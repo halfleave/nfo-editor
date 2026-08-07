@@ -64,6 +64,51 @@ img { display: block; }
 .page { display: none; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
 .page.active { display: flex; }
 
+/* 影片详情页 */
+#page-detail { padding: 0; color: #fff; }
+#page-detail.active ~ .ios-tabbar { display: none; }
+.detail-bg {
+  position: fixed; inset: 0; z-index: 0;
+  background-size: cover; background-position: center;
+}
+.detail-bg::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.78) 100%);
+}
+.detail-topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  padding: calc(var(--sat) + 8px) 12px 8px;
+  display: flex; align-items: center; justify-content: space-between;
+  pointer-events: none;
+}
+.detail-topbar button {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,0.22); backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border: none; color: #fff; display: flex; align-items: center; justify-content: center;
+  pointer-events: auto; -webkit-tap-highlight-color: transparent;
+}
+.detail-topbar button svg { width: 20px; height: 20px; }
+.detail-scroll {
+  position: fixed; inset: 0; z-index: 5;
+  padding-top: calc(var(--sat) + 56px);
+  padding-bottom: max(20px, var(--sab));
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+.detail-content { padding: 0 20px 30px; }
+.detail-poster-wrap { display: flex; justify-content: center; margin: 12px 0 24px; }
+.detail-poster {
+  width: 170px; height: 255px; border-radius: 14px;
+  background-size: cover; background-position: center;
+  background-color: rgba(255,255,255,0.15);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.detail-title { text-align: center; font-size: 28px; font-weight: 700; margin: 0 0 10px; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.detail-meta { text-align: center; font-size: 14px; color: rgba(255,255,255,0.85); line-height: 1.5; margin-bottom: 20px; }
+.detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); }
+.detail-plot:empty { display: none; }
+
 /* 顶部大标题栏（fixed 固定顶部，避免 sticky 在 iOS 滚动子容器内失效） */
 .page-bar, .home-header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 30;
@@ -175,10 +220,19 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .tags-area { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
 #countryTags { border-bottom: 0.5px solid var(--sep); }
 .tag-chip {
+  position: relative;
   display: inline-flex; align-items: center; gap: 6px;
   background: var(--accent-fill); color: var(--accent);
-  padding: 7px 13px; border-radius: 20px; font-size: 15px; font-weight: 500;
+  padding: 7px 22px 7px 13px; border-radius: 20px; font-size: 15px; font-weight: 500;
 }
+.tag-chip .chip-del {
+  position: absolute; right: 4px; top: 4px; width: 14px; height: 14px;
+  border-radius: 50%; background: rgba(0,0,0,0.08); color: #555;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.tag-chip .chip-del:active { background: rgba(0,0,0,0.16); }
+.tag-chip .chip-del svg { width: 10px; height: 10px; }
 .tag-add {
   display: inline-flex; align-items: center; gap: 4px;
   background: var(--gray-fill); color: var(--label-2);
@@ -232,11 +286,15 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   background: #E5E5EA; display: flex; align-items: center; justify-content: center;
   background-size: cover; background-position: center;
 }
-.person-avatar-large::after { content: "👤"; font-size: 52px; color: #8E8E93; }
+.person-avatar-large::after {
+  content: "";
+  width: 56px; height: 56px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23555555' d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E") center/contain no-repeat;
+}
 .person-avatar-large.has-photo::after { content: none; }
 .avatar-camera {
   position: absolute; right: 0; bottom: 0; width: 34px; height: 34px; border-radius: 50%;
-  background: #F48FB1; color: #fff; display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
   font-size: 0; border: 3px solid var(--glass-strong); box-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
 .avatar-camera svg { width: 18px; height: 18px; }
@@ -345,13 +403,19 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .settings-row .sr-value { color: var(--label-2); font-size: 15px; }
 .settings-row:active { background: var(--gray-fill); }
 
+/* 主题色选择网格 */
+.theme-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 22px; padding: 22px var(--pad) calc(22px + var(--sab)); }
+.theme-color { width: 100%; aspect-ratio: 1; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); background-clip: padding-box; }
+.theme-color.active { border-color: var(--label); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--label); }
+.theme-color:active { transform: scale(0.92); }
+
 /* 底部浮动胶囊 Tab 栏（Liquid Glass） */
 .ios-tabbar {
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--sab) + 16px); z-index: 100;
   display: flex; gap: 4px;
-  width: 60%; min-width: 220px; max-width: 320px;
-  padding: 7px;
+  width: 72%; min-width: 260px; max-width: 360px;
+  padding: 5px;
   background: var(--glass);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -359,9 +423,9 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   box-shadow: 0 6px 22px rgba(0,0,0,0.14);
   border: 0.5px solid rgba(0,0,0,0.06);
 }
-.tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--label-2); font-size: 10px; font-weight: 500; padding: 7px 0; border-radius: 20px; transition: .2s; }
-.tab-item .ti-icon { font-size: 22px; line-height: 1; }
-.tab-item.active { background: #E6E5EA; color: var(--accent); }
+.tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--label-2); font-size: 10px; font-weight: 500; padding: 5px 0; border-radius: 20px; transition: .2s; }
+.tab-item .ti-icon { font-size: 21px; line-height: 1; }
+.tab-item.active { background: #F2F1F7; color: var(--accent); }
 .tab-item:active { opacity: 0.55; }
 
 /* 首页头部：大标题 + 日期胶囊（fixed 定位由上方 .page-bar, .home-header 统一设置） */
@@ -432,6 +496,9 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 /* 底部 sheet / 动作表（Liquid Glass + 抓取条） */
 .sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.36); z-index: 500; opacity: 0; pointer-events: none; transition: .25s; }
 .sheet-mask.show { opacity: 1; pointer-events: auto; }
+/* 首页长按弹窗的透明蒙版：覆盖海报/底部栏，吸收误触；点击外部仍由 ctxOutsideClose 关闭 */
+.ctx-mask { position: fixed; inset: 0; background: transparent; z-index: 500; opacity: 0; pointer-events: none; }
+.ctx-mask.show { opacity: 1; pointer-events: auto; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 501;
   background: var(--glass-strong);
@@ -532,9 +599,9 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .sheet-row:active { background: var(--gray-fill); border-radius: var(--radius-sm); }
 .sheet-row .sr-left { display: flex; align-items: center; gap: 12px; }
 .sheet-confirm { display: flex; justify-content: center; margin-top: 14px; margin-bottom: 6px; }
-.check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--label-3); flex-shrink: 0; position: relative; }
-.check.on { background: var(--accent); border-color: var(--accent); }
-.check.on::after { content: ""; position: absolute; left: 7px; top: 3px; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.check { width: 22px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; opacity: 0; }
+.check.on { opacity: 1; }
+.check.on::after { content: ""; width: 8px; height: 14px; border: solid var(--accent); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); margin-top: -3px; }
 .sheet-add { display: flex; gap: 8px; padding: 4px 0 12px; }
 .sheet-add input { flex: 1; border: none; background: var(--card-fill); border-radius: 22px; padding: 11px 18px; font-size: 16px; }
 .sheet-add input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent); }
@@ -627,6 +694,18 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div id="actionSheetInner"></div>
   </div>
 
+  <!-- 主题色选择 -->
+  <div class="sheet" id="themeSheet">
+    <div class="sheet-bar sheet-bar-center">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="sb-title">主题色</span>
+      <span class="sb-spacer"></span>
+    </div>
+    <div class="theme-grid" id="themeGrid"></div>
+  </div>
+
   <!-- 长按海报：在长按位置附近弹出的 iOS 风格上下文菜单 -->
   <div class="sheet sheet-context" id="contextSheet">
     <div class="action-sheet-group">
@@ -634,6 +713,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <div class="action-sheet-list" id="contextSheetInner"></div>
     </div>
   </div>
+  <div class="ctx-mask" id="ctxMask"></div>
 
   <!-- 图片裁剪弹窗 -->
   <div class="crop-mask" id="cropMask" onclick="closeCrop()"></div>
@@ -676,7 +756,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
     <div class="list-sheet-body">
       <div class="sheet-list" id="listBody"></div>
-      <div class="sheet-confirm" id="listConfirm" style="display:none;"><button class="btn btn-primary btn-pill" onclick="listSheetConfirm()">完成</button></div>
     </div>
   </div>
 
@@ -939,11 +1018,58 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <span class="sr-label">类型管理</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
+        <button class="settings-row" onclick="showSaveModeSheet()">
+          <span class="sr-icon" style="background:#007AFF;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M17 3H7c-1.1 0-2 .9-2 2v14l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg></span>
+          <span class="sr-label">保存模式</span>
+          <span class="sr-value" id="saveModeValue">保存</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+      </div>
+
+      <!-- 主题色：独立卡片 -->
+      <div class="settings-group">
+        <button class="settings-row" onclick="openThemeSheet()">
+          <span class="sr-icon" style="background:var(--accent);"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><circle cx="12" cy="12" r="5"/></svg></span>
+          <span class="sr-label">主题色</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+      </div>
+
+      <!-- 清除缓存：独立卡片 -->
+      <div class="settings-group">
+        <button class="settings-row" onclick="showClearCacheSheet()">
+          <span class="sr-icon" style="background:#FF3B30;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></span>
+          <span class="sr-label">清除缓存</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
       </div>
       <footer class="site-footer">
         This product uses the TMDB API but is not endorsed or certified by TMDB.<br>
         作者 @Halfleave · 版本 v1.0.0
       </footer>
+    </div>
+  </section>
+
+  <!-- ====================== 影片详情 ====================== -->
+  <section class="page" id="page-detail">
+    <div class="detail-bg" id="detailBg"></div>
+    <div class="detail-topbar">
+      <button onclick="switchPage('home')" aria-label="返回">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button onclick="showDetailActions()" aria-label="更多">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+      </button>
+    </div>
+    <div class="detail-scroll">
+      <div class="detail-content">
+        <div class="detail-poster-wrap">
+          <div class="detail-poster" id="detailPoster"></div>
+        </div>
+        <h1 class="detail-title" id="detailTitle"></h1>
+        <div class="detail-meta" id="detailMeta"></div>
+        <div class="detail-plot" id="detailPlot"></div>
+      </div>
     </div>
   </section>
 
@@ -964,7 +1090,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 </div>
 
 <script>
-/* ===== M1 骨架导航 + 占位桩（M3/M4 实现具体逻辑） ===== */
+/* ===== 骨架导航 + 全局交互（页面切换、Toast、各类弹窗开合） ===== */
 
 function switchPage(page) {
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
@@ -990,17 +1116,21 @@ function switchMetaTab(tab){
   document.getElementById('btnSave').style.display = isSearch ? 'none' : '';
 }
 
-function showToast(msg, type) {
+function showToast(msg, type, duration) {
   var t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'toast show' + (type ? ' ' + type : '');
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(function(){ t.className = 'toast'; }, 1800);
+  showToast._t = setTimeout(function(){ t.className = 'toast'; }, duration || 1800);
 }
 
 function openSheet(id) {
   document.getElementById('sheetMask').classList.add('show');
   document.getElementById(id).classList.add('show');
+  if (id === 'listSheet'){
+    var body = document.getElementById('listBody');
+    if (body) body.scrollTop = 0;
+  }
 }
 var ctxIgnoreNextOutside = false;
 function ctxOutsideClose(e){
@@ -1019,6 +1149,7 @@ function closeAllSheets() {
   overviewSuppressClick = false;
   ctxIgnoreNextOutside = false;
   document.getElementById('sheetMask').classList.remove('show');
+  document.getElementById('ctxMask').classList.remove('show');
   document.removeEventListener('touchstart', ctxOutsideClose, true);
   document.removeEventListener('mousedown', ctxOutsideClose, true);
   var sheets = document.querySelectorAll('.sheet');
@@ -1032,7 +1163,17 @@ function showActionSheet(title, items) {
     var b = document.createElement('button');
     b.className = 'settings-row';
     b.style.color = it.danger ? 'var(--danger)' : 'var(--accent)';
-    b.textContent = it.label;
+    var label = document.createElement('span');
+    label.className = 'sr-label';
+    label.textContent = it.label;
+    b.appendChild(label);
+    if (it.checked){
+      var check = document.createElement('span');
+      check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:block"><path d="M20 6 9 17l-5-5"/></svg>';
+      check.style.marginLeft = 'auto';
+      check.style.color = 'var(--accent)';
+      b.appendChild(check);
+    }
     b.onclick = function(){ closeAllSheets(); it.onClick && it.onClick(); };
     inner.appendChild(b);
   });
@@ -1069,7 +1210,8 @@ function showContextSheet(title, items, anchor){
   el.style.left = x + 'px';
   el.style.top = y + 'px';
   el.classList.add('show');
-  // 不显示黑色蒙版；改为点击空白处关闭（延迟注册，避免长按抬手时误触关闭）
+  // 显示透明蒙版覆盖海报/底部栏，吸收误触；点击外部仍由 ctxOutsideClose 关闭
+  document.getElementById('ctxMask').classList.add('show');
   ctxIgnoreNextOutside = true;
   setTimeout(function(){
     document.addEventListener('touchstart', ctxOutsideClose, true);
@@ -1100,7 +1242,8 @@ var state = {
   directors: [],
   actors: [],
   personPhoto: null,
-  poster: null, fanart: null, logo: null, hasSubtitle: false
+  poster: null, fanart: null, logo: null, hasSubtitle: false,
+  saveMode: 'save'
 };
 var personState = { mode: 'actor', index: -1 }; // 'director' | 'actor'
 var currentGenreTab = 'normal';
@@ -1127,13 +1270,10 @@ function updateClearButtonState(){
 }
 
 /* —— 原生 select 选择器（年份 / 分级）—— */
-var YEAR_LIST = [];
 function initNativeSelects(){
   var cur = new Date().getFullYear();
-  YEAR_LIST = [];
   var yearHtml = '<option value="">请选择</option>';
   for (var y = cur + 3; y >= 1900; y--){
-    YEAR_LIST.push(String(y));
     yearHtml += '<option value="' + y + '">' + y + '</option>';
   }
   var ySel = document.getElementById('year');
@@ -1222,7 +1362,7 @@ function renderCountryChips(){
   var row = document.getElementById('countryRow');
   if (state.countries.length){
     area.style.display = 'flex';
-    area.innerHTML = state.countries.map(function(c){ return '<span class="tag-chip">' + escapeHtml(c) + '</span>'; }).join('');
+    area.innerHTML = state.countries.map(function(c, i){ return '<span class="tag-chip">' + escapeHtml(c) + '<span class="chip-del" onclick="removeCountry(' + i + ')">' + CHIP_CLOSE_SVG + '</span></span>'; }).join('');
     val.innerHTML = '<span style="color:var(--label)">已选 ' + state.countries.length + ' 项</span>';
     val.classList.remove('empty');
     if (row) row.classList.add('no-border');
@@ -1231,6 +1371,11 @@ function renderCountryChips(){
     val.textContent = '请选择'; val.classList.add('empty');
     if (row) row.classList.remove('no-border');
   }
+}
+function removeCountry(idx){
+  if (idx >= 0 && idx < state.countries.length) state.countries.splice(idx, 1);
+  renderCountryChips();
+  updateState();
 }
 function openGenreSheet(){
   listState.kind = 'genre';
@@ -1247,13 +1392,18 @@ function renderGenreChips(){
   var val = document.getElementById('genreVal');
   if (state.genres.length){
     area.style.display = 'flex';
-    area.innerHTML = state.genres.map(function(c){ return '<span class="tag-chip">' + escapeHtml(c) + '</span>'; }).join('');
+    area.innerHTML = state.genres.map(function(c, i){ return '<span class="tag-chip">' + escapeHtml(c) + '<span class="chip-del" onclick="removeGenre(' + i + ')">' + CHIP_CLOSE_SVG + '</span></span>'; }).join('');
     val.innerHTML = '<span style="color:var(--label)">已选 ' + state.genres.length + ' 项</span>';
     val.classList.remove('empty');
   } else {
     area.style.display = 'none'; area.innerHTML = '';
     val.textContent = '请选择'; val.classList.add('empty');
   }
+}
+function removeGenre(idx){
+  if (idx >= 0 && idx < state.genres.length) state.genres.splice(idx, 1);
+  renderGenreChips();
+  updateState();
 }
 function switchGenreTab(tab){
   currentGenreTab = tab;
@@ -1272,19 +1422,35 @@ function switchGenreTab(tab){
 
 /* —— 管理列表（新增 / 删除 / 拖动排序） —— */
 var CLOSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+var CHIP_CLOSE_SVG = '<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'3\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M18 6 6 18M6 6l12 12\'/></svg>';
 var GRIP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 8h12M6 12h12M6 16h12"/></svg>';
 function setListSheetHeader(mode){
   var leftSlot = document.getElementById('listLeftSlot');
   var rightSlot = document.getElementById('listRightSlot');
-  var confirmBar = document.getElementById('listConfirm');
   if (mode === 'multi'){
     leftSlot.innerHTML = '<button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">' + CLOSE_SVG + '</button>';
     rightSlot.innerHTML = '<button class="sb-pill" onclick="listSheetConfirm()">完成</button>';
-  } else {
-    leftSlot.innerHTML = '<span class="sb-spacer"></span>';
-    rightSlot.innerHTML = '<button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">' + CLOSE_SVG + '</button>';
+  } else { // manage 模式：左侧关闭，右侧「恢复」默认标签
+    leftSlot.innerHTML = '<button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">' + CLOSE_SVG + '</button>';
+    var resetFn = (listState.kind === 'country') ? 'resetCountriesToDefault' : 'resetGenresToDefault';
+    rightSlot.innerHTML = '<button class="sb-done" onclick="' + resetFn + '()">恢复</button>';
   }
-  if (confirmBar) confirmBar.style.display = 'none';
+}
+function resetGenresToDefault(){
+  if (listState.kind !== 'genre') return;
+  if (currentGenreTab === 'adult'){
+    state.genreAdult = GENRE_ADULT.slice();
+  } else {
+    state.genreNormal = GENRE_NORMAL.slice();
+  }
+  renderManageList();
+  showToast('已恢复默认标签', 'success');
+}
+function resetCountriesToDefault(){
+  if (listState.kind !== 'country') return;
+  state.countryPresets = COUNTRY_DEFAULT.slice();
+  renderManageList();
+  showToast('已恢复默认国家/地区', 'success');
 }
 function openCountryManage(){
   listState.mode = 'manage'; listState.kind = 'country';
@@ -1565,19 +1731,6 @@ function saveApiKey(){
     showToast('保存失败：' + (e && e.message ? e.message : '未知错误'), 'error');
   }
 }
-function clearApiKey(){
-  try {
-    state.apiKey = '';
-    document.getElementById('apiKeyInput').value = '';
-    refreshApiKeyStatus();
-    closeAllSheets();
-    setTMDBKey('').then(function(){ showToast('已清除', ''); }).catch(function(err){ showToast('清除失败：' + (err && err.message ? err.message : '未知错误'), 'error'); });
-  } catch(e) {
-    showToast('清除失败：' + (e && e.message ? e.message : '未知错误'), 'error');
-  }
-}
-
-/* —— M4 占位（逻辑移植） —— */
 var _filenameManual = false;
 function onTitleChanged(el){
   if (!_filenameManual && el && el.value){ document.getElementById('filename').value = el.value; }
@@ -1727,6 +1880,7 @@ function openPersonSheet(mode, index){
     ? (mode === 'director' ? state.directors[personState.index] : state.actors[personState.index])
     : { name: '', role: '', photo: '' };
   document.getElementById('personName').value = p.name || '';
+  document.getElementById('personName').closest('.field').classList.toggle('no-border', mode === 'director');
   document.getElementById('personRole').value = p.role || '';
   document.getElementById('personRoleRow').style.display = (mode === 'director') ? 'none' : 'flex';
   state.personPhoto = p.photo || null;
@@ -1767,8 +1921,6 @@ function deletePerson(){
   closeAllSheets();
   showToast('已删除');
 }
-function addDirector(){ openPersonSheet('director', -1); }
-function addActor(){ openPersonSheet('actor', -1); }
 function saveToDisk(){
   var title = getVal('title');
   var filename = getVal('filename');
@@ -1777,11 +1929,14 @@ function saveToDisk(){
   saveFilm(film).then(function(){
     currentFilmId = film.id;
     renderOverview();
+    if (state.saveMode === 'save-download'){
+      exportShare();
+    } else {
+      showToast('已保存', 'success');
+    }
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
-  // 同时导出 .nfo 文件：iOS 通过系统分享表保存到「文件」/ AirDrop，桌面走下载
-  exportShare();
 }
 
 /* 列表 sheet 完成按钮 */
@@ -1857,7 +2012,7 @@ function renderOverview(){
         : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>';
       var rating = f.rating ? '<div class="mc-rating">' + escapeHtml(f.rating) + '</div>' : '';
       var title = '<div class="mc-title">' + escapeHtml(f.title || f.id) + '</div>';
-      return '<div class="movie-card-wrap" data-id="' + enc + '" onclick="openFilm(\'' + enc + '\')">'
+      return '<div class="movie-card-wrap" data-id="' + enc + '" onclick="openFilmDetail(\'' + enc + '\')">'
            + '<div class="movie-card">' + poster + rating + '</div>' + title + '</div>';
     }).join('');
     bindOverviewLongPress();
@@ -1869,21 +2024,21 @@ function renderOverview(){
 
 /* ===== M4：持久化 / TMDB / 裁剪 / NFO / 导出 / 概览 ===== */
 
-/* —— IndexedDB（NFOEditorFS：handles / kv） —— */
+/* —— IndexedDB（NFOEditorFS：仅 kv store，存影片与配置）—— */
 var currentFilmId = null;
 var DB_NAME = 'NFOEditorFS', DB_VERSION = 1;
 function openDB(){
-  return new Promise(function(res, rej){
-    if (openDB._db) return res(openDB._db);
+  if (openDB._p) return openDB._p;   // 缓存 Promise，避免初始化时并发重复 open
+  openDB._p = new Promise(function(res, rej){
     var req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = function(){
       var db = req.result;
-      if (!db.objectStoreNames.contains('handles')) db.createObjectStore('handles');
       if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
     };
-    req.onsuccess = function(){ openDB._db = req.result; res(req.result); };
+    req.onsuccess = function(){ res(req.result); };
     req.onerror = function(){ rej(req.error); };
   });
+  return openDB._p;
 }
 function idbGet(store, key){
   return openDB().then(function(db){
@@ -1958,12 +2113,6 @@ var CC_MAP = {
   ID:'印度尼西亚', VN:'越南', EG:'埃及', AE:'阿联酋', SA:'沙特阿拉伯'
 };
 
-function openSearchSheet(){
-  switchMetaTab('search');
-  var q = document.getElementById('title').value.trim();
-  if (q) document.getElementById('tmdbQuery').value = q;
-  document.getElementById('tmdbResults').innerHTML = '';
-}
 function searchTMDB(){
   var q = document.getElementById('tmdbQuery').value.trim();
   if (!q){ showToast('请输入影片名', 'error'); return; }
@@ -2016,13 +2165,13 @@ function selectTMDB(id){
 function populateFromTMDB(d){
   // 先清空已有数据再导入
   ['title','originaltitle','premiered','runtime','plot','rating'].forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
-  state.title = ''; state.originaltitle = ''; state.premiered = ''; state.runtime = ''; state.plot = ''; state.rating = '';
   state.year = ''; state.mpaa = '';
   var pv = document.getElementById('premieredVal'); if (pv){ pv.textContent = '请选择'; pv.classList.add('empty'); }
   var yv = document.getElementById('year'); if (yv) yv.value = '';
   var yvv = document.getElementById('yearVal'); if (yvv){ yvv.textContent = '请选择'; yvv.classList.add('empty'); }
   var mv = document.getElementById('mpaaVal'); if (mv){ mv.textContent = '请选择'; mv.classList.add('empty'); }
-  state.countries = []; state.genres = []; state.genreNormal = [];
+  // 只清空本次的已选值（countries/genres），保留用户维护的类型预设库 genreNormal
+  state.countries = []; state.genres = [];
   state.directors = []; state.actors = [];
   state.poster = null; state.fanart = null; state.logo = null;
   clearMediaThumb('poster'); clearMediaThumb('fanart'); clearMediaThumb('logo');
@@ -2143,6 +2292,7 @@ function cropToRatio(dataUrl, ratio){
 
 /* —— 字段写入辅助 —— */
 function setFieldVal(id, val){
+  // 注意：val 为空/null 时直接 return，不会清空已有值。需要清空表单时请显式把各字段设为空（见 populateFromTMDB / newFilm）。
   var el = document.getElementById(id);
   if (!el || val == null || val === '') return;
   if (el.tagName === 'SELECT'){ setSelectValue(id, val); return; }
@@ -2237,16 +2387,6 @@ function imageToBlob(dataUrl, mime, withBadge){
     img.src = dataUrl;
   });
 }
-function dataUrlToBlob(dataUrl){
-  var m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl || '');
-  if (m){
-    var bin = atob(m[2]), arr = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    return new Blob([arr], { type: m[1] || 'image/jpeg' });
-  }
-  return null;
-}
-
 /* —— 当前影片 ↔ 记录 互转 —— */
 function buildFilmFromCurrent(){
   var id = sanitizeName(getVal('filename') || getVal('title') || ('film-' + Date.now()));
@@ -2306,7 +2446,7 @@ var cropType = null, cropRatio = 0, cropDrag = null;
 function openCrop(type){
   if (!state[type]) return showToast('请先有图片再裁剪', 'error');
   cropType = type;
-  cropRatio = (type === 'poster') ? 2/3 : (type === 'fanart' ? 16/9 : 0);
+  cropRatio = (type === 'poster') ? 2/3 : (type === 'fanart' ? 4/3 : 0);
   var img = document.getElementById('cropImg');
   img.onload = function(){ initCropBox(); };
   img.src = state[type];
@@ -2414,12 +2554,50 @@ function openFilm(encId){
     if (!film) return showToast('未找到影片', 'error');
     applyFilmData(film);
     currentFilmId = film.id;
+    switchMetaTab('edit');
     switchPage('edit');
   });
+}
+var currentDetailFilmId = null;
+function openFilmDetail(encId){
+  if (overviewSuppressClick){ overviewSuppressClick = false; return; }
+  var id = decodeURIComponent(encId);
+  loadFilm(id).then(function(film){
+    if (!film) return showToast('未找到影片', 'error');
+    currentDetailFilmId = film.id;
+    renderFilmDetail(film);
+    switchPage('detail');
+  });
+}
+function renderFilmDetail(film){
+  var d = film.data || {};
+  var bgUrl = film.posterDataUrl || d.poster || d.fanart || '';
+  document.getElementById('detailBg').style.backgroundImage = bgUrl ? 'url(' + escapeAttr(bgUrl) + ')' : '';
+  document.getElementById('detailPoster').style.backgroundImage = (film.posterDataUrl || d.poster) ? 'url(' + escapeAttr(film.posterDataUrl || d.poster) + ')' : '';
+  document.getElementById('detailTitle').textContent = d.title || film.id;
+  var parts = [];
+  if (d.premiered) parts.push(d.premiered);
+  if (d.countries && d.countries.length) parts.push(d.countries.join(' / '));
+  if (d.genres && d.genres.length) parts.push(d.genres.join(' / '));
+  if (d.runtime) parts.push(d.runtime + ' 分钟');
+  if (d.mpaa) parts.push(d.mpaa);
+  if (d.rating) parts.push('评分 ' + d.rating);
+  document.getElementById('detailMeta').textContent = parts.join(' · ');
+  document.getElementById('detailPlot').textContent = d.plot || '';
+}
+function showDetailActions(){
+  if (!currentDetailFilmId) return;
+  showActionSheet('影片操作', [
+    { label: '编辑', icon: 'pencil', onClick: function(){ openFilm(encodeURIComponent(currentDetailFilmId)); } },
+    { label: '删除', danger: true, onClick: function(){
+        deleteFilm(currentDetailFilmId).then(function(){ showToast('已删除'); currentDetailFilmId = null; switchPage('home'); renderOverview(); });
+      } }
+  ]);
 }
 function newFilm(){
   currentFilmId = null;
   applyFilmData({ id: '', data: {} });
+  switchMetaTab('edit');
   ['title','originaltitle','premiered','year','runtime','plot','rating','filename','mpaa'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
@@ -2477,8 +2655,7 @@ function bindOverviewLongPress(){
   }
 }
 
-/* —— 导出 / 分享（navigator.share） —— */
-/* —— 极简 zip 打包（store 模式，支持 UTF-8 文件名，保持单文件离线可用）—— */
+/* —— ZIP 打包工具：crc32 / utf8Bytes / makeZip（store 模式，支持 UTF-8 文件名，单文件离线可用）—— */
 function crc32(buf){
   var table = crc32.table || (crc32.table = (function(){
     var t = []; for (var n = 0; n < 256; n++){ var c = n; for (var k = 0; k < 8; k++){ c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); } t[n] = c >>> 0; }
@@ -2489,6 +2666,7 @@ function crc32(buf){
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 function utf8Bytes(s){
+  // JS UTF-16 字符串手工编码为 UTF-8 字节（含代理对处理），用于 ZIP 中文文件名
   var out = [];
   for (var i = 0; i < s.length; i++){
     var c = s.charCodeAt(i);
@@ -2500,6 +2678,7 @@ function utf8Bytes(s){
   return out;
 }
 function makeZip(files){
+  // Store 模式（不压缩）ZIP：本地文件头 + 中央目录 + 结束记录(EOCD)；0x0800 标志位声明 UTF-8 文件名
   var chunks = [], central = [], offset = 0;
   function u16(n){ return [n & 0xFF, (n >> 8) & 0xFF]; }
   function u32(n){ return [n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF]; }
@@ -2516,9 +2695,9 @@ function makeZip(files){
   var end = cat([ new Uint8Array(u32(0x06054b50).concat(u16(0), u16(0), u16(files.length), u16(files.length), u32(centralSize), u32(offset), u16(0))) ]);
   return cat(chunks.concat(central, [end]));
 }
-/* —— 导出 / 分享（打包成单一 zip，并在点击手势内「同步」调用 share）—— */
-/* iOS 要求 navigator.share 在用户点击的同步手势内调用；state 内的图已是 data URL，
-   直接同步解码，避免 canvas 异步重编码导致手势失效、分享被系统拦截。 */
+/* —— 导出：打包成单一 zip，点击手势内同步解码后直接下载 —— */
+/* 同步解码 data URL 可在用户点击手势内完成，避免 canvas 异步重编码打断手势、
+   导致 a.click() 下载不被触发。 */
 function dataUrlToBytesSync(dataUrl){
   if (!dataUrl || dataUrl.indexOf(',') < 0) return null;
   var b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
@@ -2529,13 +2708,11 @@ function dataUrlToBytesSync(dataUrl){
     return arr;
   } catch (e) { return null; }
 }
-function isStandaloneMode(){
-  return ('standalone' in navigator && navigator.standalone) ||
-         (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-}
+/* 生成 zip 并触发下载：全程同步组装，绝不能 await。
+   若在用户点击手势外（如 canvas 异步回调）才调用 a.click()，iOS Safari 会拦截下载。 */
 function exportShare(){
   var filename = sanitizeName(getVal('filename') || getVal('title') || 'movie');
-  var zipBlob, zipFile;
+  var zipBlob;
   try {
     var zipFiles = [];
     // nfo 文本（同步）
@@ -2549,81 +2726,109 @@ function exportShare(){
     state.actors.forEach(function(a, i){ if (typeof a.photo === 'string'){ var b = dataUrlToBytesSync(a.photo); if (b) zipFiles.push({ name: sanitizeName(a.name || ('actor' + i)) + '-actor.jpg', data: b }); } });
     if (!zipFiles.length) throw new Error('没有可导出的内容');
     zipBlob = new Blob([makeZip(zipFiles)], { type: 'application/zip' });
-    zipFile = new File([zipBlob], filename + '.zip', { type: 'application/zip' });
   } catch (buildErr) {
     showToast('生成导出文件失败：' + ((buildErr && buildErr.message) || buildErr), 'error');
     return;
   }
 
-  // —— 路径 1：Web Share API（需 HTTPS 安全上下文 + 用户手势内调用）——
-  if (navigator.share && window.isSecureContext){
-    navigator.share({ files: [zipFile], title: filename })
-      .then(function(){ showToast('已生成 zip，请在分享表选择「存储到文件」', 'success'); })
-      .catch(function(err){
-        if (err && err.name === 'AbortError') return; // 用户主动取消，正常
-        var detail = (err && (err.name + (err.message ? '：' + err.message : ''))) || '未知错误';
-        fallbackOpenZip(zipBlob, filename, '分享被系统拒绝（' + detail + '），已改用其他方式');
-      });
-    return;
-  }
-
-  // —— 路径 2：降级（非安全上下文 / 不支持分享）——
-  // 直接在新标签打开 zip：iOS Safari 右上角分享可「存储到文件」；弹窗被拦截时提供可长按的链接。
-  var reason = (!window.isSecureContext)
-    ? '当前页面不是 HTTPS，系统分享不可用'
-    : '当前浏览器不支持系统分享';
-  fallbackOpenZip(zipBlob, filename, reason);
+  // —— 直接下载模式（移动端落入「文件」App 下载项目，桌面落入下载文件夹）——
+  directDownload(zipBlob, filename + '.zip');
 }
 
-/* 降级：新标签打开 zip；被拦截时在页内插入可长按下载的链接 */
-function fallbackOpenZip(zipBlob, filename, reason){
-  // 主屏（standalone）模式下 window.open 会被系统拦截，直接给可长按保存的链接
-  if (isStandaloneMode()){
-    var su = URL.createObjectURL(zipBlob);
-    showInlineDownload(su, filename, (reason || '当前为主屏模式') + '，请长按下面的链接保存到「文件」');
-    return;
-  }
-  try {
-    var url = URL.createObjectURL(zipBlob);
-    var w = window.open(url, '_blank');
-    if (w) {
-      setTimeout(function(){ try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
-      showToast((reason ? reason + '。' : '') + '已在新标签打开 zip，点右上角分享 → 存储到文件', 'success', 4500);
-    } else {
-      showInlineDownload(url, filename, reason);
-    }
-  } catch (e) {
-    showInlineDownload(null, filename, '导出失败：' + ((e && e.message) || e));
-  }
-}
-function showInlineDownload(url, filename, reason){
-  var box = document.getElementById('inlineDownload');
-  if (!box){
-    box = document.createElement('div');
-    box.id = 'inlineDownload';
-    box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;padding:12px;' +
-      'background:rgba(0,0,0,0.4);display:flex;justify-content:center;';
-    document.body.appendChild(box);
-  }
-  var card = document.createElement('div');
-  card.style.cssText = 'background:#fff;border-radius:14px;max-width:440px;width:100%;' +
-    'padding:18px;box-shadow:0 8px 30px rgba(0,0,0,0.25);font-size:14px;color:#111;';
-  var p = document.createElement('p');
-  p.style.cssText = 'margin:0 0 12px;line-height:1.5;';
-  p.textContent = (reason || '') + '。请长按下面的链接，选择「下载」或「存储到文件」：';
+/* 直接下载：创建 blob 链接并触发浏览器下载（iOS 落入 文件App→下载项目） */
+function directDownload(blob, name){
+  var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  a.href = url || '#';
-  a.download = filename + '.zip';
-  a.textContent = filename + '.zip';
-  a.style.cssText = 'display:block;padding:12px;background:#f2f2f7;border-radius:10px;' +
-    'color:#007aff;text-decoration:none;word-break:break-all;text-align:center;';
-  var btn = document.createElement('button');
-  btn.textContent = '关闭';
-  btn.style.cssText = 'margin-top:12px;width:100%;padding:10px;border:none;border-radius:10px;' +
-    'background:#e5e5ea;color:#111;font-size:15px;';
-  btn.onclick = function(){ box.style.display = 'none'; };
-  card.appendChild(p); card.appendChild(a); card.appendChild(btn);
-  box.innerHTML = ''; box.appendChild(card); box.style.display = 'flex';
+  a.href = url;
+  a.download = name;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ try { document.body.removeChild(a); } catch (e) {} try { URL.revokeObjectURL(url); } catch (e) {} }, 4000);
+  showToast('已开始下载，文件保存到浏览器下载目录（iOS：文件 App → 我的 iPhone → 下载项目）', 'success', 4500);
+}
+
+/* —— 主题色 —— */
+var THEME_COLORS = [
+  '#56BEE5', '#007AFF', '#34C759', '#00C7BE', '#5AC8FA',
+  '#5856D6', '#5E5CE6', '#AF52DE', '#FF2D55', '#FF3B30',
+  '#FF9500', '#FFCC00', '#FF6B35', '#1ABC9C', '#E91E63',
+  '#607D8B', '#A2845E', '#8E8E93', '#242426', '#C9C9CE'
+];
+function hexToRgba(hex, a){
+  var m = hex.replace('#', '').match(/^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/);
+  if (!m) return 'rgba(86,190,229,' + a + ')';
+  return 'rgba(' + parseInt(m[1], 16) + ',' + parseInt(m[2], 16) + ',' + parseInt(m[3], 16) + ',' + a + ')';
+}
+function setThemeColor(c){ return idbPut('kv', 'themeColor', c || ''); }
+function getThemeColor(){ return idbGet('kv', 'themeColor').then(function(v){ return v || ''; }); }
+function applyThemeColor(c, save){
+  if (!c) return;
+  document.documentElement.style.setProperty('--accent', c);
+  document.documentElement.style.setProperty('--accent-fill', hexToRgba(c, 0.12));
+  if (save !== false){
+    setThemeColor(c).catch(function(){});
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', c);
+  }
+  renderThemeGrid();
+}
+function renderThemeGrid(){
+  var grid = document.getElementById('themeGrid');
+  if (!grid) return;
+  var current = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#56BEE5').trim().toLowerCase();
+  grid.innerHTML = THEME_COLORS.map(function(c){
+    return '<button class="theme-color' + (c.toLowerCase() === current ? ' active' : '') + '" style="background:' + c + '" onclick="applyThemeColor(\'' + c + '\')" aria-label="主题色"></button>';
+  }).join('');
+}
+function openThemeSheet(){
+  renderThemeGrid();
+  openSheet('themeSheet');
+}
+
+/* —— 保存模式 —— */
+var SAVE_MODES = [
+  { key: 'save', label: '保存' },
+  { key: 'save-download', label: '保存并下载' }
+];
+function getSaveModeLabel(key){
+  var label = '保存';
+  SAVE_MODES.forEach(function(m){ if (m.key === key) label = m.label; });
+  return label;
+}
+function getSaveMode(){ return idbGet('kv', 'saveMode').then(function(v){ return v || ''; }); }
+function setSaveMode(mode){
+  state.saveMode = mode === 'save-download' ? 'save-download' : 'save';
+  updateSaveModeDisplay();
+  idbPut('kv', 'saveMode', state.saveMode).catch(function(){});
+}
+function updateSaveModeDisplay(){
+  var el = document.getElementById('saveModeValue');
+  if (el) el.textContent = getSaveModeLabel(state.saveMode);
+}
+function showSaveModeSheet(){
+  showActionSheet('保存模式', SAVE_MODES.map(function(m){
+    return { label: m.label, checked: state.saveMode === m.key, onClick: function(){ setSaveMode(m.key); } };
+  }));
+}
+
+/* —— 清除缓存 —— */
+function showClearCacheSheet(){
+  showActionSheet('清除缓存', [
+    { label: '清除所有影片数据', danger: true, onClick: function(){ clearAllFilmData(); } }
+  ]);
+}
+function clearAllFilmData(){
+  listFilms().then(function(films){
+    return Promise.all(films.map(function(f){ return deleteFilm(f.id); }));
+  }).then(function(){
+    currentFilmId = null;
+    newFilm();
+    renderOverview();
+    showToast('已清除所有影片数据', 'success');
+  }).catch(function(err){
+    showToast('清除失败：' + ((err && err.message) || err), 'error');
+  });
 }
 
 /* ===== Init ===== */
@@ -2636,6 +2841,8 @@ initNativeSelects();
 syncAllSelectDisplays();
 refreshApiKeyStatus();
 getTMDBKey().then(function(k){ state.apiKey = k || ''; refreshApiKeyStatus(); }).catch(function(){});
+getThemeColor().then(function(c){ if (c) applyThemeColor(c, false); }).catch(function(){});
+getSaveMode().then(function(m){ state.saveMode = (m === 'save-download') ? 'save-download' : 'save'; updateSaveModeDisplay(); }).catch(function(){});
 renderOverview();
 renderCast();
 updateState();
