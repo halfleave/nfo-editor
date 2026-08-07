@@ -1,0 +1,3442 @@
+<!DOCTYPE html>
+<!--
+  影视元数据编辑 (NFO Editor) — 单文件 HTML 工具
+  作者：@Halfleave   版本：v1.0.0
+  功能：编辑电影/剧集元数据，生成 Kodi 兼容的 .nfo 文件，并导出海报/剧照/Logo/演职人员照片。
+  技术：纯前端单文件（HTML + CSS + JS），依赖 File System Access API、IndexedDB、Canvas、TMDB API。
+  代码结构：<style> 全局样式 → <body> 布局与各类弹窗 → <script> 状态与逻辑（按 State / TMDB / 标签 / 裁剪 / NFO / 导出 分区）。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzAwN0FGRiIvPjxwYXRoIGQ9Ik0xMiAxMGwxMCA2LTEwIDZ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+">
+<title>影视元数据编辑</title>
+<style>
+  /* ===================================================================
+     全局样式（iOS 风格设计系统）
+     - 颜色 / 圆角 / 阴影统一由 :root 中的 CSS 变量管理，便于整体换肤
+     - 布局采用 flex + grid，桌面端为「历史侧栏 + 表单」左右分栏
+     =================================================================== */
+  :root {
+    --bg: #F2F2F7;
+    --card: #FFFFFF;
+    --separator: #E5E5EA;
+    --text: #1C1C1E;
+    --text-secondary: #8E8E93;
+    --text-tertiary: #AEAEB2;
+    --accent: #007AFF;
+    --accent-light: #E8F2FF;
+    --danger: #FF3B30;
+    --success: #34C759;
+    --warning: #FF9500;
+    --fill-quaternary: rgba(120,120,128,0.08);
+    --fill-tertiary: rgba(120,120,128,0.12);
+    --radius-sm: 10px;
+    --radius: 14px;
+    --radius-lg: 18px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow: 0 2px 12px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* Container */
+  .container { max-width: 1220px; margin: 0 auto; padding: 16px 20px 6px; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box; }
+  /* Site Footer */
+  .site-footer {
+    flex-shrink: 0;
+    margin-top: 6px;
+    padding-top: 0;
+    border-top: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+  .footer-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .footer-left .tmdb-logo { height: 9px; width: auto; display: block; flex-shrink: 0; }
+  .tmdb-attribution { line-height: 1.3; }
+  .footer-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .footer-author { color: var(--text-secondary); }
+  .footer-version { font-variant-numeric: tabular-nums; opacity: 0.75; }
+
+  /* Card */
+  .card {
+    background: var(--card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+  }
+  .card-header {
+    padding: 16px 20px;
+    border-bottom: 0.5px solid var(--separator);
+    font-weight: 600; font-size: 17px; letter-spacing: -0.02em;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    /* 提升层级：本元素因 backdrop-filter 形成独立层叠上下文，
+       但默认低于其后 DOM 兄弟 .card-body，会导致下拉菜单被卡片主体遮挡。
+       显式提升层级使下载下拉框能盖在卡片内容之上。 */
+    position: relative; z-index: 20;
+  }
+  .card-body { display: flex; gap: 20px; padding: 20px; flex: 1; min-height: 0; }
+  @media (max-width: 1100px) { .card-body { flex-direction: column; } }
+  /* History sidebar */
+  .history-sidebar {
+    width: 190px; flex-shrink: 0;
+    border-right: 0.5px solid var(--separator);
+    padding-right: 16px;
+    display: flex; flex-direction: column;
+  }
+  @media (max-width: 1100px) {
+    .history-sidebar { width: 100%; border-right: none; border-bottom: 0.5px solid var(--separator); padding-right: 0; padding-bottom: 12px; max-height: 200px; }
+  }
+  .history-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; flex-shrink: 0;
+  }
+  .history-header span {
+    font-size: 13px; font-weight: 600; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .history-list {
+    flex: 1; overflow-y: auto; min-height: 0;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .storage-location-btn { margin-top: 10px; width: 100%; text-align: center; justify-content: center; }
+  .history-empty {
+    font-size: 12px; color: var(--text-tertiary);
+    text-align: center; padding: 20px 0;
+  }
+  .history-item {
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 10px; border-radius: var(--radius-sm);
+    cursor: pointer; transition: background 0.15s;
+    background: var(--fill-quaternary);
+  }
+  .history-item:hover { background: var(--accent-light); }
+  .history-item-title {
+    flex: 1; font-size: 13px; font-weight: 500; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text);
+  }
+  .history-item-delete {
+    width: 20px; height: 20px; border-radius: 10px;
+    border: none; background: transparent; color: var(--text-tertiary);
+    font-size: 15px; cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+    flex-shrink: 0; line-height: 1;
+    transition: all 0.15s;
+  }
+  .history-item-delete:hover { background: rgba(255,59,48,0.12); color: var(--danger); }
+  .header-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  /* Dropdown */
+  .dropdown { position: relative; display: inline-flex; }
+  .dropdown-trigger { cursor: pointer; }
+  .dropdown-menu {
+    display: none; position: absolute; top: 100%; right: 0;
+    min-width: 140px;
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden; z-index: 10000;
+    padding: 4px; margin-top: -4px; padding-top: 8px;
+  }
+  .dropdown:hover .dropdown-menu, .dropdown.open .dropdown-menu { display: block; }
+  .dropdown-menu::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+    background: transparent;
+  }
+  .dropdown-item {
+    display: block; width: 100%; padding: 9px 14px;
+    border: none; background: transparent; border-radius: var(--radius-sm);
+    font-size: 14px; font-family: inherit; color: var(--text);
+    text-align: left; cursor: pointer;
+    transition: background 0.15s; white-space: nowrap;
+  }
+  .dropdown-item:hover { background: var(--fill-quaternary); }
+  .dropdown-item:disabled { opacity: 0.35; cursor: default; }
+  .dropdown-item:disabled:hover { background: transparent; }
+  .dropdown-item-primary { color: var(--accent); font-weight: 600; }
+  .dropdown-item-primary:hover { background: var(--accent-light); }
+  .dropdown-divider { height: 0.5px; background: var(--separator); margin: 4px 8px; }
+  /* Section */
+  .section-title {
+    font-size: 13px; font-weight: 600; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 10px;
+  }
+  /* Form area */
+  .form-area { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+  .image-area { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+  @media (max-width: 1100px) { .image-area { width: 100%; } }
+  /* Tabs */
+  .tab-bar { display: flex; justify-content: center; margin-bottom: 16px; flex-shrink: 0; }
+  .tab-inner { display: inline-flex; background: var(--fill-quaternary); border-radius: 100px; padding: 3px; gap: 0; }
+  .tab-btn { padding: 6px 16px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; border-radius: 100px; user-select: none; transition: all 0.15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+  .tab-panels { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+  .tab-panel { display: none; height: 100%; overflow-y: auto; padding-right: 4px; }
+  .tab-panel.active { display: block; }
+  /* Media tab grid */
+  .media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .media-grid { grid-template-columns: 1fr; } }
+  .form-group { margin-bottom: 16px; }
+  .form-actions {
+    display: flex; gap: 8px; justify-content: center; align-items: center;
+    padding-top: 12px; flex-shrink: 0; margin-top: auto;
+  }
+  .form-group label {
+    display: block; font-size: 12px; font-weight: 600;
+    margin-bottom: 4px; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .form-group label .required { color: var(--danger); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* Genre capsule toggle */
+  .genre-capsule {
+    display: inline-flex; flex-shrink: 0;
+    background: var(--fill-quaternary); border-radius: 100px;
+    padding: 2px; gap: 0; margin-top: 8px;
+  }
+  .capsule-option {
+    padding: 2px 8px; border-radius: 100px;
+    font-size: 11px; font-weight: 500; cursor: pointer;
+    color: var(--text-secondary); transition: all 0.15s;
+    user-select: none; white-space: nowrap;
+    line-height: 1.6;
+  }
+  .capsule-option.active {
+    background: var(--card); color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  /* MPAA custom dropdown */
+  .mpaa-dropdown { width: 100%; display: block; position: relative; }
+  .mpaa-trigger {
+    width: 100%; padding: 10px 14px; border-radius: var(--radius-sm);
+    background: var(--fill-quaternary); color: var(--text); font-size: 15px;
+    cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  .mpaa-trigger::after {
+    content: ''; width: 10px; height: 10px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: center; background-size: contain;
+    transition: transform 0.2s;
+  }
+  .mpaa-dropdown:hover .mpaa-trigger::after { transform: rotate(180deg); }
+  .mpaa-trigger:hover, .mpaa-dropdown.open .mpaa-trigger { background: var(--card); box-shadow: 0 0 0 3px rgba(0,122,255,0.15), inset 0 0 0 1.5px var(--accent); }
+  .mpaa-dropdown .dropdown-menu { right: auto; left: 0; width: 100%; margin-top: 0; padding-top: 4px; }
+  .mpaa-dropdown .dropdown-item { text-align: left; }
+
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%; padding: 10px 14px;
+    border: none; border-radius: var(--radius-sm);
+    font-size: 15px; font-family: inherit; font-weight: 400; letter-spacing: -0.01em;
+    background: var(--fill-quaternary); color: var(--text);
+    transition: background 0.2s, box-shadow 0.2s;
+    -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  }
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+    padding-right: 36px; cursor: pointer;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; background: var(--card);
+    box-shadow: 0 0 0 3px rgba(0,122,255,0.15), inset 0 0 0 1.5px var(--accent);
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-tertiary); }
+  textarea { resize: vertical; min-height: 80px; }
+  /* Tags input */
+  .tag-input-wrapper {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 8px 10px; border-radius: var(--radius-sm);
+    background: var(--fill-quaternary); min-height: 42px; cursor: text;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  /* TMDB search */
+  .title-input-wrap { position: relative; display: flex; align-items: center; }
+  .title-input-wrap input { padding-right: 64px; }
+  .title-search-btn {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    border: 1px solid var(--separator); background: var(--card); color: var(--text-secondary); font-size: 12px;
+    padding: 5px 13px; border-radius: 100px; cursor: pointer; line-height: 1.4;
+    transition: all 0.2s;
+  }
+  .title-search-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .title-search-btn:disabled { opacity: 0.5; cursor: default; border-color: var(--separator); color: var(--text-tertiary); }
+  .form-group label.title-label-row { display: flex; justify-content: space-between; align-items: center; }
+  .tmdb-check-inline { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); cursor: default; user-select: none; }
+  .tmdb-results {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 100;
+    background: var(--card); border: 0.5px solid var(--separator); border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.16); max-height: 320px; overflow-y: auto; padding: 6px;
+  }
+  .tmdb-result { display: flex; gap: 8px; padding: 6px; border-radius: 8px; cursor: pointer; align-items: center; }
+  .tmdb-result:hover { background: var(--fill-secondary); }
+  .tmdb-result img { width: 38px; height: 57px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: var(--fill-quaternary); }
+  .tmdb-result .tr-info { flex: 1; min-width: 0; }
+  .tmdb-result .tr-title { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tmdb-result .tr-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .tmdb-msg { padding: 14px 10px; font-size: 12px; color: var(--text-tertiary); text-align: center; }
+  .tag-input-wrapper:focus-within {
+    background: var(--card);
+    box-shadow: 0 0 0 3px rgba(0,122,255,0.15), inset 0 0 0 1.5px var(--accent);
+  }
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--accent-light); color: var(--accent);
+    padding: 4px 12px; border-radius: 14px;
+    font-size: 13px; font-weight: 500; letter-spacing: -0.01em;
+  }
+  .tag .remove { cursor: pointer; opacity: 0.5; font-size: 17px; line-height: 1; font-weight: 400; }
+  .tag .remove:hover { opacity: 1; }
+  .tag-input-wrapper input {
+    border: none; outline: none; flex: 1;
+    min-width: 80px; padding: 3px 4px;
+    font-size: 14px; background: transparent;
+    box-shadow: none;
+  }
+  .tag-input-wrapper input:focus { box-shadow: none; background: transparent; }
+  /* Image card */
+  .image-card {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow-sm); overflow: hidden;
+    transition: box-shadow 0.2s;
+  }
+  .image-card:hover { box-shadow: var(--shadow); }
+  .image-card-title {
+    font-size: 13px; font-weight: 600;
+    padding: 12px 14px 0;
+    color: var(--text); display: flex; align-items: center; gap: 6px;
+  }
+  .image-card-title .ratio-hint {
+    flex: 1; font-weight: 400; font-size: 11px; color: var(--text-tertiary);
+  }
+  .media-grid .image-upload-area { height: 200px; }
+  .image-upload-area {
+    margin: 8px 14px 14px;
+    border: 2px dashed var(--separator);
+    border-radius: var(--radius-sm);
+    padding: 10px 10px 8px; text-align: center; cursor: pointer;
+    transition: all 0.2s;
+    height: 170px;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .image-upload-area:hover { border-color: var(--accent); background: var(--accent-light); }
+  .image-upload-area.dragover { border-color: var(--accent); background: var(--accent-light); transform: scale(1.01); }
+  .image-upload-area .placeholder { color: var(--text-tertiary); font-size: 13px; }
+  .image-upload-area .placeholder .upload-icon { font-size: 28px; display: block; margin-bottom: 4px; opacity: 0.5; }
+  .image-preview { max-width: 100%; max-height: 90px; border-radius: var(--radius-sm); display: block; margin: 0 auto; }
+  .image-info { font-size: 10px; color: var(--text-tertiary); margin-top: 2px; text-align: center; line-height: 1.3; }
+  .image-actions { margin-top: 3px; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .subtitle-badge {
+    position: absolute; top: 5%; left: 5%;
+    background: var(--success); color: #fff;
+    padding: 5px 14px; border-radius: 16px;
+    font-size: 15px; font-weight: 700; z-index: 5;
+    pointer-events: none; box-shadow: 0 2px 8px rgba(52,199,89,0.35);
+  }
+  .subtitle-inline {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 13px; font-weight: 500; color: var(--text);
+    cursor: pointer; margin-left: auto;
+  }
+  .subtitle-inline input[type="checkbox"] {
+    width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+  }
+  .subtitle-inline span { cursor: pointer; }
+  .btn-reuse {
+    padding: 3px 12px; border: 1px solid var(--separator); border-radius: 20px;
+    font-size: 11px; font-weight: 500; cursor: pointer;
+    background: var(--fill-quaternary); color: var(--text-secondary);
+    line-height: 1.6; margin-left: 6px;
+    transition: all 0.2s;
+  }
+  .btn-reuse:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+  /* Person cards (director / actor) */
+  .person-card {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px; border-radius: var(--radius);
+    background: var(--card); border: 1px solid var(--separator);
+    margin-bottom: 10px; position: relative; box-shadow: var(--shadow-sm);
+  }
+  .person-photo {
+    width: 72px; height: 72px; flex-shrink: 0; border-radius: 10px;
+    background: var(--fill-secondary); overflow: hidden; cursor: pointer;
+    position: relative; display: flex; align-items: center; justify-content: center;
+    border: 1px dashed var(--separator); transition: border-color 0.2s;
+  }
+  .person-photo:hover { border-color: var(--accent); }
+  .person-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .person-photo .photo-placeholder { font-size: 22px; color: var(--text-tertiary); opacity: 0.5; }
+  .person-photo .photo-change {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.45); color: #fff;
+    font-size: 11px; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .person-photo:hover .photo-change { opacity: 1; }
+  .person-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .person-fields input { font-size: 14px; padding: 7px 11px; }
+  .person-name-row, .person-role-row { display: flex; align-items: center; gap: 8px; }
+  .person-name-row input, .person-role-row input { flex: 1; min-width: 0; }
+  .person-remove-spacer { width: 22px; height: 22px; flex-shrink: 0; }
+  .person-remove {
+    width: 22px; height: 22px; border-radius: 11px; flex-shrink: 0;
+    border: 1px solid var(--separator); background: var(--card);
+    color: var(--text-tertiary); font-size: 14px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    transition: all 0.15s;
+  }
+  .person-remove:hover { background: rgba(255,59,48,0.08); border-color: rgba(255,59,48,0.3); color: var(--danger); }
+  /* 导演 / 演员 卡片网格：一行最多 3 个 */
+  #directorCard, #actorCards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  #directorCard .person-card, #actorCards .person-card { margin-bottom: 0; }
+  #directorCard .person-empty, #actorCards .person-empty { grid-column: 1 / -1; }
+  @media (max-width: 900px) {
+    #directorCard, #actorCards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    #directorCard, #actorCards { grid-template-columns: 1fr; }
+  }
+  .btn-add-row {
+    margin-top: 4px; padding: 8px 16px; border: 1px dashed var(--text-tertiary);
+    border-radius: var(--radius); background: transparent; color: var(--text-secondary);
+    font-size: 13px; font-weight: 600; cursor: pointer; width: 100%;
+    transition: all 0.2s;
+  }
+  .btn-add-row:hover { background: var(--fill-tertiary); border-color: var(--text-secondary); }
+  .person-empty {
+    font-size: 13px; color: var(--text-tertiary); padding: 10px 0;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px;
+  }
+  .section-header label { margin: 0; }
+  .section-header .btn-add-row { width: auto; margin-top: 0; padding: 6px 12px; font-size: 12px; }
+  /* Buttons - iOS style */
+  .btn {
+    padding: 8px 18px; border: none; border-radius: 20px;
+    font-size: 14px; font-weight: 600; cursor: pointer; letter-spacing: -0.01em;
+    transition: all 0.2s ease;
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+    -webkit-user-select: none; user-select: none;
+  }
+  .btn:active { transform: scale(0.96); opacity: 0.8; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #0070E9; box-shadow: 0 2px 8px rgba(0,122,255,0.3); }
+  .btn-outline {
+    background: var(--fill-quaternary); color: var(--accent);
+  }
+  .btn-outline:hover { background: var(--accent-light); }
+  .btn-danger {
+    background: rgba(255,59,48,0.1); color: var(--danger);
+  }
+  .btn-danger:hover { background: rgba(255,59,48,0.15); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 16px; }
+  .btn-accent { background: var(--fill-quaternary); color: var(--accent); font-weight: 600; }
+  .btn-accent:hover { background: var(--accent-light); }
+  .btn-export { background: var(--accent); color: #fff; font-weight: 600; }
+  .btn-export:hover { background: #0070E9; }
+  .btn-ghost {
+    background: transparent; color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .btn-ghost:hover { background: var(--fill-quaternary); }
+  /* Modal - iOS sheet style */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35); z-index: 1000;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--card); border-radius: var(--radius-lg);
+    width: 90vw; max-width: 800px; max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.08);
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 16px 20px; border-bottom: 0.5px solid var(--separator);
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: 600; font-size: 17px; letter-spacing: -0.02em;
+  }
+  .modal-body { padding: 16px 20px; overflow: auto; flex: 1; }
+  .modal-footer {
+    padding: 12px 20px; border-top: 0.5px solid var(--separator);
+    display: flex; gap: 10px; justify-content: flex-end;
+  }
+  .modal-footer .btn { min-width: 80px; justify-content: center; }
+  /* NFO Syntax */
+  .nfo-preview-wrapper {
+    background: #1C1C1E; border-radius: var(--radius-sm);
+    padding: 16px 18px; overflow: auto; max-height: 55vh;
+  }
+  .nfo-preview {
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+    font-size: 12px; line-height: 1.7; color: #E5E5EA; white-space: pre; word-break: break-all;
+  }
+  .nfo-preview .xml-tag { color: #7AA2F7; }
+  .nfo-preview .xml-attr { color: #FF9E64; }
+  .nfo-preview .xml-value { color: #9ECE6A; }
+  .nfo-preview .xml-decl { color: #565F89; }
+  /* Crop Modal */
+  .crop-modal { max-width: 920px; }
+  .crop-body {
+    display: flex; flex-direction: column; align-items: center;
+    background: #1C1C1E; border-radius: var(--radius-sm);
+    user-select: none; -webkit-user-select: none;
+    overflow: hidden;
+  }
+  .crop-container {
+    position: relative; display: inline-block; cursor: crosshair;
+    max-width: 100%; max-height: 55vh;
+    overflow: hidden;
+  }
+  .crop-container img { display: block; }
+  .crop-frame {
+    position: absolute;
+    border: 2.5px solid rgba(255,255,255,0.95);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+    cursor: move;
+    border-radius: 2px;
+  }
+  .crop-handle {
+    position: absolute;
+    width: 14px; height: 14px;
+    background: #fff;
+    border: 2.5px solid var(--accent);
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .crop-handle-tl { top: -7px; left: -7px; cursor: nw-resize; }
+  .crop-handle-tr { top: -7px; right: -7px; cursor: ne-resize; }
+  .crop-handle-bl { bottom: -7px; left: -7px; cursor: sw-resize; }
+  .crop-handle-br { bottom: -7px; right: -7px; cursor: se-resize; }
+  .crop-zoom-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; background: #1C1C1E;
+  }
+  .crop-zoom-row label { color: var(--text-tertiary); font-size: 13px; white-space: nowrap; font-weight: 500; }
+  .crop-zoom-row input[type="range"] { flex: 1; accent-color: var(--accent); height: 4px; }
+  .crop-zoom-row span { color: var(--text-tertiary); font-size: 12px; min-width: 36px; text-align: center; }
+  .crop-info-row {
+    display: flex; gap: 24px; padding: 8px 16px;
+    font-size: 12px; color: var(--text-tertiary);
+    background: #1C1C1E; border-top: 0.5px solid rgba(255,255,255,0.08);
+  }
+  .crop-ratio-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.08); border-radius: 100px; padding: 3px;
+  }
+  .crop-ratio-toggle span { font-size: 12px; color: var(--text-tertiary); padding-left: 6px; }
+  .ratio-btn {
+    padding: 4px 12px; border: none; border-radius: 100px;
+    background: transparent; color: var(--text-tertiary); font-size: 12px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .ratio-btn.active { background: var(--accent); color: #fff; }
+
+  /* Toast */
+  .hint { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+  .hot-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 32px; overflow: hidden; }
+  .hot-tags span {
+    display: inline-block; padding: 4px 10px;
+    background: var(--fill-secondary); border-radius: 14px;
+    font-size: 12px; color: var(--text-secondary);
+    cursor: pointer; transition: all 0.15s; user-select: none; white-space: nowrap;
+  }
+  .hot-tags span:hover { background: rgba(0,122,255,0.12); color: var(--system-blue); }
+  .hot-tags span.used { opacity: 0.4; pointer-events: none; }
+  /* Runtime stepper */
+  .runtime-stepper { position: relative; }
+  .runtime-stepper input {
+    width: 100%; padding-right: 116px;
+  }
+  .runtime-btns {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    display: flex; gap: 3px;
+  }
+  .runtime-btns button {
+    padding: 3px 6px; font-size: 11px; font-family: inherit; font-weight: 500;
+    border: 1px solid var(--separator); background: var(--card);
+    color: var(--text-secondary); border-radius: 5px; cursor: pointer;
+    transition: all 0.15s; line-height: 1.3;
+  }
+  .runtime-btns button:hover { border-color: var(--accent); color: var(--accent); }
+  .runtime-btns button:active { background: var(--accent-light); }
+  .mini-stepper { position: relative; }
+  .mini-stepper input { width: 100%; padding-right: 56px; }
+  .mini-stepper-btns {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    display: flex; gap: 3px;
+  }
+  .mini-stepper-btns button {
+    padding: 3px 6px; font-size: 11px; font-family: inherit; font-weight: 500;
+    border: 1px solid var(--separator); background: var(--card);
+    color: var(--text-secondary); border-radius: 5px; cursor: pointer;
+    transition: all 0.15s; line-height: 1.3;
+  }
+  .mini-stepper-btns button:hover { border-color: var(--accent); color: var(--accent); }
+  .mini-stepper-btns button:active { background: var(--accent-light); }
+  /* Custom Tags Modal */
+  .custom-tags-body { flex: 1 1 auto; height: 60vh; max-height: 60vh; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .custom-tags-col { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .custom-tags-col:first-child { border-right: 0.5px solid var(--separator); padding-right: 20px; }
+  .custom-tags-col .genre-capsule { margin-top: 0; }
+  @media (max-width: 600px) {
+    .custom-tags-body { grid-template-columns: 1fr; overflow-y: auto; }
+    .custom-tags-col { overflow: visible; }
+    .custom-tags-col:first-child { border-right: none; padding-right: 0; border-bottom: 0.5px solid var(--separator); padding-bottom: 16px; }
+  }
+  .tag-input-inner { position: relative; flex: 1; display: flex; }
+  .tag-input-inner input { width: 100%; padding-right: 30px; }
+  .input-icon-btn {
+    position: absolute; top: 50%; right: 5px; transform: translateY(-50%);
+    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+    padding: 0; border: none; background: transparent; color: var(--text-tertiary);
+    cursor: pointer; border-radius: 6px; transition: all 0.15s;
+  }
+  .input-icon-btn:hover { color: var(--accent); background: var(--accent-light); }
+  .input-icon-btn:active { background: var(--accent-light); }
+  .batch-textarea {
+    flex: 1; min-height: 160px; padding: 10px;
+    border: 0.5px solid var(--separator); border-radius: 10px;
+    background: var(--fill-quaternary); color: var(--text);
+    font-size: 13px; resize: vertical; font-family: inherit; line-height: 1.5;
+  }
+  .batch-textarea:focus { outline: none; border-color: var(--accent); background: var(--card); }
+  .custom-tags-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+  .ct-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; background: var(--fill-secondary); transition: background 0.15s; }
+  .ct-item.disabled { opacity: 0.4; }
+  .ct-item .ct-name { flex: 1; font-size: 13px; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ct-item.disabled .ct-name { text-decoration: line-through; }
+  .ct-item .ct-arrow { background: none; border: none; color: var(--text-tertiary); cursor: pointer; padding: 2px 3px; border-radius: 4px; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink: 0; }
+  .ct-item .ct-arrow:hover { background: var(--fill-tertiary); color: var(--text-primary); }
+  .ct-item .ct-arrow.ct-arrow-disabled { opacity: 0.25; pointer-events: none; }
+  .ct-item .ct-toggle { position: relative; display: inline-block; width: 36px; height: 20px; cursor: pointer; flex-shrink: 0; }
+  .ct-item .ct-toggle input { opacity: 0; width: 0; height: 0; }
+  .ct-item .ct-toggle .slider { position: absolute; inset: 0; background: rgba(120,120,128,0.36); border-radius: 20px; transition: 0.2s; }
+  .ct-item .ct-toggle .slider:before { content: ''; position: absolute; height: 16px; width: 16px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+  .ct-item .ct-toggle input:checked + .slider { background: var(--success); }
+  .ct-item .ct-toggle input:checked + .slider:before { transform: translateX(16px); }
+  .ct-item .ct-del { background: none; border: none; color: var(--text-tertiary); cursor: pointer; padding: 2px 5px; border-radius: 4px; font-size: 14px; line-height: 1; flex-shrink: 0; }
+  .ct-item .ct-del:hover { color: #ff3b30; background: rgba(255,59,48,0.1); }
+  .toast {
+    position: fixed; top: 32px; left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: rgba(28,28,30,0.92); color: #fff;
+    padding: 12px 24px; border-radius: 24px;
+    font-size: 14px; font-weight: 500; z-index: 9999; letter-spacing: -0.01em;
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { background: rgba(52,199,89,0.92); }
+  .toast.error { background: rgba(255,59,48,0.92); }
+  /* Divider */
+  .divider-sm { height: 0.5px; background: var(--separator); margin: 12px 0; }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--fill-tertiary); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <span>影视元数据</span>
+      <div class="header-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openApiKeyModal()" title="配置 TMDB API Key">API 管理</button>
+        <button class="btn btn-ghost btn-sm" onclick="openCustomTagsModal()">自定义标签</button>
+        <button class="btn btn-ghost btn-sm" onclick="previewNFO()">预览 NFO</button>
+        <div class="dropdown">
+          <button class="btn btn-ghost btn-sm dropdown-trigger">下载 ▾</button>
+          <div class="dropdown-menu">
+            <button class="dropdown-item" onclick="exportNFO()">下载 NFO</button>
+            <button class="dropdown-item" id="btnExportPoster" onclick="exportImage('poster')">下载海报</button>
+            <button class="dropdown-item" id="btnExportFanart" onclick="exportImage('fanart')">下载剧照</button>
+            <button class="dropdown-item" id="btnExportLogo" onclick="exportImage('logo')">下载 Logo</button>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item dropdown-item-primary" onclick="exportAll()">导出全部</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <!-- History Sidebar -->
+      <div class="history-sidebar">
+        <div class="history-header">
+          <span>历史记录</span>
+          <button class="btn btn-ghost btn-sm" onclick="clearHistory()">清空</button>
+        </div>
+        <div class="history-list" id="historyList">
+          <div class="history-empty">暂无记录</div>
+        </div>
+        <button class="btn btn-ghost btn-sm storage-location-btn" onclick="reselectStorageLocation()" title="重新选择文件保存位置">选择文件夹</button>
+      </div>
+
+      <!-- Main Form + Tabs -->
+      <div class="form-area">
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label class="title-label-row">
+              <span>标题 <span class="required">*</span></span>
+              <span class="tmdb-check-inline" title="通过 TMDB 自动获取媒体信息" onclick="return false;">
+                <input type="checkbox" id="useTMDB" checked onclick="return false;"> TMDB
+              </span>
+            </label>
+            <div class="title-input-wrap">
+              <input type="text" id="title" placeholder="例：盗梦空间" oninput="onTitleChanged(); updateState()" autocomplete="off">
+              <button type="button" class="title-search-btn" onclick="searchTMDB()" title="从 TMDB 搜索">搜索</button>
+              <div id="tmdbResults" class="tmdb-results" style="display:none;"></div>
+            </div>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>文件名 <span class="required">*</span></label>
+            <input type="text" id="filename" placeholder="inception" oninput="onFilenameManualEdit(); sanitizeFilename(this); updateState()">
+          </div>
+        </div>
+
+        <div class="tab-bar">
+          <div class="tab-inner">
+            <span class="tab-btn active" data-tab="basic" onclick="switchTab('basic')">基本信息</span>
+            <span class="tab-btn" data-tab="cast" onclick="switchTab('cast')">演职人员</span>
+            <span class="tab-btn" data-tab="media" onclick="switchTab('media')">媒体</span>
+          </div>
+        </div>
+
+        <div class="tab-panels">
+
+        <!-- Tab: 基本信息 -->
+        <div class="tab-panel active" id="tab-basic">
+          <div class="form-group">
+            <label>原始标题</label>
+            <input type="text" id="originaltitle" placeholder="例：Inception" oninput="updateState()">
+          </div>
+          <div class="form-row" style="grid-template-columns: 5fr 2fr 3fr 2fr;">
+            <div class="form-group">
+              <label>首播日期</label>
+              <input type="text" id="premiered" placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" oninput="formatPremiered(this); autoFillYear(); updateState()">
+            </div>
+            <div class="form-group">
+              <label>年份</label>
+              <div class="mini-stepper">
+                <input type="text" id="year" inputmode="numeric" pattern="\d{4}" placeholder="2016" oninput="onYearManualEdit(); updateState()">
+                <div class="mini-stepper-btns">
+                  <button type="button" tabindex="-1" onclick="adjustYear(-1)">-</button>
+                  <button type="button" tabindex="-1" onclick="adjustYear(1)">+</button>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>时长 (分钟)</label>
+              <div class="runtime-stepper">
+                <input type="text" id="runtime" inputmode="numeric" pattern="\d*" placeholder="122" oninput="updateState()">
+                <div class="runtime-btns">
+                  <button type="button" tabindex="-1" onclick="adjustRuntime(-1)">-1</button>
+                  <button type="button" tabindex="-1" onclick="adjustRuntime(1)">+1</button>
+                  <button type="button" tabindex="-1" onclick="adjustRuntime(-5)">-5</button>
+                  <button type="button" tabindex="-1" onclick="adjustRuntime(5)">+5</button>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>评分</label>
+              <div class="mini-stepper">
+                <input type="text" id="rating" inputmode="decimal" pattern="\d+(\.\d)?" placeholder="6.0" onblur="validateRating(this)" oninput="updateState()">
+                <div class="mini-stepper-btns">
+                  <button type="button" tabindex="-1" onclick="adjustRating(-0.5)">-</button>
+                  <button type="button" tabindex="-1" onclick="adjustRating(0.5)">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="form-row" style="grid-template-columns: 5fr 2fr 3fr 2fr;">
+            <div class="form-group" style="grid-column: 1 / 4;">
+              <label>国家/地区</label>
+              <div class="tag-input-wrapper" onclick="focusTagInput(this)">
+                <input type="text" placeholder="输入后按回车添加" onkeydown="handleTagKeydown(event, 'country')">
+              </div>
+              <div class="hot-tags" id="hotCountryTags"></div>
+            </div>
+            <div class="form-group" style="grid-column: 4 / 5;">
+              <label>分级</label>
+              <div class="dropdown mpaa-dropdown" id="mpaaDropdown">
+                <div class="dropdown-trigger mpaa-trigger" id="mpaaTrigger">未分级</div>
+                <div class="dropdown-menu">
+                  <button class="dropdown-item" data-value="" onclick="setMpaa('', '未分级')">未分级</button>
+                  <button class="dropdown-item" data-value="G" onclick="setMpaa('G', 'G')">G</button>
+                  <button class="dropdown-item" data-value="PG" onclick="setMpaa('PG', 'PG')">PG</button>
+                  <button class="dropdown-item" data-value="PG-13" onclick="setMpaa('PG-13', 'PG-13')">PG-13</button>
+                  <button class="dropdown-item" data-value="R" onclick="setMpaa('R', 'R')">R</button>
+                  <button class="dropdown-item" data-value="NC-17" onclick="setMpaa('NC-17', 'NC-17')">NC-17</button>
+                </div>
+              </div>
+              <input type="hidden" id="mpaa" value="">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>类型</label>
+            <div class="tag-input-wrapper" onclick="focusTagInput(this)">
+              <input type="text" placeholder="输入后按回车添加" onkeydown="handleTagKeydown(event, 'genre')">
+            </div>
+            <div style="display:flex; align-items:flex-start; gap:6px; flex-wrap:wrap;">
+              <span class="genre-capsule">
+                <span class="capsule-option active" onclick="switchGenreTab('normal'); event.stopPropagation();">普通</span>
+                <span class="capsule-option" onclick="switchGenreTab('adult'); event.stopPropagation();">成人</span>
+              </span>
+              <div class="hot-tags" id="hotGenreTags" style="flex:1; min-width:0;"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>剧情简介</label>
+            <textarea id="plot" rows="4" placeholder="输入剧情简介..." oninput="updateState()"></textarea>
+          </div>
+        </div>
+
+        <!-- Tab: 演职人员 -->
+        <div class="tab-panel" id="tab-cast">
+          <div class="form-group">
+            <div class="section-header">
+              <label>导演</label>
+              <button class="btn-add-row" onclick="addDirector()">+ 添加导演</button>
+            </div>
+            <div id="directorCard"></div>
+          </div>
+          <div class="form-group">
+            <div class="section-header">
+              <label>演员</label>
+              <button class="btn-add-row" onclick="addActor()">+ 添加演员</button>
+            </div>
+            <div id="actorCards"></div>
+          </div>
+        </div>
+
+        <!-- Tab: 媒体 -->
+        <div class="tab-panel" id="tab-media">
+          <div class="media-grid">
+            <!-- Poster -->
+            <div class="image-card">
+              <div class="image-card-title">
+                <span>海报</span>
+                <span class="ratio-hint">poster · 2:3</span>
+                <button class="btn-reuse" id="btnReuseFanart" style="display:none;" onclick="event.stopPropagation(); reuseFanartForPoster()">复用剧照</button>
+                <label class="subtitle-inline" for="hasSubtitle">
+                  <input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()">
+                  <span>字幕</span>
+                </label>
+              </div>
+              <div class="image-upload-area" id="posterUpload" onclick="triggerUpload('poster')">
+                <div class="placeholder">
+                  <span class="upload-icon">+</span>上传海报<br>
+                  <span style="font-size:11px;">JPG/PNG · 2:3</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Fanart -->
+            <div class="image-card">
+              <div class="image-card-title">
+                <span>剧照</span>
+                <span class="ratio-hint">fanart · 4:3</span>
+              </div>
+              <div class="image-upload-area" id="fanartUpload" onclick="triggerUpload('fanart')">
+                <div class="placeholder">
+                  <span class="upload-icon">+</span>上传剧照<br>
+                  <span style="font-size:11px;">JPG/PNG · 4:3</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Logo -->
+            <div class="image-card">
+              <div class="image-card-title">
+                <span>Logo</span>
+                <span class="ratio-hint">clearlogo · 透明背景</span>
+              </div>
+              <div class="image-upload-area" id="logoUpload" onclick="triggerUpload('logo')">
+                <div class="placeholder">
+                  <span class="upload-icon">+</span>上传 Logo<br>
+                  <span style="font-size:11px;">JPG/PNG · 透明背景最佳</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        </div><!-- /.tab-panels -->
+
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="resetAll()">清空</button>
+          <button class="btn btn-primary" id="btnSave" onclick="saveToDisk()" disabled style="opacity:0.5;">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="footer-left">
+      <svg class="tmdb-logo" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 489.04 35.4"><defs><style>.cls-1{fill:url(#linear-gradient);}</style><linearGradient id="linear-gradient" y1="17.7" x2="489.04" y2="17.7" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#90cea1"/><stop offset="0.56" stop-color="#3cbec9"/><stop offset="1" stop-color="#00b3e5"/></linearGradient></defs><title>Asset 5</title><g id="Layer_2" data-name="Layer 2"><g id="Layer_1-2" data-name="Layer 1"><path class="cls-1" d="M293.5,0h8.9l8.75,23.2h.1L320.15,0h8.35L313.9,35.4h-6.25Zm46.6,0h7.8V35.4h-7.8Zm22.2,0h24.05V7.2H370.1v6.6h15.35V21H370.1v7.2h17.15v7.2H362.3Zm55,0H429a33.54,33.54,0,0,1,8.07,1A18.55,18.55,0,0,1,443.75,4a15.1,15.1,0,0,1,4.52,5.53A18.5,18.5,0,0,1,450,17.8a16.91,16.91,0,0,1-1.63,7.58,16.37,16.37,0,0,1-4.37,5.5,19.52,19.52,0,0,1-6.35,3.37A24.59,24.59,0,0,1,430,35.4H417.29Zm7.81,28.2h4a21.57,21.57,0,0,0,5-.55,10.87,10.87,0,0,0,4-1.83,8.69,8.69,0,0,0,2.67-3.34,11.92,11.92,0,0,0,1-5.08,9.87,9.87,0,0,0-1-4.52,9,9,0,0,0-2.62-3.18,11.68,11.68,0,0,0-3.88-1.88,17.43,17.43,0,0,0-4.67-.62h-4.6ZM461.24,0h13.2a34.42,34.42,0,0,1,4.63.32,12.9,12.9,0,0,1,4.17,1.3,7.88,7.88,0,0,1,3,2.73A8.34,8.34,0,0,1,487.39,9a7.42,7.42,0,0,1-1.67,5,9.28,9.28,0,0,1-4.43,2.82v.1a10,10,0,0,1,3.18,1,8.38,8.38,0,0,1,2.45,1.85,7.79,7.79,0,0,1,1.57,2.62,9.16,9.16,0,0,1,.55,3.2,8.52,8.52,0,0,1-1.2,4.68,9.42,9.42,0,0,1-3.1,3,13.38,13.38,0,0,1-4.27,1.65,23.11,23.11,0,0,1-4.73.5h-14.5ZM469,14.15h5.65a8.16,8.16,0,0,0,1.78-.2A4.78,4.78,0,0,0,478,13.3a3.34,3.34,0,0,0,1.13-1.2,3.63,3.63,0,0,0,.42-1.8,3.22,3.22,0,0,0-.47-1.82,3.33,3.33,0,0,0-1.23-1.13,5.77,5.77,0,0,0-1.7-.58,10.79,10.79,0,0,0-1.85-.17H469Zm0,14.65h7a8.91,8.91,0,0,0,1.83-.2,4.78,4.78,0,0,0,1.67-.7,4,4,0,0,0,1.23-1.3,3.71,3.71,0,0,0,.47-2,3.13,3.13,0,0,0-.62-2A4,4,0,0,0,479,21.45,7.83,7.83,0,0,0,477,20.9a15.12,15.12,0,0,0-2.05-.15H469Zm-265,6.53H271a17.66,17.66,0,0,0,17.66-17.66h0A17.67,17.67,0,0,0,271,0H204.06A17.67,17.67,0,0,0,186.4,17.67h0A17.66,17.66,0,0,0,204.06,35.33ZM10.1,6.9H0V0H28V6.9H17.9V35.4H10.1ZM39,0h7.8V13.2H61.9V0h7.8V35.4H61.9V20.1H46.75V35.4H39ZM80.2,0h24V7.2H88v6.6h15.35V21H88v7.2h17.15v7.2h-25Zm55,0H147l8.15,23.1h.1L163.45,0H175.2V35.4h-7.8V8.25h-.1L158,35.4h-5.95l-9-27.15H143V35.4h-7.8Z"/></g></g></svg>
+      <span class="tmdb-attribution">This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
+    </div>
+    <div class="footer-right">
+      <span class="footer-author">@Halfleave</span>
+      <span class="footer-version">v1.0.0</span>
+    </div>
+  </footer>
+</div>
+
+<!-- Custom Tags Modal -->
+<div class="modal-overlay" id="customTagsModal">
+  <div class="modal" style="max-width:740px;">
+    <div class="modal-header">
+      <span>自定义标签</span>
+      <button class="btn btn-ghost btn-sm" onclick="closeCustomTagsModal()">关闭</button>
+    </div>
+    <div class="modal-body custom-tags-body">
+      <div class="custom-tags-col">
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px;">
+          <span style="font-weight:600; font-size:14px;">国家/地区</span>
+          <div class="tag-input-inner">
+            <input type="text" id="newCountryTag" placeholder="输入新标签..." style="padding:5px 30px 5px 8px; border:0.5px solid var(--separator); border-radius:8px; background:var(--fill-quaternary); color:var(--text); font-size:12px;">
+            <button class="input-icon-btn" onclick="openBatchAddModal('country')" title="批量添加" aria-label="批量添加">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <button class="btn btn-accent btn-sm" onclick="addCustomTag('country')">添加</button>
+        </div>
+        <div id="customCountryList" class="custom-tags-list"></div>
+      </div>
+      <div class="custom-tags-col">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:8px;">
+          <div style="display:flex; align-items:center; gap:6px; flex:1;">
+            <span style="font-weight:600; font-size:14px;">类型</span>
+            <span class="genre-capsule">
+              <span class="capsule-option active" id="customGenreTabNormal" onclick="switchCustomGenreTab('normal')">普通</span>
+              <span class="capsule-option" id="customGenreTabAdult" onclick="switchCustomGenreTab('adult')">成人</span>
+            </span>
+          </div>
+          <div class="tag-input-inner">
+            <input type="text" id="newGenreTag" placeholder="输入新标签..." style="padding:5px 30px 5px 8px; border:0.5px solid var(--separator); border-radius:8px; background:var(--fill-quaternary); color:var(--text); font-size:12px;">
+            <button class="input-icon-btn" onclick="openBatchAddModal('genre')" title="批量添加" aria-label="批量添加">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <button class="btn btn-accent btn-sm" id="newGenreTagBtn" onclick="addCustomTag('genre_normal')">添加</button>
+        </div>
+        <div id="customGenreList" class="custom-tags-list"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="resetCustomTags()">恢复默认</button>
+      <button class="btn btn-primary" onclick="closeCustomTagsModal()">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Add Modal -->
+<div class="modal-overlay" id="batchAddModal" onclick="if(event.target===this) closeBatchAddModal()">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <span id="batchAddTitle">批量添加标签</span>
+      <button class="btn btn-ghost btn-sm" onclick="closeBatchAddModal()">关闭</button>
+    </div>
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+      <label style="font-size:13px; color:var(--text-secondary);">每行输入一个标签，空行会自动忽略。</label>
+      <textarea id="batchAddTextarea" class="batch-textarea" placeholder="例如：&#10;中国大陆&#10;香港&#10;台湾"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeBatchAddModal()">取消</button>
+      <button class="btn btn-accent" onclick="confirmBatchAdd()">确认添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- NFO Preview Modal -->
+<div class="modal-overlay" id="nfoModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>NFO 预览</span>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">关闭</button>
+    </div>
+    <div class="modal-body">
+      <div class="nfo-preview-wrapper">
+        <div class="nfo-preview" id="modalNfoPreview"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="copyNFO()">复制内容</button>
+      <button class="btn btn-export" onclick="modalExportNFO()">下载 NFO</button>
+    </div>
+  </div>
+</div>
+
+<!-- Crop Modal -->
+<div class="modal-overlay" id="cropModal">
+  <div class="modal crop-modal">
+    <div class="modal-header">
+      <span>裁剪图片 — <span id="cropLabel"></span></span>
+      <button class="btn btn-ghost btn-sm" onclick="closeCropModal()">关闭</button>
+    </div>
+    <div class="modal-body" style="padding:0;">
+      <div class="crop-body">
+        <div class="crop-container" id="cropContainer">
+          <img id="cropImage" draggable="false">
+          <div class="crop-frame" id="cropFrame">
+            <div class="crop-handle crop-handle-tl" data-dir="tl"></div>
+            <div class="crop-handle crop-handle-tr" data-dir="tr"></div>
+            <div class="crop-handle crop-handle-bl" data-dir="bl"></div>
+            <div class="crop-handle crop-handle-br" data-dir="br"></div>
+          </div>
+        </div>
+      </div>
+      <div class="crop-info-row">
+        <span id="cropDims"></span>
+      </div>
+      <div class="crop-zoom-row">
+        <label>缩放</label>
+        <input type="range" id="cropZoom" min="10" max="200" value="100" oninput="onCropZoom(this.value)">
+        <span id="cropZoomVal">100%</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="crop-ratio-toggle" id="cropRatioToggle" style="display:none;">
+        <span>比例</span>
+        <button class="ratio-btn active" data-ratio="4:3" onclick="switchCropRatio(4/3)">4:3</button>
+        <button class="ratio-btn" data-ratio="3:2" onclick="switchCropRatio(3/2)">3:2</button>
+        <button class="ratio-btn" data-ratio="16:9" onclick="switchCropRatio(16/9)">16:9</button>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="resetCrop()">重置选区</button>
+      <button class="btn btn-ghost" onclick="closeCropModal()">取消</button>
+      <button class="btn btn-primary" onclick="applyCrop()">确认裁剪</button>
+    </div>
+  </div>
+</div>
+
+<!-- API Key 管理弹窗 -->
+<div class="modal-overlay" id="apiKeyModal" onclick="if(event.target===this) closeApiKeyModal()">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <span>API 管理</span>
+      <button class="btn btn-ghost btn-sm" onclick="closeApiKeyModal()">关闭</button>
+    </div>
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:14px;">
+      <p id="apiKeyHint" style="margin:0; font-size:12px; color:var(--text-secondary);">正在读取当前配置…</p>
+      <div class="form-group" style="margin:0;">
+        <label>TMDB API Key</label>
+        <input type="text" id="apiKeyInput" placeholder="输入 TMDB API Key" style="width:100%;" autocomplete="off">
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn btn-ghost btn-sm" id="btnClearApiKey" onclick="clearApiKey()" style="display:none; color:var(--danger);">清除API</button>
+      <div style="display:flex; gap:10px; margin-left:auto;">
+        <button class="btn btn-ghost" onclick="closeApiKeyModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveApiKey()">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="seasonEpisodeModal" onclick="if(event.target===this) closeSeasonEpisodeModal()">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <span>选择剧集信息</span>
+      <button class="btn btn-ghost btn-sm" onclick="closeSeasonEpisodeModal()">关闭</button>
+    </div>
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:14px;">
+      <p style="margin:0; font-size:12px; color:var(--text-secondary);">选择用于获取剧照的季和集</p>
+      <div class="form-group" style="margin:0;">
+        <label>季</label>
+        <select id="seSeason" onchange="onSeasonChange()" style="width:100%;"></select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>集</label>
+        <input type="number" id="seEpisode" min="1" value="1" style="width:100%;">
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end;">
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-ghost" onclick="closeSeasonEpisodeModal()">取消</button>
+        <button class="btn btn-primary" onclick="confirmSeasonEpisode()">确认</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="posterInput" accept=".jpg,.jpeg,.png" style="display:none;" onchange="handleImageUpload(event,'poster')">
+<input type="file" id="fanartInput" accept=".jpg,.jpeg,.png" style="display:none;" onchange="handleImageUpload(event,'fanart')">
+<input type="file" id="logoInput" accept=".jpg,.jpeg,.png" style="display:none;" onchange="handleImageUpload(event,'logo')">
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===================================================================
+//  影视元数据编辑器 — 脚本入口
+//  以下代码按职责分区，函数均为声明式（hoisted），可在定义前被调用：
+//    1. State         全局状态对象与裁剪临时状态
+//    2. TMDB          影视数据库搜索 / 详情填充 / API Key 管理
+//    3. 标签 / 演职人员 标签输入、类型分组、导演演员卡片
+//    4. 历史记录       本地存储与回载
+//    5. 文件系统       保存目录、图片导出（File System Access API）
+//    6. 裁剪           海报/剧照裁剪弹窗交互
+//    7. NFO 生成/导出  组装 XML、语法高亮、下载
+//    8. 工具函数       转义、Toast、圆角绘制等
+// ===================================================================
+// ====== State ======
+const state = {
+  genre: [],
+  country: [],
+  directors: [],   // [{ name, photo: { dataUrl, name, size, type } }]
+  actors: [],      // [{ name, role, photo: { dataUrl, name, size, type } }]
+  genreTab: 'normal',
+  _genreStore: { normal: [], adult: [] },
+  poster: null,    // { dataUrl, name, size, type, width, height }
+  fanart: null,
+  logo: null,
+  hasSubtitle: false,
+  mpaa: '',
+};
+
+// Crop state
+let _crop = {
+  type: null,       // 'poster' | 'fanart'
+  ratio: 1,         // target w/h
+  naturalW: 0, naturalH: 0,  // original image size
+  displayW: 0, displayH: 0,  // displayed size in container
+  scale: 1,         // display / natural
+  frameX: 0, frameY: 0, frameW: 0, frameH: 0,  // frame in display coords
+  zoom: 100,
+  dragging: false, dragType: '', dragStartX: 0, dragStartY: 0,
+};
+
+// 季/集选择弹窗临时数据
+var _seData = null;
+var _seKey = null;
+
+function getExportTitle() {
+  var fn = document.getElementById('filename').value.trim();
+  return fn || 'movie';
+}
+
+function getMpaaLabel(value) {
+  var map = { '': '未分级', 'G': 'G', 'PG': 'PG', 'PG-13': 'PG-13', 'R': 'R', 'NC-17': 'NC-17' };
+  return map[value] || value || '未分级';
+}
+
+function setMpaa(value, label) {
+  state.mpaa = value;
+  var input = document.getElementById('mpaa');
+  if (input) input.value = value;
+  var trigger = document.getElementById('mpaaTrigger');
+  if (trigger) trigger.textContent = label || getMpaaLabel(value);
+  updateState();
+}
+
+function addMpaaOption(value, label) {
+  if (!value) return;
+  var menu = document.querySelector('#mpaaDropdown .dropdown-menu');
+  if (!menu) return;
+  var exists = false;
+  menu.querySelectorAll('.dropdown-item').forEach(function(btn) {
+    if (btn.dataset.value === value) exists = true;
+  });
+  if (exists) return;
+  var btn = document.createElement('button');
+  btn.className = 'dropdown-item';
+  btn.dataset.value = value;
+  btn.setAttribute('onclick', "setMpaa('" + value + "', '" + (label || value) + "')");
+  btn.textContent = label || value;
+  menu.appendChild(btn);
+}
+
+function sanitizeName(str) {
+  return (str == null ? '' : String(str)).replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, '');
+}
+function sanitizeCommonFilename(str) {
+  return (str == null ? '' : String(str))
+    .replace(/[\\/<>:"|?*]/g, '')
+    .replace(/[\x00-\x1f\x7f]/g, '');
+}
+function sanitizeFilename(input) {
+  input.value = sanitizeCommonFilename(input.value);
+}
+
+var _filenameManual = false;
+var _yearManual = false;
+
+function onTitleChanged() {
+  var filenameInput = document.getElementById('filename');
+  var filenameVal = filenameInput.value.trim();
+  // Sync from title if: never manually edited, or filename was cleared
+  if (!_filenameManual || !filenameVal) {
+    if (!filenameVal) _filenameManual = false;
+    var title = document.getElementById('title').value.trim();
+    if (title) {
+      var fn = sanitizeCommonFilename(title).replace(/\s+/g, '');
+      filenameInput.value = fn;
+    }
+  }
+  updateSearchButtonState();
+}
+
+function updateSearchButtonState() {
+  var btn = document.querySelector('.title-search-btn');
+  if (btn) btn.disabled = !document.getElementById('title').value.trim();
+}
+
+function onFilenameManualEdit() {
+  _filenameManual = true;
+}
+
+// ====== TMDB integration (直连 TMDB，Key 存于本机浏览器 localStorage) ======
+var TMDB_API_BASE = 'https://api.themoviedb.org/3';
+var TMDB_IMG_BASE = 'https://image.tmdb.org/t/p';
+var TMDB_KEY_STORAGE = 'nfo-editor-tmdb-key';
+var TMDB_KEY_CACHE = null; // localStorage 不可用时的内存兜底
+
+function getTMDBKey() {
+  if (TMDB_KEY_CACHE !== null) return TMDB_KEY_CACHE;
+  try { return localStorage.getItem(TMDB_KEY_STORAGE) || ''; } catch (e) { return ''; }
+}
+function ensureTMDBKey() {
+  var k = getTMDBKey();
+  if (!k) { showToast('请先点右上角「API 管理」填写 TMDB Key', 'error'); openApiKeyModal(); return ''; }
+  return k;
+}
+
+// ISO 3166-1 -> 中文（TMDB 国家名不随语言翻译，故做一份常用映射）
+var CC_MAP = {
+  US: '美国', GB: '英国', CN: '中国大陆', HK: '香港', TW: '台湾', JP: '日本', KR: '韩国',
+  FR: '法国', DE: '德国', IN: '印度', TH: '泰国', CA: '加拿大', AU: '澳大利亚',
+  IT: '意大利', ES: '西班牙', RU: '俄罗斯', NZ: '新西兰', NL: '荷兰', SE: '瑞典',
+  CH: '瑞士', BR: '巴西', MX: '墨西哥', DK: '丹麦', NO: '挪威', FI: '芬兰',
+  BE: '比利时', AT: '奥地利', IE: '爱尔兰', PT: '葡萄牙', PL: '波兰', CZ: '捷克',
+  HU: '匈牙利', GR: '希腊', TR: '土耳其', KR2: '', IL: '以色列', ZA: '南非',
+  AR: '阿根廷', CL: '智利', CO: '哥伦比亚', PH: '菲律宾', SG: '新加坡', MY: '马来西亚',
+  ID: '印度尼西亚', VN: '越南', EG: '埃及', AE: '阿联酋', SA: '沙特阿拉伯'
+};
+
+function searchTMDB() {
+  var q = getVal('title');
+  if (!q) { showToast('请先输入标题', 'error'); return; }
+  var key = ensureTMDBKey();
+  if (!key) return;
+  var box = document.getElementById('tmdbResults');
+  box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
+  box.style.display = 'block';
+  var btn = document.querySelector('.title-search-btn');
+  if (btn) btn.disabled = true;
+  var url = TMDB_API_BASE + '/search/multi?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=true&query=' + encodeURIComponent(q);
+  fetch(url)
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(data) {
+      if (btn) btn.disabled = false;
+      renderTMDBResults(data && data.results ? data.results : []);
+    })
+    .catch(function(err) {
+      if (btn) btn.disabled = false;
+      var msg = (err && err.message) ? err.message : '请求失败';
+      box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(msg) + '</div>';
+    });
+}
+
+function renderTMDBResults(results) {
+  var box = document.getElementById('tmdbResults');
+  if (!results.length) { box.innerHTML = '<div class="tmdb-msg">未找到匹配结果</div>'; return; }
+  var html = '';
+  results.slice(0, 20).forEach(function(item) {
+    var mt = item.media_type === 'tv' ? '剧集' : '电影';
+    var name = item.title || item.name || '';
+    var orig = item.original_title || item.original_name || '';
+    var year = (item.release_date || item.first_air_date || '').slice(0, 4);
+    var poster = item.poster_path ? TMDB_IMG_BASE + '/w92' + item.poster_path : '';
+    var sub = [mt, year, (orig && orig !== name) ? orig : ''].filter(Boolean).join(' · ');
+    html += '<div class="tmdb-result" onclick="selectTMDB(\'' + item.media_type + '\',' + item.id + ')">';
+    html += poster
+      ? '<img src="' + poster + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">'
+      : '<div style="width:38px;height:57px;flex-shrink:0;background:var(--fill-quaternary);border-radius:4px;"></div>';
+    html += '<div class="tr-info"><div class="tr-title">' + escapeHtml(name) + '</div><div class="tr-sub">' + escapeHtml(sub) + '</div></div>';
+    html += '</div>';
+  });
+  box.innerHTML = html;
+}
+
+function selectTMDB(mediaType, id) {
+  var key = ensureTMDBKey();
+  if (!key) return;
+  document.getElementById('tmdbResults').style.display = 'none';
+  showToast('正在获取详情…', 'success');
+  var append = (mediaType === 'tv') ? 'images,content_ratings,credits' : 'images,release_dates,credits';
+  var url = TMDB_API_BASE + '/' + mediaType + '/' + id + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=true&append_to_response=' + append + '&include_image_language=zh,en,null';
+  fetch(url)
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(data) {
+      if (mediaType === 'tv') {
+        openSeasonEpisodeModal(data, key);
+      } else {
+        populateFromTMDB(data, mediaType, key);
+      }
+    })
+    .catch(function(err) { showToast('获取详情失败：' + ((err && err.message) ? err.message : '请求失败'), 'error'); });
+}
+
+// Tab 切换：高亮对应按钮并显隐对应面板（基本信息 / 演职人员 / 媒体）
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.tab === tab); });
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'tab-' + tab); });
+}
+
+function setFieldVal(id, val) {
+  var el = document.getElementById(id);
+  if (el && val != null && val !== '') el.value = val;
+}
+
+function populateFromTMDB(d, mediaType, key, seasonNum, episodeNum) {
+  var title = d.title || d.name || '';
+  var orig = d.original_title || d.original_name || '';
+  var date = d.release_date || d.first_air_date || '';
+  var year = (date || '').slice(0, 4);
+  var runtime = d.runtime || (d.episode_run_time && d.episode_run_time[0]) || '';
+  var overview = d.overview || '';
+  var rating = (typeof d.vote_average === 'number') ? d.vote_average.toFixed(1) : '';
+  var countries = (d.production_countries && d.production_countries.length)
+    ? d.production_countries.map(function(c) { return CC_MAP[c.iso_3166_1] || c.name; })
+    : (d.origin_country || []).map(function(code) { return CC_MAP[code] || code; });
+  var genres = (d.genres || []).map(function(g) { return g.name; });
+
+  setFieldVal('title', title);
+  // 文件名自动同步为标题（允许之后手动修改文件名）
+  _filenameManual = false;
+  onTitleChanged();
+  setFieldVal('originaltitle', orig);
+  setFieldVal('premiered', date);
+  setFieldVal('year', year);
+  setFieldVal('runtime', runtime);
+  setFieldVal('plot', overview);
+  setFieldVal('rating', rating);
+
+  // 分级（MPAA / 内容分级）：电影取 release_dates 的 US certification，剧集取 content_ratings 的 US rating
+  var cert = '';
+  if (mediaType === 'movie' && d.release_dates && d.release_dates.results) {
+    var usMovie = d.release_dates.results.find(function(r) { return r.iso_3166_1 === 'US'; });
+    if (usMovie) {
+      var c = (usMovie.release_dates || []).find(function(x) { return x.certification; });
+      cert = c ? c.certification : '';
+    }
+  } else if (mediaType === 'tv' && d.content_ratings && d.content_ratings.results) {
+    var usTv = d.content_ratings.results.find(function(r) { return r.iso_3166_1 === 'US'; });
+    cert = usTv ? usTv.rating : '';
+  }
+
+  // 导演 / 演员：credits 中 crew.job==='Director' 取 1 位，cast 取前 5 位
+  if (d.credits) {
+    var crew = d.credits.crew || [];
+    var dir = crew.find(function(p) { return p.job === 'Director'; });
+    if (dir) {
+      state.directors = [{ name: dir.name || '', photo: null, _profile: dir.profile_path || null }];
+    } else {
+      state.directors = [];
+    }
+    var cast = (d.credits.cast || []).slice(0, 5);
+    state.actors = cast.map(function(p) {
+      return { name: p.name || '', role: p.character || '', photo: null, _profile: p.profile_path || null };
+    });
+  }
+  renderDirectors();
+  renderActors();
+
+  if (cert) {
+    addMpaaOption(cert, cert);
+    setMpaa(cert, cert);
+  }
+
+  // 国家/地区
+  state.country = countries.slice();
+  var countryWrap = document.querySelectorAll('.tag-input-wrapper')[0];
+  if (countryWrap) renderTags(countryWrap, 'country');
+
+  // 类型 → 普通标签库
+  state._genreStore.normal = genres.slice();
+  syncGenreState();
+  var genreWrap = document.querySelectorAll('.tag-input-wrapper')[1];
+  if (genreWrap) renderTags(genreWrap, 'genre');
+  renderHotTags();
+
+  // 海报
+  if (d.poster_path) loadImageFromTMDB(d.poster_path, 'poster');
+  // 剧照 / 横版背景图（TMDB stills 优先，回退 backdrops，再无则用海报兜底）
+  var stills = (d.images && d.images.stills) || [];
+  var backdrops = (d.images && d.images.backdrops) || [];
+  if (stills.length) {
+    loadImageFromTMDB(stills[0].file_path, 'fanart', 'w1280');
+  } else if (backdrops.length) {
+    loadImageFromTMDB(backdrops[0].file_path, 'fanart', 'w1280');
+  } else if (d.poster_path) {
+    loadImageFromTMDB(d.poster_path, 'fanart', 'original');
+  }
+  // Logo（优先取中文/英文，取第一个）
+  if (d.images && d.images.logos && d.images.logos.length) {
+    var logos = d.images.logos;
+    var zhLogo = logos.find(function(l) { return l.iso_639_1 === 'zh'; });
+    var enLogo = logos.find(function(l) { return l.iso_639_1 === 'en'; });
+    var logoPath = (zhLogo || enLogo || logos[0]).file_path;
+    loadImageFromTMDB(logoPath, 'logo', 'w500');
+  }
+
+  // 剧集：主接口无 stills，按用户选定（或默认 S01E01）取单集真剧照
+  if (mediaType === 'tv' && key) {
+    var sn = (typeof seasonNum === 'number') ? seasonNum : null;
+    var en = (typeof episodeNum === 'number') ? episodeNum : null;
+    loadTVStill(d, key, sn, en);
+  }
+
+  // 导演 / 演员照片：异步从 TMDB 资料图填充
+  state.directors.forEach(function(d, i) {
+    if (d._profile) {
+      loadPersonPhotoFromTMDB(d._profile, 'director', i);
+      d._profile = null;
+    }
+  });
+  state.actors.forEach(function(a, i) {
+    if (a._profile) {
+      loadPersonPhotoFromTMDB(a._profile, 'actor', i);
+      a._profile = null;
+    }
+  });
+
+  updateState();
+  showToast('已填充 TMDB 信息', 'success');
+}
+
+// 剧集：取指定季/集（或默认 S01E01）的剧照，覆盖到 fanart
+function loadTVStill(d, key, seasonNum, episodeNum) {
+  var seasons = (d.seasons || []).filter(function(s) { return s.season_number != null && s.season_number >= 0; });
+  if (!seasons.length) return;
+  var season;
+  if (typeof seasonNum === 'number' && seasons.some(function(s) { return s.season_number === seasonNum; })) {
+    season = seasons.find(function(s) { return s.season_number === seasonNum; });
+  } else {
+    season = seasons.find(function(s) { return s.season_number === 1; }) || seasons[0];
+  }
+  var sn = season.season_number;
+  var en = (typeof episodeNum === 'number') ? episodeNum : 1;
+  if (season.episode_count && en > season.episode_count) en = season.episode_count;
+  if (season.episode_count && en < 1) en = 1;
+  var url = TMDB_API_BASE + '/tv/' + d.id + '/season/' + sn + '/episode/' + en + '/images'
+    + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=true&include_image_language=zh,en,null';
+  fetch(url)
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(ep) {
+      var stills = ep.stills || [];
+      if (stills.length) {
+        loadImageFromTMDB(stills[0].file_path, 'fanart', 'w1280');
+        showToast('已填充 TMDB 剧照（S' + sn + 'E' + en + ' 单集截图）', 'success');
+      }
+    })
+    .catch(function() { /* 该集无剧照，保留背景图兜底 */ });
+}
+
+function openSeasonEpisodeModal(d, key) {
+  _seData = d; _seKey = key;
+  var sel = document.getElementById('seSeason');
+  sel.innerHTML = '';
+  var seasons = (d.seasons || []).filter(function(s) { return s.season_number != null && s.season_number >= 0; });
+  if (!seasons.length) {
+    populateFromTMDB(d, 'tv', key);
+    return;
+  }
+  seasons.forEach(function(s) {
+    var opt = document.createElement('option');
+    opt.value = s.season_number;
+    opt.textContent = '第 ' + s.season_number + ' 季' + (s.name ? '（' + s.name + '）' : '');
+    sel.appendChild(opt);
+  });
+  sel.value = 1;
+  document.getElementById('seEpisode').value = 1;
+  onSeasonChange();
+  document.getElementById('seasonEpisodeModal').classList.add('show');
+}
+
+function closeSeasonEpisodeModal() {
+  document.getElementById('seasonEpisodeModal').classList.remove('show');
+  _seData = null; _seKey = null;
+}
+
+function onSeasonChange() {
+  if (!_seData) return;
+  var sel = document.getElementById('seSeason');
+  var sn = parseInt(sel.value, 10);
+  var season = (_seData.seasons || []).find(function(s) { return s.season_number === sn; });
+  var epInput = document.getElementById('seEpisode');
+  var max = season && season.episode_count ? season.episode_count : 999;
+  epInput.max = max;
+  if (parseInt(epInput.value, 10) > max) epInput.value = max;
+}
+
+function confirmSeasonEpisode() {
+  if (!_seData || !_seKey) return;
+  var sn = parseInt(document.getElementById('seSeason').value, 10);
+  var en = parseInt(document.getElementById('seEpisode').value, 10) || 1;
+  closeSeasonEpisodeModal();
+  populateFromTMDB(_seData, 'tv', _seKey, sn, en);
+}
+
+function loadImageFromTMDB(posterPath, type, size) {
+  size = size || 'original';
+  var url = TMDB_IMG_BASE + '/' + size + posterPath;
+  fetch(url)
+    .then(function(r) { if (!r.ok) throw new Error('img ' + r.status); return r.blob(); })
+    .then(function(blob) {
+      var reader = new FileReader();
+      reader.onload = function(evt) {
+        var dataUrl = evt.target.result;
+        var img = new Image();
+        img.onload = function() {
+          var ext = (posterPath.split('.').pop() || 'jpg').toLowerCase();
+          state[type] = {
+            dataUrl: dataUrl, originalDataUrl: dataUrl,
+            name: type + '.' + ext,
+            size: blob.size, type: blob.type || 'image/jpeg',
+            width: img.width, height: img.height,
+            originalWidth: img.width, originalHeight: img.height,
+            cropped: false, cropX: 0, cropY: 0, cropW: img.width, cropH: img.height,
+          };
+          renderImagePreview(type);
+          updateState();
+        };
+        img.onerror = function() { /* 该图格式无法显示，忽略 */ };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(blob);
+    })
+    .catch(function() { /* 图片为可选项，失败则忽略 */ });
+}
+
+// ====== API Key 管理（存于本机浏览器） ======
+function openApiKeyModal() {
+  var input = document.getElementById('apiKeyInput');
+  var hint = document.getElementById('apiKeyHint');
+  var clearBtn = document.getElementById('btnClearApiKey');
+  input.value = '';
+  var existing = getTMDBKey();
+  hint.textContent = existing
+    ? '当前已配置 Key（' + existing.slice(0, 4) + '****' + existing.slice(-4) + '），重新填入并确定即可覆盖。'
+    : '尚未配置 Key，请先填入后再搜索。';
+  if (clearBtn) clearBtn.style.display = existing ? 'inline-flex' : 'none';
+  document.getElementById('apiKeyModal').classList.add('show');
+  setTimeout(function() { input.focus(); }, 50);
+}
+function closeApiKeyModal() {
+  document.getElementById('apiKeyModal').classList.remove('show');
+}
+function saveApiKey() {
+  var val = document.getElementById('apiKeyInput').value.trim();
+  if (!val) { closeApiKeyModal(); return; }
+  TMDB_KEY_CACHE = val;
+  try { localStorage.setItem(TMDB_KEY_STORAGE, val); } catch (e) {}
+  closeApiKeyModal();
+  showToast('API Key 已保存', 'success');
+}
+function clearApiKey() {
+  TMDB_KEY_CACHE = '';
+  try { localStorage.removeItem(TMDB_KEY_STORAGE); } catch (e) {}
+  document.getElementById('apiKeyHint').textContent = '尚未配置 Key，请先填入后再搜索。';
+  document.getElementById('btnClearApiKey').style.display = 'none';
+  document.getElementById('apiKeyInput').value = '';
+  showToast('API Key 已清除', 'success');
+}
+
+// 点击空白处关闭 TMDB 结果
+document.addEventListener('click', function(e) {
+  var box = document.getElementById('tmdbResults');
+  if (!box || box.style.display === 'none') return;
+  var wrap = document.querySelector('.title-input-wrap');
+  if (wrap && (wrap.contains(e.target) || box.contains(e.target))) return;
+  box.style.display = 'none';
+});
+
+// 下载下拉框：鼠标滑入/滑出时带短暂延迟，避免从按钮移向菜单时闪断
+(function setupDownloadDropdown() {
+  var dropdown = document.querySelector('.dropdown');
+  if (!dropdown) return;
+  var timer = null;
+  function open() {
+    clearTimeout(timer);
+    dropdown.classList.add('open');
+  }
+  function close() {
+    timer = setTimeout(function() { dropdown.classList.remove('open'); }, 180);
+  }
+  dropdown.addEventListener('mouseenter', open);
+  dropdown.addEventListener('mouseleave', close);
+  var menu = dropdown.querySelector('.dropdown-menu');
+  if (menu) {
+    menu.addEventListener('mouseenter', open);
+    menu.addEventListener('mouseleave', close);
+  }
+})();
+
+// 首播日期变化时自动回填「年份」；若用户手动改过年份则不再覆盖
+function autoFillYear() {
+  if (_yearManual) return;
+  var premiered = document.getElementById('premiered').value.trim();
+  var m = premiered.match(/^(\d{4})/);
+  if (m) {
+    document.getElementById('year').value = m[1];
+  }
+}
+
+function onYearManualEdit() {
+  _yearManual = true;
+}
+
+function adjustRuntime(delta) {
+  var input = document.getElementById('runtime');
+  var raw = (input.value || '').trim();
+  var val = parseInt(raw, 10);
+  if (!raw || isNaN(val) || val < 0) val = 122;
+  val = Math.max(0, val + delta);
+  input.value = val;
+  updateState();
+}
+
+function adjustYear(delta) {
+  var input = document.getElementById('year');
+  var raw = (input.value || '').trim();
+  var val = parseInt(raw, 10);
+  if (!raw || isNaN(val)) val = 2016;
+  val = Math.max(1900, Math.min(2099, val + delta));
+  input.value = val;
+  onYearManualEdit();
+  updateState();
+}
+
+function adjustRating(delta) {
+  var input = document.getElementById('rating');
+  var raw = (input.value || '').trim();
+  var val = parseFloat(raw);
+  if (!raw || isNaN(val)) val = 6.0;
+  val = Math.max(0, Math.min(10, val + delta));
+  input.value = val.toFixed(1);
+  updateState();
+}
+
+// ====== Custom Tags Config ======
+const CT_KEY = 'nfo-editor-custom-tags';
+
+function getDefaultTags() {
+  return {
+    country: ['中国大陆','香港','台湾','美国','英国','日本','韩国','法国','德国','印度','泰国','俄罗斯','意大利','西班牙'],
+    genre_normal: ['剧情','喜剧','动作','爱情','科幻','奇幻','动画','惊悚','恐怖','悬疑','犯罪','战争','历史','冒险','音乐','纪录片'],
+    genre_adult: ['成人','伦理','情色','R18','AV','人妻','巨乳','口交','内射','颜射','肛交','女同','BDSM','NTR','重口','多人'],
+  };
+}
+
+function loadCustomTagsConfig() {
+  try {
+    var raw = localStorage.getItem(CT_KEY);
+    if (raw) {
+      var cfg = JSON.parse(raw);
+      // Migrate old single 'genre' key to genre_normal/genre_adult
+      if (cfg.genre && !cfg.genre_normal) {
+        cfg.genre_normal = cfg.genre;
+        cfg.genre_adult = getDefaultTags().genre_adult.map(function(name, i) { return { name: name, enabled: true, order: i }; });
+        delete cfg.genre;
+        saveCustomTagsConfig(cfg);
+      }
+      return cfg;
+    }
+  } catch (e) {}
+  var def = getDefaultTags();
+  var config = {};
+  for (var k in def) {
+    config[k] = def[k].map(function(name, i) { return { name: name, enabled: true, order: i }; });
+  }
+  return config;
+}
+
+function saveCustomTagsConfig(cfg) {
+  try { localStorage.setItem(CT_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+
+function getEnabledTags(field) {
+  var cfg = loadCustomTagsConfig();
+  return (cfg[field] || []).filter(function(t) { return t.enabled; }).sort(function(a, b) { return a.order - b.order; });
+}
+
+function genreField() { return 'genre_' + state.genreTab; }
+
+function getAllGenres() {
+  var all = [];
+  state._genreStore.normal.forEach(function(g) { if (all.indexOf(g) === -1) all.push(g); });
+  state._genreStore.adult.forEach(function(g) { if (all.indexOf(g) === -1) all.push(g); });
+  return all;
+}
+
+function syncGenreState() {
+  state.genre = getAllGenres();
+}
+
+function switchGenreTab(tab) {
+  if (state.genreTab === tab) return;
+  // Switch tab only affects hot-tag pool and capsule UI
+  state.genreTab = tab;
+  // Update UI
+  document.querySelectorAll('.capsule-option').forEach(function(b) { b.classList.toggle('active', b.textContent === (tab === 'normal' ? '普通' : '成人')); });
+  var wrappers = document.querySelectorAll('.tag-input-wrapper');
+  if (wrappers[1]) renderTags(wrappers[1], 'genre');
+  renderHotTags();
+}
+
+// ====== History Management ======
+const HISTORY_KEY = 'nfo-editor-history';
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function persistHistory(list) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+  } catch (e) {
+    showToast('存储空间不足，无法保存历史记录', 'error');
+    // Try saving without image data
+    const slim = list.map(function(item) {
+      var copy = Object.assign({}, item);
+      delete copy.poster; delete copy.fanart; delete copy.logo;
+      return copy;
+    });
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(slim));
+      showToast('历史记录已保存（不含图片）', 'success');
+    } catch (e2) {
+      showToast('存储空间不足', 'error');
+    }
+  }
+}
+
+function getCurrentFormData() {
+  // Ensure genre state is synced before snapshot
+  syncGenreState();
+  return {
+    filename: getVal('filename'),
+    title: getVal('title'),
+    originaltitle: getVal('originaltitle'),
+    year: getVal('year'),
+    premiered: getVal('premiered'),
+    runtime: getVal('runtime'),
+    country: state.country.slice(),
+    genre: state.genre.slice(),
+    directors: state.directors.map(function(d) {
+      var c = { name: d.name };
+      c.photo = d.photo ? serializeImage(d.photo) : null;
+      return c;
+    }),
+    actors: state.actors.map(function(a) {
+      var c = { name: a.name, role: a.role };
+      delete c._profile;
+      c.photo = a.photo ? serializeImage(a.photo) : null;
+      return c;
+    }),
+    plot: getVal('plot'),
+    rating: getVal('rating'),
+    mpaa: getVal('mpaa'),
+    hasSubtitle: state.hasSubtitle,
+    poster: state.poster ? serializeImage(state.poster) : null,
+    fanart: state.fanart ? serializeImage(state.fanart) : null,
+    logo: state.logo ? serializeImage(state.logo) : null,
+  };
+}
+
+function serializeImage(data) {
+  return {
+    dataUrl: data.dataUrl,
+    name: data.name,
+    size: data.size,
+    type: data.type,
+    width: data.width,
+    height: data.height,
+    originalWidth: data.originalWidth,
+    originalHeight: data.originalHeight,
+    cropped: data.cropped || false,
+    cropX: data.cropX || 0,
+    cropY: data.cropY || 0,
+    cropW: data.cropW || data.width,
+    cropH: data.cropH || data.height,
+  };
+}
+
+function saveCurrentToHistory() {
+  var filename = getVal('filename');
+  if (!filename) {
+    showToast('请先填写文件名再保存', 'error');
+    return;
+  }
+  var list = loadHistory();
+  var data = getCurrentFormData();
+  data.id = Date.now().toString();
+  data.createdAt = new Date().toISOString();
+
+  // Replace existing entry with same filename
+  var found = false;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].filename === filename) {
+      list[i] = data;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    list.unshift(data);
+  }
+  persistHistory(list);
+  renderHistory();
+  showToast('已保存: ' + filename, 'success');
+}
+
+function loadFromHistory(id) {
+  var list = loadHistory();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id === id) {
+      var d = list[i];
+      document.getElementById('filename').value = d.filename || '';
+      document.getElementById('title').value = d.title || '';
+      document.getElementById('originaltitle').value = d.originaltitle || '';
+      document.getElementById('year').value = d.year || '';
+      document.getElementById('premiered').value = d.premiered || '';
+      document.getElementById('runtime').value = d.runtime || '';
+      document.getElementById('rating').value = d.rating || '';
+      setMpaa(d.mpaa || '', getMpaaLabel(d.mpaa || ''));
+      document.getElementById('plot').value = d.plot || '';
+      // Load genres into store (all go to normal by default when loading history)
+      var allGenres = d.genre || [];
+      state._genreStore.normal = allGenres.slice();
+      state._genreStore.adult = [];
+      state.genreTab = 'normal';
+      syncGenreState();
+      state.country = d.country || [];
+      // 兼容旧历史记录（director 为单个对象）
+      if (d.director && !d.directors) {
+        state.directors = [{ name: d.director.name || '', photo: d.director.photo ? deserializeImage(d.director.photo) : null }];
+      } else {
+        state.directors = (d.directors || []).map(function(d) {
+          return { name: d.name || '', photo: d.photo ? deserializeImage(d.photo) : null };
+        });
+      }
+      state.actors = (d.actors || []).map(function(a) {
+        return { name: a.name || '', role: a.role || '', photo: a.photo ? deserializeImage(a.photo) : null };
+      });
+      state.hasSubtitle = d.hasSubtitle || false;
+      document.getElementById('hasSubtitle').checked = state.hasSubtitle;
+      state.poster = d.poster ? deserializeImage(d.poster) : null;
+      state.fanart = d.fanart ? deserializeImage(d.fanart) : null;
+      state.logo = d.logo ? deserializeImage(d.logo) : null;
+
+      // Reset tab UI
+      document.querySelectorAll('.capsule-option').forEach(function(b) { b.classList.toggle('active', b.textContent === '普通'); });
+
+      // Re-render tags
+      ['genre', 'country'].forEach(renderTagsForField);
+      renderDirectors();
+      renderActors();
+      renderImagePreview('poster');
+      renderImagePreview('fanart');
+      renderImagePreview('logo');
+      renderHotTags();
+      _filenameManual = true; // loaded from history, treat as manual
+      _yearManual = true;
+      updateState();
+      showToast('已加载: ' + d.title, 'success');
+      return;
+    }
+  }
+}
+
+function deserializeImage(data) {
+  return {
+    dataUrl: data.dataUrl,
+    originalDataUrl: data.dataUrl,
+    name: data.name,
+    size: data.size,
+    type: data.type,
+    width: data.width,
+    height: data.height,
+    originalWidth: data.originalWidth || data.width,
+    originalHeight: data.originalHeight || data.height,
+    cropped: data.cropped || false,
+    cropX: data.cropX || 0,
+    cropY: data.cropY || 0,
+    cropW: data.cropW || data.width,
+    cropH: data.cropH || data.height,
+  };
+}
+
+function deleteHistory(id) {
+  var list = loadHistory();
+  list = list.filter(function(item) { return item.id !== id; });
+  persistHistory(list);
+  renderHistory();
+  showToast('已删除记录', 'success');
+}
+
+function clearHistory() {
+  if (!confirm('确定要清空全部历史记录吗？此操作不可恢复。')) return;
+  localStorage.removeItem(HISTORY_KEY);
+  renderHistory();
+  showToast('已清空全部历史', 'success');
+}
+
+function renderHistory() {
+  var list = loadHistory();
+  var container = document.getElementById('historyList');
+  if (!list.length) {
+    container.innerHTML = '<div class="history-empty">暂无记录</div>';
+    return;
+  }
+  var html = '';
+  list.forEach(function(item) {
+    html += '<div class="history-item" onclick="event.stopPropagation(); loadFromHistory(\'' + item.id + '\')">' +
+      '<span class="history-item-title">' + escapeHtml(item.filename || item.title || '未命名') + '</span>' +
+      '<button class="history-item-delete" onclick="event.stopPropagation(); deleteHistory(\'' + item.id + '\')" title="删除">\u00d7</button>' +
+      '</div>';
+  });
+  container.innerHTML = html;
+}
+
+// ====== File System Access (Save to Disk) ======
+const DIR_STORE = 'nfo-editor-dir';
+let _baseDirHandle = null;
+
+function openDB() {
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open('NFOEditorFS', 1);
+    req.onupgradeneeded = function() { req.result.createObjectStore('handles'); };
+    req.onsuccess = function() { resolve(req.result); };
+    req.onerror = function() { reject(req.error); };
+  });
+}
+
+async function loadDirHandle() {
+  try {
+    var db = await openDB();
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('handles', 'readonly');
+      var req = tx.objectStore('handles').get(DIR_STORE);
+      req.onsuccess = function() { resolve(req.result); };
+      req.onerror = function() { reject(req.error); };
+    });
+  } catch (e) {
+    return undefined;
+  }
+}
+
+async function storeDirHandle(handle) {
+  try {
+    var db = await openDB();
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('handles', 'readwrite');
+      tx.objectStore('handles').put(handle, DIR_STORE);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  } catch (e) {}
+}
+
+async function reselectStorageLocation() {
+  _baseDirHandle = null;
+  try {
+    var db = await openDB();
+    var tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').delete(DIR_STORE);
+    tx.oncomplete = function() {};
+  } catch (e) { console.error(e); }
+  showToast('请选择新的保存位置', '');
+  var dir = await ensureBaseDir();
+  if (dir) {
+    showToast('已设置保存位置：' + (dir.name || '所选文件夹'), 'success');
+  }
+}
+
+async function ensureBaseDir() {
+  if (_baseDirHandle) {
+    // Verify permission
+    var opts = { mode: 'readwrite' };
+    var ok = await _baseDirHandle.queryPermission(opts);
+    if (ok === 'granted') return _baseDirHandle;
+    ok = await _baseDirHandle.requestPermission(opts);
+    if (ok === 'granted') return _baseDirHandle;
+    _baseDirHandle = null;
+  }
+
+  // Try to load from IndexedDB
+  var stored = await loadDirHandle();
+  if (stored) {
+    var opts = { mode: 'readwrite' };
+    var ok = await stored.queryPermission(opts);
+    if (ok !== 'granted') {
+      ok = await stored.requestPermission(opts);
+    }
+    if (ok === 'granted') {
+      _baseDirHandle = stored;
+      return _baseDirHandle;
+    }
+  }
+
+  // Ask user to select directory
+  if (!window.showDirectoryPicker) {
+    return null;
+  }
+  _baseDirHandle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+  await storeDirHandle(_baseDirHandle);
+  return _baseDirHandle;
+}
+
+async function dataUrlToBlob(dataUrl) {
+  // 优先用 fetch；失败（如某些环境不支持 fetch data: URL）则手动解码 base64 兜底
+  try {
+    var resp = await fetch(dataUrl);
+    if (resp && resp.ok) return await resp.blob();
+  } catch (e) { /* 走下方兜底 */ }
+  var m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl || '');
+  if (m) {
+    var bin = atob(m[2]);
+    var arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: m[1] || 'image/jpeg' });
+  }
+  throw new Error('无法解析图片数据');
+}
+
+function sanitizeDirName(name) {
+  return (name || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie';
+}
+
+// 单个图片导出：成功返回 1，失败返回 0（不抛出，避免单张图失败拖垮整个保存）
+async function safeExportImage(subDir, fileName, type, mime) {
+  try {
+    var canvas = await buildExportImage(type);
+    if (!canvas) return 0;
+    var blob = await new Promise(function(resolve) {
+      canvas.toBlob(function(b) { resolve(b); }, mime, 0.95);
+    });
+    if (!blob) return 0;
+    var file = await subDir.getFileHandle(fileName, { create: true });
+    var w = await file.createWritable();
+    await w.write(blob);
+    await w.close();
+    return 1;
+  } catch (e) {
+    console.error('导出图片失败(' + type + '):', e);
+    return 0;
+  }
+}
+
+// 导演 / 演员照片导出：逐个独立 try，单张失败不影响其它
+async function safeExportPersonPhotos(subDir, folderName) {
+  var count = 0;
+  for (var di = 0; di < state.directors.length; di++) {
+    var dir = state.directors[di];
+    if (!dir.photo) continue;
+    try {
+      var dBlob = await dataUrlToBlob(dir.photo.dataUrl);
+      var dFile = await subDir.getFileHandle(sanitizeName(dir.name || ('director' + di)) + '-director.jpg', { create: true });
+      var dW = await dFile.createWritable();
+      await dW.write(dBlob);
+      await dW.close();
+      count++;
+    } catch (e) { console.error('导出导演照片失败:', e); }
+  }
+  for (var ai = 0; ai < state.actors.length; ai++) {
+    var act = state.actors[ai];
+    if (!act.photo) continue;
+    try {
+      var aBlob = await dataUrlToBlob(act.photo.dataUrl);
+      var aFile = await subDir.getFileHandle(sanitizeName(act.name || ('actor' + ai)) + '-actor.jpg', { create: true });
+      var aW = await aFile.createWritable();
+      await aW.write(aBlob);
+      await aW.close();
+      count++;
+    } catch (e) { console.error('导出演员照片失败:', e); }
+  }
+  return count;
+}
+
+async function saveToDisk() {
+  var filename = getVal('filename');
+  if (!filename) {
+    showToast('请先填写文件名', 'error');
+    return;
+  }
+
+  if (!window.showDirectoryPicker) {
+    saveToDiskFallback();
+    return;
+  }
+
+  try {
+    var baseDir = await ensureBaseDir();
+    if (!baseDir) {
+      saveToDiskFallback();
+      return;
+    }
+
+    var folderName = sanitizeDirName(filename);
+    var baseName = baseDir.name || '所选文件夹';
+    showToast('正在保存到「' + baseName + '/' + folderName + '」…', '');
+
+    // 1) 先写 NFO（核心内容，不依赖任何图片，确保一定落盘）
+    var subDir = await baseDir.getDirectoryHandle(folderName, { create: true });
+    var nfo = generateNFO();
+    var nfoFile = await subDir.getFileHandle(folderName + '.nfo', { create: true });
+    var nfoWritable = await nfoFile.createWritable();
+    await nfoWritable.write(nfo);
+    await nfoWritable.close();
+
+    // 2) 图片 / 照片：逐个导出，单张失败不影响整体保存（也不会误跳下载兜底）
+    var imgCount = 0;
+    imgCount += await safeExportImage(subDir, folderName + '-poster.jpg', 'poster', 'image/jpeg');
+    imgCount += await safeExportImage(subDir, folderName + '-fanart.jpg', 'fanart', 'image/jpeg');
+    imgCount += await safeExportImage(subDir, folderName + '-clearlogo.png', 'logo', 'image/png');
+    imgCount += await safeExportPersonPhotos(subDir, folderName);
+
+    // 保存历史
+    saveCurrentToHistory();
+    showToast('已保存 ' + (1 + imgCount) + ' 个文件到：' + baseName + '/' + folderName + '/', 'success');
+  } catch (e) {
+    console.error(e);
+    if (e && (e.name === 'NotAllowedError' || e.name === 'AbortError')) {
+      showToast('已取消保存到文件夹', '');
+      return;
+    }
+    // 文件系统写入不可用（如受限 iframe / 非安全上下文）→ 自动下载兜底
+    saveToDiskFallback();
+  }
+}
+
+// 无法写磁盘时的兜底：下载全部文件 + 保存到历史记录
+function saveToDiskFallback() {
+  saveCurrentToHistory();
+  exportAll();
+  showToast('当前环境不支持直接写入文件夹，已下载文件并保存到历史记录', 'success');
+}
+
+function buildExportImage(type) {
+  return new Promise(function(resolve, reject) {
+    var data = state[type];
+    if (!data) { resolve(null); return; }
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+    var img = new Image();
+    img.onload = function() {
+      var cw = data.cropped ? data.cropW : data.width;
+      var ch = data.cropped ? data.cropH : data.height;
+      var cx = data.cropped ? data.cropX : 0;
+      var cy = data.cropped ? data.cropY : 0;
+      canvas.width = cw;
+      canvas.height = ch;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.drawImage(img, cx, cy, cw, ch, 0, 0, cw, ch);
+
+      if ((type === 'poster' || type === 'fanart') && state.hasSubtitle) {
+        drawSubtitleBadge(ctx, cw, type);
+      }
+      resolve(canvas);
+    };
+    img.onerror = function() { resolve(null); };
+    img.src = data.dataUrl;
+  });
+}
+
+// ====== Tag Input ======
+function focusTagInput(wrapper) { wrapper.querySelector('input').focus(); }
+
+function handleTagKeydown(e, field) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const input = e.target;
+    const val = input.value.trim();
+    if (val && !state[field].includes(val)) {
+      if (field === 'genre') {
+        state._genreStore[state.genreTab].push(val);
+        syncGenreState();
+      } else {
+        state[field].push(val);
+      }
+      renderTags(input.parentElement, field);
+      renderHotTags();
+      updateState();
+    }
+    input.value = '';
+  } else if (e.key === 'Backspace' && e.target.value === '' && state[field].length > 0) {
+    if (field === 'genre') {
+      state._genreStore[state.genreTab].pop();
+      syncGenreState();
+    } else {
+      state[field].pop();
+    }
+    renderTags(e.target.parentElement, field);
+    renderHotTags();
+    updateState();
+  }
+}
+
+function renderTags(wrapper, field) {
+  const input = wrapper.querySelector('input');
+  wrapper.querySelectorAll('.tag').forEach(t => t.remove());
+  state[field].forEach((val, idx) => {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.innerHTML = escapeHtml(val) + ' <span class="remove" onclick="removeTag(\'' + field + '\',' + idx + ')">\u00d7</span>';
+    wrapper.insertBefore(tag, input);
+  });
+}
+
+// 按字段名找到对应的标签输入框容器并重新渲染。
+// 页面存在多个 .tag-input-wrapper（国家/地区、类型），各自 input 通过
+// onkeydown="handleTagKeydown(event, '<field>')" 声明归属字段，据此区分。
+function renderTagsForField(field) {
+  document.querySelectorAll('.tag-input-wrapper').forEach(function(w) {
+    var inp = w.querySelector('input');
+    if (inp && inp.getAttribute('onkeydown') === 'handleTagKeydown(event, \'' + field + '\')') {
+      renderTags(w, field);
+    }
+  });
+}
+
+function removeTag(field, idx) {
+  if (field === 'genre') {
+    var val = state.genre[idx];
+    var normalIdx = state._genreStore.normal.indexOf(val);
+    if (normalIdx !== -1) state._genreStore.normal.splice(normalIdx, 1);
+    var adultIdx = state._genreStore.adult.indexOf(val);
+    if (adultIdx !== -1) state._genreStore.adult.splice(adultIdx, 1);
+    syncGenreState();
+  } else {
+    state[field].splice(idx, 1);
+  }
+  renderTagsForField(field);
+  renderHotTags();
+  updateState();
+}
+
+function addTag(field, val) {
+  if (!state[field].includes(val)) {
+    if (field === 'genre') {
+      state._genreStore[state.genreTab].push(val);
+      syncGenreState();
+    } else {
+      state[field].push(val);
+    }
+    renderTagsForField(field);
+    renderHotTags();
+    updateState();
+  }
+}
+
+// ====== Director / Actor (结构化：姓名 + 照片 + 角色) ======
+function renderDirectors() {
+  var box = document.getElementById('directorCard');
+  if (!box) return;
+  if (!state.directors.length) {
+    box.innerHTML = '<div class="person-empty">尚未添加导演</div>';
+    return;
+  }
+  var html = '';
+  state.directors.forEach(function(d, idx) {
+    var photo = d.photo
+      ? '<img src="' + d.photo.dataUrl + '" alt=""><span class="photo-change">更换</span>'
+      : '<span class="photo-placeholder">＋</span><span class="photo-change">上传</span>';
+    html +=
+      '<div class="person-card">' +
+        '<div class="person-photo" onclick="uploadPersonPhoto(\'director\',' + idx + ')">' + photo + '</div>' +
+        '<div class="person-fields">' +
+          '<div class="person-name-row">' +
+            '<input type="text" placeholder="导演姓名" value="' + escapeHtml(d.name || '') + '" oninput="setDirectorField(' + idx + ',\'name\', this.value)">' +
+            '<button class="person-remove" title="移除" onclick="removeDirector(' + idx + ')">×</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  });
+  box.innerHTML = html;
+}
+
+function renderActors() {
+  var box = document.getElementById('actorCards');
+  if (!box) return;
+  if (!state.actors.length) {
+    box.innerHTML = '<div class="person-empty">尚未添加演员</div>';
+    return;
+  }
+  var html = '';
+  state.actors.forEach(function(a, idx) {
+    var photo = a.photo
+      ? '<img src="' + a.photo.dataUrl + '" alt=""><span class="photo-change">更换</span>'
+      : '<span class="photo-placeholder">＋</span><span class="photo-change">上传</span>';
+    html +=
+      '<div class="person-card">' +
+        '<div class="person-photo" onclick="uploadPersonPhoto(\'actor\',' + idx + ')">' + photo + '</div>' +
+        '<div class="person-fields">' +
+          '<div class="person-name-row">' +
+            '<input type="text" placeholder="演员姓名" value="' + escapeHtml(a.name || '') + '" oninput="setActorField(' + idx + ',\'name\', this.value)">' +
+            '<button class="person-remove" title="移除" onclick="removeActor(' + idx + ')">×</button>' +
+          '</div>' +
+          '<div class="person-role-row">' +
+            '<input type="text" class="person-role" placeholder="角色名" value="' + escapeHtml(a.role || '') + '" oninput="setActorField(' + idx + ',\'role\', this.value)">' +
+            '<span class="person-remove-spacer"></span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  });
+  box.innerHTML = html;
+}
+
+function addDirector() {
+  state.directors.push({ name: '', photo: null });
+  renderDirectors();
+  updateState();
+  var inps = document.querySelectorAll('#directorCard .person-fields input');
+  var last = inps[inps.length - 1];
+  if (last) last.focus();
+}
+
+function addActor(name, role, photo) {
+  state.actors.push({ name: name || '', role: role || '', photo: photo || null });
+  renderActors();
+  updateState();
+}
+
+function removeDirector(idx) {
+  state.directors.splice(idx, 1);
+  renderDirectors();
+  updateState();
+}
+
+function removeActor(idx) {
+  state.actors.splice(idx, 1);
+  renderActors();
+  updateState();
+}
+
+function setDirectorField(idx, field, val) {
+  if (state.directors[idx]) {
+    state.directors[idx][field] = val;
+    updateState();
+  }
+}
+
+function setActorField(idx, field, val) {
+  if (state.actors[idx]) {
+    state.actors[idx][field] = val;
+    updateState();
+  }
+}
+
+// 上传导演/演员照片（kind: 'director' | 'actor'，idx 为演员序号）
+function uploadPersonPhoto(kind, idx) {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = function() {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(evt) {
+      var data = {
+        dataUrl: evt.target.result,
+        name: file.name, size: file.size, type: file.type || 'image/jpeg'
+      };
+        if (kind === 'director') {
+        if (!state.directors[idx]) return;
+        state.directors[idx].photo = data;
+        renderDirectors();
+      } else {
+        if (!state.actors[idx]) return;
+        state.actors[idx].photo = data;
+        renderActors();
+      }
+      updateState();
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+// 从 TMDB 资料图填充导演/演员照片
+function loadPersonPhotoFromTMDB(profilePath, kind, idx) {
+  if (!profilePath) return;
+  var url = TMDB_IMG_BASE + '/w185' + profilePath;
+  fetch(url)
+    .then(function(r) { if (!r.ok) throw new Error('img ' + r.status); return r.blob(); })
+    .then(function(blob) {
+      var reader = new FileReader();
+      reader.onload = function(evt) {
+        var data = {
+          dataUrl: evt.target.result,
+          name: (kind === 'director' ? 'director' : 'actor' + idx) + '.jpg',
+          size: blob.size, type: blob.type || 'image/jpeg'
+        };
+        if (kind === 'director') {
+          if (!state.directors[idx]) return;
+          state.directors[idx].photo = data;
+          renderDirectors();
+        } else if (state.actors[idx]) {
+          state.actors[idx].photo = data;
+          renderActors();
+        }
+        updateState();
+      };
+      reader.readAsDataURL(blob);
+    })
+    .catch(function() { /* 无照片则忽略 */ });
+}
+
+// ====== Custom Tags Modal ======
+function renderHotTags() {
+  // Country
+  var countryTags = getEnabledTags('country');
+  var countryHtml = '';
+  for (var i = 0; i < countryTags.length; i++) {
+    var t = countryTags[i];
+    var used = state.country.indexOf(t.name) !== -1;
+    countryHtml += '<span class="' + (used ? 'used' : '') + '" onclick="addTag(\'country\',\'' + t.name.replace(/'/g, "\\'") + '\'); refreshHotTagsDisplay()">' + escapeHtml(t.name) + '</span>';
+  }
+  document.getElementById('hotCountryTags').innerHTML = countryHtml;
+
+  // Genre
+  var genreTags = getEnabledTags(genreField());
+  var genreHtml = '';
+  for (var i = 0; i < genreTags.length; i++) {
+    var t = genreTags[i];
+    var used = state.genre.indexOf(t.name) !== -1;
+    genreHtml += '<span class="' + (used ? 'used' : '') + '" onclick="addTag(\'genre\',\'' + t.name.replace(/'/g, "\\'") + '\'); refreshHotTagsDisplay()">' + escapeHtml(t.name) + '</span>';
+  }
+  document.getElementById('hotGenreTags').innerHTML = genreHtml;
+}
+
+function refreshHotTagsDisplay() {
+  renderHotTags();
+}
+
+function openCustomTagsModal() {
+  document.getElementById('customTagsModal').classList.add('show');
+  switchCustomGenreTab(_customGenreTab || 'normal');
+}
+
+function closeCustomTagsModal() {
+  document.getElementById('customTagsModal').classList.remove('show');
+  renderHotTags();
+  refreshTagDisplay();
+}
+
+var _customGenreTab = 'normal';
+
+function switchCustomGenreTab(tab) {
+  _customGenreTab = tab;
+  document.getElementById('customGenreTabNormal').classList.toggle('active', tab === 'normal');
+  document.getElementById('customGenreTabAdult').classList.toggle('active', tab === 'adult');
+  var input = document.getElementById('newGenreTag');
+  var btn = document.getElementById('newGenreTagBtn');
+  if (input) input.value = '';
+  if (btn) btn.setAttribute('onclick', "addCustomTag('genre_" + tab + "')");
+  renderCustomTagsList();
+}
+
+function renderCustomTagsList() {
+  var cfg = loadCustomTagsConfig();
+  ['country', 'genre_normal', 'genre_adult'].forEach(function(field) {
+    var listId = field === 'country' ? 'customCountryList' : 'customGenreList';
+    if (field !== 'country' && field !== 'genre_' + _customGenreTab) {
+      if (field === 'genre_normal' && _customGenreTab === 'adult') return;
+      if (field === 'genre_adult' && _customGenreTab === 'normal') return;
+    }
+    var tags = (cfg[field] || []).sort(function(a, b) { return a.order - b.order; });
+    var html = '';
+    for (var i = 0; i < tags.length; i++) {
+      var t = tags[i];
+      var isFirst = i === 0;
+      var isLast = i === tags.length - 1;
+      html += '<div class="ct-item' + (t.enabled ? '' : ' disabled') + '">';
+      html += '<span class="ct-name">' + escapeHtml(t.name) + '</span>';
+      html += '<label class="ct-toggle"><input type="checkbox" ' + (t.enabled ? 'checked' : '') + ' onchange="toggleCustomTag(\'' + field + '\',' + i + ',this.checked)"><span class="slider"></span></label>';
+      html += '<button class="ct-arrow' + (isFirst ? ' ct-arrow-disabled' : '') + '" onclick="moveCustomTag(\'' + field + '\',' + i + ',-1)" title="上移"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg></button>';
+      html += '<button class="ct-arrow' + (isLast ? ' ct-arrow-disabled' : '') + '" onclick="moveCustomTag(\'' + field + '\',' + i + ',1)" title="下移"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>';
+      html += '<button class="ct-del" onclick="deleteCustomTag(\'' + field + '\',' + i + ')" title="删除">\u00d7</button>';
+      html += '</div>';
+    }
+    document.getElementById(listId).innerHTML = html;
+  });
+}
+
+function addCustomTag(field) {
+  var inputId = field === 'country' ? 'newCountryTag' : 'newGenreTag';
+  var input = document.getElementById(inputId);
+  var name = input.value.trim();
+  if (!name) return;
+  var cfg = loadCustomTagsConfig();
+  // Check duplicate within the same field
+  if ((cfg[field] || []).some(function(t) { return t.name === name; })) {
+    showToast('标签已存在', 'error');
+    return;
+  }
+  var maxOrder = 0;
+  (cfg[field] || []).forEach(function(t) { if (t.order > maxOrder) maxOrder = t.order; });
+  cfg[field] = cfg[field] || [];
+  cfg[field].push({ name: name, enabled: true, order: maxOrder + 1 });
+  saveCustomTagsConfig(cfg);
+  renderCustomTagsList();
+  input.value = '';
+}
+
+var _batchAddField = '';
+
+function openBatchAddModal(field) {
+  _batchAddField = field;
+  var title = document.getElementById('batchAddTitle');
+  var textarea = document.getElementById('batchAddTextarea');
+  if (field === 'country') {
+    title.textContent = '批量添加国家/地区';
+    textarea.placeholder = '例如：\n中国大陆\n香港\n台湾';
+  } else {
+    var tabName = _customGenreTab === 'adult' ? '成人' : '普通';
+    title.textContent = '批量添加' + tabName + '类型';
+    textarea.placeholder = '例如：\n剧情\n喜剧\n动作';
+  }
+  textarea.value = '';
+  document.getElementById('batchAddModal').classList.add('show');
+  setTimeout(function() { textarea.focus(); }, 50);
+}
+
+function closeBatchAddModal() {
+  document.getElementById('batchAddModal').classList.remove('show');
+}
+
+function confirmBatchAdd() {
+  var rawField = _batchAddField;
+  if (!rawField) return;
+  var field = rawField === 'genre' ? 'genre_' + _customGenreTab : rawField;
+  var textarea = document.getElementById('batchAddTextarea');
+  var text = textarea.value || '';
+  var names = text.split(/\r?\n/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+  if (names.length === 0) {
+    closeBatchAddModal();
+    return;
+  }
+  var cfg = loadCustomTagsConfig();
+  var tags = cfg[field] || [];
+  var maxOrder = 0;
+  tags.forEach(function(t) { if (t.order > maxOrder) maxOrder = t.order; });
+  var added = 0, existed = 0;
+  names.forEach(function(name) {
+    if (tags.some(function(t) { return t.name === name; })) {
+      existed++;
+      return;
+    }
+    tags.push({ name: name, enabled: true, order: ++maxOrder });
+    added++;
+  });
+  cfg[field] = tags;
+  saveCustomTagsConfig(cfg);
+  renderCustomTagsList();
+  closeBatchAddModal();
+  if (added > 0) showToast('已添加 ' + added + ' 个标签', 'success');
+  if (existed > 0) showToast(existed + ' 个标签已存在，已跳过', '');
+}
+
+function deleteCustomTag(field, idx) {
+  var cfg = loadCustomTagsConfig();
+  var tags = (cfg[field] || []).sort(function(a, b) { return a.order - b.order; });
+  tags.splice(idx, 1);
+  cfg[field] = tags;
+  saveCustomTagsConfig(cfg);
+  renderCustomTagsList();
+}
+
+function moveCustomTag(field, idx, delta) {
+  var cfg = loadCustomTagsConfig();
+  var tags = (cfg[field] || []).sort(function(a, b) { return a.order - b.order; });
+  if (idx + delta < 0 || idx + delta >= tags.length) return;
+  var tmp = tags[idx].order;
+  tags[idx].order = tags[idx + delta].order;
+  tags[idx + delta].order = tmp;
+  cfg[field] = tags;
+  saveCustomTagsConfig(cfg);
+  renderCustomTagsList();
+}
+
+function toggleCustomTag(field, idx, enabled) {
+  var cfg = loadCustomTagsConfig();
+  var tags = (cfg[field] || []).sort(function(a, b) { return a.order - b.order; });
+  tags[idx].enabled = enabled;
+  cfg[field] = tags;
+  saveCustomTagsConfig(cfg);
+  renderCustomTagsList();
+}
+
+function resetCustomTags() {
+  if (!confirm('确定要恢复默认标签配置吗？')) return;
+  localStorage.removeItem(CT_KEY);
+  renderCustomTagsList();
+  renderHotTags();
+  refreshTagDisplay();
+  showToast('已恢复默认标签', 'success');
+}
+
+document.getElementById('customTagsModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCustomTagsModal();
+});
+
+// Called after tag operations to update all tag displays
+function refreshTagDisplay() {
+  ['genre', 'country'].forEach(renderTagsForField);
+}
+
+// ====== Image Upload ======
+function triggerUpload(type) {
+  document.getElementById(type + 'Input').click();
+}
+
+function handleImageUpload(e, type) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  // Validate type
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext !== 'jpg' && ext !== 'jpeg' && ext !== 'png') {
+    showToast('仅支持 JPG 和 PNG 格式', 'error');
+    e.target.value = '';
+    return;
+  }
+  if (file.type !== 'image/jpeg' && file.type !== 'image/png') {
+    showToast('仅支持 JPG 和 PNG 格式', 'error');
+    e.target.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const dataUrl = evt.target.result;
+    const img = new Image();
+    img.onload = function() {
+      state[type] = {
+        dataUrl: dataUrl,
+        originalDataUrl: dataUrl,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        width: img.width,
+        height: img.height,
+        originalWidth: img.width,
+        originalHeight: img.height,
+        cropped: false,
+        cropX: 0, cropY: 0, cropW: img.width, cropH: img.height,
+      };
+      if (type === 'poster' || type === 'fanart') {
+        // Open crop modal directly; on cancel, remove the image
+        openCropModal(type, true);
+      } else {
+        renderImagePreview(type);
+        updateState();
+      }
+    };
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function renderImagePreview(type) {
+  const area = document.getElementById(type + 'Upload');
+  const data = state[type];
+  if (!data) {
+    const labels = { poster: '海报<br><span style="font-size:11px;">JPG/PNG · 2:3</span>', fanart: '剧照<br><span style="font-size:11px;">JPG/PNG · 4:3</span>', logo: 'Logo<br><span style="font-size:11px;">JPG/PNG · 透明背景</span>' };
+    area.innerHTML = '<div class="placeholder"><span class="upload-icon">+</span>上传' + labels[type] + '</div>';
+    return;
+  }
+  const sizeKB = (data.size / 1024).toFixed(1);
+  const sizeMB = data.size > 1048576 ? (data.size / 1048576).toFixed(2) + ' MB' : sizeKB + ' KB';
+  const cw = data.cropped ? data.cropW : data.width;
+  const ch = data.cropped ? data.cropH : data.height;
+  const cropBtn = (type === 'poster' || type === 'fanart')
+    ? '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); openCropModal(\'' + type + '\')">裁剪</button>'
+    : '';
+  const subtitleBadge = ((type === 'poster' || type === 'fanart') && state.hasSubtitle)
+    ? '<span class="subtitle-badge">字幕</span>'
+    : '';
+  area.innerHTML =
+    subtitleBadge +
+    '<img src="' + data.dataUrl + '" class="image-preview" alt="' + type + '">' +
+    '<div class="image-info">' + data.name + ' · ' + cw + '\u00d7' + ch + ' · ' + sizeMB + '</div>' +
+    '<div class="image-actions">' +
+      cropBtn +
+      '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); removeImage(\'' + type + '\')">移除</button>' +
+    '</div>';
+
+  // Show/hide reuse button based on fanart existence
+  const btnReuse = document.getElementById('btnReuseFanart');
+  if (btnReuse) {
+    btnReuse.style.display = state.fanart ? '' : 'none';
+  }
+}
+
+function removeImage(type) {
+  state[type] = null;
+  renderImagePreview(type);
+  updateState();
+}
+
+function toggleSubtitle() {
+  state.hasSubtitle = document.getElementById('hasSubtitle').checked;
+  renderImagePreview('poster');
+  renderImagePreview('fanart');
+}
+
+function reuseFanartForPoster() {
+  const fanart = state.fanart;
+  if (!fanart) return;
+
+  // Use the current banner (as-is, possibly cropped) as poster base,
+  // then open crop modal with frame pre-positioned to the right half
+  state.poster = {
+    dataUrl: fanart.dataUrl,
+    originalDataUrl: fanart.dataUrl,
+    name: fanart.name,
+    size: fanart.size,
+    type: fanart.type,
+    width: fanart.width,
+    height: fanart.height,
+    originalWidth: fanart.width,
+    originalHeight: fanart.height,
+    cropped: false,
+    cropX: 0, cropY: 0,
+    cropW: fanart.width, cropH: fanart.height,
+  };
+  renderImagePreview('poster');
+  updateState();
+  openCropModal('poster', false, 'right');
+}
+
+// Drag & drop
+['poster', 'fanart', 'logo'].forEach(type => {
+  const area = document.getElementById(type + 'Upload');
+  area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('dragover'); });
+  area.addEventListener('dragleave', e => { area.classList.remove('dragover'); });
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    area.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.getElementById(type + 'Input').files = dt.files;
+      document.getElementById(type + 'Input').dispatchEvent(new Event('change'));
+    }
+  });
+});
+
+// ====== Crop Modal ======
+// 裁剪坐标系说明：原图尺寸为 naturalW/naturalH，按 zoom 缩放到 displayW/displayH 显示；
+// _crop.scale = 显示尺寸 / 原图尺寸，用作显示坐标与原图像素坐标之间的换算比例。
+function openCropModal(type, fromUpload, cropAlign) {
+  const data = state[type];
+  if (!data) return;
+  _crop.type = type;
+  _crop.fromUpload = !!fromUpload;
+  _crop.ratio = type === 'poster' ? (2/3) : (4/3);
+  // Always use the original full image for re-crop
+  _crop.naturalW = data.originalWidth || data.width;
+  _crop.naturalH = data.originalHeight || data.height;
+  _crop.cropAlign = cropAlign || 'center';
+
+  // Fit zoom: scale down so the full image is visible inside the modal
+  const maxW = 820;
+  const maxH = window.innerHeight * 0.5;
+  const fitZoomW = maxW / _crop.naturalW;
+  const fitZoomH = maxH / _crop.naturalH;
+  _crop.zoom = Math.min(100, Math.round(Math.min(fitZoomW, fitZoomH) * 100));
+
+  const img = document.getElementById('cropImage');
+  img.src = data.originalDataUrl || data.dataUrl;
+  img.onload = function() {
+    document.getElementById('cropZoom').value = _crop.zoom;
+    document.getElementById('cropZoomVal').textContent = _crop.zoom + '%';
+    var ratioToggle = document.getElementById('cropRatioToggle');
+    if (ratioToggle) {
+      ratioToggle.style.display = type === 'fanart' ? 'inline-flex' : 'none';
+    }
+    updateCropRatioButtons(_crop.ratio);
+    updateCropLabel(type);
+    initCropLayout();
+    document.getElementById('cropModal').classList.add('show');
+  };
+}
+
+function updateCropLabel(type) {
+  var ratioName = '4:3';
+  if (type !== 'poster') {
+    var r = _crop.ratio;
+    if (Math.abs(r - 16/9) < 0.001) ratioName = '16:9';
+    else if (Math.abs(r - 3/2) < 0.001) ratioName = '3:2';
+    else ratioName = '4:3';
+  }
+  var label = type === 'poster' ? '海报 (2:3)' : ('剧照 (' + ratioName + ')');
+  document.getElementById('cropLabel').textContent = label;
+}
+
+function updateCropRatioButtons(ratio) {
+  document.querySelectorAll('.ratio-btn').forEach(function(b) {
+    var parts = (b.dataset.ratio || '').split(':');
+    var btnRatio = parts.length === 2 ? (parseInt(parts[0]) / parseInt(parts[1])) : 0;
+    b.classList.toggle('active', Math.abs(btnRatio - ratio) < 0.001);
+  });
+}
+
+function switchCropRatio(ratio) {
+  _crop.ratio = ratio;
+  updateCropRatioButtons(ratio);
+  updateCropLabel(_crop.type);
+  resetCrop();
+}
+
+function initCropLayout() {
+  const container = document.getElementById('cropContainer');
+  const img = document.getElementById('cropImage');
+
+  const zoom = _crop.zoom / 100;
+  _crop.displayW = Math.round(_crop.naturalW * zoom);
+  _crop.displayH = Math.round(_crop.naturalH * zoom);
+  _crop.scale = zoom;
+
+  img.style.width = _crop.displayW + 'px';
+  img.style.height = _crop.displayH + 'px';
+  container.style.width = _crop.displayW + 'px';
+
+  // Initial crop frame = max inscribed rect at target ratio
+  let fw = _crop.displayW;
+  let fh = Math.round(_crop.displayW / _crop.ratio);
+  if (fh > _crop.displayH) {
+    fh = _crop.displayH;
+    fw = Math.round(_crop.displayH * _crop.ratio);
+  }
+  if (_crop.cropAlign === 'right') {
+    _crop.frameX = _crop.displayW - fw;
+    _crop.frameY = 0;
+  } else {
+    _crop.frameX = Math.round((_crop.displayW - fw) / 2);
+    _crop.frameY = Math.round((_crop.displayH - fh) / 2);
+  }
+  _crop.frameW = fw;
+  _crop.frameH = fh;
+
+  clampCropFrame();
+  updateCropFrame();
+}
+
+function updateCropFrame() {
+  const frame = document.getElementById('cropFrame');
+  frame.style.left = _crop.frameX + 'px';
+  frame.style.top = _crop.frameY + 'px';
+  frame.style.width = _crop.frameW + 'px';
+  frame.style.height = _crop.frameH + 'px';
+
+  const imgCx = Math.round(_crop.frameX / _crop.scale);
+  const imgCy = Math.round(_crop.frameY / _crop.scale);
+  const imgCw = Math.round(_crop.frameW / _crop.scale);
+  const imgCh = Math.round(_crop.frameH / _crop.scale);
+  document.getElementById('cropDims').textContent = '裁剪区域: ' + imgCw + '\u00d7' + imgCh + ' px (原图: ' + _crop.naturalW + '\u00d7' + _crop.naturalH + ' px)';
+}
+
+function clampCropFrame() {
+  if (_crop.frameW > _crop.displayW) {
+    _crop.frameW = _crop.displayW;
+    _crop.frameH = Math.round(_crop.frameW / _crop.ratio);
+  }
+  if (_crop.frameH > _crop.displayH) {
+    _crop.frameH = _crop.displayH;
+    _crop.frameW = Math.round(_crop.frameH * _crop.ratio);
+  }
+  if (_crop.frameX < 0) _crop.frameX = 0;
+  if (_crop.frameY < 0) _crop.frameY = 0;
+  if (_crop.frameX + _crop.frameW > _crop.displayW) _crop.frameX = _crop.displayW - _crop.frameW;
+  if (_crop.frameY + _crop.frameH > _crop.displayH) _crop.frameY = _crop.displayH - _crop.frameH;
+}
+
+function onCropZoom(val) {
+  _crop.zoom = parseInt(val);
+  document.getElementById('cropZoomVal').textContent = val + '%';
+
+  // Remember current crop in image coords
+  const imgCx = _crop.frameX / _crop.scale;
+  const imgCy = _crop.frameY / _crop.scale;
+  const imgCw = _crop.frameW / _crop.scale;
+  const imgCh = _crop.frameH / _crop.scale;
+
+  const newZoom = _crop.zoom / 100;
+  _crop.displayW = Math.round(_crop.naturalW * newZoom);
+  _crop.displayH = Math.round(_crop.naturalH * newZoom);
+  _crop.scale = newZoom;
+
+  document.getElementById('cropImage').style.width = _crop.displayW + 'px';
+  document.getElementById('cropImage').style.height = _crop.displayH + 'px';
+  document.getElementById('cropContainer').style.width = _crop.displayW + 'px';
+
+  _crop.frameX = Math.round(imgCx * newZoom);
+  _crop.frameY = Math.round(imgCy * newZoom);
+  _crop.frameW = Math.round(imgCw * newZoom);
+  _crop.frameH = Math.round(imgCh * newZoom);
+
+  clampCropFrame();
+  updateCropFrame();
+}
+
+function resetCrop() {
+  _crop.frameW = _crop.displayW;
+  _crop.frameH = Math.round(_crop.displayW / _crop.ratio);
+  if (_crop.frameH > _crop.displayH) {
+    _crop.frameH = _crop.displayH;
+    _crop.frameW = Math.round(_crop.frameH * _crop.ratio);
+  }
+  _crop.frameX = Math.round((_crop.displayW - _crop.frameW) / 2);
+  _crop.frameY = Math.round((_crop.displayH - _crop.frameH) / 2);
+  clampCropFrame();
+  updateCropFrame();
+}
+
+// Mouse events for crop
+document.getElementById('cropFrame').addEventListener('mousedown', function(e) {
+  if (e.target.classList.contains('crop-handle')) {
+    _crop.dragging = true;
+    _crop.dragType = e.target.dataset.dir;
+  } else {
+    _crop.dragging = true;
+    _crop.dragType = 'move';
+  }
+  _crop.dragStartX = e.clientX;
+  _crop.dragStartY = e.clientY;
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+document.addEventListener('mousemove', function(e) {
+  if (!_crop.dragging) return;
+  const dx = e.clientX - _crop.dragStartX;
+  const dy = e.clientY - _crop.dragStartY;
+  _crop.dragStartX = e.clientX;
+  _crop.dragStartY = e.clientY;
+
+  if (_crop.dragType === 'move') {
+    _crop.frameX += dx;
+    _crop.frameY += dy;
+  } else {
+    resizeCropFrame(_crop.dragType, dx, dy);
+  }
+  clampCropFrame();
+  updateCropFrame();
+});
+
+document.addEventListener('mouseup', function() {
+  _crop.dragging = false;
+  _crop.dragType = '';
+});
+
+function resizeCropFrame(dir, dx, dy) {
+  const ratio = _crop.ratio;
+  const minSize = 30;
+  if (dir === 'br') {
+    const nw = _crop.frameW + dx;
+    if (nw >= minSize && _crop.frameX + nw <= _crop.displayW) {
+      _crop.frameW = nw;
+      _crop.frameH = Math.round(nw / ratio);
+      if (_crop.frameY + _crop.frameH > _crop.displayH) {
+        _crop.frameH = _crop.displayH - _crop.frameY;
+        _crop.frameW = Math.round(_crop.frameH * ratio);
+      }
+    }
+  } else if (dir === 'tl') {
+    const nw = _crop.frameW - dx;
+    const nh = Math.round(nw / ratio);
+    if (nw >= minSize) {
+      const newX = _crop.frameX + dx;
+      const newY = _crop.frameY + (_crop.frameH - nh);
+      if (newX >= 0 && newY >= 0) {
+        _crop.frameX = newX;
+        _crop.frameY = newY;
+        _crop.frameW = nw;
+        _crop.frameH = nh;
+      }
+    }
+  } else if (dir === 'tr') {
+    const nw = _crop.frameW + dx;
+    const nh = Math.round(nw / ratio);
+    if (nw >= minSize && _crop.frameX + nw <= _crop.displayW) {
+      const newY = _crop.frameY - (nh - _crop.frameH);
+      if (newY >= 0) {
+        _crop.frameY = newY;
+        _crop.frameW = nw;
+        _crop.frameH = nh;
+      }
+    }
+  } else if (dir === 'bl') {
+    const nw = _crop.frameW - dx;
+    const nh = Math.round(nw / ratio);
+    if (nw >= minSize) {
+      const newX = _crop.frameX + dx;
+      if (newX >= 0 && _crop.frameY + nh <= _crop.displayH) {
+        _crop.frameX = newX;
+        _crop.frameW = nw;
+        _crop.frameH = nh;
+      }
+    }
+  }
+}
+
+function applyCrop() {
+  const data = state[_crop.type];
+  if (!data) return;
+
+  const imgCx = Math.max(0, Math.round(_crop.frameX / _crop.scale));
+  const imgCy = Math.max(0, Math.round(_crop.frameY / _crop.scale));
+  const imgCw = Math.min(_crop.naturalW - imgCx, Math.round(_crop.frameW / _crop.scale));
+  const imgCh = Math.min(_crop.naturalH - imgCy, Math.round(_crop.frameH / _crop.scale));
+
+  // Crop via canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = imgCw;
+  canvas.height = imgCh;
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = function() {
+    ctx.drawImage(img, imgCx, imgCy, imgCw, imgCh, 0, 0, imgCw, imgCh);
+    const format = data.type === 'image/png' ? 'image/png' : 'image/jpeg';
+    data.dataUrl = canvas.toDataURL(format, 0.95);
+    data.cropped = true;
+    data.cropX = 0; data.cropY = 0;
+    data.cropW = imgCw; data.cropH = imgCh;
+    data.width = imgCw;
+    data.height = imgCh;
+
+    _crop.fromUpload = false;
+    renderImagePreview(_crop.type);
+    updateState();
+    closeCropModal();
+    showToast('裁剪完成', 'success');
+  };
+  img.src = data.originalDataUrl || data.dataUrl;
+}
+
+function closeCropModal() {
+  document.getElementById('cropModal').classList.remove('show');
+  if (_crop.fromUpload && _crop.type) {
+    // Cancelled from upload flow: remove the image
+    state[_crop.type] = null;
+    renderImagePreview(_crop.type);
+    updateState();
+  }
+  _crop.type = null;
+  _crop.fromUpload = false;
+}
+
+// ====== NFO Generation ======
+function getVal(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+function escapeXml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+// 汇总当前表单状态，生成 Kodi 兼容的 .nfo（movie）XML 字符串；空字段自动省略
+function generateNFO() {
+  const title = getVal('title');
+  const originaltitle = getVal('originaltitle');
+  const year = getVal('year');
+  const premiered = getVal('premiered');
+  const runtime = getVal('runtime');
+  const plot = getVal('plot');
+
+  let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<movie>\n';
+  if (title) xml += '    <title>' + escapeXml(title) + '</title>\n';
+  if (originaltitle) xml += '    <originaltitle>' + escapeXml(originaltitle) + '</originaltitle>\n';
+  if (year) xml += '    <year>' + escapeXml(year) + '</year>\n';
+  if (premiered) xml += '    <premiered>' + escapeXml(premiered) + '</premiered>\n';
+  if (runtime) xml += '    <runtime>' + escapeXml(runtime) + '</runtime>\n';
+  const rating = getVal('rating');
+  if (rating) xml += '    <rating>' + escapeXml(rating) + '</rating>\n';
+  if (plot) xml += '    <plot>' + escapeXml(plot) + '</plot>\n';
+  // Use combined genre list (always up to date, sync for safety)
+  syncGenreState();
+  state.genre.forEach(function(g) { xml += '    <genre>' + escapeXml(g) + '</genre>\n'; });
+  state.country.forEach(function(c) { xml += '    <country>' + escapeXml(c) + '</country>\n'; });
+  const mpaa = getVal('mpaa');
+  if (mpaa) xml += '    <mpaa>' + escapeXml(mpaa) + '</mpaa>\n';
+  state.directors.forEach(function(d) {
+    if (!d.name) return;
+    xml += '    <director>' + escapeXml(d.name) + '</director>\n';
+  });
+  state.actors.forEach(function(a, i) {
+    if (!a.name) return;
+    xml += '    <actor>\n';
+    xml += '      <name>' + escapeXml(a.name) + '</name>\n';
+    if (a.role) xml += '      <role>' + escapeXml(a.role) + '</role>\n';
+    if (a.photo) xml += '      <thumb>' + escapeXml(sanitizeName(a.name) + '-actor.jpg') + '</thumb>\n';
+    xml += '      <order>' + (i + 1) + '</order>\n';
+    xml += '    </actor>\n';
+  });
+  xml += '</movie>\n';
+  return xml;
+}
+
+function syntaxHighlight(xml) {
+  var esc = String(xml)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // 单遍切分：要么是完整标签 &lt;...&gt;，要么是标签之间的文本
+  var out = '';
+  var re = /(&lt;[\s\S]*?&gt;)|([\s\S]+?)(?=&lt;|$)/g;
+  var m;
+  while ((m = re.exec(esc)) !== null) {
+    if (m[1]) {
+      out += highlightTag(m[1]);
+    } else if (m[2]) {
+      out += '<span class="xml-value">' + m[2] + '</span>';
+    }
+  }
+  return out;
+}
+
+function highlightTag(tag) {
+  if (/&lt;\?xml/.test(tag)) {
+    return '<span class="xml-decl">' + tag + '</span>';
+  }
+  var inner = tag.slice(4, -4); // 去掉头尾 &lt; 与 &gt;
+  var isClose = inner.charAt(0) === '/';
+  if (isClose) inner = inner.slice(1);
+  var sp = inner.indexOf(' ');
+  var name, attrs = '';
+  if (sp === -1) { name = inner; } else { name = inner.slice(0, sp); attrs = inner.slice(sp); }
+  var attrsHtml = attrs.replace(/([\w-]+)="([^"]*)"/g,
+    ' <span class="xml-attr">$1</span>=<span class="xml-attr">"$2"</span>');
+  return '&lt;' + (isClose ? '/' : '') + '<span class="xml-tag">' + name + '</span>' + attrsHtml + '&gt;';
+}
+
+// 首播日期输入时自动格式化为 YYYY-MM-DD（如 20160101 → 2016-01-01）
+function formatPremiered(input) {
+  var v = input.value.replace(/[^\d]/g, '');
+  var parts = [];
+  if (v.length > 0) parts.push(v.slice(0, 4));
+  if (v.length > 4) parts.push(v.slice(4, 6));
+  if (v.length > 6) parts.push(v.slice(6, 8));
+  input.value = parts.join('-');
+}
+
+function validateRating(input) {
+  var v = input.value.trim();
+  if (v === '' || v === '-' || v === '.') return;
+  var n = parseFloat(v);
+  if (isNaN(n)) { input.value = ''; return; }
+  if (n < 0) n = 0;
+  if (n > 10) n = 10;
+  input.value = n.toFixed(1);
+}
+
+// 同步界面状态：依据是否已上传图片 / 填写文件名，启用或禁用导出与保存按钮
+function updateState() {
+  document.getElementById('btnExportPoster').disabled = !state.poster;
+  document.getElementById('btnExportPoster').style.opacity = state.poster ? '1' : '0.5';
+  document.getElementById('btnExportFanart').disabled = !state.fanart;
+  document.getElementById('btnExportFanart').style.opacity = state.fanart ? '1' : '0.5';
+  document.getElementById('btnExportLogo').disabled = !state.logo;
+  document.getElementById('btnExportLogo').style.opacity = state.logo ? '1' : '0.5';
+
+  var hasFilename = !!getVal('filename');
+  var btnSave = document.getElementById('btnSave');
+  btnSave.disabled = !hasFilename;
+  btnSave.style.opacity = hasFilename ? '1' : '0.5';
+}
+
+// ====== NFO Modal ======
+function previewNFO() {
+  const nfo = generateNFO();
+  let html;
+  try {
+    html = syntaxHighlight(nfo);
+  } catch (e) {
+    html = String(nfo).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  document.getElementById('modalNfoPreview').innerHTML = html;
+  document.getElementById('nfoModal').classList.add('show');
+}
+
+function closeModal() { document.getElementById('nfoModal').classList.remove('show'); }
+function modalExportNFO() { exportNFO(); }
+
+document.getElementById('nfoModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.getElementById('cropModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCropModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { closeModal(); closeCropModal(); }
+});
+
+// ====== Export ======
+function exportNFO() {
+  const nfo = generateNFO();
+  const filename = getExportTitle() + '.nfo';
+  const blob = new Blob([nfo], { type: 'application/xml;charset=utf-8' });
+  downloadBlob(blob, filename);
+  showToast('NFO 文件已下载: ' + filename, 'success');
+}
+
+function exportImage(type) {
+  const data = state[type];
+  if (!data) {
+    const labels = { poster: '海报', fanart: '剧照', logo: 'Logo' };
+    showToast('请先上传' + labels[type] + '图片', 'error');
+    return;
+  }
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = function() {
+    const cw = data.cropped ? data.cropW : data.width;
+    const ch = data.cropped ? data.cropH : data.height;
+    const cx = data.cropped ? data.cropX : 0;
+    const cy = data.cropped ? data.cropY : 0;
+    canvas.width = cw;
+    canvas.height = ch;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.drawImage(img, cx, cy, cw, ch, 0, 0, cw, ch);
+
+    // Draw subtitle badge on poster & fanart
+    if ((type === 'poster' || type === 'fanart') && state.hasSubtitle) {
+      drawSubtitleBadge(ctx, cw, type);
+    }
+
+    let filename, mime;
+    if (type === 'logo') {
+      filename = getExportTitle() + '-clearlogo.png';
+      mime = 'image/png';
+    } else if (type === 'poster') {
+      filename = getExportTitle() + '-poster.jpg';
+      mime = 'image/jpeg';
+    } else {
+      filename = getExportTitle() + '-fanart.jpg';
+      mime = 'image/jpeg';
+    }
+
+    canvas.toBlob(function(blob) {
+      downloadBlob(blob, filename);
+      const labels = { poster: '海报', fanart: '剧照', logo: 'Logo' };
+      showToast(labels[type] + '已下载: ' + filename, 'success');
+    }, mime, 0.95);
+  };
+  img.src = data.dataUrl;
+}
+
+function exportAll() {
+  exportNFO();
+  if (state.poster) setTimeout(function() { exportImage('poster'); }, 300);
+  if (state.fanart) setTimeout(function() { exportImage('fanart'); }, 600);
+  if (state.logo) setTimeout(function() { exportImage('logo'); }, 900);
+  exportPersonPhotos(function() {});
+  var hasImg = state.poster || state.fanart || state.logo || state.directors.some(function(d) { return d.photo; }) || state.actors.some(function(a) { return a.photo; });
+  if (!hasImg) {
+    showToast('提示：未上传任何图片', 'error');
+  } else {
+    setTimeout(function() { showToast('全部文件导出完成', 'success'); }, 1400);
+  }
+}
+
+// 下载导演 / 演员照片（区分后缀，避免同名冲突）
+function exportPersonPhotos(onDone) {
+  var targets = [];
+  state.directors.forEach(function(d, i) {
+    if (d.photo) targets.push({ photo: d.photo, name: sanitizeName(d.name || ('director' + i)) + '-director.jpg' });
+  });
+  state.actors.forEach(function(a, i) {
+    if (a.photo) targets.push({ photo: a.photo, name: sanitizeName(a.name || ('actor' + i)) + '-actor.jpg' });
+  });
+  var pending = targets.length;
+  if (!pending) { onDone(); return; }
+  targets.forEach(function(t) {
+    dataUrlToBlob(t.photo.dataUrl).then(function(blob) {
+      downloadBlob(blob, t.name);
+    }).catch(function() {}).then(function() {
+      pending--;
+      if (pending === 0) onDone();
+    });
+  });
+}
+
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+}
+
+function copyNFO() {
+  const nfo = generateNFO();
+  navigator.clipboard.writeText(nfo).then(function() {
+    showToast('NFO 内容已复制到剪贴板', 'success');
+  }).catch(function() {
+    showToast('复制失败', 'error');
+  });
+}
+
+// ====== Utilities ======
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// 在海报/剧照画布左上角绘制绿色「字幕」胶囊角标。
+// cw 为导出图片宽度；fanart 用较小角标、poster 用较大角标。
+function drawSubtitleBadge(ctx, cw, type) {
+  var badgeW = cw * (type === 'fanart' ? 0.15 : 0.30);
+  var badgeH = badgeW * 0.28;
+  var badgeX = cw * 0.05;
+  var badgeY = cw * 0.05;
+  ctx.fillStyle = '#34C759';
+  drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeH / 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold ' + Math.round(badgeH * 0.7) + 'px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('字幕', badgeX + badgeW / 2, badgeY + badgeH / 2);
+}
+
+function showToast(msg, type) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = 'toast show ' + (type || '');
+  setTimeout(function() { toast.classList.remove('show'); }, 2500);
+}
+
+function resetAll() {
+  document.querySelectorAll('input[type="text"], input[type="number"], textarea').forEach(function(el) { el.value = ''; });
+  state.country = [];
+  state.directors = [];
+  state.actors = [];
+  state._genreStore = { normal: [], adult: [] };
+  state.genreTab = 'normal';
+  syncGenreState();
+  state.poster = null; state.fanart = null; state.logo = null;
+  state.hasSubtitle = false;
+  document.getElementById('hasSubtitle').checked = false;
+  setMpaa('', '未分级');
+  _filenameManual = false;
+  _yearManual = false;
+
+  // Reset tab UI
+  document.querySelectorAll('.capsule-option').forEach(function(b) { b.classList.toggle('active', b.textContent === '普通'); });
+
+  ['genre', 'country'].forEach(renderTagsForField);
+  renderDirectors();
+  renderActors();
+  renderImagePreview('poster');
+  renderImagePreview('fanart');
+  renderImagePreview('logo');
+  renderHotTags();
+  updateState();
+  showToast('已清空所有数据', 'success');
+}
+
+// ====== Global Enter to Blur ======
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  var el = e.target;
+  if (el.tagName === 'TEXTAREA') return;
+  if (el.closest('.tag-input-wrapper')) return;
+  if (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number')) {
+    e.preventDefault();
+    el.blur();
+  }
+});
+
+// ====== Init ======
+renderHotTags();
+renderDirectors();
+renderActors();
+updateState();
+updateSearchButtonState();
+renderHistory();
+</script>
+</body>
+</html>
