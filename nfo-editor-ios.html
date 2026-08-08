@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="NFO 编辑">
-<meta name="theme-color" content="#F2F1F6">
+<meta name="theme-color" content="#3D8CF0">
 <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAADiUlEQVR42u3SZRYQVBSF0WfHqOxGbLGwsRswsQdiYScmdrciKja2YnfX9b5pnLV/7LPOAL4xtr68ClKMsdVl/xWkmEX/W5Cii760H4SYRf9TkELRxBV9yd8FKRRNXNEX/1WQQtHkFf1nQYou+qJ+EGIW/UdBCkUTV/SFvxekUDRxRa/4rSDFLPrXghRjbNkLKbroC34pSKFo8or+uSBFF31+Pwgxi/6pIEUXfV4/CDGL/rEghaKJK/rcHwpSKJq4os/5viCFoskr+ruCFF302f0gxCz624IUs+hvClJ00cv7QYgxtlj+dUGKLnpZPwgxi/6qIIWiiSt66ZcFKRRNXtFfFKToos/qByFm0R8WpOiiT+kHIWbRHxSkUDRxRZ/8fkEKRZNX9PqCFF30Sf0gxCz6vYIUXfSJ7xakUDR5Rb/9YMQs+h7ClI00Qv7QYhZ9N0FKRRNXNF73lWQQtHkFX1nQYouekE/CDHGRgtWFaToovfoByFm0XcUpJhF316QoovevR+EmEXfVpBC0cQVvdutBSkUTVzRu95SkELR5BV9c0GKLnqXfhBiFn1TQYoueud+EGIWfWNBCkUTV/RONxSkGGPMhRRd9PUFMcbY8bqCGIomregdri2IoWjiil5ZEGOM7XshRRd9TUEMRZNW9HZXF8RQNGlFb3tVQQxFE1f0lQUxxtimF1J00VcUxFA0Uf4Ht7Hnp69iR60AAAAASUVORK5CYII=">
 <title>NFO 编辑器</title>
 <style>
@@ -20,8 +20,8 @@
   --label-2: #8e8e93;
   --label-3: #c7c7cc;
   --sep: rgba(60,60,67,0.18);
-  --accent: #56BEE5;
-  --accent-fill: rgba(86,190,229,0.12);
+  --accent: #3D8CF0;
+  --accent-fill: rgba(61,140,240,0.12);
   --accent-text: #ffffff;
   --danger: #ff3b30;
   --green: #34c759;
@@ -41,6 +41,49 @@
   --glass-strong: rgba(247,247,250,0.92);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
 }
+
+/* ===== 深色主题（跟随系统 / 手动） ===== */
+[data-theme="dark"] {
+  --bg: #000000;
+  --card: #1c1c1e;
+  --card-fill: #2c2c2e;
+  --label: #ffffff;
+  --label-2: #98989f;
+  --label-3: #48484a;
+  --sep: rgba(84,84,88,0.65);
+  --gray-fill: rgba(120,120,128,0.24);
+  --glass: rgba(28,28,30,0.78);
+  --glass-strong: rgba(28,28,30,0.92);
+}
+/* 硬编码浅色表面在深色下的覆盖 */
+[data-theme="dark"] .sheet { background: var(--card); }
+[data-theme="dark"] .sheet::before { background: rgba(255,255,255,0.24); }
+[data-theme="dark"] .sheet.sheet-action { background: transparent; }
+[data-theme="dark"] #listSheet { background: var(--card); }
+[data-theme="dark"] .about-modal { background: var(--card); }
+[data-theme="dark"] .crop-modal { background: var(--card); }
+[data-theme="dark"] .crop-stage { background: #2c2c2e; }
+[data-theme="dark"] .search-box input[type="text"] { background: var(--card-fill); }
+[data-theme="dark"] .search-box .ios-input { background: var(--card-fill); }
+[data-theme="dark"] #apiSheet .ios-input { background: var(--card-fill); }
+[data-theme="dark"] .meta-tabs button.active { background: var(--card-fill); color: var(--label); }
+[data-theme="dark"] .home-tab.active { background: var(--card-fill); color: var(--label); }
+[data-theme="dark"] .seg button.active { background: var(--card-fill); color: var(--label); }
+[data-theme="dark"] .sheet-seg .seg button.active { background: rgba(120,120,128,0.4); color: #fff; }
+[data-theme="dark"] .tab-item.active { background: rgba(120,120,128,0.24); }
+[data-theme="dark"] .cast-item .ci-del:active { background: rgba(120,120,128,0.3); }
+[data-theme="dark"] .sheet.sheet-context { background: var(--glass-strong); }
+[data-theme="dark"] .sheet.sheet-context .action-row { color: var(--label); border-top-color: var(--sep); }
+[data-theme="dark"] .action-sheet-group { background: var(--card); }
+[data-theme="dark"] .action-sheet-cancel { background: var(--card); }
+[data-theme="dark"] .meta-tabs { background: var(--gray-fill); }
+[data-theme="dark"] .meta-tabs button { color: var(--label-2); }
+[data-theme="dark"] .home-tabs { background: var(--gray-fill); }
+[data-theme="dark"] .home-tab { color: var(--label-2); }
+[data-theme="dark"] .media-upload-col .media-add-box { background: var(--card-fill); border-color: rgba(255,255,255,0.15); }
+[data-theme="dark"] .media-upload-col .media-add-box:active { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .theme-color.active { box-shadow: 0 0 0 4px var(--card), 0 0 0 7px var(--ring); }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
 body {
@@ -83,29 +126,24 @@ img { display: block; }
   pointer-events: none;
 }
 .detail-topbar button {
-  width: 36px; height: 36px; border-radius: 50%;
+  width: 44px; height: 44px; border-radius: 50%;
   background: rgba(255,255,255,0.22); backdrop-filter: saturate(180%) blur(12px);
   -webkit-backdrop-filter: saturate(180%) blur(12px);
   border: none; color: #fff; display: flex; align-items: center; justify-content: center;
   pointer-events: auto; -webkit-tap-highlight-color: transparent;
 }
-.detail-topbar button svg { width: 20px; height: 20px; }
+.detail-topbar button svg { width: 24px; height: 24px; }
 .detail-scroll {
   position: fixed; inset: 0; z-index: 5;
   padding-top: calc(var(--sat) + 56px);
   padding-bottom: max(20px, var(--sab));
   overflow-y: auto; -webkit-overflow-scrolling: touch;
 }
-.detail-content { padding: 0 20px 30px; }
-.detail-poster-wrap { display: flex; justify-content: center; margin: 12px 0 24px; }
-.detail-poster {
-  width: 170px; height: 255px; border-radius: 14px;
-  background-size: cover; background-position: center;
-  background-color: rgba(255,255,255,0.15);
-  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
-}
-.detail-title { text-align: center; font-size: 28px; font-weight: 700; margin: 0 0 10px; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
-.detail-meta { text-align: center; font-size: 14px; color: rgba(255,255,255,0.85); line-height: 1.5; margin-bottom: 20px; }
+.detail-content { padding: 8px 20px 30px; }
+.detail-title { text-align: center; font-size: 28px; font-weight: 700; margin: 0 0 12px; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.detail-info1 { text-align: center; font-size: 15px; font-weight: 600; color: rgba(255,255,255,0.95); line-height: 1.6; margin: 0 0 4px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+.detail-info2 { text-align: center; font-size: 13px; color: rgba(255,255,255,0.72); line-height: 1.6; margin-bottom: 20px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+.detail-info1:empty, .detail-info2:empty { display: none; }
 .detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); }
 .detail-plot:empty { display: none; }
 
@@ -211,7 +249,13 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .value-row .vr-value { font-size: 17px; color: var(--label); display: flex; align-items: center; gap: 6px; }
 .value-row .vr-value.empty { color: var(--label-3); }
 .value-row .vr-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.value-row:active { background: var(--gray-fill); border-radius: var(--radius-sm); }
+.value-row { position: relative; overflow: hidden; }
+.value-row.select-row:active::before,
+.value-row.date-row:active::before {
+  content: ''; position: absolute; inset: 0;
+  background: rgba(0,0,0,0.08); border-radius: var(--radius-sm);
+}
+.value-row .vr-label, .value-row .vr-value, .value-row .chevron { position: relative; z-index: 1; }
 .chevron { width: 8px; height: 8px; border-right: 2px solid var(--label-3); border-top: 2px solid var(--label-3); transform: rotate(45deg); }
 .sr-chevron { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: var(--label-3); }
 .sr-chevron svg { width: 20px; height: 20px; }
@@ -220,19 +264,18 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .tags-area { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
 #countryTags { border-bottom: 0.5px solid var(--sep); }
 .tag-chip {
-  position: relative;
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 4px;
   background: var(--accent-fill); color: var(--accent);
-  padding: 7px 22px 7px 13px; border-radius: 20px; font-size: 15px; font-weight: 500;
+  padding: 7px 10px 7px 13px; border-radius: 20px; font-size: 15px; font-weight: 500;
 }
 .tag-chip .chip-del {
-  position: absolute; right: 4px; top: 4px; width: 14px; height: 14px;
+  width: 24px; height: 24px; flex-shrink: 0;
   border-radius: 50%; background: rgba(0,0,0,0.08); color: #555;
-  display: flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center;
   -webkit-tap-highlight-color: transparent;
 }
 .tag-chip .chip-del:active { background: rgba(0,0,0,0.16); }
-.tag-chip .chip-del svg { width: 10px; height: 10px; }
+.tag-chip .chip-del svg { width: 14px; height: 14px; }
 .tag-add {
   display: inline-flex; align-items: center; gap: 4px;
   background: var(--gray-fill); color: var(--label-2);
@@ -299,6 +342,11 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 .avatar-camera svg { width: 18px; height: 18px; }
 .person-avatar-wrap:active .person-avatar-large { filter: brightness(0.96); }
+/* 人员信息输入框：浅灰色底 */
+#personName, #personRole {
+  background: var(--gray-fill); border-radius: var(--radius-sm);
+  padding: 10px 12px; text-align: left;
+}
 
 /* 媒体上传（参考图：海报/剧照独立卡片，Logo 独立，字幕开关在右） */
 .media-grid { display: flex; gap: var(--gap); margin-bottom: 6px; }
@@ -316,7 +364,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 .media-subtitle-row .section-heading { margin: 0; padding: 0; }
 .media-upload-col {
-  flex: 0 0 auto; width: 120px; text-align: center;
+  flex: 0 0 auto; width: 120px; text-align: center; position: relative;
 }
 .media-upload-col.poster { width: 66px; height: 100px; }
 .media-upload-col.fanart { width: 132px; height: 100px; }
@@ -343,6 +391,15 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   display: flex; align-items: center; justify-content: center; padding: 0;
   -webkit-tap-highlight-color: transparent;
 }
+/* 缩略图右上角关闭图标（海报/剧照/Logo 通用） */
+.media-thumb-close {
+  position: absolute; top: 4px; right: 4px; z-index: 4;
+  width: 22px; height: 22px; border-radius: 50%; border: none; padding: 0;
+  background: rgba(0,0,0,0.55); color: #fff; display: none;
+  align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.media-thumb-close svg { width: 12px; height: 12px; display: block; }
 .mt-btn:active { background: rgba(0,0,0,0.75); }
 .mt-btn.mt-del { background: rgba(214,48,49,0.85); }
 .media-toolbar {
@@ -355,24 +412,34 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   -webkit-tap-highlight-color: transparent;
 }
 .media-toolbar button:active { opacity: 0.5; }
+.media-toolbar button:disabled { color: var(--label-3); pointer-events: none; }
 .media-toolbar button.mt-text-del { color: var(--danger); }
 
 /* 图片裁剪弹窗 */
-.crop-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 600; opacity: 0; pointer-events: none; transition: opacity .2s; }
+/* 图片裁剪弹窗：白底 iOS 26 风格 */
+.crop-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 600; opacity: 0; pointer-events: none; transition: opacity .2s; }
 .crop-mask.show { opacity: 1; pointer-events: auto; }
 .crop-modal {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 601;
-  background: #1c1c1e; border-radius: 16px 16px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
-  display: none; flex-direction: column; gap: 12px;
+  background: #fff; border-radius: 26px 26px 0 0; padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  display: none; flex-direction: column; gap: 14px;
+  box-shadow: 0 -8px 32px rgba(0,0,0,0.12);
+  height: 85vh; max-height: 85vh;
 }
 .crop-modal.show { display: flex; }
-.crop-head { display: flex; justify-content: space-between; align-items: center; color: #fff; font-size: 16px; }
-.crop-head button { background: none; border: none; color: var(--accent); font-size: 16px; padding: 2px 6px; -webkit-tap-highlight-color: transparent; }
-.crop-stage { position: relative; width: 100%; max-height: 56vh; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; touch-action: none; user-select: none; }
-.crop-stage img { max-width: 100%; max-height: 56vh; display: block; pointer-events: auto; user-select: none; -webkit-user-select: none; }
-.crop-box { position: absolute; border: 1.5px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); box-sizing: border-box; touch-action: none; }
-.crop-handle { position: absolute; right: -10px; bottom: -10px; width: 20px; height: 20px; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
-.crop-foot { display: flex; justify-content: flex-end; }
+.crop-head { position: relative; display: flex; align-items: center; justify-content: space-between; color: var(--label); font-size: 17px; }
+.crop-head > span:first-child { position: absolute; left: 50%; transform: translateX(-50%); font-weight: 600; max-width: 56%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crop-head .ch-close, .crop-head .ch-done { background: none; border: none; color: var(--accent); font-size: 16px; font-weight: 600; padding: 2px 6px; -webkit-tap-highlight-color: transparent; display: flex; align-items: center; justify-content: center; }
+.crop-head .ch-close { color: var(--label); }
+.crop-head .ch-close svg { width: 22px; height: 22px; }
+.crop-stage { position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden; background: #F2F2F7; border-radius: 18px; touch-action: none; user-select: none; }
+.crop-stage img { position: absolute; left: 50%; top: 50%; display: block; pointer-events: none; user-select: none; -webkit-user-select: none; transform-origin: center center; }
+.crop-box { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); box-sizing: border-box; pointer-events: none; }
+.crop-handle { display: none; }
+.crop-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.crop-ratios { flex: 1; display: flex; align-items: center; }
+.crop-ratios .seg { margin-left: 0; }
+.crop-ratios .seg button { font-size: 13px; padding: 5px 14px; }
 .subtitle-toggle {
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; font-size: 17px; color: var(--label);
@@ -402,11 +469,28 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .settings-row .sr-label { flex: 1; min-width: 0; color: var(--label); }
 .settings-row .sr-value { color: var(--label-2); font-size: 15px; }
 .settings-row:active { background: var(--gray-fill); }
+/* 设置行内嵌原生 select（真·iOS 滚轮选择器） */
+.settings-row.select-row { position: relative; overflow: hidden; }
+.settings-row.select-row:active { background: transparent; }
+.settings-row.select-row:active::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--gray-fill); border-radius: var(--radius-sm);
+}
+.settings-row.select-row .sr-icon,
+.settings-row.select-row .sr-label,
+.settings-row.select-row .sr-value,
+.settings-row.select-row .sr-chevron { position: relative; z-index: 1; }
+.settings-row .select-overlay {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: none; background: transparent;
+  -webkit-appearance: none; appearance: none; color: transparent;
+  font-size: 16px; cursor: pointer; z-index: 2;
+}
 
 /* 主题色选择网格 */
-.theme-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 22px; padding: 22px var(--pad) calc(22px + var(--sab)); }
-.theme-color { width: 100%; aspect-ratio: 1; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); background-clip: padding-box; }
-.theme-color.active { border-color: var(--label); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--label); }
+.theme-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 32px; padding: 32px var(--pad) calc(32px + var(--sab)); }
+.theme-color { width: 100%; aspect-ratio: 1; border-radius: 50%; border: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); background-clip: padding-box; justify-self: center; transition: transform .15s; }
+.theme-color.active { box-shadow: 0 0 0 4px #fff, 0 0 0 7px var(--ring); }
 .theme-color:active { transform: scale(0.92); }
 
 /* 底部浮动胶囊 Tab 栏（Liquid Glass） */
@@ -468,6 +552,14 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; font-weight: 700;
   padding: 2px 7px; border-radius: 10px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
+.movie-card .mc-lock {
+  position: absolute; bottom: 6px; left: 6px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(0,0,0,0.55); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.movie-card .mc-lock svg { width: 13px; height: 13px; display: block; }
 .movie-card-wrap .mc-title { font-size: 15px; font-weight: 500; padding: 6px 2px 0; line-height: 1.3; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .empty-hint { text-align: center; color: var(--label-2); font-size: 14px; padding: 40px 20px; }
 
@@ -493,7 +585,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.error, .toast.success { background: rgba(0,0,0,0.82); color: #fff; }
 
-/* 底部 sheet / 动作表（Liquid Glass + 抓取条） */
+/* 底部 sheet / 动作表（iOS 26 风格：纯白底 + 抓取条） */
 .sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.36); z-index: 500; opacity: 0; pointer-events: none; transition: .25s; }
 .sheet-mask.show { opacity: 1; pointer-events: auto; }
 /* 首页长按弹窗的透明蒙版：覆盖海报/底部栏，吸收误触；点击外部仍由 ctxOutsideClose 关闭 */
@@ -501,11 +593,9 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .ctx-mask.show { opacity: 1; pointer-events: auto; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 501;
-  background: var(--glass-strong);
-  backdrop-filter: saturate(180%) blur(30px);
-  -webkit-backdrop-filter: saturate(180%) blur(30px);
-  border-radius: 20px 20px 0 0; padding: 8px var(--pad) calc(var(--sab) + 56px);
-  box-shadow: none;
+  background: #fff;
+  border-radius: 24px 24px 0 0; padding: 8px var(--pad) calc(var(--sab) + 56px);
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.08);
   transform: translateY(100%); transition: transform .32s cubic-bezier(.32,.72,0,1);
   /* 通用最小高度：约屏幕 44%（介于 2/5 与 1/2 之间），保证内容落在拇指易触区 */
   min-height: 44vh; min-height: 44dvh;
@@ -583,12 +673,12 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 .action-sheet-cancel:active { background: var(--gray-fill); }
 .sheet-mask { background: rgba(0,0,0,0.45); }
-.sheet-bar { display: grid; grid-template-columns: 44px 1fr auto; gap: 6px; align-items: center; padding: 8px 0; border-bottom: none; margin-bottom: 16px; }
-.sheet-bar.sheet-bar-center { display: grid; grid-template-columns: 44px 1fr auto; gap: 6px; align-items: center; }
-.sheet-bar .sb-spacer { width: 44px; }
-.sheet-bar .sb-title { font-size: 17px; font-weight: 600; text-align: center; }
+/* 弹窗头部：标题绝对居中，左右按钮自然分布 */
+.sheet-bar { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: none; margin-bottom: 16px; }
+.sheet-bar .sb-title { position: absolute; left: 50%; transform: translateX(-50%); font-size: 17px; font-weight: 600; text-align: center; max-width: 56%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-bar .sb-spacer { width: 44px; flex-shrink: 0; }
 .sheet-bar .sb-done { color: var(--accent); font-size: 17px; font-weight: 600; background: none; border: none; padding: 0; text-align: right; }
-.sheet-bar .sb-pill { justify-self: end; background: var(--accent); color: var(--accent-text); border: none; border-radius: 20px; padding: 7px 22px; font-size: 15px; font-weight: 600; line-height: 1.2; -webkit-tap-highlight-color: transparent; outline: none; }
+.sheet-bar .sb-pill { background: var(--accent); color: var(--accent-text); border: none; border-radius: 20px; padding: 7px 22px; font-size: 15px; font-weight: 600; line-height: 1.2; -webkit-tap-highlight-color: transparent; outline: none; }
 .sheet-bar .sb-cancel { color: var(--label-2); font-size: 17px; }
 .sheet-bar .sb-icon { width: 44px; height: 34px; display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; color: var(--label); }
 .sheet-bar .sb-icon svg { width: 22px; height: 22px; }
@@ -611,8 +701,8 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 
 /* 管理行：左滑删除 + 右侧拖动排序 */
 .swipe { position: relative; overflow: hidden; border-bottom: 0.5px solid var(--sep); }
-.swipe-inner { display: flex; align-items: center; padding: 14px 4px; background: var(--glass-strong); transition: transform .25s, background .18s, border-radius .18s; touch-action: pan-y; position: relative; z-index: 2; }
-.swipe-inner.swiped { background: var(--card); border-radius: var(--radius-sm); }
+.swipe-inner { display: flex; align-items: center; padding: 14px 4px; background: var(--card); transition: transform .25s, background .18s, border-radius .18s, box-shadow .18s; touch-action: pan-y; position: relative; z-index: 2; }
+.swipe-inner.swiped { background: var(--card); border-radius: var(--radius-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 .swipe-del { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: auto; padding: 6px 16px; background: var(--danger); color: #fff; border-radius: 16px; font-size: 14px; font-weight: 600; z-index: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.12); opacity: 0; transition: opacity .18s; }
 .swipe-inner.swiped ~ .swipe-del { opacity: 1; }
 .swipe.drag-target .swipe-del { opacity: 0; }
@@ -621,18 +711,28 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .drag-handle svg { width: 20px; height: 20px; pointer-events: none; }
 .mr-name { flex: 1; font-size: 17px; color: var(--label); padding: 0 8px; }
 .swipe.drag-target .swipe-inner { opacity: 0.35; background: var(--card); border-radius: var(--radius-sm); }
-.swipe-inner.dragging { position: fixed; z-index: 1000; opacity: 0.92; background: var(--card); border-radius: var(--radius-sm); box-shadow: 0 4px 12px rgba(0,0,0,0.12); pointer-events: none; }
+.swipe-inner.dragging { position: fixed; z-index: 1000; opacity: 0.92; background: var(--card); border-radius: var(--radius-sm); box-shadow: 0 6px 18px rgba(0,0,0,0.08); pointer-events: none; }
 
 /* 国家/地区、类型选择/管理弹窗固定 85% 高度 */
 .sheet.sheet-tall { min-height: 85vh; min-height: 85dvh; max-height: 85vh; max-height: 85dvh; }
 .sheet.sheet-tall .sheet-list { max-height: 68vh; max-height: 68dvh; }
 
 /* 列表/管理弹窗：头部固定，仅内容区滚动 */
-#listSheet { display: flex; flex-direction: column; overflow: hidden; }
+#listSheet { display: flex; flex-direction: column; overflow: hidden; background: #fff; }
 #listSheet .list-sheet-header { flex-shrink: 0; }
 #listSheet .list-sheet-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #listSheet .sheet-list { max-height: none; }
+#listSheet .sheet-row { position: relative; overflow: hidden; }
+#listSheet .sheet-row:active::before {
+  content: ''; position: absolute; inset: 0;
+  background: rgba(0,0,0,0.08); border-radius: var(--radius-sm);
+}
+#listSheet .sheet-row .sr-name, #listSheet .sheet-row .check { position: relative; z-index: 1; }
 #listSheet .list-sheet-header .sheet-seg { padding-bottom: 8px; }
+
+/* API 配置弹窗：输入框浅灰底，提示语居中 */
+#apiSheet .ios-input { background: #F2F2F7; }
+#apiSheet .sheet-note { text-align: center; }
 
 /* 隐藏应用内所有滚动条 */
 *::-webkit-scrollbar { display: none; }
@@ -651,6 +751,18 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* 设置页页脚 */
 .site-footer { text-align: center; color: var(--label-2); font-size: 12px; padding: 24px 16px; line-height: 1.6; }
 .site-footer svg { height: 11px; vertical-align: middle; }
+
+/* 关于弹窗（居中 iOS Alert 风格） */
+.about-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 700; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.about-mask.show { opacity: 1; pointer-events: auto; }
+.about-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.96); width: 78%; max-width: 320px; background: #fff; border-radius: 18px; z-index: 701; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; box-shadow: 0 10px 30px rgba(0,0,0,0.15); overflow: hidden; text-align: center; }
+.about-modal.show { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+.about-title { padding: 18px 16px 8px; font-size: 17px; font-weight: 600; color: var(--label); }
+.about-body { padding: 8px 20px 18px; font-size: 14px; line-height: 1.6; color: var(--label-2); }
+.about-body p { margin: 0 0 8px; }
+.about-body p:last-child { margin-bottom: 0; }
+.about-done { width: 100%; padding: 14px; font-size: 17px; font-weight: 600; color: var(--accent); background: none; border: none; border-top: 0.5px solid var(--sep); -webkit-tap-highlight-color: transparent; }
+.about-done:active { background: var(--gray-fill); }
 
 /* TMDB 搜索结果 */
 .tmdb-result { display: flex; align-items: flex-start; gap: 14px; padding: 12px 4px; border-bottom: 0.5px solid var(--sep); }
@@ -694,13 +806,24 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div id="actionSheetInner"></div>
   </div>
 
+  <!-- 关于弹窗（居中卡片） -->
+  <div class="about-mask" id="aboutMask" onclick="closeAllSheets()"></div>
+  <div class="about-modal" id="aboutModal">
+    <div class="about-title">关于</div>
+    <div class="about-body">
+      <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+      <p>作者 @Halfleave · 版本 v1.0.0</p>
+    </div>
+    <button class="about-done" onclick="closeAllSheets()">完成</button>
+  </div>
+
   <!-- 主题色选择 -->
   <div class="sheet" id="themeSheet">
     <div class="sheet-bar sheet-bar-center">
       <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
-      <span class="sb-title">主题色</span>
+      <span class="sb-title">主题</span>
       <span class="sb-spacer"></span>
     </div>
     <div class="theme-grid" id="themeGrid"></div>
@@ -719,15 +842,22 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   <div class="crop-mask" id="cropMask" onclick="closeCrop()"></div>
   <div class="crop-modal" id="cropModal">
     <div class="crop-head">
+      <button class="ch-close" onclick="closeCrop()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <span>裁剪图片</span>
-      <button onclick="closeCrop()">取消</button>
+      <button class="ch-done" onclick="applyCrop()">完成</button>
     </div>
     <div class="crop-stage" id="cropStage">
       <img id="cropImg" alt="">
       <div class="crop-box" id="cropBox"><span class="crop-handle" id="cropHandle"></span></div>
     </div>
     <div class="crop-foot">
-      <button class="btn btn-primary btn-pill" onclick="applyCrop()">完成</button>
+      <div class="crop-ratios" id="cropRatios" style="display:none;">
+        <span class="seg">
+          <button type="button" data-ratio="16:9" onclick="setFanartRatio('16:9', this)">16:9</button>
+          <button type="button" data-ratio="3:2" onclick="setFanartRatio('3:2', this)">3:2</button>
+          <button type="button" data-ratio="4:3" class="active" onclick="setFanartRatio('4:3', this)">4:3</button>
+        </span>
+      </div>
     </div>
   </div>
 
@@ -759,13 +889,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
   </div>
 
-  <!-- API 管理 -->
+  <!-- API 配置 -->
   <div class="sheet" id="apiSheet">
     <div class="sheet-bar sheet-bar-center">
       <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
-      <span class="sb-title">API 管理</span>
+      <span class="sb-title">API 配置</span>
       <button class="sb-pill" onclick="saveApiKey()">保存</button>
     </div>
     <div class="field field-stacked no-border api-key-field">
@@ -958,10 +1088,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
               <div class="card media-card">
                 <div class="media-upload-col poster" id="posterUpload" onclick="triggerUpload('poster')">
                   <div class="media-add-box"><span>＋</span></div>
+                  <button class="media-thumb-close" id="posterClose" onclick="event.stopPropagation(); deleteMedia('poster')" aria-label="删除">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
                 </div>
-                <div class="media-toolbar" id="posterToolbar" style="display:none;">
-                  <button onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
-                  <button class="mt-text-del" onclick="event.stopPropagation(); deleteMedia('poster')">删除</button>
+                <div class="media-toolbar" id="posterToolbar">
+                  <button id="posterCropBtn" disabled onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
                 </div>
               </div>
             </div>
@@ -970,10 +1102,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
               <div class="card media-card">
                 <div class="media-upload-col fanart" id="fanartUpload" onclick="triggerUpload('fanart')">
                   <div class="media-add-box"><span>＋</span></div>
+                  <button class="media-thumb-close" id="fanartClose" onclick="event.stopPropagation(); deleteMedia('fanart')" aria-label="删除">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
                 </div>
-                <div class="media-toolbar" id="fanartToolbar" style="display:none;">
-                  <button onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
-                  <button class="mt-text-del" onclick="event.stopPropagation(); deleteMedia('fanart')">删除</button>
+                <div class="media-toolbar" id="fanartToolbar">
+                  <button id="fanartCropBtn" disabled onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
                 </div>
               </div>
             </div>
@@ -988,6 +1122,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <div class="card media-logo-card">
             <div class="media-upload-col wide" id="logoUpload" onclick="triggerUpload('logo')">
               <div class="media-add-box"><span>＋</span></div>
+              <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
             </div>
           </div>
         </div>
@@ -1002,51 +1139,68 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </header>
     <div class="page-scroll">
       <h2 class="section-heading">功能设置</h2>
+      <!-- 卡片1：API 配置 + 两个标签管理 -->
       <div class="settings-group">
         <button class="settings-row" onclick="openApiKeySheet()">
           <span class="sr-icon" style="background:#FF9500;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z"/></svg></span>
-          <span class="sr-label">API 管理</span>
+          <span class="sr-label">API 配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
         <button class="settings-row" onclick="openCountryManage()">
           <span class="sr-icon" style="background:#34C759;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1 17.93a8 8 0 0 1-6-6.93h3.2a17.8 17.8 0 0 0 1.14 4.93A9.9 9.9 0 0 0 11 19.93Zm2 0a9.9 9.9 0 0 0 1.66-2A17.8 17.8 0 0 0 15.8 13H19a8 8 0 0 1-6 6.93ZM5 11H8.45A18.3 18.3 0 0 0 9.35 6.07 8 8 0 0 0 5 11Zm7-5.85A16.6 16.6 0 0 1 14.55 11H9.45A16.6 16.6 0 0 1 12 5.15ZM16.65 6.07A18.3 18.3 0 0 1 17.55 11H19a8 8 0 0 0-2.35-4.93Z"/></svg></span>
-          <span class="sr-label">国家/地区管理</span>
+          <span class="sr-label">国家/地区配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
         <button class="settings-row" onclick="openGenreManage()">
           <span class="sr-icon" style="background:#5856D6;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M21.4 12.5l-8.6 8.6a2 2 0 0 1-2.8 0L2 12.9V3h9.9l8.5 8.5a2 2 0 0 1 0 2.8zM7 8a1 1 0 1 0-1 1 1 1 0 0 0 1-1z"/></svg></span>
-          <span class="sr-label">类型管理</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
-        </button>
-        <button class="settings-row" onclick="showSaveModeSheet()">
-          <span class="sr-icon" style="background:#007AFF;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M17 3H7c-1.1 0-2 .9-2 2v14l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg></span>
-          <span class="sr-label">保存模式</span>
-          <span class="sr-value" id="saveModeValue">保存</span>
+          <span class="sr-label">类型配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
       </div>
 
-      <!-- 主题色：独立卡片 -->
+      <!-- 卡片2/3/4 合并：外观 + 主题 + NSFW + 保存配置 + 自动清除 -->
       <div class="settings-group">
+        <div class="settings-row select-row">
+          <span class="sr-icon" style="background:#8E8E93;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 13.5 3.1C13 3 12.5 3 12 3z"/></svg></span>
+          <span class="sr-label">外观</span>
+          <span class="sr-value" id="appearanceValue">自动</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+          <select class="select-overlay" id="appearanceSelect" onchange="onAppearanceSelect(this)"></select>
+        </div>
         <button class="settings-row" onclick="openThemeSheet()">
           <span class="sr-icon" style="background:var(--accent);"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><circle cx="12" cy="12" r="5"/></svg></span>
-          <span class="sr-label">主题色</span>
+          <span class="sr-label">主题</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
+        <div class="settings-row">
+          <span class="sr-icon" style="background:#FF2D55;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5C21.3 7.6 17 4.5 12 4.5zm0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg></span>
+          <span class="sr-label">NSFW</span>
+          <span class="switch" onclick="document.getElementById('nsfwToggle').click(); event.stopPropagation();"><input type="checkbox" id="nsfwToggle" onchange="onNsfwChange(this)"><span class="slider"></span></span>
+        </div>
+        <div class="settings-row select-row">
+          <span class="sr-icon" style="background:#007AFF;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M17 3H7c-1.1 0-2 .9-2 2v14l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg></span>
+          <span class="sr-label">保存配置</span>
+          <span class="sr-value" id="saveModeValue">仅保存</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+          <select class="select-overlay" id="saveModeSelect" onchange="onSaveModeSelect(this)"></select>
+        </div>
+        <div class="settings-row select-row">
+          <span class="sr-icon" style="background:#FF3B30;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></span>
+          <span class="sr-label">自动清除缓存</span>
+          <span class="sr-value" id="autoClearValue">3天前</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+          <select class="select-overlay" id="autoClearSelect" onchange="onAutoClearSelect(this)"></select>
+        </div>
       </div>
 
-      <!-- 清除缓存：独立卡片 -->
+      <!-- 卡片5：关于 -->
       <div class="settings-group">
-        <button class="settings-row" onclick="showClearCacheSheet()">
-          <span class="sr-icon" style="background:#FF3B30;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></span>
-          <span class="sr-label">清除缓存</span>
+        <button class="settings-row" onclick="showAboutSheet()">
+          <span class="sr-icon" style="background:#8E8E93;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm0-13a1 1 0 1 0 1 1 1 1 0 0 0-1-1zm1 5h-2v7h2z"/></svg></span>
+          <span class="sr-label">关于</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
       </div>
-      <footer class="site-footer">
-        This product uses the TMDB API but is not endorsed or certified by TMDB.<br>
-        作者 @Halfleave · 版本 v1.0.0
-      </footer>
     </div>
   </section>
 
@@ -1063,11 +1217,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
     <div class="detail-scroll">
       <div class="detail-content">
-        <div class="detail-poster-wrap">
-          <div class="detail-poster" id="detailPoster"></div>
-        </div>
         <h1 class="detail-title" id="detailTitle"></h1>
-        <div class="detail-meta" id="detailMeta"></div>
+        <div class="detail-info1" id="detailInfo1"></div>
+        <div class="detail-info2" id="detailInfo2"></div>
         <div class="detail-plot" id="detailPlot"></div>
       </div>
     </div>
@@ -1150,10 +1302,20 @@ function closeAllSheets() {
   ctxIgnoreNextOutside = false;
   document.getElementById('sheetMask').classList.remove('show');
   document.getElementById('ctxMask').classList.remove('show');
+  var aboutMask = document.getElementById('aboutMask');
+  var aboutModal = document.getElementById('aboutModal');
+  if (aboutMask) aboutMask.classList.remove('show');
+  if (aboutModal) aboutModal.classList.remove('show');
   document.removeEventListener('touchstart', ctxOutsideClose, true);
   document.removeEventListener('mousedown', ctxOutsideClose, true);
   var sheets = document.querySelectorAll('.sheet');
   for (var i = 0; i < sheets.length; i++) sheets[i].classList.remove('show');
+}
+function showAboutSheet(){
+  var aboutMask = document.getElementById('aboutMask');
+  var aboutModal = document.getElementById('aboutModal');
+  if (aboutMask) aboutMask.classList.add('show');
+  if (aboutModal) aboutModal.classList.add('show');
 }
 function showActionSheet(title, items) {
   document.getElementById('actionSheetTitle').textContent = title || '操作';
@@ -1162,7 +1324,7 @@ function showActionSheet(title, items) {
   (items || []).forEach(function(it){
     var b = document.createElement('button');
     b.className = 'settings-row';
-    b.style.color = it.danger ? 'var(--danger)' : 'var(--accent)';
+    if (it.danger) b.style.color = 'var(--danger)';
     var label = document.createElement('span');
     label.className = 'sr-label';
     label.textContent = it.label;
@@ -1179,9 +1341,13 @@ function showActionSheet(title, items) {
   });
   openSheet('actionSheet');
 }
+
+/* 居中列表选择器（类似截图的 iOS 单选弹窗） */
 var CTX_ICONS = {
   pencil: '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
-  trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
+  trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>'
 };
 function showContextSheet(title, items, anchor){
   document.getElementById('contextSheetTitle').textContent = title || '操作';
@@ -1243,7 +1409,10 @@ var state = {
   actors: [],
   personPhoto: null,
   poster: null, fanart: null, logo: null, hasSubtitle: false,
-  saveMode: 'save'
+  saveMode: 'save',
+  autoClear: '3d',
+  nsfw: false,
+  appearance: 'auto'
 };
 var personState = { mode: 'actor', index: -1 }; // 'director' | 'actor'
 var currentGenreTab = 'normal';
@@ -1457,7 +1626,7 @@ function openCountryManage(){
   document.getElementById('listGenreSeg').style.display = 'none';
   document.getElementById('listSheet').classList.add('sheet-tall');
   setListSheetHeader('manage');
-  document.getElementById('listTitle').textContent = '国家/地区管理';
+  document.getElementById('listTitle').textContent = '国家/地区配置';
   document.getElementById('listAddWrap').style.display = 'flex';
   document.getElementById('listAddInput').placeholder = '请输入';
   renderManageList();
@@ -1469,7 +1638,7 @@ function openGenreManage(){
   document.getElementById('listSheet').classList.add('sheet-tall');
   setListSheetHeader('manage');
   switchGenreTab(currentGenreTab);
-  document.getElementById('listTitle').textContent = '类型管理';
+  document.getElementById('listTitle').textContent = '类型配置';
   document.getElementById('listAddWrap').style.display = 'flex';
   document.getElementById('listAddInput').placeholder = '请输入';
   renderManageList();
@@ -1696,7 +1865,7 @@ function cancelDrag(){
   manageDrag = { row: null, list: null, inner: null, ghost: null, startY: 0, startTop: 0, handle: null, pointerId: null, lastHover: null };
 }
 
-/* —— API 管理（IndexedDB 持久化） —— */
+/* —— API 配置（IndexedDB 持久化） —— */
 function openApiKeySheet(){
   document.getElementById('apiKeyInput').value = state.apiKey || '';
   toggleApiClear();
@@ -1772,6 +1941,10 @@ function renderMediaThumb(type, url){
   if (box) box.style.display = 'none';
   var toolbar = document.getElementById(type + 'Toolbar');
   if (toolbar) toolbar.style.display = 'flex';
+  var close = document.getElementById(type + 'Close');
+  if (close) close.style.display = 'flex';
+  var cropBtn = document.getElementById(type + 'CropBtn');
+  if (cropBtn) cropBtn.disabled = false;
 }
 function deleteMedia(type){
   if (!state[type]) return;
@@ -1785,19 +1958,17 @@ function handleImageUpload(e, type){
   if (!file) return e.target.value = '';
   var reader = new FileReader();
   reader.onload = function(ev){
-    var ratio = (type === 'poster') ? 2/3 : (type === 'fanart' ? 4/3 : 0);
-    cropToRatio(ev.target.result, ratio).then(function(cropped){
-      if (type === 'person'){
-        state.personPhoto = cropped;
-        var preview = document.getElementById('personAvatarPreview');
-        preview.style.backgroundImage = 'url(' + cropped + ')';
-        preview.classList.add('has-photo');
-      } else {
-        state[type] = cropped;
-        renderMediaThumb(type, cropped);
-      }
+    if (type === 'poster' || type === 'fanart'){
+      state[type] = ev.target.result;
+      openCrop(type);
+    } else if (type === 'person'){
+      state.personPhoto = ev.target.result;
+      openCrop('person');
+    } else {
+      state[type] = ev.target.result;
+      renderMediaThumb(type, ev.target.result);
       updateState();
-    });
+    }
   };
   reader.readAsDataURL(file);
   e.target.value = '';
@@ -1929,11 +2100,15 @@ function saveToDisk(){
   saveFilm(film).then(function(){
     currentFilmId = film.id;
     renderOverview();
+    // 保存完成后按配置自动清理过期缓存
+    clearExpiredFilms();
     if (state.saveMode === 'save-download'){
       exportShare();
     } else {
       showToast('已保存', 'success');
     }
+    // 保存后检查影片数量，达到上限附近时提醒（延迟以免覆盖保存提示）
+    checkFilmCap(1500);
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
@@ -2011,9 +2186,10 @@ function renderOverview(){
         ? '<div class="mc-poster" style="background-image:url(' + escapeAttr(f.posterDataUrl) + ')"></div>'
         : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>';
       var rating = f.rating ? '<div class="mc-rating">' + escapeHtml(f.rating) + '</div>' : '';
+      var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
       var title = '<div class="mc-title">' + escapeHtml(f.title || f.id) + '</div>';
       return '<div class="movie-card-wrap" data-id="' + enc + '" onclick="openFilmDetail(\'' + enc + '\')">'
-           + '<div class="movie-card">' + poster + rating + '</div>' + title + '</div>';
+           + '<div class="movie-card">' + poster + rating + lock + '</div>' + title + '</div>';
     }).join('');
     bindOverviewLongPress();
   }).catch(function(){
@@ -2026,6 +2202,7 @@ function renderOverview(){
 
 /* —— IndexedDB（NFOEditorFS：仅 kv store，存影片与配置）—— */
 var currentFilmId = null;
+var currentFilmLocked = false;
 var DB_NAME = 'NFOEditorFS', DB_VERSION = 1;
 function openDB(){
   if (openDB._p) return openDB._p;   // 缓存 Promise，避免初始化时并发重复 open
@@ -2119,8 +2296,10 @@ function searchTMDB(){
   var box = document.getElementById('tmdbResults');
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
   getTMDBKey().then(function(key){
-    if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → API 管理」填写 TMDB Key', 'error'); return; }
-    var url = TMDB_API_BASE + '/search/movie?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=true&query=' + encodeURIComponent(q);
+    if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → API 配置」填写 TMDB Key', 'error'); return; }
+    // 是否包含成人内容由 NSFW 开关控制：开启时 include_adult=true，否则 false
+    var adult = state.nsfw ? 'true' : 'false';
+    var url = TMDB_API_BASE + '/search/movie?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
     fetch(url)
       .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
@@ -2262,8 +2441,13 @@ function loadPersonPhotoFromTMDB(profilePath, mode, idx){
     .then(function(blob){
       var reader = new FileReader();
       reader.onload = function(evt){
-        var arr = mode === 'director' ? state.directors : state.actors;
-        if (arr[idx]){ arr[idx].photo = evt.target.result; renderCast(); }
+        cropToRatio(evt.target.result, 1).then(function(cropped){
+          var arr = mode === 'director' ? state.directors : state.actors;
+          if (arr[idx]){ arr[idx].photo = cropped; renderCast(); }
+        }).catch(function(){
+          var arr = mode === 'director' ? state.directors : state.actors;
+          if (arr[idx]){ arr[idx].photo = evt.target.result; renderCast(); }
+        });
       };
       reader.readAsDataURL(blob);
     }).catch(function(){});
@@ -2394,6 +2578,7 @@ function buildFilmFromCurrent(){
     __type: 'film', id: id,
     title: getVal('title'),
     rating: getVal('rating'),
+    locked: currentFilmLocked,
     posterDataUrl: state.poster || null,
     data: {
       title: getVal('title'), originaltitle: getVal('originaltitle'),
@@ -2408,6 +2593,7 @@ function buildFilmFromCurrent(){
   };
 }
 function applyFilmData(film){
+  currentFilmLocked = !!film.locked;
   var d = film.data || {};
   setFieldVal('title', d.title);
   _filenameManual = true;
@@ -2438,106 +2624,195 @@ function clearMediaThumb(type){
   var box = col.querySelector('.media-add-box');
   if (box) box.style.display = 'flex';
   var toolbar = document.getElementById(type + 'Toolbar');
-  if (toolbar) toolbar.style.display = 'none';
+  if (toolbar) toolbar.style.display = 'flex';
+  var close = document.getElementById(type + 'Close');
+  if (close) close.style.display = 'none';
+  var cropBtn = document.getElementById(type + 'CropBtn');
+  if (cropBtn) cropBtn.disabled = true;
 }
 
-/* —— 图片裁剪（页内裁剪，iOS 文件选择器另带系统原生裁剪）—— */
-var cropType = null, cropRatio = 0, cropDrag = null;
+/* —— 图片裁剪：裁剪框固定居中，移动/缩放图片取景 —— */
+var cropType = null, cropRatio = 0, cropDrag = null, fanartRatio = 4/3;
 function openCrop(type){
-  if (!state[type]) return showToast('请先有图片再裁剪', 'error');
+  var srcKey = (type === 'person') ? 'personPhoto' : type;
+  if (!state[srcKey]) return showToast('请先选择图片再裁剪', 'error');
   cropType = type;
-  cropRatio = (type === 'poster') ? 2/3 : (type === 'fanart' ? 4/3 : 0);
+  if (type === 'poster') cropRatio = 2/3;
+  else if (type === 'fanart') cropRatio = fanartRatio;
+  else if (type === 'person') cropRatio = 1;
+  else cropRatio = 0;
   var img = document.getElementById('cropImg');
-  img.onload = function(){ initCropBox(); };
-  img.src = state[type];
+  img.onload = function(){ resetCropTransform(); };
+  img.src = state[srcKey];
   document.getElementById('cropMask').classList.add('show');
   document.getElementById('cropModal').classList.add('show');
+  var ratios = document.getElementById('cropRatios');
+  if (ratios) ratios.style.display = (type === 'fanart') ? 'flex' : 'none';
+  attachCropGestures();
 }
-function initCropBox(){
-  var img = document.getElementById('cropImg');
-  var sr = img.getBoundingClientRect();
-  var iw = sr.width, ih = sr.height;
-  var boxW, boxH;
-  if (cropRatio){
-    if (iw / ih > cropRatio){ boxH = ih; boxW = ih * cropRatio; }
-    else { boxW = iw; boxH = iw / cropRatio; }
-  } else { boxW = iw; boxH = ih; }
-  var box = document.getElementById('cropBox');
-  box._w = boxW; box._h = boxH;
-  box._x = (iw - boxW) / 2; box._y = (ih - boxH) / 2;
-  positionCropBox();
+function setFanartRatio(r, btn){
+  fanartRatio = (r === '16:9') ? 16/9 : (r === '3:2') ? 3/2 : 4/3;
+  cropRatio = fanartRatio;
+  if (btn && btn.parentNode){
+    var btns = btn.parentNode.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', btns[i] === btn);
+  }
+  resetCropTransform();
 }
-function positionCropBox(){
-  var box = document.getElementById('cropBox');
-  var img = document.getElementById('cropImg');
-  var sr = img.getBoundingClientRect();
+function getCropBoxSize(){
   var stage = document.getElementById('cropStage');
   var st = stage.getBoundingClientRect();
-  box.style.width = box._w + 'px';
-  box.style.height = box._h + 'px';
-  box.style.left = (sr.left - st.left + box._x) + 'px';
-  box.style.top = (sr.top - st.top + box._y) + 'px';
+  var sw = st.width - 32, sh = st.height - 32; // 留边距
+  var boxW, boxH;
+  if (cropRatio){
+    if (sw / sh > cropRatio){ boxH = sh; boxW = sh * cropRatio; }
+    else { boxW = sw; boxH = sw / cropRatio; }
+  } else { boxW = sw; boxH = sh; }
+  return { w: Math.max(40, boxW), h: Math.max(40, boxH), cx: st.width/2, cy: st.height/2 };
 }
-function cropPointerDown(mode, e){
-  e.preventDefault(); e.stopPropagation();
+function resetCropTransform(){
   var img = document.getElementById('cropImg');
-  var sr = img.getBoundingClientRect();
-  var box = document.getElementById('cropBox');
-  cropDrag = {
-    mode: mode, startX: e.clientX, startY: e.clientY,
-    boxX: box._x, boxY: box._y, boxW: box._w, boxH: box._h,
-    imgW: sr.width, imgH: sr.height, imgLeft: sr.left, imgTop: sr.top
-  };
-  document.addEventListener('pointermove', cropPointerMove, { passive: false });
-  document.addEventListener('pointerup', cropPointerUp);
-  document.addEventListener('pointercancel', cropPointerUp);
+  var box = getCropBoxSize();
+  var boxEl = document.getElementById('cropBox');
+  boxEl.style.width = box.w + 'px';
+  boxEl.style.height = box.h + 'px';
+  // 初始 scale：让图片短边恰好铺满裁剪框
+  var nw = img.naturalWidth || box.w, nh = img.naturalHeight || box.h;
+  var scale = Math.max(box.w / nw, box.h / nh);
+  if (!isFinite(scale) || scale <= 0) scale = 1;
+  img._crop = { x: 0, y: 0, scale: scale, minScale: scale };
+  applyCropTransform();
+  clampCropTransform();
+  applyCropTransform();
 }
-function cropPointerMove(e){
-  if (!cropDrag) return;
+function applyCropTransform(){
+  var img = document.getElementById('cropImg');
+  var t = img._crop || { x:0, y:0, scale:1 };
+  img.style.transform = 'translate(calc(-50% + ' + t.x + 'px), calc(-50% + ' + t.y + 'px)) scale(' + t.scale + ')';
+}
+function clampCropTransform(){
+  var img = document.getElementById('cropImg');
+  var t = img._crop; if (!t) return;
+  var box = getCropBoxSize();
+  var nw = img.naturalWidth, nh = img.naturalHeight;
+  var scaledW = nw * t.scale, scaledH = nh * t.scale;
+  // scale 不能小于初始铺满值
+  t.scale = Math.max(t.minScale, t.scale);
+  t.scale = Math.min(t.scale, 4); // 最大放大 4 倍
+  scaledW = nw * t.scale; scaledH = nh * t.scale;
+  // 平移限制：裁剪框内始终有图
+  var halfBoxW = box.w / 2, halfBoxH = box.h / 2;
+  var halfImgW = scaledW / 2, halfImgH = scaledH / 2;
+  t.x = Math.min(halfImgW - halfBoxW, Math.max(halfBoxW - halfImgW, t.x));
+  t.y = Math.min(halfImgH - halfBoxH, Math.max(halfBoxH - halfImgH, t.y));
+}
+function attachCropGestures(){
+  var stage = document.getElementById('cropStage');
+  if (stage._cropBound) return;
+  stage._cropBound = true;
+  stage.addEventListener('pointerdown', onCropPointerDown, { passive: false });
+  stage.addEventListener('touchstart', onCropTouchStart, { passive: false });
+  stage.addEventListener('touchmove', onCropTouchMove, { passive: false });
+  stage.addEventListener('touchend', onCropTouchEnd, { passive: false });
+}
+function onCropPointerDown(e){
+  if (e.pointerType === 'touch') return; // touch 用 pinch+pan
   e.preventDefault();
   var img = document.getElementById('cropImg');
-  var sr = img.getBoundingClientRect();
-  var dx = e.clientX - cropDrag.startX, dy = e.clientY - cropDrag.startY;
-  var box = document.getElementById('cropBox');
-  if (cropDrag.mode === 'move'){
-    var nx = cropDrag.boxX + dx, ny = cropDrag.boxY + dy;
-    nx = Math.max(0, Math.min(nx, sr.width - box._w));
-    ny = Math.max(0, Math.min(ny, sr.height - box._h));
-    box._x = nx; box._y = ny;
-  } else {
-    var add = Math.max(dx, dy);
-    var nw = cropDrag.boxW + add;
-    if (cropRatio){
-      nw = Math.max(40, Math.min(nw, sr.width - box._x));
-      var nh = nw / cropRatio;
-      nh = Math.min(nh, sr.height - box._y);
-      nw = nh * cropRatio;
-    } else {
-      nw = Math.max(40, Math.min(nw, sr.width - box._x));
-    }
-    box._w = nw; box._h = cropRatio ? nw / cropRatio : nw;
-  }
-  positionCropBox();
+  cropDrag = { type: 'pan', startX: e.clientX, startY: e.clientY, ox: img._crop.x, oy: img._crop.y };
+  document.addEventListener('pointermove', onCropPointerMove, { passive: false });
+  document.addEventListener('pointerup', onCropPointerUp);
+  document.addEventListener('pointercancel', onCropPointerUp);
 }
-function cropPointerUp(){
+function onCropPointerMove(e){
+  if (!cropDrag || cropDrag.type !== 'pan') return;
+  e.preventDefault();
+  var img = document.getElementById('cropImg');
+  var dx = e.clientX - cropDrag.startX, dy = e.clientY - cropDrag.startY;
+  img._crop.x = cropDrag.ox + dx;
+  img._crop.y = cropDrag.oy + dy;
+  clampCropTransform();
+  applyCropTransform();
+}
+function onCropPointerUp(){
   cropDrag = null;
-  document.removeEventListener('pointermove', cropPointerMove);
-  document.removeEventListener('pointerup', cropPointerUp);
-  document.removeEventListener('pointercancel', cropPointerUp);
+  document.removeEventListener('pointermove', onCropPointerMove);
+  document.removeEventListener('pointerup', onCropPointerUp);
+  document.removeEventListener('pointercancel', onCropPointerUp);
+}
+var cropPinch = null;
+function onCropTouchStart(e){
+  if (e.touches.length === 2){
+    e.preventDefault();
+    var img = document.getElementById('cropImg');
+    var t0 = e.touches[0], t1 = e.touches[1];
+    cropPinch = {
+      startD: Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY),
+      startScale: img._crop.scale,
+      cx: (t0.clientX + t1.clientX) / 2,
+      cy: (t0.clientY + t1.clientY) / 2
+    };
+  } else if (e.touches.length === 1 && !cropPinch){
+    cropDrag = { type: 'pan-touch', startX: e.touches[0].clientX, startY: e.touches[0].clientY, ox: img._crop.x, oy: img._crop.y };
+  }
+}
+function onCropTouchMove(e){
+  if (cropPinch && e.touches.length === 2){
+    e.preventDefault();
+    var img = document.getElementById('cropImg');
+    var t0 = e.touches[0], t1 = e.touches[1];
+    var d = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+    var ratio = d / cropPinch.startD;
+    if (isFinite(ratio) && ratio > 0){
+      img._crop.scale = cropPinch.startScale * ratio;
+      clampCropTransform();
+      applyCropTransform();
+    }
+  } else if (cropDrag && cropDrag.type === 'pan-touch' && e.touches.length === 1){
+    e.preventDefault();
+    var img = document.getElementById('cropImg');
+    var dx = e.touches[0].clientX - cropDrag.startX;
+    var dy = e.touches[0].clientY - cropDrag.startY;
+    img._crop.x = cropDrag.ox + dx;
+    img._crop.y = cropDrag.oy + dy;
+    clampCropTransform();
+    applyCropTransform();
+  }
+}
+function onCropTouchEnd(e){
+  if (cropPinch && e.touches.length < 2) cropPinch = null;
+  if (cropDrag && cropDrag.type === 'pan-touch' && e.touches.length === 0) cropDrag = null;
 }
 function applyCrop(){
   var img = document.getElementById('cropImg');
-  var sr = img.getBoundingClientRect();
-  var box = document.getElementById('cropBox');
-  var sx = img.naturalWidth / sr.width, sy = img.naturalHeight / sr.height;
-  var cx = box._x * sx, cy = box._y * sy, cw = box._w * sx, ch = box._h * sy;
+  var t = img._crop || { x:0, y:0, scale:1, minScale:1 };
+  var box = getCropBoxSize();
+  var stage = document.getElementById('cropStage');
+  var st = stage.getBoundingClientRect();
+  // 裁剪框在 stage 内的中心坐标
+  var boxCx = st.width / 2, boxCy = st.height / 2;
+  // 图片在 stage 内的中心坐标（以 stage 中心为原点）
+  var imgCx = boxCx + t.x, imgCy = boxCy + t.y;
+  // 计算裁剪框左上角相对图片原点的自然像素坐标
+  var sx = img.naturalWidth / (img.naturalWidth * t.scale); // = 1/scale
+  var cropLeft = (boxCx - box.w/2 - (imgCx - img.naturalWidth * t.scale / 2)) * sx;
+  var cropTop = (boxCy - box.h/2 - (imgCy - img.naturalHeight * t.scale / 2)) * sx;
   var canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(cw));
-  canvas.height = Math.max(1, Math.round(ch));
-  canvas.getContext('2d').drawImage(img, cx, cy, cw, ch, 0, 0, canvas.width, canvas.height);
+  canvas.width = Math.max(1, Math.round(box.w * sx));
+  canvas.height = Math.max(1, Math.round(box.h * sx));
+  var ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, cropLeft, cropTop, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
   var out = canvas.toDataURL('image/jpeg', 0.92);
-  state[cropType] = out;
-  renderMediaThumb(cropType, out);
+  if (cropType === 'person'){
+    state.personPhoto = out;
+    var preview = document.getElementById('personAvatarPreview');
+    if (preview){ preview.style.backgroundImage = 'url(' + out + ')'; preview.classList.add('has-photo'); }
+  } else {
+    state[cropType] = out;
+    renderMediaThumb(cropType, out);
+  }
   updateState();
   closeCrop();
   showToast('裁剪完成', 'success');
@@ -2569,20 +2844,46 @@ function openFilmDetail(encId){
     switchPage('detail');
   });
 }
+function toggleLock(id){
+  loadFilm(id).then(function(film){
+    if (!film) return showToast('未找到影片', 'error');
+    film.locked = !film.locked;
+    saveFilm(film).then(function(){
+      renderOverview();
+      showToast(film.locked ? '已锁定，将跳过自动清除' : '已解锁', 'success');
+    });
+  });
+}
+function downloadMetadata(id){
+  loadFilm(id).then(function(film){
+    if (!film) return showToast('未找到影片', 'error');
+    currentFilmId = film.id;
+    switchMetaTab('search');
+    switchPage('edit');
+    var q = document.getElementById('tmdbQuery');
+    if (q) q.value = film.title || film.id;
+    searchTMDB();
+  });
+}
 function renderFilmDetail(film){
   var d = film.data || {};
   var bgUrl = film.posterDataUrl || d.poster || d.fanart || '';
   document.getElementById('detailBg').style.backgroundImage = bgUrl ? 'url(' + escapeAttr(bgUrl) + ')' : '';
-  document.getElementById('detailPoster').style.backgroundImage = (film.posterDataUrl || d.poster) ? 'url(' + escapeAttr(film.posterDataUrl || d.poster) + ')' : '';
   document.getElementById('detailTitle').textContent = d.title || film.id;
-  var parts = [];
-  if (d.premiered) parts.push(d.premiered);
-  if (d.countries && d.countries.length) parts.push(d.countries.join(' / '));
-  if (d.genres && d.genres.length) parts.push(d.genres.join(' / '));
-  if (d.runtime) parts.push(d.runtime + ' 分钟');
-  if (d.mpaa) parts.push(d.mpaa);
-  if (d.rating) parts.push('评分 ' + d.rating);
-  document.getElementById('detailMeta').textContent = parts.join(' · ');
+  // 第一行：🌟评分 | 日期 | 国家 | 分级
+  var info1 = [];
+  if (d.rating) info1.push('🌟 ' + d.rating);
+  if (d.premiered) info1.push(d.premiered);
+  if (d.countries && d.countries.length) info1.push(d.countries.join(' / '));
+  if (d.mpaa) info1.push(d.mpaa);
+  var el1 = document.getElementById('detailInfo1');
+  el1.textContent = info1.join(' ｜ ');
+  el1.style.display = info1.length ? '' : 'none';
+  // 第二行：标签
+  var tags = (d.genres && d.genres.length) ? d.genres.slice() : [];
+  var el2 = document.getElementById('detailInfo2');
+  el2.textContent = tags.length ? tags.join(' ｜ ') : '';
+  el2.style.display = tags.length ? '' : 'none';
   document.getElementById('detailPlot').textContent = d.plot || '';
 }
 function showDetailActions(){
@@ -2596,6 +2897,7 @@ function showDetailActions(){
 }
 function newFilm(){
   currentFilmId = null;
+  currentFilmLocked = false;
   applyFilmData({ id: '', data: {} });
   switchMetaTab('edit');
   ['title','originaltitle','premiered','year','runtime','plot','rating','filename','mpaa'].forEach(function(id){
@@ -2629,12 +2931,26 @@ function bindOverviewLongPress(){
           overviewSuppressClick = true;
           if (navigator.vibrate) navigator.vibrate(15);
           var id = decodeURIComponent(card.getAttribute('data-id'));
-          showContextSheet('影片操作', [
-            { label: '编辑', icon: 'pencil', onClick: function(){ newFilm(); openFilm(encodeURIComponent(id)); } },
-            { label: '删除', danger: true, onClick: function(){
-                deleteFilm(id).then(function(){ showToast('已删除'); renderOverview(); });
-              } }
-          ], { x: startX, y: startY });
+          loadFilm(id).then(function(film){
+            var locked = film && film.locked;
+            showContextSheet('影片操作', [
+              { label: '编辑', icon: 'pencil', onClick: function(){ newFilm(); openFilm(encodeURIComponent(id)); } },
+              { label: '下载元数据', icon: 'download', onClick: function(){ downloadMetadata(id); } },
+              { label: locked ? '解锁' : '锁定', icon: 'lock', onClick: function(){ toggleLock(id); } },
+              { label: '删除', danger: true, onClick: function(){
+                  deleteFilm(id).then(function(){ showToast('已删除'); renderOverview(); });
+                } }
+            ], { x: startX, y: startY });
+          }).catch(function(){
+            showContextSheet('影片操作', [
+              { label: '编辑', icon: 'pencil', onClick: function(){ newFilm(); openFilm(encodeURIComponent(id)); } },
+              { label: '下载元数据', icon: 'download', onClick: function(){ downloadMetadata(id); } },
+              { label: '锁定', icon: 'lock', onClick: function(){ toggleLock(id); } },
+              { label: '删除', danger: true, onClick: function(){
+                  deleteFilm(id).then(function(){ showToast('已删除'); renderOverview(); });
+                } }
+            ], { x: startX, y: startY });
+          });
         }, 520);
       }
       function move(e){
@@ -2750,10 +3066,9 @@ function directDownload(blob, name){
 
 /* —— 主题色 —— */
 var THEME_COLORS = [
-  '#56BEE5', '#007AFF', '#34C759', '#00C7BE', '#5AC8FA',
-  '#5856D6', '#5E5CE6', '#AF52DE', '#FF2D55', '#FF3B30',
-  '#FF9500', '#FFCC00', '#FF6B35', '#1ABC9C', '#E91E63',
-  '#607D8B', '#A2845E', '#8E8E93', '#242426', '#C9C9CE'
+  '#E85D75', '#F28C6A', '#F0B05A', '#F4C542', '#66C266',
+  '#5DD3A5', '#4FB8F9', '#3D8CF0', '#5568C4', '#8B5FCD',
+  '#B084E8', '#E990D0', '#8E95A1', '#8FAE9A', '#B89A7A'
 ];
 function hexToRgba(hex, a){
   var m = hex.replace('#', '').match(/^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/);
@@ -2776,9 +3091,9 @@ function applyThemeColor(c, save){
 function renderThemeGrid(){
   var grid = document.getElementById('themeGrid');
   if (!grid) return;
-  var current = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#56BEE5').trim().toLowerCase();
+  var current = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#3D8CF0').trim().toLowerCase();
   grid.innerHTML = THEME_COLORS.map(function(c){
-    return '<button class="theme-color' + (c.toLowerCase() === current ? ' active' : '') + '" style="background:' + c + '" onclick="applyThemeColor(\'' + c + '\')" aria-label="主题色"></button>';
+    return '<button class="theme-color' + (c.toLowerCase() === current ? ' active' : '') + '" style="background:' + c + ';--ring:' + c + '" onclick="applyThemeColor(\'' + c + '\')" aria-label="主题"></button>';
   }).join('');
 }
 function openThemeSheet(){
@@ -2786,13 +3101,13 @@ function openThemeSheet(){
   openSheet('themeSheet');
 }
 
-/* —— 保存模式 —— */
+/* —— 保存配置 —— */
 var SAVE_MODES = [
-  { key: 'save', label: '保存' },
+  { key: 'save', label: '仅保存' },
   { key: 'save-download', label: '保存并下载' }
 ];
 function getSaveModeLabel(key){
-  var label = '保存';
+  var label = '仅保存';
   SAVE_MODES.forEach(function(m){ if (m.key === key) label = m.label; });
   return label;
 }
@@ -2800,24 +3115,158 @@ function getSaveMode(){ return idbGet('kv', 'saveMode').then(function(v){ return
 function setSaveMode(mode){
   state.saveMode = mode === 'save-download' ? 'save-download' : 'save';
   updateSaveModeDisplay();
+  setSelectValue('saveModeSelect', state.saveMode);
   idbPut('kv', 'saveMode', state.saveMode).catch(function(){});
 }
 function updateSaveModeDisplay(){
   var el = document.getElementById('saveModeValue');
   if (el) el.textContent = getSaveModeLabel(state.saveMode);
 }
-function showSaveModeSheet(){
-  showActionSheet('保存模式', SAVE_MODES.map(function(m){
-    return { label: m.label, checked: state.saveMode === m.key, onClick: function(){ setSaveMode(m.key); } };
-  }));
+function onSaveModeSelect(sel){ setSaveMode(sel.value); }
+
+/* —— NSFW（搜索结果是否包含成人内容） —— */
+function getNsfw(){ return idbGet('kv', 'nsfw').then(function(v){ return !!v; }); }
+function setNsfw(on){
+  state.nsfw = !!on;
+  var el = document.getElementById('nsfwToggle');
+  if (el) el.checked = state.nsfw;
+  idbPut('kv', 'nsfw', state.nsfw).catch(function(){});
+}
+function onNsfwChange(box){ setNsfw(box.checked); }
+
+/* —— 自动清除缓存 —— */
+var AUTO_CLEAR_MODES = [
+  { key: '14d', label: '14天前' },
+  { key: '3d', label: '3天前' },
+  { key: '6h', label: '6小时前' },
+  { key: 'never', label: '不清除' }
+];
+function getAutoClearLabel(key){
+  var label = '3天前';
+  AUTO_CLEAR_MODES.forEach(function(m){ if (m.key === key) label = m.label; });
+  return label;
+}
+function getAutoClearMode(){ return idbGet('kv', 'autoClear').then(function(v){ return v || '3d'; }); }
+function setAutoClearMode(mode){
+  var key = 'never';
+  AUTO_CLEAR_MODES.forEach(function(m){ if (m.key === mode) key = m.key; });
+  state.autoClear = key;
+  updateAutoClearDisplay();
+  setSelectValue('autoClearSelect', key);
+  idbPut('kv', 'autoClear', key).catch(function(){});
+  // 切换配置后立即执行一次过期清理
+  clearExpiredFilms();
+}
+function updateAutoClearDisplay(){
+  var el = document.getElementById('autoClearValue');
+  if (el) el.textContent = getAutoClearLabel(state.autoClear);
+}
+function onAutoClearSelect(sel){ setAutoClearMode(sel.value); }
+
+/* —— 外观（自动 / 浅色 / 深色） —— */
+var APPEARANCE_MODES = [
+  { key: 'auto', label: '自动' },
+  { key: 'light', label: '浅色' },
+  { key: 'dark', label: '深色' }
+];
+var appearanceMQ = null;
+function getAppearance(){ return idbGet('kv', 'appearance').then(function(v){ return v || 'auto'; }); }
+function getAppearanceLabel(key){
+  var label = '自动';
+  APPEARANCE_MODES.forEach(function(m){ if (m.key === key) label = m.label; });
+  return label;
+}
+function applyAppearanceValue(v){
+  document.documentElement.setAttribute('data-theme', v);
+}
+function applyAppearance(mode){
+  if (mode === 'auto'){
+    if (!appearanceMQ){
+      appearanceMQ = window.matchMedia('(prefers-color-scheme: dark)');
+      var onChange = function(){ if (state.appearance === 'auto') applyAppearanceValue(appearanceMQ.matches ? 'dark' : 'light'); };
+      if (appearanceMQ.addEventListener) appearanceMQ.addEventListener('change', onChange);
+      else if (appearanceMQ.addListener) appearanceMQ.addListener(onChange);
+    }
+    applyAppearanceValue(appearanceMQ.matches ? 'dark' : 'light');
+  } else {
+    applyAppearanceValue(mode);
+  }
+}
+function setAppearance(mode){
+  var key = 'auto';
+  APPEARANCE_MODES.forEach(function(m){ if (m.key === mode) key = m.key; });
+  state.appearance = key;
+  applyAppearance(key);
+  setSelectValue('appearanceSelect', key);
+  updateAppearanceDisplay();
+  idbPut('kv', 'appearance', key).catch(function(){});
+}
+function updateAppearanceDisplay(){
+  var el = document.getElementById('appearanceValue');
+  if (el) el.textContent = getAppearanceLabel(state.appearance);
+}
+function onAppearanceSelect(sel){ setAppearance(sel.value); }
+/* 填充设置页的原生 select 选项，并同步当前选中值 */
+function populateSettingSelects(){
+  var sm = document.getElementById('saveModeSelect');
+  if (sm) sm.innerHTML = SAVE_MODES.map(function(m){ return '<option value="' + m.key + '">' + m.label + '</option>'; }).join('');
+  var ac = document.getElementById('autoClearSelect');
+  if (ac) ac.innerHTML = AUTO_CLEAR_MODES.map(function(m){ return '<option value="' + m.key + '">' + m.label + '</option>'; }).join('');
+  var ap = document.getElementById('appearanceSelect');
+  if (ap) ap.innerHTML = APPEARANCE_MODES.map(function(m){ return '<option value="' + m.key + '">' + m.label + '</option>'; }).join('');
+  setSelectValue('saveModeSelect', state.saveMode);
+  setSelectValue('autoClearSelect', state.autoClear);
+  setSelectValue('appearanceSelect', state.appearance);
+}
+/* —— 影片保存上限（硬编码，仅提醒不强制删除） —— */
+var FILM_CAP = 150;        // 上限
+var FILM_CAP_WARN = 145;   // 达到该数量时提醒
+var FILM_CAP_TRIM = 15;    // 超出上限时一次性删除的最早影片数
+function checkFilmCap(delay){
+  var run = function(){
+    listFilms().then(function(films){
+      if (films.length > FILM_CAP){
+        // 超出上限：固定删除最早的 15 部（锁定影片受保护，不计入删除）
+        var removeCount = FILM_CAP_TRIM;
+        // listFilms 已按 updatedAt 倒序，最早的在末尾；先剔除锁定影片
+        var candidates = films.filter(function(f){ return !f.locked; });
+        var toDelete = candidates.slice(Math.max(0, candidates.length - removeCount));
+        if (toDelete.length){
+          Promise.all(toDelete.map(function(f){ return deleteFilm(f.id); })).then(function(){
+            renderOverview();
+            showToast('影片已超过上限 ' + FILM_CAP + ' 部，已自动删除最早的 ' + toDelete.length + ' 部', 'success', 2800);
+          }).catch(function(){});
+        }
+      } else if (films.length >= FILM_CAP_WARN){
+        showToast('影片已达 ' + films.length + ' 部（上限 ' + FILM_CAP + '），建议清理较早的缓存', 'info', 2800);
+      }
+    }).catch(function(){});
+  };
+  if (delay) setTimeout(run, delay); else run();
 }
 
-/* —— 清除缓存 —— */
-function showClearCacheSheet(){
-  showActionSheet('清除缓存', [
-    { label: '清除所有影片数据', danger: true, onClick: function(){ clearAllFilmData(); } }
-  ]);
+/* 根据当前配置清理超过阈值未更新的影片 */
+function clearExpiredFilms(){
+  if (state.autoClear === 'never') return;
+  var ms;
+  if (state.autoClear === '14d') ms = 14 * 24 * 60 * 60 * 1000;
+  else if (state.autoClear === '3d') ms = 3 * 24 * 60 * 60 * 1000;
+  else if (state.autoClear === '6h') ms = 6 * 60 * 60 * 1000;
+  else return;
+  var threshold = Date.now() - ms;
+  listFilms().then(function(films){
+    var expired = films.filter(function(f){ return !f.locked && (f.updatedAt || 0) < threshold; });
+    if (!expired.length) return;
+    return Promise.all(expired.map(function(f){ return deleteFilm(f.id); })).then(function(){
+      renderOverview();
+      showToast('已自动清除 ' + expired.length + ' 条过期缓存', 'success');
+    });
+  }).catch(function(err){
+    // 自动清理失败不打扰用户
+    console && console.error && console.error('自动清除缓存失败', err);
+  });
 }
+/* 保留手动全清入口，供后续扩展使用 */
 function clearAllFilmData(){
   listFilms().then(function(films){
     return Promise.all(films.map(function(f){ return deleteFilm(f.id); }));
@@ -2839,16 +3288,22 @@ renderCountryChips();
 renderGenreChips();
 initNativeSelects();
 syncAllSelectDisplays();
+populateSettingSelects();
 refreshApiKeyStatus();
 getTMDBKey().then(function(k){ state.apiKey = k || ''; refreshApiKeyStatus(); }).catch(function(){});
 getThemeColor().then(function(c){ if (c) applyThemeColor(c, false); }).catch(function(){});
-getSaveMode().then(function(m){ state.saveMode = (m === 'save-download') ? 'save-download' : 'save'; updateSaveModeDisplay(); }).catch(function(){});
+getSaveMode().then(function(m){ state.saveMode = (m === 'save-download') ? 'save-download' : 'save'; updateSaveModeDisplay(); setSelectValue('saveModeSelect', state.saveMode); }).catch(function(){});
+getNsfw().then(function(on){ state.nsfw = !!on; var el = document.getElementById('nsfwToggle'); if (el) el.checked = state.nsfw; }).catch(function(){});
+getAutoClearMode().then(function(m){ state.autoClear = m || '3d'; updateAutoClearDisplay(); setSelectValue('autoClearSelect', state.autoClear); clearExpiredFilms(); }).catch(function(){});
+getAppearance().then(function(m){ state.appearance = (m === 'dark' || m === 'light' || m === 'auto') ? m : 'auto'; updateAppearanceDisplay(); setSelectValue('appearanceSelect', state.appearance); applyAppearance(state.appearance); }).catch(function(){});
 renderOverview();
 renderCast();
 updateState();
 switchPage('home');
 switchHomeTab('basic');
 switchMetaTab('edit');
+// 进入网页时检查影片数量，达到上限附近时提醒
+checkFilmCap(700);
 document.addEventListener('visibilitychange', function(){ if (document.hidden) cancelDrag(); });
 // 裁剪框拖拽/缩放绑定
 (function bindCrop(){
