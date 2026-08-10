@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#3D8CF0">
+<title>NFO 编辑器</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #F2F1F6;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #1c1c1e;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap { text-align: center; padding: 28px; }
+  .spinner {
+    width: 30px; height: 30px;
+    border: 3px solid rgba(61, 140, 240, 0.22);
+    border-top-color: #3D8CF0;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    margin: 0 auto 18px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.2px; }
+  p { font-size: 14px; color: #8e8e93; margin: 0 0 22px; }
+  .links { display: flex; align-items: center; justify-content: center; gap: 16px; }
+  .links a {
+    font-size: 14px; font-weight: 500;
+    color: #3D8CF0; text-decoration: none;
+    padding: 6px 10px; border-radius: 8px;
+  }
+  .links a:active { background: rgba(61,140,240,0.10); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="spinner"></div>
+    <h1>NFO 编辑器</h1>
+    <p>正在根据设备类型跳转…</p>
+    <div class="links">
+      <a href="nfo-editor.html">桌面版</a>
+      <a href="nfo-editor-ios.html">iOS / 移动版</a>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var ua = navigator.userAgent.toLowerCase();
+      // iOS：包含 iPhone/iPad/iPod；也处理 iPad 桌面模式 UA（Macintosh + 触屏）
+      var isIOS = /iphone|ipad|ipod/.test(ua) || (ua.indexOf('macintosh') > -1 && navigator.maxTouchPoints > 1);
+      // 其他移动设备：Android / 旧 BlackBerry / Windows Phone / Opera Mini 等
+      var isMobile = isIOS || /android|webos|blackberry|iemobile|opera mini/.test(ua)
+        || ('ontouchstart' in window && window.innerWidth < 1024);
+      var target = isMobile ? 'nfo-editor-ios.html' : 'nfo-editor.html';
+      location.replace(target);
+    })();
+  </script>
+</body>
+</html>
