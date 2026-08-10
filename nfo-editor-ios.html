@@ -907,7 +907,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="about-title">关于</div>
     <div class="about-body">
       <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-      <p>作者 @Halfleave · 版本 v1.0.0</p>
+      <p>@Halfleave · v1.0.0</p>
     </div>
     <button class="about-done" onclick="closeAllSheets()">完成</button>
   </div>
@@ -3747,6 +3747,13 @@ switchMetaTab('edit');
 // 进入网页时检查影片数量，达到上限附近时提醒
 checkFilmCap(700);
 document.addEventListener('visibilitychange', function(){ if (document.hidden) cancelDrag(); });
+
+/* —— PWA：Service Worker 离线缓存（仅 HTTPS / localhost 生效；file:// 直接跳过） —— */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(err){ console.warn('SW 注册失败：', err); });
+  });
+}
 // 裁剪框为固定设计：移动/缩放作用于图片本身，手势统一由 cropStage 的 touch/pointer 事件处理；此处不再绑定框的拖拽/缩放
 
 /* 点击非输入区域收起键盘 */
