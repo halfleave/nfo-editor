@@ -217,7 +217,7 @@ img { display: block; }
   transition: background .15s, transform .08s;
 }
 .detail-act .da-ic svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.detail-act#dtActMagnet .da-ic svg { width: 21px; height: 21px; fill: currentColor; stroke: none; }
+.detail-act#dtActMagnet .da-ic svg { width: 21px; height: 21px; }
 .detail-act .da-lb { display: none; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
 .detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); }
@@ -958,7 +958,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-result { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 0.5px solid var(--sep); }
 .magnet-result:active { background: var(--gray-fill); border-radius: var(--radius-sm); }
 .magnet-result .mr-icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-fill); color: var(--accent-fg); display: flex; align-items: center; justify-content: center; }
-.magnet-result .mr-icon svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+.magnet-result .mr-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .magnet-result .mr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .magnet-result .mr-title { font-size: 15px; font-weight: 600; color: var(--label); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .magnet-result .mr-meta { font-size: 12px; color: var(--label-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -1521,7 +1521,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   <section class="page" id="page-detail">
     <div class="detail-bg" id="detailBg"><div class="detail-poster" id="detailPoster"></div></div>
     <div class="detail-topbar">
-      <button onclick="switchPage('home')" aria-label="返回">
+      <button onclick="animateDetailBack()" aria-label="返回">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
     </div>
@@ -1548,7 +1548,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
             <span class="da-lb">删除</span>
           </button>
           <button class="detail-act" id="dtActMagnet" onclick="openMagnetSheet()">
-            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9v6a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-4a2 2 0 0 1 4 0v4a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-6c0-4.97-4.03-9-9-9z"/></svg></span>
+            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M6 3v6a6 6 0 0 1 12 0V3"/><path d="M6 3h4"/><path d="M18 3h-4"/></svg></span>
             <span class="da-lb">磁力</span>
           </button>
         </div>
@@ -1613,14 +1613,14 @@ function initEdgeSwipeBack(){
       page.style.transform = 'translateX(' + window.innerWidth + 'px)';
       page.style.opacity = '0';
       setTimeout(function(){
-        page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = '';
+        page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = ''; page.style.boxShadow = '';
         switchPage('home');
       }, 320);
     } else {
       page.style.transform = 'translateX(0)';
       page.style.opacity = '1';
       setTimeout(function(){
-        page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = '';
+        page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = ''; page.style.boxShadow = '';
         if (home) home.classList.remove('active');
       }, 320);
     }
@@ -1649,6 +1649,7 @@ function initEdgeSwipeBack(){
     page.style.userSelect = 'none';
     if (home && !home.classList.contains('active')) home.classList.add('active'); // 首页透出到背景
     page.style.transform = 'translateX(' + dx + 'px)';
+    page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
     var op = 1 - dx / (window.innerWidth * 1.6);
     page.style.opacity = (op < 0.35 ? 0.35 : op).toFixed(3);
   }, { passive: false });
@@ -1656,6 +1657,21 @@ function initEdgeSwipeBack(){
   page.addEventListener('touchcancel', function(){ if (dragging) finish(moved > threshold()); });
 }
 initEdgeSwipeBack();
+/* 顶部「返回」按钮：与边缘右滑一致的滑出退场动画（详情页从右移出、首页透出） */
+function animateDetailBack(){
+  var page = document.getElementById('page-detail');
+  if (!page){ switchPage('home'); return; }
+  var home = document.getElementById('page-home');
+  if (home && !home.classList.contains('active')) home.classList.add('active');
+  page.style.transition = 'transform .32s cubic-bezier(.32,.72,0,1), opacity .32s';
+  page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
+  page.style.transform = 'translateX(' + window.innerWidth + 'px)';
+  page.style.opacity = '0';
+  setTimeout(function(){
+    page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.boxShadow = '';
+    switchPage('home');
+  }, 320);
+}
 
 function switchHomeTab(tab) {
   document.querySelectorAll('.home-tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === tab); });
@@ -2563,7 +2579,7 @@ function renderMagnetResults(items){
     if (it.leechers) meta.push('下载 ' + it.leechers);
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
     html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="copyMagnet(this)">'
-      + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9v6a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-4a2 2 0 0 1 4 0v4a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-6c0-4.97-4.03-9-9-9z"/></svg></span>'
+      + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 3v6a6 6 0 0 1 12 0V3"/><path d="M6 3h4"/><path d="M18 3h-4"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
       + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + (meta.length ? '<span>' + meta.join(' · ') + '</span>' : '') + '</div>'
