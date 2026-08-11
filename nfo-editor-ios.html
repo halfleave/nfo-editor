@@ -2992,7 +2992,7 @@ function renderOverview(){
       var hasTrailer = !!(f.data && f.data.trailer);
       var badgeHtml = '';
       if (f.rating) badgeHtml += '<div class="mc-rating">' + escapeHtml(f.rating) + '</div>';
-      if (hasTrailer) badgeHtml += '<div class="mc-trailer"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>预告</div>';
+      if (hasTrailer) badgeHtml += '<div class="mc-trailer"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>';
       var badges = badgeHtml ? '<div class="mc-badges">' + badgeHtml + '</div>' : '';
       var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
       var title = '<div class="mc-title">' + escapeHtml(f.title || f.id) + '</div>';
@@ -3950,16 +3950,56 @@ function toggleLock(id){
     });
   });
 }
+function buildNFOMovieXml(d){
+  var title = d.title || '', originaltitle = d.originaltitle || '',
+      year = d.year || '', premiered = d.premiered || '',
+      runtime = d.runtime || '', plot = d.plot || '', rating = d.rating || '',
+      mpaa = d.mpaa || '';
+  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<movie>\n';
+  if (title) xml += '    <title>' + escapeXml(title) + '</title>\n';
+  if (originaltitle) xml += '    <originaltitle>' + escapeXml(originaltitle) + '</originaltitle>\n';
+  if (year) xml += '    <year>' + escapeXml(year) + '</year>\n';
+  if (premiered) xml += '    <premiered>' + escapeXml(premiered) + '</premiered>\n';
+  if (runtime) xml += '    <runtime>' + escapeXml(runtime) + '</runtime>\n';
+  if (rating) xml += '    <rating>' + escapeXml(rating) + '</rating>\n';
+  if (plot) xml += '    <plot>' + escapeXml(plot) + '</plot>\n';
+  (d.genres || []).forEach(function(g){ if (g) xml += '    <genre>' + escapeXml(g) + '</genre>\n'; });
+  (d.countries || []).forEach(function(c){ if (c) xml += '    <country>' + escapeXml(c) + '</country>\n'; });
+  if (mpaa) xml += '    <mpaa>' + escapeXml(mpaa) + '</mpaa>\n';
+  (d.directors || []).forEach(function(dir){ if (dir && dir.name) xml += '    <director>' + escapeXml(dir.name) + '</director>\n'; });
+  (d.actors || []).forEach(function(a, i){
+    if (!a || !a.name) return;
+    xml += '    <actor>\n';
+    xml += '      <name>' + escapeXml(a.name) + '</name>\n';
+    if (a.role) xml += '      <role>' + escapeXml(a.role) + '</role>\n';
+    if (typeof a.photo === 'string') xml += '      <thumb>' + escapeXml(sanitizeName(a.name) + '-actor.jpg') + '</thumb>\n';
+    xml += '      <order>' + (i + 1) + '</order>\n';
+    xml += '    </actor>\n';
+  });
+  if (d.hasSubtitle) xml += '    <subtitles>字幕</subtitles>\n';
+  xml += '</movie>\n';
+  return xml;
+}
+/* 首页/详情页「下载元数据」：直接把该影片已存的元数据导出为 NFO + 图片的 zip 并下载，不再跳转到 TMDB 搜索 */
 function downloadMetadata(id){
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
-    currentFilmId = film.id;
-    switchMetaTab('search');
-    switchPage('edit');
-    var q = document.getElementById('tmdbQuery');
-    if (q) q.value = film.title || film.id;
-    searchTMDB();
-  });
+    var d = film.data || {};
+    var filename = sanitizeName(d.title || film.title || film.id || 'movie');
+    var zipFiles = [];
+    zipFiles.push({ name: filename + '.nfo', data: new TextEncoder().encode(buildNFOMovieXml(d)) });
+    // 图片：仅处理已存为 data URL 的字符串；远程 URL 无法离线打包，跳过（与导出页行为一致）
+    if (typeof d.poster === 'string'){ var pb = dataUrlToBytesSync(d.poster); if (pb) zipFiles.push({ name: filename + '-poster.jpg', data: pb }); }
+    if (typeof d.fanart === 'string'){ var fb = dataUrlToBytesSync(d.fanart); if (fb) zipFiles.push({ name: filename + '-fanart.jpg', data: fb }); }
+    if (typeof d.logo === 'string'){ var lb = dataUrlToBytesSync(d.logo); if (lb) zipFiles.push({ name: filename + '-clearlogo.png', data: lb }); }
+    (d.directors || []).forEach(function(dir, i){ if (dir && typeof dir.photo === 'string'){ var b = dataUrlToBytesSync(dir.photo); if (b) zipFiles.push({ name: sanitizeName(dir.name || ('director' + i)) + '-director.jpg', data: b }); } });
+    (d.actors || []).forEach(function(a, i){ if (a && typeof a.photo === 'string'){ var b = dataUrlToBytesSync(a.photo); if (b) zipFiles.push({ name: sanitizeName(a.name || ('actor' + i)) + '-actor.jpg', data: b }); } });
+    if (!zipFiles.length) return showToast('没有可导出的元数据', 'error');
+    var zipBlob;
+    try { zipBlob = new Blob([makeZip(zipFiles)], { type: 'application/zip' }); }
+    catch (e) { return showToast('生成下载文件失败：' + ((e && e.message) || e), 'error'); }
+    directDownload(zipBlob, filename + '.zip');
+  }).catch(function(){ showToast('读取影片失败', 'error'); });
 }
 var currentDetailTrailer = '';
 // 从海报图采样平均色，压暗后写入 --dt-r/g/b，作为底部渐变/叠加层的海报色（保证文字可读又保留色相）。
