@@ -1,80 +1,84 @@
-# NFO Editor
+# NFO 编辑器
 
-一个基于单文件 HTML 的影片 NFO 信息编辑器，支持 NFO 文件导入导出、TMDB 在线搜索、海报与演职人员管理。所有数据保存在浏览器本地（IndexedDB），无需后端服务。
+一套用于影视资源（电影 / 剧集）整理 **NFO 元数据** 的轻量工具。支持海报、剧照、Logo 等图片编辑，以及演员 / 导演、国家 / 地区、类型等信息的录入与管理，最终导出标准 `.nfo` 文件，配合 Kodi、Emby、Plex、Infuse 等管理软件使用。
 
-仓库包含两个版本：
+提供两个版本，均由单一 HTML 文件构成，无需服务器、无需安装、双击即可在浏览器打开：
 
-| 文件 | 说明 |
-|------|------|
-| `nfo-editor.html` | 基础版，简洁通用 |
-| `nfo-editor-ios.html` | iOS 26 Liquid Glass 风格版，针对手机/Safari 优化交互与动画 |
+| 版本 | 文件 | 适用场景 |
+|---|---|---|
+| **移动版（iOS）** | `nfo-editor-ios.html` | iPhone / iPad，建议「添加到主屏幕」全屏使用 |
+| **桌面版** | `nfo-editor.html` | Windows / macOS / Linux 桌面浏览器，可直接写入本地目录 |
+
+访问仓库根目录的 `index.html` 会根据设备类型自动跳转到对应版本。
+
+---
 
 ## 功能特性
 
-- **NFO 文件管理**：导入本地 `.nfo` 文件，解析影片元数据；支持导出 NFO。
-- **TMDB 在线搜索**：通过 The Movie Database API 搜索影片并一键导入标题、年份、剧情、评分、海报、背景图、预告片等信息。
-- **多媒体素材**：管理海报（poster）、背景图（fanart）、Logo 和演职人员头像，支持裁剪。
-- **演职人员管理**：添加、编辑、删除导演和演员，维护角色信息。
-- **预告片播放**：自动识别 YouTube 预告片并内嵌播放（仅 TMDB 导入）。
-- **本地持久化**：所有影片数据存储在浏览器 IndexedDB，刷新不丢失。
-- **iOS 风格交互**（iOS 版）：底部 Sheet 弹窗、手势缩放海报、滚动磨砂玻璃效果、安全区适配等。
+- **图片编辑**：海报、剧照、Logo 上传与裁剪（裁剪框外内容默认隐藏，操作时显示并带暗色聚焦遮罩）。
+- **人员管理**：演员 / 导演添加，支持头像、姓名、角色名；弹窗采用分组卡片式输入。
+- **标签系统**：
+  - 国家 / 地区、类型（普通 / 成人）以气泡胶囊选择。
+  - 内置常用预设，可在「配置」中增删、拖拽排序、逐条**启用 / 禁用**（禁用后文字置灰、选择弹窗不再出现）。
+  - 支持本次临时「手动添加」标签，仅作用于当前影片，不写入预设库。
+  - 预设库与禁用状态长期保存在浏览器本地（IndexedDB），刷新不丢失。
+- **主题与外观**：支持浅色 / 深色 / 自动；可切换主题色。设置页标题快速连点 3 次进入**隐藏模式**（应用深灰主题、隐藏主题配置、显示 NSFW 开关与「隐藏模式」徽标）。
+- **数据安全**：设置页「恢复」可一键清空所有配置与缓存，回到初始状态（带二次确认）。
+- **离线可用（移动版）**：通过 `sw.js` Service Worker 缓存应用外壳，部署到 HTTPS 后可离线打开。
 
-## 快速开始
-
-1. 克隆或下载本仓库。
-2. 任选以下方式打开：
-   - 本地直接双击 `nfo-editor-ios.html`（或 `nfo-editor.html`）。
-   - 部署到任意静态托管（GitHub Pages、Cloudflare Pages、Vercel 等）。
-3. 首次使用建议配置 TMDB API Key（见下文）。
-
-## 配置 TMDB API Key
-
-TMDB 搜索与海报导入需要 API Key。
-
-1. 访问 [TMDB 官网](https://www.themoviedb.org/) 注册并申请 API Key（个人版即可）。
-2. 打开编辑器，进入「设置」→「TMDB API Key」。
-3. 粘贴 Key 并保存，即可使用搜索与导入功能。
-
-## 技术栈
-
-- 单文件 HTML，零构建步骤
-- 原生 JavaScript（Vanilla JS）
-- IndexedDB（浏览器本地数据库）
-- TMDB API（`append_to_response=videos`）
-- CSS 变量与 `backdrop-filter` 实现 iOS Liquid Glass 质感
-
-## 浏览器兼容性
-
-- Chrome / Edge（最新版）
-- Safari（iOS 16+ / macOS 13+，iOS 版针对 Safari 做了手势与安全区适配）
-- Firefox（最新版，部分滤镜效果可能略有差异）
+---
 
 ## 文件结构
 
 ```
-.
-├── nfo-editor.html          # 基础版编辑器
-├── nfo-editor-ios.html      # iOS 26 Liquid Glass 风格版
-├── README.md                # 本文件
-└── .*-test.js               # 本地测试脚本（jsdom + fake-indexeddb）
+NFO/
+├── index.html            # GitHub Pages 入口，按设备自动跳转
+├── nfo-editor-ios.html   # 移动版（iOS）源文件，单文件自包含
+├── nfo-editor.html       # 桌面版源文件（File System Access API 直写目录）
+├── sw.js                 # 移动版 Service Worker（离线缓存）
+├── dist/                 # 部署副本（含上述四件套）
+├── verify_nfo.py         # 修改后做 JS 语法校验
+├── make_icon.py          # 生成应用图标（icon_app.png）
+└── icon_app.png          # 应用图标源图
 ```
 
-## 本地测试
+---
 
-项目附带少量 Node.js 测试脚本，用于校验核心逻辑：
+## 部署到 GitHub Pages
+
+1. 在仓库根目录上传以下文件：**`index.html`**、**`nfo-editor-ios.html`**、**`nfo-editor.html`**、**`sw.js`**（`dist/` 内的副本即为这一套完整文件）。
+2. 在仓库 **Settings → Pages** 中，将 Source 设为 `main` 分支（或你的默认分支）的 `/ (root)`。
+3. 访问分配的 `https://<用户名>.github.io/<仓库名>/`，移动设备会自动打开 `nfo-editor-ios.html`。
+
+> **注意**
+> - 移动版的分享导出、Service Worker 离线等能力**需要 HTTPS**（GitHub Pages 已满足）。
+> - `sw.js` 必须与入口页面同源同级，否则离线缓存不生效。
+> - 修改源文件后，需重新上传到仓库根目录才能对公网生效。
+
+---
+
+## 本地预览
+
+**桌面版**：直接用浏览器打开 `nfo-editor.html` 即可（桌面版依赖文件系统 API，建议用 Chrome / Edge）。
+
+**移动版**：
+- 简单方式：用电脑起一个本地 HTTP 服务（如 `start-preview.bat`，或 `python -m http.server 8000`），手机与电脑同一 Wi-Fi 下访问 `http://<电脑IP>:8000/nfo-editor-ios.html`。注意 HTTP 环境下 Service Worker 与系统分享不可用，仅用于界面预览。
+- 完整体验：部署到 HTTPS（如 GitHub Pages 或 CloudStudio）后，在 Safari 中打开 → 点击「分享」→「添加到主屏幕」，即可全屏离线使用。
+
+---
+
+## 校验与构建
+
+修改 `nfo-editor-ios.html` 后，建议先跑语法校验：
 
 ```bash
-node --check nfo-editor-ios.html
-# 或运行具体测试（需安装 jsdom、fake-indexeddb）
-node .features-test.js
+python verify_nfo.py nfo-editor-ios.html
 ```
 
-> 测试依赖可通过 `npm install jsdom fake-indexeddb` 安装。
+校验通过再同步到 `dist/` 或上传部署，避免把带语法错误的版本发布出去。
 
-## 截图
+---
 
-> TODO：添加应用主界面、影片详情页、编辑页截图。
+## 隐私说明
 
-## License
-
-MIT
+所有影片数据、标签预设、主题与配置均仅保存在**你自己的浏览器本地（IndexedDB）**，不会上传到任何服务器。执行「恢复」会清空这些本地数据，操作前请确认已导出需要保留的内容。
