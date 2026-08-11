@@ -217,6 +217,7 @@ img { display: block; }
   transition: background .15s, transform .08s;
 }
 .detail-act .da-ic svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.detail-act#dtActMagnet .da-ic svg { width: 21px; height: 21px; }
 .detail-act .da-lb { display: none; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
 .detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); }
@@ -965,9 +966,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-source-badge { display: inline-flex; align-items: center; justify-content: center; height: 16px; padding: 0 5px; font-size: 10px; font-weight: 600; color: var(--accent-fg); background: var(--accent-fill); border-radius: 4px; }
 #magnetSheet .sheet-list { max-height: 62vh; max-height: 62dvh; }
 #magnetSheet .magnet-sheet-head { display: flex; align-items: center; gap: 8px; padding: 4px 0 12px; }
-#magnetSheet .magnet-sheet-head input { flex: 1; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 16px; font-size: 15px; color: var(--label); }
+#magnetSheet .magnet-search-wrap { position: relative; flex: 1; min-width: 0; }
+#magnetSheet .magnet-search-wrap input { width: 100%; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 36px 10px 16px; font-size: 15px; color: var(--label); }
 #magnetSheet .magnet-sheet-head input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 #magnetSheet .magnet-sheet-head button { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 14px; font-weight: 600; }
+#magnetSheet .magnet-sheet-head .magnet-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; border-radius: 50%; background: transparent; color: var(--label-3); font-size: 18px; line-height: 1; }
+#magnetSheet .magnet-sheet-head .magnet-clear.show { display: flex; }
+#magnetSheet .magnet-sheet-head .magnet-clear:active { opacity: 0.5; }
 #magnetConfigSheet .field-stacked { margin-bottom: 12px; }
 #magnetConfigSheet .field-stacked label { display: block; font-size: 14px; font-weight: 600; color: var(--label-2); margin-bottom: 6px; }
 #magnetConfigSheet .ios-input,
@@ -1173,7 +1178,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <span class="sb-spacer"></span>
     </div>
     <div class="magnet-sheet-head">
-      <input type="text" id="magnetQueryInput" placeholder="输入关键词" onkeydown="if(event.key==='Enter')searchMagnet()">
+      <div class="magnet-search-wrap">
+        <input type="text" id="magnetQueryInput" placeholder="输入关键词" oninput="toggleMagnetClear()" onkeydown="if(event.key==='Enter')searchMagnet()">
+        <button type="button" id="magnetClear" class="magnet-clear" onclick="clearMagnetQuery()" aria-label="清除">×</button>
+      </div>
       <button onclick="searchMagnet()">搜索</button>
     </div>
     <div class="sheet-list" id="magnetResults"></div>
@@ -1643,10 +1651,11 @@ function initEdgeSwipeBack(){
       }, 300);
     }
   }
+  function swipeDx(){ var m = /translateX\(([-\d.]+)px\)/.exec(page.style.transform || ''); return m ? parseFloat(m[1]) : 0; }
   page.addEventListener('pointerup', function(e){
-    if (dragging || captured){ try { page.releasePointerCapture(e.pointerId); } catch(_){} finish(Math.max(0, e.clientX - startX) > threshold()); }
+    if (dragging || captured){ try { page.releasePointerCapture(e.pointerId); } catch(_){} finish(swipeDx() > threshold()); }
   });
-  page.addEventListener('pointercancel', function(){ if (dragging || captured) finish(false); });
+  page.addEventListener('pointercancel', function(){ if (dragging || captured) finish(swipeDx() > threshold()); });
 }
 initEdgeSwipeBack();
 
@@ -2506,11 +2515,26 @@ function openMagnetSheet(){
     loadFilm(currentDetailFilmId).then(function(film){
       var q = (film && film.data && (film.data.title || film.data.originaltitle)) || '';
       document.getElementById('magnetQueryInput').value = q;
+      toggleMagnetClear();
       if (q) searchMagnet();
-    }).catch(function(){ document.getElementById('magnetQueryInput').value = ''; });
+    }).catch(function(){ document.getElementById('magnetQueryInput').value = ''; toggleMagnetClear(); });
   } else {
     document.getElementById('magnetQueryInput').value = '';
+    toggleMagnetClear();
   }
+}
+function toggleMagnetClear(){
+  var inp = document.getElementById('magnetQueryInput');
+  var btn = document.getElementById('magnetClear');
+  if (inp && btn) btn.classList.toggle('show', (inp.value || '').length > 0);
+}
+function clearMagnetQuery(){
+  var inp = document.getElementById('magnetQueryInput');
+  if (inp) inp.value = '';
+  toggleMagnetClear();
+  if (inp) inp.focus();
+  var box = document.getElementById('magnetResults');
+  if (box) box.innerHTML = '';
 }
 function searchMagnet(){
   var q = (document.getElementById('magnetQueryInput').value || '').trim();
