@@ -828,6 +828,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .manage-switch { flex-shrink: 0; transform: scale(0.86); margin-right: 2px; }
 .swipe.drag-target .swipe-inner { opacity: 0.35; background: var(--card); border-radius: var(--radius-sm); }
 .swipe-inner.dragging { position: fixed; z-index: 1000; opacity: 0.92; background: var(--card); border-radius: var(--radius-sm); box-shadow: 0 6px 18px rgba(0,0,0,0.08); pointer-events: none; }
+.swipe.reorder-anim { transition: transform .18s ease-out; }
 
 /* 标签管理弹窗固定 85% 高度 */
 .sheet.sheet-tall { min-height: 85vh; min-height: 85dvh; max-height: 85vh; max-height: 85dvh; }
@@ -1229,6 +1230,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
         <!-- 媒体 -->
         <div class="home-panel" id="tab-media" style="display:none;">
+          <h2 class="section-heading">预告</h2>
+          <div class="card">
+            <div class="field field-stacked" style="padding-bottom: 0;">
+              <input class="ios-input" type="text" id="trailer" placeholder="粘贴 YouTube 链接或视频 ID" oninput="onTrailerInput(this)">
+            </div>
+            <div class="trailer-hint" id="trailerHint"></div>
+          </div>
+
           <div class="media-grid">
             <div class="media-group">
               <h2 class="section-heading">海报</h2>
@@ -1275,14 +1284,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
             </div>
           </div>
 
-          <h2 class="section-heading" style="display:none;">预告片</h2>
-          <div class="card" style="display:none;">
-            <div class="card-title">YouTube 预告片</div>
-            <div class="field field-stacked" style="padding-top:0;">
-              <input class="ios-input" type="text" id="trailer" placeholder="粘贴 YouTube 链接或视频 ID" oninput="onTrailerInput(this)">
-            </div>
-            <div class="trailer-hint" id="trailerHint"></div>
-          </div>
         </div>
       </div>
     </div>
@@ -2120,8 +2121,11 @@ function onDragMove(e){
     if (pt.y < r.top + r.height/2){ hover = rows[i]; break; }
   }
   if (hover !== manageDrag.lastHover){
+    clearReorderAnim(manageDrag.list, manageDrag.row);
+    var oldTops = recordRowTops(manageDrag.list);
     if (hover) manageDrag.list.insertBefore(manageDrag.row, hover);
     else manageDrag.list.appendChild(manageDrag.row);
+    applyReorderFlip(manageDrag.list, oldTops, manageDrag.row);
     manageDrag.lastHover = hover;
   }
 }
@@ -2143,6 +2147,7 @@ function onDragEnd(e){
   manageDrag.list.classList.remove('dragging-list');
   if (manageDrag.scrollList) manageDrag.scrollList.classList.remove('dragging-list');
   manageDrag.ghost.remove();
+  if (manageDrag.list) clearReorderAnim(manageDrag.list, null);
   var h = manageDrag.handle;
   if (h){
     h.removeEventListener('pointermove', onDragMove);
@@ -2161,6 +2166,7 @@ function cancelDrag(){
   if (manageDrag.list) manageDrag.list.classList.remove('dragging-list');
   if (manageDrag.scrollList) manageDrag.scrollList.classList.remove('dragging-list');
   if (manageDrag.ghost) manageDrag.ghost.remove();
+  if (manageDrag.list) clearReorderAnim(manageDrag.list, null);
   var h = manageDrag.handle;
   if (h){
     h.removeEventListener('pointermove', onDragMove);
@@ -2172,6 +2178,37 @@ function cancelDrag(){
     try { if (manageDrag.pointerId != null) h.releasePointerCapture(manageDrag.pointerId); } catch(_){}
   }
   manageDrag = { row: null, list: null, inner: null, ghost: null, startY: 0, startTop: 0, handle: null, pointerId: null, lastHover: null };
+}
+function recordRowTops(list){
+  var map = {};
+  Array.from(list.children).forEach(function(r){ map[r.dataset.val] = r.getBoundingClientRect().top; });
+  return map;
+}
+function applyReorderFlip(list, oldTops, excludeRow){
+  var moved = [];
+  Array.from(list.children).forEach(function(r){
+    if (r === excludeRow) return;
+    var oldTop = oldTops[r.dataset.val];
+    if (oldTop == null) return;
+    var newTop = r.getBoundingClientRect().top;
+    var delta = newTop - oldTop;
+    if (Math.abs(delta) > 0.5){
+      r.classList.add('reorder-anim');
+      r.style.transform = 'translateY(' + (-delta) + 'px)';
+      moved.push(r);
+    }
+  });
+  if (moved.length){
+    list.offsetHeight;
+    moved.forEach(function(r){ r.style.transform = 'translateY(0px)'; });
+  }
+}
+function clearReorderAnim(list, excludeRow){
+  Array.from(list.children).forEach(function(r){
+    if (r === excludeRow) return;
+    r.classList.remove('reorder-anim');
+    r.style.transform = '';
+  });
 }
 
 /* —— API 配置（IndexedDB 持久化） —— */
