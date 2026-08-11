@@ -652,7 +652,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .required { color: var(--danger); margin-right: 3px; }
 
 /* 首页概览：三列网格海报 */
-.overview-section { padding-top: 24px; }
+.overview-section { padding-top: 8px; }
 .overview-head { display: flex; align-items: center; justify-content: space-between; }
 .ov-new { background: none; border: 0; padding: 0; font-size: 14px; font-weight: 500; color: var(--accent); }
 .ov-new:active { opacity: 0.5; }
@@ -922,13 +922,18 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tmdb-result .tr-title { font-size: 16px; font-weight: 600; color: var(--label); }
 .tmdb-result .tr-meta { font-size: 13px; color: var(--label-2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tmdb-result .tr-overview { font-size: 13px; color: var(--label-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.adult-tag { background: transparent; color: var(--label-2); font-size: 11px; font-weight: 600; padding: 1px 5px; border: 1px solid var(--label-2); border-radius: 4px; }
+.adult-tag {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  height: 18px; padding: 0 5px; margin-left: 6px; vertical-align: middle;
+  background: transparent; color: var(--label-2); font-size: 11px; font-weight: 600; line-height: 1;
+  border: 1px solid var(--label-2); border-radius: 4px;
+}
 /* 搜索结果「预告」角标：胶片图标 + 边框，懒加载点亮 */
 .tr-trailer-tag {
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  height: 18px; padding: 0 5px; margin-left: 6px; vertical-align: middle;
   font-size: 11px; font-weight: 600; line-height: 1;
   color: var(--label-2); border: 1px solid var(--label-2); border-radius: 4px;
-  padding: 3px; margin-left: 6px; vertical-align: middle;
   opacity: 0; transform: scale(0.85); transition: opacity .2s ease, transform .2s ease;
 }
 .tr-trailer-tag.show { opacity: 1; transform: scale(1); }
@@ -2899,7 +2904,8 @@ function refreshFromTMDB(id){
     });
   });
 }
-// 按标题在 TMDB 静默搜索，回调返回最相关项（results[0]）的 id，未找到返回 null
+// 按标题在 TMDB 静默搜索：优先取标题（title/original_title）与当前标题一致的项，
+// 没有一致的再取搜索结果第一项。回调返回选中的 id，未找到返回 null
 function searchTMDBIdByTitle(q, cb){
   getTMDBKey().then(function(key){
     if (!key) return cb(null);
@@ -2909,7 +2915,16 @@ function searchTMDBIdByTitle(q, cb){
       .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(data){
         var results = (data && data.results) || [];
-        cb(results.length ? results[0].id : null);
+        if (!results.length) return cb(null);
+        var qNorm = q.trim().toLowerCase();
+        var exact = null;
+        for (var i = 0; i < results.length; i++) {
+          var r = results[i];
+          var tl = (r.title || '').trim().toLowerCase();
+          var og = (r.original_title || '').trim().toLowerCase();
+          if (tl === qNorm || og === qNorm) { exact = r; break; }
+        }
+        cb((exact || results[0]).id);
       })
       .catch(function(){ cb(null); });
   });
