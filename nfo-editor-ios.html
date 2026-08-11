@@ -440,34 +440,70 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 /* 人员信息输入框：卡片内右对齐，无独立背景 */
 #personName, #personRole { text-align: right; }
 
-/* 媒体上传（参考图：海报/剧照独立卡片，Logo 独立，字幕开关在右） */
-.media-grid { display: flex; gap: var(--gap); margin-bottom: 6px; }
-.media-group { flex: 1; min-width: 0; }
-.media-group .section-heading { margin-bottom: 8px; }
-.media-card, .media-logo-card {
-  background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  display: flex; align-items: center; padding: 18px var(--pad);
+/* 媒体上传（原型：海报/字幕/剧照/Logo 统一位于一个大卡片内，2x2 网格） */
+.media-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px 12px;
+  padding: 16px var(--pad);
 }
-.media-card { flex-direction: column; justify-content: center; height: auto; padding: 14px var(--pad) 10px; }
-.media-logo-card { justify-content: center; height: 136px; width: calc((100% - var(--gap))/2); margin: 0; }
-.media-subtitle-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 2px; margin-bottom: 6px;
+.media-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
 }
-.media-subtitle-row .section-heading { margin: 0; padding: 0; }
+.media-cell .media-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--label-2);
+}
+.media-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  gap: 8px;
+}
+.media-crop-btn {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 2px 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.media-crop-btn:disabled { color: var(--label-3); pointer-events: none; }
+.media-crop-btn:active { opacity: 0.5; }
+.media-cell.subtitle-cell {
+  position: relative;
+  align-items: flex-start;
+}
+.media-cell.subtitle-cell .switch {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
 .media-upload-col {
-  flex: 0 0 auto; width: 120px; text-align: center; position: relative;
+  width: 100%;
+  text-align: center;
+  position: relative;
 }
-.media-upload-col.poster { width: 66px; height: 100px; }
-.media-upload-col.fanart { width: 132px; height: 100px; }
-.media-upload-col.wide { width: 132px; height: 100px; }
+.media-upload-col.poster { max-width: 80px; aspect-ratio: 2/3; }
+.media-upload-col.fanart { aspect-ratio: 16/9; }
+.media-upload-col.wide { aspect-ratio: 16/9; }
 .media-upload-col .media-add-box {
   width: 100%; height: 100%; border-radius: var(--radius-sm);
   border: 1.5px dashed rgba(0,0,0,0.18); background: #F2F1F6;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--label-2);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: var(--label-2); gap: 4px;
 }
-.media-upload-col .media-add-box span { font-size: 28px; line-height: 1; }
+.media-upload-col .media-add-box span { font-size: 28px; line-height: 1; font-weight: 300; }
+.media-upload-col .media-add-box small { font-size: 12px; font-weight: 500; }
 .media-upload-col .media-add-box:active { background: #e2e2e8; }
 .media-upload-col .media-thumb {
   width: 100%; height: 100%; border-radius: var(--radius-sm);
@@ -494,19 +530,6 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .media-thumb-close svg { width: 12px; height: 12px; display: block; }
 .mt-btn:active { background: rgba(0,0,0,0.75); }
 .mt-btn.mt-del { background: rgba(214,48,49,0.85); }
-.media-toolbar {
-  display: flex; align-items: center; justify-content: center; gap: 16px;
-  margin-top: 8px;
-}
-.media-toolbar button {
-  background: none; border: none; padding: 4px 6px;
-  font-size: 13px; font-weight: 500; color: var(--accent);
-  -webkit-tap-highlight-color: transparent;
-}
-.media-toolbar button:active { opacity: 0.5; }
-.media-toolbar button:disabled { color: var(--label-3); pointer-events: none; }
-.media-toolbar button.mt-text-del { color: var(--danger); }
-
 /* 图片裁剪弹窗 */
 /* 图片裁剪弹窗：白底 iOS 26 风格 */
 .crop-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 600; opacity: 0; pointer-events: none; transition: opacity .2s; }
@@ -902,9 +925,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tmdb-result .tr-meta { font-size: 13px; color: var(--label-2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tmdb-result .tr-overview { font-size: 13px; color: var(--label-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .adult-tag { background: transparent; color: var(--label-2); font-size: 11px; font-weight: 600; padding: 1px 5px; border: 1px solid var(--label-2); border-radius: 4px; }
-.tr-trailer { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; vertical-align: middle; background: rgba(10,132,255,0.14); color: #0a84ff; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
-.tr-trailer svg { width: 11px; height: 11px; }
-:root[data-theme="dark"] .tr-trailer { background: rgba(10,132,255,0.22); color: #64a8ff; }
 .tmdb-msg { padding: 16px 4px; color: var(--label-2); font-size: 14px; text-align: center; }
 
 /* 搜索页 */
@@ -1077,6 +1097,24 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <label for="personName">姓名</label>
         <input class="ios-input" type="text" id="personName" placeholder="请输入">
       </div>
+      <div class="value-row select-row" id="personDeptRow">
+        <span class="vr-label">部门</span>
+        <span class="vr-value" id="personDeptVal">导演</span>
+        <select class="select-overlay" id="personDept" onchange="onPersonDeptChange(this)">
+          <option value="导演">导演</option>
+          <option value="制片">制片</option>
+          <option value="编剧">编剧</option>
+          <option value="摄影">摄影</option>
+          <option value="声音">声音</option>
+          <option value="剪辑">剪辑</option>
+          <option value="美术">美术</option>
+          <option value="服装与化妆">服装与化妆</option>
+          <option value="视效">视效</option>
+          <option value="灯光">灯光</option>
+          <option value="其他剧组">其他剧组</option>
+        </select>
+        <span class="chevron"></span>
+      </div>
       <div class="field" id="personRoleRow">
         <label for="personRole">角色名</label>
         <input class="ios-input" type="text" id="personRole" placeholder="请输入">
@@ -1217,7 +1255,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
         <!-- 演职人员 -->
         <div class="home-panel" id="tab-cast" style="display:none;">
-          <h2 class="section-heading">导演</h2>
+          <h2 class="section-heading">职员</h2>
           <div class="card cast-row-card">
             <div class="cast-scroll" id="directorCard"></div>
           </div>
@@ -1230,57 +1268,52 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
         <!-- 媒体 -->
         <div class="home-panel" id="tab-media" style="display:none;">
-          <h2 class="section-heading">预告</h2>
-          <div class="card">
+          <!-- 预告：自动从 TMDB 获取，手动输入框已隐藏 -->
+          <h2 class="section-heading" style="display:none;">预告</h2>
+          <div class="card" style="display:none;">
             <div class="field field-stacked" style="padding-bottom: 0;">
               <input class="ios-input" type="text" id="trailer" placeholder="粘贴 YouTube 链接或视频 ID" oninput="onTrailerInput(this)">
             </div>
             <div class="trailer-hint" id="trailerHint"></div>
           </div>
 
-          <div class="media-grid">
-            <div class="media-group">
-              <h2 class="section-heading">海报</h2>
-              <div class="card media-card">
-                <div class="media-upload-col poster" id="posterUpload" onclick="triggerUpload('poster')">
-                  <div class="media-add-box"><span>＋</span></div>
-                  <button class="media-thumb-close" id="posterClose" onclick="event.stopPropagation(); deleteMedia('poster')" aria-label="删除">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                  </button>
-                </div>
-                <div class="media-toolbar" id="posterToolbar">
-                  <button id="posterCropBtn" disabled onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
-                </div>
+          <div class="card media-layout">
+            <div class="media-cell">
+              <div class="media-label-row">
+                <div class="media-label">海报</div>
+                <button class="media-crop-btn" id="posterCropBtn" disabled onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
+              </div>
+              <div class="media-upload-col poster" id="posterUpload" onclick="triggerUpload('poster')">
+                <div class="media-add-box"><span>＋</span><small>添加</small></div>
+                <button class="media-thumb-close" id="posterClose" onclick="event.stopPropagation(); deleteMedia('poster')" aria-label="删除">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
               </div>
             </div>
-            <div class="media-group">
-              <h2 class="section-heading">剧照</h2>
-              <div class="card media-card">
-                <div class="media-upload-col fanart" id="fanartUpload" onclick="triggerUpload('fanart')">
-                  <div class="media-add-box"><span>＋</span></div>
-                  <button class="media-thumb-close" id="fanartClose" onclick="event.stopPropagation(); deleteMedia('fanart')" aria-label="删除">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                  </button>
-                </div>
-                <div class="media-toolbar" id="fanartToolbar">
-                  <button id="fanartCropBtn" disabled onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
-                </div>
+            <div class="media-cell subtitle-cell">
+              <div class="media-label">字幕</div>
+              <span class="switch" onclick="document.getElementById('hasSubtitle').click(); event.stopPropagation();"><input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()"><span class="slider"></span></span>
+            </div>
+            <div class="media-cell">
+              <div class="media-label-row">
+                <div class="media-label">剧照</div>
+                <button class="media-crop-btn" id="fanartCropBtn" disabled onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
+              </div>
+              <div class="media-upload-col fanart" id="fanartUpload" onclick="triggerUpload('fanart')">
+                <div class="media-add-box"><span>＋</span><small>添加</small></div>
+                <button class="media-thumb-close" id="fanartClose" onclick="event.stopPropagation(); deleteMedia('fanart')" aria-label="删除">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
               </div>
             </div>
-          </div>
-
-          <div class="media-subtitle-row">
-            <h2 class="section-heading">字幕</h2>
-            <span class="switch" onclick="document.getElementById('hasSubtitle').click(); event.stopPropagation();"><input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()"><span class="slider"></span></span>
-          </div>
-
-          <h2 class="section-heading">Logo</h2>
-          <div class="card media-logo-card">
-            <div class="media-upload-col wide" id="logoUpload" onclick="triggerUpload('logo')">
-              <div class="media-add-box"><span>＋</span></div>
-              <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-              </button>
+            <div class="media-cell">
+              <div class="media-label">Logo</div>
+              <div class="media-upload-col wide" id="logoUpload" onclick="triggerUpload('logo')">
+                <div class="media-add-box"><span>＋</span><small>添加</small></div>
+                <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1644,7 +1677,7 @@ var state = {
   directors: [],
   actors: [],
   personPhoto: null,
-  poster: null, fanart: null, logo: null, hasSubtitle: false, trailer: null,
+  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null,
   saveMode: 'save',
   autoClear: '3d',
   nsfw: false,
@@ -2193,14 +2226,18 @@ function applyReorderFlip(list, oldTops, excludeRow){
     var newTop = r.getBoundingClientRect().top;
     var delta = newTop - oldTop;
     if (Math.abs(delta) > 0.5){
-      r.classList.add('reorder-anim');
+      // 反相：先无过渡地把元素移回旧位置
+      r.classList.remove('reorder-anim');
       r.style.transform = 'translateY(' + (-delta) + 'px)';
       moved.push(r);
     }
   });
   if (moved.length){
-    list.offsetHeight;
-    moved.forEach(function(r){ r.style.transform = 'translateY(0px)'; });
+    list.offsetHeight; // 强制重排，提交反相位置（此时无动画）
+    moved.forEach(function(r){
+      r.classList.add('reorder-anim'); // 再加过渡，归零即平滑滑到新位置
+      r.style.transform = 'translateY(0px)';
+    });
   }
 }
 function clearReorderAnim(list, excludeRow){
@@ -2370,13 +2407,14 @@ function renderCast(){
   renderCastGroup('directorCard', state.directors, 'director');
   renderCastGroup('actorCards', state.actors, 'actor');
 }
+function onPersonDeptChange(sel){ document.getElementById('personDeptVal').textContent = sel.value; }
 function renderCastGroup(containerId, items, mode){
   var container = document.getElementById(containerId);
   var html = items.map(function(p, idx){
     var avatar = p.photo
       ? '<div class="ci-avatar" style="background-image:url(' + escapeAttr(p.photo) + ')" onclick="editCastAvatar(\'' + mode + '\',' + idx + ')"></div>'
       : '<div class="ci-avatar" onclick="editCastAvatar(\'' + mode + '\',' + idx + ')"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>';
-    var role = mode === 'director' ? '导演' : (p.role || '演员');
+    var role = mode === 'director' ? (p.dept || '导演') : (p.role || '演员');
     return '<div class="cast-item" onclick="openPersonSheet(\'' + mode + '\',' + idx + ')">' +
       avatar + '<span class="ci-del" onclick="event.stopPropagation();deleteCastItem(\'' + mode + '\',' + idx + ')">×</span>' +
       '<div class="ci-name">' + escapeHtml(p.name || '未命名') + '</div>' +
@@ -2414,13 +2452,16 @@ function openPersonSheet(mode, index){
   personState.mode = mode;
   personState.index = (typeof index === 'number') ? index : -1;
   var isEdit = personState.index >= 0;
-  var title = (mode === 'director' ? (isEdit ? '编辑导演' : '添加导演') : (isEdit ? '编辑演员' : '添加演员'));
+  var title = (mode === 'director' ? (isEdit ? '编辑职员' : '添加职员') : (isEdit ? '编辑演员' : '添加演员'));
   document.getElementById('personSheetTitle').textContent = title;
   var p = isEdit
     ? (mode === 'director' ? state.directors[personState.index] : state.actors[personState.index])
-    : { name: '', role: '', photo: '' };
+    : { name: '', role: '', dept: '导演', photo: '' };
   document.getElementById('personName').value = p.name || '';
-  document.getElementById('personName').closest('.field').classList.toggle('no-border', mode === 'director');
+  var dept = p.dept || '导演';
+  document.getElementById('personDept').value = dept;
+  document.getElementById('personDeptVal').textContent = dept;
+  document.getElementById('personDeptRow').style.display = (mode === 'director') ? 'flex' : 'none';
   document.getElementById('personRole').value = p.role || '';
   document.getElementById('personRoleRow').style.display = (mode === 'director') ? 'none' : 'flex';
   state.personPhoto = p.photo || null;
@@ -2441,7 +2482,13 @@ function savePerson(){
   if (!name) return showToast('请输入姓名');
   var role = (document.getElementById('personRole').value || '').trim();
   var photo = state.personPhoto || '';
-  var item = { name: name, role: role, photo: photo };
+  var item;
+  if (personState.mode === 'director'){
+    var dept = document.getElementById('personDept').value || '导演';
+    item = { name: name, dept: dept, role: '', photo: photo };
+  } else {
+    item = { name: name, role: role, photo: photo };
+  }
   var arr = personState.mode === 'director' ? state.directors : state.actors;
   if (personState.index >= 0){
     arr[personState.index] = item;
@@ -2692,7 +2739,7 @@ function searchTMDB(){
     if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → API 配置」填写 TMDB Key', 'error'); return; }
     // 是否包含成人内容由 NSFW 开关控制：开启时 include_adult=true，否则 false
     var adult = state.nsfw ? 'true' : 'false';
-    var url = TMDB_API_BASE + '/search/movie?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&append_to_response=videos&query=' + encodeURIComponent(q);
+    var url = TMDB_API_BASE + '/search/movie?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
     fetch(url)
       .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
@@ -2709,7 +2756,6 @@ function renderTMDBResults(results){
     var date = item.release_date || '';
     var poster = item.poster_path ? TMDB_IMG_BASE + '/w154' + item.poster_path : '';
     var overview = item.overview || '';
-    var hasTrailer = !!(item.videos && item.videos.results && item.videos.results.some(function(v){ return v.site === 'YouTube' && v.key; }));
     var metaParts = [];
     if (date) metaParts.push(date);
     if (orig && orig !== name) metaParts.push(orig);
@@ -2717,7 +2763,7 @@ function renderTMDBResults(results){
     html += '<div class="tmdb-result" onclick="selectTMDB(' + item.id + ')">';
     html += poster ? '<img src="' + poster + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
     html += '<div class="tr-info">';
-    html += '<div class="tr-title">' + escapeHtml(name) + (item.adult ? '<span class="adult-tag">成人</span>' : '') + (hasTrailer ? '<span class="tr-trailer" title="有预告片"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>预告</span>' : '') + '</div>';
+    html += '<div class="tr-title">' + escapeHtml(name) + (item.adult ? '<span class="adult-tag">成人</span>' : '') + '</div>';
     if (meta) html += '<div class="tr-meta">' + escapeHtml(meta) + '</div>';
     if (overview) html += '<div class="tr-overview">' + escapeHtml(overview) + '</div>';
     html += '</div></div>';
@@ -2728,11 +2774,53 @@ function selectTMDB(id){
   getTMDBKey().then(function(key){
     if (!key) return;
     showToast('正在获取详情…', 'success');
-    var url = TMDB_API_BASE + '/movie/' + id + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=true&append_to_response=images,release_dates,credits,videos&include_image_language=null,en,zh';
+    var base = TMDB_API_BASE + '/movie/' + id;
+    var url = base + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=true&append_to_response=images,release_dates,credits,videos&include_image_language=null,en,zh';
+    // 语言无关地获取预告片：分别拉 en-US 与 zh-CN 视频，合并去重
+    var videoUrls = [
+      base + '/videos?api_key=' + encodeURIComponent(key),
+      base + '/videos?api_key=' + encodeURIComponent(key) + '&language=zh-CN'
+    ];
     fetch(url)
       .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function(data){ return populateFromTMDB(data).then(function(){ switchMetaTab('edit'); showToast('已获取影片元数据', 'success'); }); })
+      .then(function(d){
+        // 语言兜底：zh-CN 无剧情简介（或标题）时回落 en-US，避免简介变空白
+        var p = Promise.resolve(d);
+        if (!d.overview || !d.overview.trim()){
+          var fbUrl = base + '?api_key=' + encodeURIComponent(key) + '&language=en-US&include_adult=true';
+          p = fetch(fbUrl).then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(en){
+              if (en){
+                if (!d.overview || !d.overview.trim()) d.overview = en.overview || '';
+                if (!d.title || !d.title.trim()) d.title = en.title || d.title;
+              }
+              return d;
+            }).catch(function(){ return d; });
+        }
+        return p.then(function(d2){
+          return fetchVideosMerged(videoUrls).then(function(merged){
+            if (merged.length) d2.videos = { results: merged };
+            return populateFromTMDB(d2);
+          }).catch(function(){ return populateFromTMDB(d2); });
+        });
+      })
+      .then(function(){ switchMetaTab('edit'); showToast('已获取影片元数据', 'success'); })
       .catch(function(err){ showToast('获取详情失败：' + ((err&&err.message)||'请求失败'), 'error'); });
+  });
+}
+function fetchVideosMerged(urls){
+  return Promise.all(urls.map(function(u){
+    return fetch(u).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ return (j && j.results) || []; })
+      .catch(function(){ return []; });
+  })).then(function(lists){
+    var seen = {}, out = [];
+    lists.forEach(function(list){
+      (list || []).forEach(function(v){
+        if (v && v.site === 'YouTube' && v.key && !seen[v.key]){ seen[v.key] = 1; out.push(v); }
+      });
+    });
+    return out;
   });
 }
 function populateFromTMDB(d){
@@ -2746,8 +2834,8 @@ function populateFromTMDB(d){
   // 只清空本次的已选值（countries/genres），保留用户维护的类型预设库 genreNormal
   state.countries = []; state.genres = [];
   state.directors = []; state.actors = [];
-  state.poster = null; state.fanart = null; state.logo = null;
-  cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null;
+  state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null;
+  cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null; cropOriginals.detailPoster = null;
   clearMediaThumb('poster'); clearMediaThumb('fanart'); clearMediaThumb('logo');
 
   var title = d.title || d.original_title || '';
@@ -2789,7 +2877,7 @@ function populateFromTMDB(d){
   if (d.credits){
     var crew = d.credits.crew || [];
     var dir = crew.find(function(p){ return p.job === 'Director'; });
-    state.directors = dir ? [{ name: dir.name || '', role: '导演', photo: null, _profile: dir.profile_path || null }] : [];
+    state.directors = dir ? [{ name: dir.name || '', dept: '导演', role: '', photo: null, _profile: dir.profile_path || null }] : [];
     var cast = (d.credits.cast || []).slice(0, 5);
     state.actors = cast.map(function(p){ return { name: p.name || '', role: p.character || '', photo: null, _profile: p.profile_path || null }; });
   }
@@ -2806,11 +2894,27 @@ function populateFromTMDB(d){
     var en = logos.find(function(l){ return l.iso_639_1 === 'en'; });
     imgPromises.push(loadImageFromTMDB((zh || en || logos[0]).file_path, 'logo', 'w500'));
   }
-  // 预告片：取 YouTube 类型 Trailer（否则取任意 YouTube 视频）
+  // 第二张海报：若有 2 张以上海报，拉取第二张缓存，作为详情底图优先项
+  var posters = (d.images && d.images.posters) || [];
+  if (posters.length >= 2){
+    imgPromises.push(
+      fetch(TMDB_IMG_BASE + '/w780' + posters[1].file_path).then(function(r){ return r.ok ? r.blob() : null; })
+        .then(function(blob){
+          if (!blob) return;
+          return new Promise(function(res){
+            var rd = new FileReader();
+            rd.onload = function(e){ state.detailPoster = e.target.result; cropOriginals.detailPoster = e.target.result; res(); };
+            rd.readAsDataURL(blob);
+          });
+        }).catch(function(){})
+    );
+  }
+  // 预告片：语言无关合并后的 YouTube 视频，优先官方 Trailer
   var trailerKey = '';
   if (d.videos && d.videos.results && d.videos.results.length){
     var yt = d.videos.results.filter(function(v){ return v.site === 'YouTube' && v.key; });
-    var tr = yt.find(function(v){ return v.type === 'Trailer'; }) || yt[0];
+    var officialTrailer = yt.find(function(v){ return v.type === 'Trailer' && v.official; });
+    var tr = officialTrailer || yt.find(function(v){ return v.type === 'Trailer'; }) || yt[0];
     if (tr) trailerKey = tr.key;
   }
   state.trailer = trailerKey;
@@ -2993,7 +3097,7 @@ function buildFilmFromCurrent(){
       plot: getVal('plot'), rating: getVal('rating'), mpaa: getVal('mpaa'),
       countries: state.countries.slice(), genres: state.genres.slice(),
       directors: state.directors, actors: state.actors,
-      poster: state.poster || null, fanart: state.fanart || null, logo: state.logo || null,
+      poster: state.poster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
       hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null
     },
     updatedAt: Date.now()
@@ -3037,10 +3141,11 @@ function applyFilmData(film){
   state.countries = (d.countries || []).slice(); renderCountryChips();
   state.genres = (d.genres || []).slice(); renderGenreChips();
   state.directors = d.directors || []; state.actors = d.actors || []; renderCast();
-  state.poster = d.poster || null; state.fanart = d.fanart || null; state.logo = d.logo || null;
+  state.poster = d.poster || null; state.fanart = d.fanart || null; state.logo = d.logo || null; state.detailPoster = d.detailPoster || null;
   cropOriginals.poster = state.poster;
   cropOriginals.fanart = state.fanart;
   cropOriginals.logo = state.logo;
+  cropOriginals.detailPoster = state.detailPoster;
   state.trailer = d.trailer || null;
   var tEl = document.getElementById('trailer');
   if (tEl){ tEl.value = state.trailer || ''; var th = document.getElementById('trailerHint'); if (th){ th.textContent = state.trailer ? ('已识别预告片 ID：' + state.trailer) : ''; th.className = 'trailer-hint' + (state.trailer ? ' ok' : ''); } }
@@ -3364,7 +3469,7 @@ function applyDetailTint(url, bgEl){
 }
 function renderFilmDetail(film){
   var d = film.data || {};
-  var bgUrl = film.posterDataUrl || d.poster || d.fanart || '';
+  var bgUrl = d.detailPoster || film.posterDataUrl || d.poster || d.fanart || '';
   var bgEl = document.getElementById('detailBg');
   var pe = document.getElementById('detailPoster');
   if (pe){ pe.style.backgroundImage = bgUrl ? 'url(' + escapeAttr(bgUrl) + ')' : ''; } // 海报底图（静态，不再随滚动视差）
@@ -3413,7 +3518,7 @@ function renderFilmDetail(film){
   document.getElementById('detailPlot').textContent = d.plot ? ('[' + (d.title || film.id) + '] ' + d.plot) : '';
   // 演职人员：导演 + 演员（合并展示）
   var people = [];
-  (d.directors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.role || '导演', photo: p.photo }); });
+  (d.directors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.dept || '导演', photo: p.photo }); });
   (d.actors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.role || '', photo: p.photo }); });
   var castEl = document.getElementById('detailCast');
   if (people.length){
