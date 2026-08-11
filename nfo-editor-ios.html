@@ -940,6 +940,31 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tr-trailer-tag svg { width: 11px; height: 11px; display: block; }
 .tmdb-msg { padding: 16px 4px; color: var(--label-2); font-size: 14px; text-align: center; }
 
+/* ===== 磁力搜索结果 ===== */
+.magnet-result { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 0.5px solid var(--sep); }
+.magnet-result:active { background: var(--gray-fill); border-radius: var(--radius-sm); }
+.magnet-result .mr-icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-fill); color: var(--accent); display: flex; align-items: center; justify-content: center; }
+.magnet-result .mr-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.magnet-result .mr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.magnet-result .mr-title { font-size: 15px; font-weight: 600; color: var(--label); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.magnet-result .mr-meta { font-size: 12px; color: var(--label-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.magnet-result .mr-magnet { font-size: 12px; color: var(--label-3); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.magnet-source-badge { display: inline-flex; align-items: center; justify-content: center; height: 16px; padding: 0 5px; font-size: 10px; font-weight: 600; color: var(--accent); background: var(--accent-fill); border-radius: 4px; }
+.magnet-result .mr-open { flex: 0 0 auto; align-self: center; margin-left: 4px; border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 14px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
+.magnet-result .mr-open:active { background: var(--accent-fill); }
+#magnetSheet .sheet-list { max-height: 62vh; max-height: 62dvh; }
+#magnetSheet .magnet-sheet-head { display: flex; align-items: center; gap: 8px; padding: 4px 0 12px; }
+#magnetSheet .magnet-sheet-head input { flex: 1; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 16px; font-size: 15px; color: var(--label); }
+#magnetSheet .magnet-sheet-head input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+#magnetSheet .magnet-sheet-head button { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 14px; font-weight: 600; }
+#magnetConfigSheet .field-stacked { margin-bottom: 12px; }
+#magnetConfigSheet .field-stacked label { display: block; font-size: 14px; font-weight: 600; color: var(--label-2); margin-bottom: 6px; }
+#magnetConfigSheet .ios-input,
+#magnetConfigSheet select { width: 100%; border: none; background: var(--card-fill); border-radius: 12px; padding: 12px 14px; font-size: 16px; color: var(--label); -webkit-appearance: none; appearance: none; }
+#magnetConfigSheet .ios-input:focus,
+#magnetConfigSheet select:focus { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+#magnetConfigSheet .sheet-note { text-align: center; margin-top: 8px; }
+
 /* 搜索页 */
 .search-box { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
 .search-box .search-input-wrap { position: relative; flex: 1; display: flex; align-items: center; }
@@ -1098,6 +1123,49 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       </div>
     </div>
     <p class="sheet-note" id="apiKeyNote">尚未配置 Key。</p>
+  </div>
+
+  <!-- 磁力搜索配置 -->
+  <div class="sheet" id="magnetConfigSheet">
+    <div class="sheet-bar sheet-bar-center">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="sb-title">磁力搜索配置</span>
+      <button class="sb-pill" onclick="saveMagnetConfig()">保存</button>
+    </div>
+    <div class="field field-stacked no-border">
+      <label for="magnetWorkerInput">Worker 地址</label>
+      <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://nfo-magnet-proxy.xxx.workers.dev" value="https://nfo-magnet-proxy.halfleave.workers.dev/">
+    </div>
+    <div class="field field-stacked no-border">
+      <label for="magnetCategoryInput">BT4G 分类</label>
+      <select id="magnetCategoryInput">
+        <option value="movie">电影 movie</option>
+        <option value="all">全部 all</option>
+        <option value="audio">音频 audio</option>
+        <option value="doc">文档 doc</option>
+        <option value="app">应用 app</option>
+        <option value="other">其他 other</option>
+      </select>
+    </div>
+    <p class="sheet-note" id="magnetConfigNote">配置后可在影片详情页点击「搜磁力」。</p>
+  </div>
+
+  <!-- 磁力搜索结果 -->
+  <div class="sheet sheet-tall" id="magnetSheet">
+    <div class="sheet-bar sheet-bar-center">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="sb-title">磁力结果</span>
+      <span class="sb-spacer"></span>
+    </div>
+    <div class="magnet-sheet-head">
+      <input type="text" id="magnetQueryInput" placeholder="输入关键词" onkeydown="if(event.key==='Enter')searchMagnet()">
+      <button onclick="searchMagnet()">搜索</button>
+    </div>
+    <div class="sheet-list" id="magnetResults"></div>
   </div>
 
   <!-- 添加 / 编辑人员 -->
@@ -1362,6 +1430,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <span class="sr-label">API 配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
+        <button class="settings-row" onclick="openMagnetConfigSheet()">
+          <span class="sr-icon" style="background:#5856D6;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg></span>
+          <span class="sr-label">磁力搜索配置</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
         <button class="settings-row" onclick="openCountryManage()">
           <span class="sr-icon" style="background:#34C759;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1 17.93a8 8 0 0 1-6-6.93h3.2a17.8 17.8 0 0 0 1.14 4.93A9.9 9.9 0 0 0 11 19.93Zm2 0a9.9 9.9 0 0 0 1.66-2A17.8 17.8 0 0 0 15.8 13H19a8 8 0 0 1-6 6.93ZM5 11H8.45A18.3 18.3 0 0 0 9.35 6.07 8 8 0 0 0 5 11Zm7-5.85A16.6 16.6 0 0 1 14.55 11H9.45A16.6 16.6 0 0 1 12 5.15ZM16.65 6.07A18.3 18.3 0 0 1 17.55 11H19a8 8 0 0 0-2.35-4.93Z"/></svg></span>
           <span class="sr-label">国家/地区配置</span>
@@ -1454,6 +1527,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <button class="detail-act" id="dtActDel" onclick="detailDelete()">
             <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></span>
             <span class="da-lb">删除</span>
+          </button>
+          <button class="detail-act" onclick="openMagnetSheet()">
+            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z"/><path d="M12 6v6l4 2"/></svg></span>
+            <span class="da-lb">磁力</span>
           </button>
         </div>
         <div class="detail-plot" id="detailPlot"></div>
@@ -1758,6 +1835,8 @@ var MPAA_LIST = ['G','PG','PG-13','R','NC-17','NR'];
 
 var state = {
   year: '', mpaa: '', countries: [], genres: [], apiKey: '',
+  magnetWorker: 'https://nfo-magnet-proxy.halfleave.workers.dev/',
+  magnetCategory: 'movie',
   countryPresets: COUNTRY_DEFAULT.slice(),
   genreNormal: GENRE_NORMAL.slice(),
   genreAdult: GENRE_ADULT.slice(),
@@ -2373,6 +2452,122 @@ function saveApiKey(){
     showToast('保存失败', 'error');
   }
 }
+
+/* —— 磁力搜索配置与结果 —— */
+function openMagnetConfigSheet(){
+  document.getElementById('magnetWorkerInput').value = state.magnetWorker || '';
+  setSelectValue('magnetCategoryInput', state.magnetCategory || 'movie');
+  refreshMagnetConfigNote();
+  openSheet('magnetConfigSheet');
+}
+function refreshMagnetConfigNote(){
+  var note = document.getElementById('magnetConfigNote');
+  if (!note) return;
+  note.textContent = state.magnetWorker ? '已配置 Worker，可在影片详情页使用「搜磁力」。' : '请先在 Cloudflare Workers 部署代理并填写地址。';
+}
+function saveMagnetConfig(){
+  try {
+    state.magnetWorker = (document.getElementById('magnetWorkerInput').value || '').trim();
+    state.magnetCategory = document.getElementById('magnetCategoryInput').value || 'movie';
+    refreshMagnetConfigNote();
+    closeAllSheets();
+    setMagnetConfig({ worker: state.magnetWorker, category: state.magnetCategory })
+      .then(function(){ showToast('已保存', 'success'); })
+      .catch(function(){ showToast('保存失败', 'error'); });
+  } catch(e) {
+    showToast('保存失败', 'error');
+  }
+}
+function openMagnetSheet(){
+  document.getElementById('magnetResults').innerHTML = '';
+  openSheet('magnetSheet');
+  if (currentDetailFilmId){
+    loadFilm(currentDetailFilmId).then(function(film){
+      var q = (film && film.data && (film.data.title || film.data.originaltitle)) || '';
+      document.getElementById('magnetQueryInput').value = q;
+      if (q) searchMagnet();
+    }).catch(function(){ document.getElementById('magnetQueryInput').value = ''; });
+  } else {
+    document.getElementById('magnetQueryInput').value = '';
+  }
+}
+function searchMagnet(){
+  var q = (document.getElementById('magnetQueryInput').value || '').trim();
+  var box = document.getElementById('magnetResults');
+  if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
+  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置 Worker，请先到「设置 → 磁力搜索配置」填写。</div>'; return; }
+  box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
+  var url = state.magnetWorker.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
+    + '&source=bt4g'
+    + '&cat=' + encodeURIComponent(state.magnetCategory || 'movie') + '&order=seeders';
+  fetch(url)
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(data){ renderMagnetResults(data && data.items ? data.items : []); })
+    .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; });
+}
+function renderMagnetResults(items){
+  var box = document.getElementById('magnetResults');
+  if (!items || !items.length){ box.innerHTML = '<div class="tmdb-msg">未找到磁力链接</div>'; return; }
+  var html = '';
+  for (var i = 0; i < items.length; i++){
+    var it = items[i];
+    var title = escapeHtml(it.title || '无标题');
+    var size = escapeHtml(it.size || '');
+    var src = escapeHtml(it.source || 'bt4g');
+    var meta = [];
+    if (size) meta.push(size);
+    if (it.seeders) meta.push('做种 ' + it.seeders);
+    if (it.leechers) meta.push('下载 ' + it.leechers);
+    var magnet = escapeAttr(it.magnet || '');
+    html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="copyMagnet(this)">'
+      + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z"/><path d="M12 6v6l4 2"/></svg></span>'
+      + '<div class="mr-info">'
+      + '<div class="mr-title">' + title + '</div>'
+      + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + (meta.length ? '<span>' + meta.join(' · ') + '</span>' : '') + '</div>'
+      + (magnet ? '<div class="mr-magnet">' + magnet + '</div>' : '')
+      + '</div>'
+      + (magnet ? '<button class="mr-open" onclick="event.stopPropagation();openMagnetThis(this)" aria-label="打开磁力">打开</button>' : '')
+      + '</div>';
+  }
+  box.innerHTML = html;
+}
+function copyMagnet(el){
+  var magnet = el.getAttribute('data-magnet');
+  if (!magnet){ showToast('没有可复制的链接', 'error'); return; }
+  copyText(magnet, function(ok){
+    showToast(ok ? '已复制 magnet 链接' : '复制失败，请长按链接手动复制', ok ? 'success' : 'error');
+  });
+}
+function copyText(text, cb){
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ cb(true); }, function(){ fallbackCopy(text, cb); });
+  } else {
+    fallbackCopy(text, cb);
+  }
+}
+function fallbackCopy(text, cb){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+    var ok = document.execCommand && document.execCommand('copy');
+    document.body.removeChild(ta);
+    cb(!!ok);
+  } catch(e){ cb(false); }
+}
+function openMagnetThis(btn){
+  var row = btn.closest ? btn.closest('.magnet-result') : null;
+  openMagnetLink(row ? row.getAttribute('data-magnet') : '');
+}
+function openMagnetLink(magnet){
+  if (!magnet) return;
+  window.open(magnet, '_blank');
+}
 var _filenameManual = false;
 function onTitleChanged(el){
   if (!_filenameManual && el && el.value){ document.getElementById('filename').value = el.value; }
@@ -2805,6 +3000,8 @@ function listFilms(){
 /* —— API Key（kv store） —— */
 function getTMDBKey(){ return idbGet('kv', 'apiKey').then(function(v){ return v || ''; }); }
 function setTMDBKey(k){ return idbPut('kv', 'apiKey', k || ''); }
+function getMagnetConfig(){ return idbGet('kv', 'magnetConfig').then(function(v){ return v || null; }); }
+function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
 
 /* —— TMDB 常量 —— */
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
@@ -4350,6 +4547,10 @@ getSaveMode().then(function(m){ state.saveMode = (m === 'save-download') ? 'save
 getNsfw().then(function(on){ state.nsfw = !!on; var el = document.getElementById('nsfwToggle'); if (el) el.checked = state.nsfw; }).catch(function(){});
 getAutoClearMode().then(function(m){ state.autoClear = m || '3d'; updateAutoClearDisplay(); setSelectValue('autoClearSelect', state.autoClear); clearExpiredFilms(); }).catch(function(){});
 getAppearance().then(function(m){ state.appearance = (m === 'dark' || m === 'light' || m === 'auto') ? m : 'auto'; updateAppearanceDisplay(); setSelectValue('appearanceSelect', state.appearance); applyAppearance(state.appearance); }).catch(function(){});
+getMagnetConfig().then(function(cfg){
+  if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
+  if (cfg && cfg.category) state.magnetCategory = cfg.category;
+}).catch(function(){});
 renderOverview();
 renderCast();
 updateState();
