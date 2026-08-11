@@ -117,8 +117,9 @@ img { display: block; }
 
 /* ===== 页面容器 ===== */
 .ios-app { min-height: 100vh; min-height: 100dvh; }
-.page { display: none; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
-.page.active { display: flex; }
+/* 各页面 fixed 铺满并叠加：同一时刻仅一个 active 显示；返回动画期间首页在底层透出、详情页在上层右滑淡出，动画才可见 */
+.page { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: none; flex-direction: column; }
+.page.active { display: flex; z-index: 1; }
 
 /* 影片详情页 */
 #page-detail { padding: 0; color: #fff; background: #000; touch-action: pan-y; }
@@ -217,7 +218,7 @@ img { display: block; }
   transition: background .15s, transform .08s;
 }
 .detail-act .da-ic svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.detail-act#dtActMagnet .da-ic svg { width: 21px; height: 21px; fill: currentColor; stroke: none; }
+.detail-act#dtActMagnet .da-ic svg { width: 24px; height: 24px; fill: currentColor; stroke: none; }
 .detail-act .da-lb { display: none; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
 .detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); }
