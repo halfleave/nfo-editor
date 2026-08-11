@@ -37,7 +37,7 @@
   --sar: env(safe-area-inset-right, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
-  --glass: rgba(249,249,249,0.78);
+  --glass: rgba(242,241,246,0.78);
   --glass-strong: rgba(247,247,250,0.92);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
 }
@@ -52,7 +52,7 @@
   --label-3: #48484a;
   --sep: rgba(84,84,88,0.65);
   --gray-fill: rgba(120,120,128,0.24);
-  --glass: rgba(28,28,30,0.78);
+  --glass: rgba(0,0,0,0.78);
   --glass-strong: rgba(28,28,30,0.92);
 }
 /* 硬编码浅色表面在深色下的覆盖 */
@@ -242,14 +242,13 @@ img { display: block; }
   background: var(--glass);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 0.5px solid rgba(0,0,0,0.08);
   transition: background .2s, border-color .2s, backdrop-filter .2s;
 }
 .page-bar {
   display: flex; align-items: center; gap: 12px;
 }
 .page-bar.scrolled {
-  border-bottom-color: rgba(0,0,0,0.12);
+  border-bottom-color: transparent;
 }
 .page-title {
   font-size: 32px; font-weight: 700; letter-spacing: -0.6px;
