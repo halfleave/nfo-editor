@@ -217,7 +217,7 @@ img { display: block; }
   transition: background .15s, transform .08s;
 }
 .detail-act .da-ic svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.detail-act#dtActMagnet .da-ic svg { width: 21px; height: 21px; }
+.detail-act#dtActMagnet .da-ic svg { width: 21px; height: 21px; fill: currentColor; stroke: none; }
 .detail-act .da-lb { display: none; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
 .detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); }
@@ -958,7 +958,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-result { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 0.5px solid var(--sep); }
 .magnet-result:active { background: var(--gray-fill); border-radius: var(--radius-sm); }
 .magnet-result .mr-icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-fill); color: var(--accent-fg); display: flex; align-items: center; justify-content: center; }
-.magnet-result .mr-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.magnet-result .mr-icon svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
 .magnet-result .mr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .magnet-result .mr-title { font-size: 15px; font-weight: 600; color: var(--label); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .magnet-result .mr-meta { font-size: 12px; color: var(--label-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -970,9 +970,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #magnetSheet .magnet-search-wrap input { width: 100%; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 36px 10px 16px; font-size: 15px; color: var(--label); }
 #magnetSheet .magnet-sheet-head input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 #magnetSheet .magnet-sheet-head button { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 14px; font-weight: 600; }
-#magnetSheet .magnet-sheet-head .magnet-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; border-radius: 50%; background: transparent; color: var(--label-3); font-size: 18px; line-height: 1; }
+#magnetSheet .magnet-sheet-head .magnet-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; background: transparent; color: var(--label-3); font-size: 18px; line-height: 1; }
 #magnetSheet .magnet-sheet-head .magnet-clear.show { display: flex; }
 #magnetSheet .magnet-sheet-head .magnet-clear:active { opacity: 0.5; }
+#magnetSheet .magnet-field-tabs { display: flex; gap: 8px; padding: 2px 0 12px; }
+#magnetSheet .magnet-field-tabs .mft { flex: 1; position: relative; display: block; }
+#magnetSheet .magnet-field-tabs .mft input { position: absolute; opacity: 0; width: 0; height: 0; }
+#magnetSheet .magnet-field-tabs .mft span { display: block; text-align: center; padding: 9px 0; font-size: 13px; font-weight: 600; color: var(--label-2); background: var(--card-fill); border-radius: 11px; border: 1px solid var(--sep); transition: background .15s, color .15s, border-color .15s; cursor: pointer; }
+#magnetSheet .magnet-field-tabs .mft input:checked + span { color: #fff; background: var(--accent); border-color: var(--accent); }
 #magnetConfigSheet .field-stacked { margin-bottom: 12px; }
 #magnetConfigSheet .field-stacked label { display: block; font-size: 14px; font-weight: 600; color: var(--label-2); margin-bottom: 6px; }
 #magnetConfigSheet .ios-input,
@@ -1183,6 +1188,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <button type="button" id="magnetClear" class="magnet-clear" onclick="clearMagnetQuery()" aria-label="清除">×</button>
       </div>
       <button onclick="searchMagnet()">搜索</button>
+    </div>
+    <div class="magnet-field-tabs" id="magnetFieldTabs">
+      <label class="mft"><input type="radio" name="magnetField" id="magnetFieldTitle" value="title" checked onchange="onMagnetFieldChange()"><span>影片名</span></label>
+      <label class="mft"><input type="radio" name="magnetField" id="magnetFieldOriginal" value="original" onchange="onMagnetFieldChange()"><span>原始标题</span></label>
     </div>
     <div class="sheet-list" id="magnetResults"></div>
   </div>
@@ -1548,7 +1557,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
             <span class="da-lb">删除</span>
           </button>
           <button class="detail-act" id="dtActMagnet" onclick="openMagnetSheet()">
-            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M6 3v6a6 6 0 0 1 12 0V3"/><path d="M6 3h4"/><path d="M18 3h-4"/></svg></span>
+            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>
             <span class="da-lb">磁力</span>
           </button>
         </div>
@@ -2522,19 +2531,37 @@ function saveMagnetConfig(){
     showToast('保存失败', 'error');
   }
 }
+var magnetCurrentFilm = null;
 function openMagnetSheet(){
   document.getElementById('magnetResults').innerHTML = '';
+  var tEl = document.getElementById('magnetFieldTitle');
+  if (tEl) tEl.checked = true;
   openSheet('magnetSheet');
   if (currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
-      var q = (film && film.data && (film.data.title || film.data.originaltitle)) || '';
+      magnetCurrentFilm = film;
+      var f = (film && film.data) || {};
+      var q = f.title || '';
       document.getElementById('magnetQueryInput').value = q;
       toggleMagnetClear();
       if (q) searchMagnet();
-    }).catch(function(){ document.getElementById('magnetQueryInput').value = ''; toggleMagnetClear(); });
+    }).catch(function(){ magnetCurrentFilm = null; document.getElementById('magnetQueryInput').value = ''; toggleMagnetClear(); });
   } else {
+    magnetCurrentFilm = null;
     document.getElementById('magnetQueryInput').value = '';
     toggleMagnetClear();
+  }
+}
+function onMagnetFieldChange(){
+  var sel = 'title';
+  var chk = document.querySelector('input[name="magnetField"]:checked');
+  if (chk) sel = chk.value || 'title';
+  if (magnetCurrentFilm){
+    var f = magnetCurrentFilm.data || {};
+    var q = sel === 'original' ? (f.originaltitle || '') : (f.title || '');
+    document.getElementById('magnetQueryInput').value = q;
+    toggleMagnetClear();
+    if (q) searchMagnet();
   }
 }
 function toggleMagnetClear(){
@@ -2579,7 +2606,7 @@ function renderMagnetResults(items){
     if (it.leechers) meta.push('下载 ' + it.leechers);
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
     html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="copyMagnet(this)">'
-      + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 3v6a6 6 0 0 1 12 0V3"/><path d="M6 3h4"/><path d="M18 3h-4"/></svg></span>'
+      + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
       + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + (meta.length ? '<span>' + meta.join(' · ') + '</span>' : '') + '</div>'
