@@ -653,7 +653,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .required { color: var(--danger); margin-right: 3px; }
 
 /* 首页概览：三列网格海报 */
-.overview-section { padding-top: 6px; }
+.overview-section { padding-top: 24px; }
 .overview-head { display: flex; align-items: center; justify-content: space-between; }
 .ov-new { background: none; border: 0; padding: 0; font-size: 14px; font-weight: 500; color: var(--accent); }
 .ov-new:active { opacity: 0.5; }
@@ -2884,22 +2884,48 @@ function applyTMDBById(id, afterApply){
       .catch(function(err){ showToast('获取详情失败：' + ((err&&err.message)||'请求失败'), 'error'); });
   });
 }
-// 长按菜单「刷新」：用已关联的 TMDB id 重新拉取并覆盖保存该影片元数据
+// 长按菜单「刷新」：用已关联的 TMDB id 重新拉取并覆盖保存该影片元数据；
+// 若未关联 TMDB，则后台静默按标题搜索，取最相关（第一项）结果继续刷新
 function refreshFromTMDB(id){
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
     var tid = (film.data && film.data.tmdbId) || null;
-    if (!tid) return showToast('此影片未关联 TMDB，无法刷新', 'error');
-    currentFilmId = film.id;
-    currentFilmLocked = !!film.locked;
-    applyTMDBById(tid, function(){
-      var f = buildFilmFromCurrent();
-      f.id = film.id;            // 强制覆盖原影片，避免 id 变化生成新条目
-      f.locked = !!film.locked;
-      saveFilm(f).then(function(){
-        renderOverview();
-        showToast('已从 TMDB 刷新元数据', 'success');
-      });
+    if (tid) return doApplyRefresh(film, tid);
+    // 未关联 TMDB：后台按标题静默搜索，取最相关项
+    var q = ((film.data && (film.data.title || film.data.originaltitle)) || '').trim();
+    if (!q) return showToast('此影片未关联 TMDB 且无标题，无法刷新', 'error');
+    searchTMDBIdByTitle(q, function(resolvedId){
+      if (!resolvedId) return showToast('未找到匹配的影片，无法刷新', 'error');
+      doApplyRefresh(film, resolvedId);
+    });
+  });
+}
+// 按标题在 TMDB 静默搜索，回调返回最相关项（results[0]）的 id，未找到返回 null
+function searchTMDBIdByTitle(q, cb){
+  getTMDBKey().then(function(key){
+    if (!key) return cb(null);
+    var adult = state.nsfw ? 'true' : 'false';
+    var url = TMDB_API_BASE + '/search/movie?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
+    fetch(url)
+      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data){
+        var results = (data && data.results) || [];
+        cb(results.length ? results[0].id : null);
+      })
+      .catch(function(){ cb(null); });
+  });
+}
+// 用给定 TMDB id 重新拉取并覆盖保存该影片元数据
+function doApplyRefresh(film, tid){
+  currentFilmId = film.id;
+  currentFilmLocked = !!film.locked;
+  applyTMDBById(tid, function(){
+    var f = buildFilmFromCurrent();
+    f.id = film.id;            // 强制覆盖原影片，避免 id 变化生成新条目
+    f.locked = !!film.locked;
+    saveFilm(f).then(function(){
+      renderOverview();
+      showToast('已从 TMDB 刷新元数据', 'success');
     });
   });
 }
