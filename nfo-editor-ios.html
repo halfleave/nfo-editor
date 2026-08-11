@@ -680,11 +680,17 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   position: relative; height: 0; padding-top: 150%; /* 2:3 比例，兼容旧版 iOS */
   aspect-ratio: 2 / 3; object-fit: cover;
 }
+.movie-card .mc-badges { position: absolute; bottom: 6px; right: 6px; display: flex; align-items: center; gap: 4px; }
 .movie-card .mc-rating {
-  position: absolute; bottom: 6px; right: 6px;
   background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; font-weight: 700;
   padding: 2px 7px; border-radius: 10px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
+.movie-card .mc-trailer {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.movie-card .mc-trailer svg { width: 11px; height: 11px; display: block; }
 .movie-card .mc-lock {
   position: absolute; bottom: 6px; left: 6px;
   width: 22px; height: 22px; border-radius: 50%;
@@ -2983,11 +2989,15 @@ function renderOverview(){
       var poster = f.posterDataUrl
         ? '<div class="mc-poster" style="background-image:url(' + escapeAttr(f.posterDataUrl) + ')"></div>'
         : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>';
-      var rating = f.rating ? '<div class="mc-rating">' + escapeHtml(f.rating) + '</div>' : '';
+      var hasTrailer = !!(f.data && f.data.trailer);
+      var badgeHtml = '';
+      if (f.rating) badgeHtml += '<div class="mc-rating">' + escapeHtml(f.rating) + '</div>';
+      if (hasTrailer) badgeHtml += '<div class="mc-trailer"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>预告</div>';
+      var badges = badgeHtml ? '<div class="mc-badges">' + badgeHtml + '</div>' : '';
       var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
       var title = '<div class="mc-title">' + escapeHtml(f.title || f.id) + '</div>';
       return '<div class="movie-card-wrap" data-id="' + enc + '" onclick="openFilmDetail(\'' + enc + '\')">'
-           + '<div class="movie-card">' + poster + rating + lock + '</div>' + title + '</div>';
+           + '<div class="movie-card">' + poster + badges + lock + '</div>' + title + '</div>';
     }).join('');
     bindOverviewLongPress();
   }).catch(function(){
