@@ -108,7 +108,7 @@ img { display: block; }
 .page.active { display: flex; }
 
 /* 影片详情页 */
-#page-detail { padding: 0; color: #fff; background: #000; }
+#page-detail { padding: 0; color: #fff; background: #000; touch-action: pan-y; }
 #page-detail.active ~ .ios-tabbar { display: none; }
 .detail-bg {
   position: fixed; inset: -30px; z-index: 0; overflow: hidden;
@@ -239,18 +239,17 @@ img { display: block; }
 .page-bar, .home-header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 30;
   padding: calc(var(--sat) + 18px) var(--pad) 10px;
-  background: var(--bg);
-  border-bottom: 0.5px solid transparent;
+  background: var(--glass);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid rgba(0,0,0,0.08);
   transition: background .2s, border-color .2s, backdrop-filter .2s;
 }
 .page-bar {
   display: flex; align-items: center; gap: 12px;
 }
 .page-bar.scrolled {
-  background: var(--glass);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom-color: rgba(0,0,0,0.08);
+  border-bottom-color: rgba(0,0,0,0.12);
 }
 .page-title {
   font-size: 32px; font-weight: 700; letter-spacing: -0.6px;
@@ -492,7 +491,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   text-align: center;
   position: relative;
 }
-.media-upload-col.poster { max-width: 80px; aspect-ratio: 2/3; }
+.media-upload-col.poster { max-width: 120px; aspect-ratio: 2/3; }
 .media-upload-col.fanart { aspect-ratio: 16/9; }
 .media-upload-col.wide { aspect-ratio: 16/9; }
 .media-upload-col .media-add-box {
@@ -925,6 +924,16 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tmdb-result .tr-meta { font-size: 13px; color: var(--label-2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tmdb-result .tr-overview { font-size: 13px; color: var(--label-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .adult-tag { background: transparent; color: var(--label-2); font-size: 11px; font-weight: 600; padding: 1px 5px; border: 1px solid var(--label-2); border-radius: 4px; }
+/* 搜索结果「预告」角标：胶片图标 + 边框，懒加载点亮 */
+.tr-trailer-tag {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; line-height: 1;
+  color: var(--label-2); border: 1px solid var(--label-2); border-radius: 4px;
+  padding: 3px; margin-left: 6px; vertical-align: middle;
+  opacity: 0; transform: scale(0.85); transition: opacity .2s ease, transform .2s ease;
+}
+.tr-trailer-tag.show { opacity: 1; transform: scale(1); }
+.tr-trailer-tag svg { width: 11px; height: 11px; display: block; }
 .tmdb-msg { padding: 16px 4px; color: var(--label-2); font-size: 14px; text-align: center; }
 
 /* 搜索页 */
@@ -1010,9 +1019,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
     <div class="crop-ratios" id="cropRatios" style="display:none;">
       <span class="seg">
-        <button type="button" data-ratio="16:9" onclick="setFanartRatio('16:9', this)">16:9</button>
+        <button type="button" data-ratio="16:9" class="active" onclick="setFanartRatio('16:9', this)">16:9</button>
         <button type="button" data-ratio="3:2" onclick="setFanartRatio('3:2', this)">3:2</button>
-        <button type="button" data-ratio="4:3" class="active" onclick="setFanartRatio('4:3', this)">4:3</button>
+        <button type="button" data-ratio="4:3" onclick="setFanartRatio('4:3', this)">4:3</button>
       </span>
     </div>
     <div class="crop-stage" id="cropStage">
@@ -1097,7 +1106,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <label for="personName">姓名</label>
         <input class="ios-input" type="text" id="personName" placeholder="请输入">
       </div>
-      <div class="value-row select-row" id="personDeptRow">
+      <div class="value-row select-row no-border" id="personDeptRow">
         <span class="vr-label">部门</span>
         <span class="vr-value" id="personDeptVal">导演</span>
         <select class="select-overlay" id="personDept" onchange="onPersonDeptChange(this)">
@@ -1113,7 +1122,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <option value="灯光">灯光</option>
           <option value="其他剧组">其他剧组</option>
         </select>
-        <span class="chevron"></span>
       </div>
       <div class="field" id="personRoleRow">
         <label for="personRole">角色名</label>
@@ -1474,6 +1482,68 @@ function switchPage(page) {
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
 }
 
+/* 详情页「从左边缘右滑返回首页」手势：兼容触摸与鼠标（桌面模式），与竖向滚动/下拉放大互斥 */
+function initEdgeSwipeBack(){
+  var page = document.getElementById('page-detail');
+  if (!page) return;
+  var home = document.getElementById('page-home');
+  var EDGE = 28;                 // 触发区：距左边缘 28px
+  var startX = 0, startY = 0, dragging = false, axis = null, captured = false;
+  function threshold(){ return Math.max(80, window.innerWidth * 0.30); }
+  page.addEventListener('pointerdown', function(e){
+    if (dragging || captured) return;
+    if (!page.classList.contains('active')) return;       // 仅详情页激活时
+    if (e.clientX > EDGE) return;                          // 必须从左边缘开始
+    var sc = document.getElementById('detailScroll');
+    if (sc && sc.scrollTop > 2) return;                    // 仅顶部允许（与下拉放大互斥）
+    dragging = true; axis = null; startX = e.clientX; startY = e.clientY;
+    page.style.transition = 'none';
+  });
+  page.addEventListener('pointermove', function(e){
+    if (!dragging) return;
+    var mx = e.clientX - startX, my = e.clientY - startY;
+    if (axis === null){
+      if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;    // 方向未定
+      if (Math.abs(mx) > Math.abs(my) && mx > 0){ axis = 'h'; }
+      else { axis = 'v'; dragging = false; return; }        // 竖向/反向：放弃，交回滚动
+    }
+    if (axis !== 'h') return;
+    if (!captured){ try { page.setPointerCapture(e.pointerId); } catch(_){} captured = true; }
+    if (e.cancelable) e.preventDefault();
+    var dx = Math.max(0, mx);
+    page.style.userSelect = 'none';
+    if (home && !home.classList.contains('active')) home.classList.add('active'); // 首页透出到背景
+    page.style.transform = 'translateX(' + dx + 'px)';
+    var op = 1 - dx / (window.innerWidth * 1.6);
+    page.style.opacity = (op < 0.35 ? 0.35 : op).toFixed(3);
+  });
+  function finish(goHome){
+    if (!dragging && !captured) return;
+    dragging = false; captured = false; axis = null;
+    page.style.transition = 'transform .3s cubic-bezier(.32,.72,0,1), opacity .3s';
+    if (goHome){
+      page.style.transform = 'translateX(' + window.innerWidth + 'px)';
+      page.style.opacity = '0';
+      setTimeout(function(){
+        page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = '';
+        switchPage('home');                                // 幂等：清掉首页临时 active，设定 home
+      }, 300);
+    } else {
+      page.style.transform = 'translateX(0)';
+      page.style.opacity = '1';
+      setTimeout(function(){
+        page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = '';
+        if (home) home.classList.remove('active');
+      }, 300);
+    }
+  }
+  page.addEventListener('pointerup', function(e){
+    if (dragging || captured){ try { page.releasePointerCapture(e.pointerId); } catch(_){} finish(Math.max(0, e.clientX - startX) > threshold()); }
+  });
+  page.addEventListener('pointercancel', function(){ if (dragging || captured) finish(false); });
+}
+initEdgeSwipeBack();
+
 function switchHomeTab(tab) {
   document.querySelectorAll('.home-tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === tab); });
   document.getElementById('tab-basic').style.display = (tab === 'basic') ? 'block' : 'none';
@@ -1613,7 +1683,8 @@ var CTX_ICONS = {
   trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M6 10V8a6 6 0 0 1 12 0v2"/></svg>',
   unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M7 10V8a5 5 0 0 1 9.9-1"/></svg>',
-  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>'
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>'
 };
 function showContextSheet(title, items, anchor){
   document.getElementById('contextSheetTitle').textContent = title || '操作';
@@ -1677,7 +1748,7 @@ var state = {
   directors: [],
   actors: [],
   personPhoto: null,
-  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null,
+  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null,
   saveMode: 'save',
   autoClear: '3d',
   nsfw: false,
@@ -2760,17 +2831,21 @@ function renderTMDBResults(results){
     if (date) metaParts.push(date);
     if (orig && orig !== name) metaParts.push(orig);
     var meta = metaParts.join(' · ');
-    html += '<div class="tmdb-result" onclick="selectTMDB(' + item.id + ')">';
+    html += '<div class="tmdb-result" data-tmdb-id="' + item.id + '" onclick="selectTMDB(' + item.id + ')">';
     html += poster ? '<img src="' + poster + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
     html += '<div class="tr-info">';
-    html += '<div class="tr-title">' + escapeHtml(name) + (item.adult ? '<span class="adult-tag">成人</span>' : '') + '</div>';
+    html += '<div class="tr-title">' + escapeHtml(name) + (item.adult ? '<span class="adult-tag">18+</span>' : '') + '</div>';
     if (meta) html += '<div class="tr-meta">' + escapeHtml(meta) + '</div>';
     if (overview) html += '<div class="tr-overview">' + escapeHtml(overview) + '</div>';
     html += '</div></div>';
   });
   box.innerHTML = html;
+  // A+B+C：限并发拉取每个结果的预告信息，按 tmdb id 缓存到 IndexedDB，列表先渲染后懒加载点亮角标
+  fetchTrailersForResults(results.slice(0, 20));
 }
-function selectTMDB(id){
+function selectTMDB(id){ applyTMDBById(id, function(){ switchMetaTab('edit'); showToast('已获取影片元数据', 'success'); }); }
+// 按 TMDB id 拉取影片详情并填充编辑态；afterApply（可选）在图片加载完成后回调
+function applyTMDBById(id, afterApply){
   getTMDBKey().then(function(key){
     if (!key) return;
     showToast('正在获取详情…', 'success');
@@ -2800,12 +2875,32 @@ function selectTMDB(id){
         return p.then(function(d2){
           return fetchVideosMerged(videoUrls).then(function(merged){
             if (merged.length) d2.videos = { results: merged };
-            return populateFromTMDB(d2);
-          }).catch(function(){ return populateFromTMDB(d2); });
+            return d2;
+          }).catch(function(){ return d2; });
         });
       })
-      .then(function(){ switchMetaTab('edit'); showToast('已获取影片元数据', 'success'); })
+      .then(function(d2){ return populateFromTMDB(d2); })
+      .then(function(){ if (afterApply) afterApply(); })
       .catch(function(err){ showToast('获取详情失败：' + ((err&&err.message)||'请求失败'), 'error'); });
+  });
+}
+// 长按菜单「刷新」：用已关联的 TMDB id 重新拉取并覆盖保存该影片元数据
+function refreshFromTMDB(id){
+  loadFilm(id).then(function(film){
+    if (!film) return showToast('未找到影片', 'error');
+    var tid = (film.data && film.data.tmdbId) || null;
+    if (!tid) return showToast('此影片未关联 TMDB，无法刷新', 'error');
+    currentFilmId = film.id;
+    currentFilmLocked = !!film.locked;
+    applyTMDBById(tid, function(){
+      var f = buildFilmFromCurrent();
+      f.id = film.id;            // 强制覆盖原影片，避免 id 变化生成新条目
+      f.locked = !!film.locked;
+      saveFilm(f).then(function(){
+        renderOverview();
+        showToast('已从 TMDB 刷新元数据', 'success');
+      });
+    });
   });
 }
 function fetchVideosMerged(urls){
@@ -2821,6 +2916,55 @@ function fetchVideosMerged(urls){
       });
     });
     return out;
+  });
+}
+// ===== 搜索结果「预告」角标：A 限并发拉取 + B 按 tmdb id 缓存 + C 懒加载点亮 =====
+var TR_FILM_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 14h4M17 9h4M17 14h4M7 12h10"/></svg>';
+// 并发受限的任务池：worker(item) 返回 Promise
+function runPool(items, limit, worker){
+  var results = new Array(items.length), idx = 0;
+  function runOne(){
+    if (idx >= items.length) return Promise.resolve();
+    var cur = idx++;
+    return Promise.resolve(worker(items[cur], cur)).catch(function(){ /* 单个失败不影响其余 */ }).then(runOne);
+  }
+  var runners = [], n = Math.min(limit, items.length);
+  for (var k = 0; k < n; k++) runners.push(runOne());
+  return Promise.all(runners).then(function(){ return results; });
+}
+function trailerCacheKey(id){ return 'trailer:' + id; }
+// 返回 Promise<boolean>：true 表示该影片有 YouTube 预告。先查缓存，未命中则拉取并写回缓存
+function ensureTrailerHas(id){
+  return idbGet('kv', trailerCacheKey(id)).then(function(cached){
+    if (cached && typeof cached.has === 'boolean') return cached.has;
+    return getTMDBKey().then(function(key){
+      if (!key) return false;
+      // 不带 language 参数：返回全部语言的 videos，覆盖中文/英文预告
+      var url = TMDB_API_BASE + '/movie/' + id + '/videos?api_key=' + encodeURIComponent(key);
+      return fetch(url).then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          var has = !!(j && j.results && j.results.some(function(v){ return v.site === 'YouTube' && v.key; }));
+          idbPut('kv', trailerCacheKey(id), { has: has }).catch(function(){});
+          return has;
+        }).catch(function(){ return false; });
+    });
+  });
+}
+// 列表渲染完成后，后台并发解析每个结果的预告状态，命中后点亮角标
+function fetchTrailersForResults(results){
+  var items = (results || []).slice(0, 20);
+  runPool(items, 4, function(item){
+    return ensureTrailerHas(item.id).then(function(has){
+      if (!has) return;
+      var titleEl = document.querySelector('.tmdb-result[data-tmdb-id="' + item.id + '"] .tr-title');
+      if (!titleEl || titleEl.querySelector('.tr-trailer-tag')) return;
+      var tag = document.createElement('span');
+      tag.className = 'tr-trailer-tag';
+      tag.innerHTML = TR_FILM_ICON;
+      titleEl.appendChild(tag);
+      void tag.offsetWidth;          // 强制重排，触发过渡动画
+      tag.classList.add('show');
+    });
   });
 }
 function populateFromTMDB(d){
@@ -2923,6 +3067,9 @@ function populateFromTMDB(d){
 
   state.directors.forEach(function(dir, i){ if (dir._profile){ loadPersonPhotoFromTMDB(dir._profile, 'director', i); dir._profile = null; } });
   state.actors.forEach(function(a, i){ if (a._profile){ loadPersonPhotoFromTMDB(a._profile, 'actor', i); a._profile = null; } });
+
+  // 记录 TMDB id，供「刷新」功能重新拉取元数据
+  if (d.id != null) state.tmdbId = d.id;
 
   updateState();
   return Promise.all(imgPromises);
@@ -3098,7 +3245,7 @@ function buildFilmFromCurrent(){
       countries: state.countries.slice(), genres: state.genres.slice(),
       directors: state.directors, actors: state.actors,
       poster: state.poster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
-      hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null
+      hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null
     },
     updatedAt: Date.now()
   };
@@ -3147,6 +3294,7 @@ function applyFilmData(film){
   cropOriginals.logo = state.logo;
   cropOriginals.detailPoster = state.detailPoster;
   state.trailer = d.trailer || null;
+  state.tmdbId = d.tmdbId || null;
   var tEl = document.getElementById('trailer');
   if (tEl){ tEl.value = state.trailer || ''; var th = document.getElementById('trailerHint'); if (th){ th.textContent = state.trailer ? ('已识别预告片 ID：' + state.trailer) : ''; th.className = 'trailer-hint' + (state.trailer ? ' ok' : ''); } }
   if (state.poster) renderMediaThumb('poster', state.poster); else clearMediaThumb('poster');
@@ -3171,7 +3319,7 @@ function clearMediaThumb(type){
 }
 
 /* —— 图片裁剪：裁剪框固定居中，移动/缩放图片取景 —— */
-var cropType = null, cropRatio = 0, cropDrag = null, fanartRatio = 4/3;
+var cropType = null, cropRatio = 0, cropDrag = null, fanartRatio = 16/9;
 var cropOriginals = {};
 function getCropOriginalKey(type){
   if (type === 'person'){
@@ -3621,6 +3769,7 @@ function bindOverviewLongPress(){
             var locked = film && film.locked;
             showContextSheet('影片操作', [
               { label: '编辑', icon: 'pencil', onClick: function(){ newFilm(); openFilm(encodeURIComponent(id)); } },
+              { label: '刷新', icon: 'refresh', onClick: function(){ refreshFromTMDB(id); } },
               { label: '下载元数据', icon: 'download', onClick: function(){ downloadMetadata(id); } },
               { label: locked ? '解锁' : '锁定', icon: locked ? 'unlock' : 'lock', onClick: function(){ toggleLock(id); } },
               { label: '删除', danger: true, onClick: function(){
@@ -3630,6 +3779,7 @@ function bindOverviewLongPress(){
           }).catch(function(){
             showContextSheet('影片操作', [
               { label: '编辑', icon: 'pencil', onClick: function(){ newFilm(); openFilm(encodeURIComponent(id)); } },
+              { label: '刷新', icon: 'refresh', onClick: function(){ refreshFromTMDB(id); } },
               { label: '下载元数据', icon: 'download', onClick: function(){ downloadMetadata(id); } },
               { label: '锁定', icon: 'lock', onClick: function(){ toggleLock(id); } },
               { label: '删除', danger: true, onClick: function(){
@@ -4082,7 +4232,7 @@ function resetDetailZoom(){
 var DETAIL_ALPHA_CAP_AT = 0.35; // 上滑到此比例时，海报色叠加透明度达到封顶值
 var DETAIL_GLASS_START_AT = 0.25; // 上滑到此比例时，开始叠加磨砂玻璃
 var DETAIL_ALPHA_MAX = 0.6; // 海报色叠加透明度封顶（控制在 0.6：留出 40% 让磨砂模糊透出，过高会盖住模糊）
-var DETAIL_GLASS_MAX = 200; // 磨砂玻璃模糊最大值(px)
+var DETAIL_GLASS_MAX = 30; // 磨砂玻璃模糊最大值(px)
 var DETAIL_EXP_BASE = Math.exp(2.5); // 指数曲线分母预计算，避免每次滚动重算 Math.exp
 
 // 阅读时随滚动更新底图叠加层：① 叠加海报色（指数，35% 封顶）② 磨砂玻璃（25% 起，最大 50px）
