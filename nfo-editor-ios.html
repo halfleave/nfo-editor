@@ -1857,6 +1857,16 @@ var currentGenreTab = 'normal';
 
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escapeAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+/* 把 XML/HTML 实体还原（Worker 返回的 magnet 里 & 是 &amp; 形式），避免二次转义 */
+function decodeXmlEntities(s){
+  return String(s)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&#x27;/gi, "'");
+}
 
 function updateState(){
   var hasFilename = !!getVal('filename');
@@ -2516,7 +2526,7 @@ function renderMagnetResults(items){
     if (size) meta.push(size);
     if (it.seeders) meta.push('做种 ' + it.seeders);
     if (it.leechers) meta.push('下载 ' + it.leechers);
-    var magnet = escapeAttr(it.magnet || '');
+    var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
     html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="copyMagnet(this)">'
       + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="m6 15-4-4a6 6 0 0 1 8.5-8.5l3 3a6 6 0 0 1 0 8.5l-1.5 1.5"/><path d="m15 9 4 4a6 6 0 0 1-8.5 8.5l-3-3a6 6 0 0 1 0-8.5l1.5-1.5"/></svg></span>'
       + '<div class="mr-info">'
