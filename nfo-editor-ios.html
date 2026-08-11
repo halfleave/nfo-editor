@@ -942,8 +942,19 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
 /* 搜索页 */
 .search-box { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.search-box .search-input-wrap { position: relative; flex: 1; display: flex; align-items: center; }
 .search-box .ios-input,
 .search-box input[type="text"] { flex: 1; border: none; background: #fff; border-radius: 22px; padding: 11px 18px; font-size: 16px; color: var(--label); }
+.search-box .search-input-wrap .ios-input,
+.search-box .search-input-wrap input[type="text"] { padding-right: 40px; }
+.search-clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 22px; border: none; background: transparent; color: var(--label-3);
+  font-size: 18px; line-height: 1;
+  display: none; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; -webkit-appearance: none; appearance: none;
+}
+.search-clear.show { display: flex; }
 .search-box .ios-input::placeholder,
 .search-box input[type="text"]::placeholder { color: var(--label-3); }
 .search-box .ios-input:focus,
@@ -1181,7 +1192,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
       <div class="meta-panel" id="searchPanel" style="display:none;">
         <div class="search-box">
-          <input class="ios-input" type="text" id="tmdbQuery" placeholder="请输入" onkeydown="if(event.key==='Enter')searchTMDB()">
+          <div class="search-input-wrap">
+            <input class="ios-input" type="text" id="tmdbQuery" placeholder="请输入" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchTMDB()">
+            <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
+          </div>
           <button class="btn btn-primary btn-pill" onclick="searchTMDB()">搜索</button>
         </div>
         <div id="tmdbResults"></div>
@@ -1561,6 +1575,7 @@ function switchMetaTab(tab){
   document.getElementById('metaTabEdit').classList.toggle('active', !isSearch);
   document.getElementById('searchPanel').style.display = isSearch ? 'block' : 'none';
   document.getElementById('searchPanel').classList.toggle('active', isSearch);
+  if (isSearch) toggleSearchClear();
   document.getElementById('editPanel').style.display = isSearch ? 'none' : 'block';
   document.getElementById('editPanel').classList.toggle('active', !isSearch);
   document.getElementById('btnClear').style.display = isSearch ? 'none' : '';
@@ -2820,6 +2835,18 @@ function searchTMDB(){
       .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
       .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; });
   });
+}
+function toggleSearchClear(){
+  var el = document.getElementById('tmdbQuery');
+  var btn = document.getElementById('searchClear');
+  if (el.value.length) btn.classList.add('show'); else btn.classList.remove('show');
+}
+function clearSearch(){
+  var el = document.getElementById('tmdbQuery');
+  el.value = '';
+  document.getElementById('searchClear').classList.remove('show');
+  document.getElementById('tmdbResults').innerHTML = '';
+  el.focus();
 }
 function renderTMDBResults(results){
   var box = document.getElementById('tmdbResults');
