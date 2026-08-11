@@ -1678,17 +1678,21 @@ function initDetailTitleLongPress(){
   var t = document.getElementById('detailTitle');
   if (!t || t._lpBound) return;
   t._lpBound = true;
-  var timer = null, sx = 0, sy = 0;
-  function clear(){ if (timer){ clearTimeout(timer); timer = null; } }
-  function start(x, y){ clear(); sx = x; sy = y; timer = setTimeout(function(){ var txt = (currentDetailTitle || t.textContent || '').trim(); if (txt){ copyText(txt); showToast('已复制标题'); } }, 500); }
-  t.addEventListener('touchstart', function(e){ var p = e.touches && e.touches[0]; start(p ? p.clientX : 0, p ? p.clientY : 0); }, { passive: true });
-  t.addEventListener('touchmove', function(e){ var p = e.touches && e.touches[0]; if (p && (Math.abs(p.clientX - sx) > 10 || Math.abs(p.clientY - sy) > 10)) clear(); }, { passive: true });
-  t.addEventListener('touchend', clear);
-  t.addEventListener('touchcancel', clear);
+  var sx = 0, sy = 0, st = 0, moved = false;
+  function onStart(x, y){ sx = x; sy = y; st = Date.now(); moved = false; }
+  function onMove(x, y){ if (st && (Math.abs(x - sx) > 14 || Math.abs(y - sy) > 14)) moved = true; }
+  function doCopy(){ var txt = (currentDetailTitle || t.textContent || '').trim(); if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制标题' : '复制失败', ok ? 'success' : 'error'); }); } }
+  // 在「松手」的用户手势内判定长按并复制（iOS 的 clipboard API / execCommand 必须处于用户手势上下文才生效，定时器异步回调会被拒绝）
+  function onEnd(){ if (st && !moved && (Date.now() - st) >= 500){ doCopy(); } st = 0; moved = false; }
+  t.addEventListener('touchstart', function(e){ var p = e.touches && e.touches[0]; onStart(p ? p.clientX : 0, p ? p.clientY : 0); }, { passive: true });
+  t.addEventListener('touchmove', function(e){ var p = e.touches && e.touches[0]; if (p) onMove(p.clientX, p.clientY); }, { passive: true });
+  t.addEventListener('touchend', onEnd, { passive: true });
+  t.addEventListener('touchcancel', function(){ st = 0; moved = false; });
   /* 桌面：鼠标长按同样可复制 */
-  t.addEventListener('mousedown', function(e){ start(e.clientX, e.clientY); });
-  t.addEventListener('mouseup', clear);
-  t.addEventListener('mouseleave', clear);
+  t.addEventListener('mousedown', function(e){ onStart(e.clientX, e.clientY); });
+  t.addEventListener('mousemove', function(e){ onMove(e.clientX, e.clientY); });
+  t.addEventListener('mouseup', onEnd);
+  t.addEventListener('mouseleave', function(){ st = 0; moved = false; });
 }
 initDetailTitleLongPress();
 /* 顶部「返回」按钮：与边缘右滑一致的滑出退场动画（详情页从右移出、首页透出） */
