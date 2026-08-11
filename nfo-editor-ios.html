@@ -3972,7 +3972,6 @@ function buildNFOMovieXml(d){
     xml += '    <actor>\n';
     xml += '      <name>' + escapeXml(a.name) + '</name>\n';
     if (a.role) xml += '      <role>' + escapeXml(a.role) + '</role>\n';
-    if (typeof a.photo === 'string') xml += '      <thumb>' + escapeXml(sanitizeName(a.name) + '-actor.jpg') + '</thumb>\n';
     xml += '      <order>' + (i + 1) + '</order>\n';
     xml += '    </actor>\n';
   });
@@ -3992,8 +3991,6 @@ function downloadMetadata(id){
     if (typeof d.poster === 'string'){ var pb = dataUrlToBytesSync(d.poster); if (pb) zipFiles.push({ name: filename + '-poster.jpg', data: pb }); }
     if (typeof d.fanart === 'string'){ var fb = dataUrlToBytesSync(d.fanart); if (fb) zipFiles.push({ name: filename + '-fanart.jpg', data: fb }); }
     if (typeof d.logo === 'string'){ var lb = dataUrlToBytesSync(d.logo); if (lb) zipFiles.push({ name: filename + '-clearlogo.png', data: lb }); }
-    (d.directors || []).forEach(function(dir, i){ if (dir && typeof dir.photo === 'string'){ var b = dataUrlToBytesSync(dir.photo); if (b) zipFiles.push({ name: sanitizeName(dir.name || ('director' + i)) + '-director.jpg', data: b }); } });
-    (d.actors || []).forEach(function(a, i){ if (a && typeof a.photo === 'string'){ var b = dataUrlToBytesSync(a.photo); if (b) zipFiles.push({ name: sanitizeName(a.name || ('actor' + i)) + '-actor.jpg', data: b }); } });
     if (!zipFiles.length) return showToast('没有可导出的元数据', 'error');
     var zipBlob;
     try { zipBlob = new Blob([makeZip(zipFiles)], { type: 'application/zip' }); }
