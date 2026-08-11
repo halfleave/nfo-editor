@@ -1667,6 +1667,24 @@ function initEdgeSwipeBack(){
   page.addEventListener('touchcancel', function(){ if (dragging) finish(moved > threshold()); });
 }
 initEdgeSwipeBack();
+/* 详情页长按标题复制：长按 ~500ms 复制影片标题；与边缘右滑返回手势互不干扰（长按不动不产生横向位移，松手仅 finish(false) 无视觉变化）；桌面鼠标长按同样可复制 */
+function initDetailTitleLongPress(){
+  var t = document.getElementById('detailTitle');
+  if (!t || t._lpBound) return;
+  t._lpBound = true;
+  var timer = null, sx = 0, sy = 0;
+  function clear(){ if (timer){ clearTimeout(timer); timer = null; } }
+  function start(x, y){ clear(); sx = x; sy = y; timer = setTimeout(function(){ var txt = (currentDetailTitle || t.textContent || '').trim(); if (txt){ copyText(txt); showToast('已复制标题'); } }, 500); }
+  t.addEventListener('touchstart', function(e){ var p = e.touches && e.touches[0]; start(p ? p.clientX : 0, p ? p.clientY : 0); }, { passive: true });
+  t.addEventListener('touchmove', function(e){ var p = e.touches && e.touches[0]; if (p && (Math.abs(p.clientX - sx) > 10 || Math.abs(p.clientY - sy) > 10)) clear(); }, { passive: true });
+  t.addEventListener('touchend', clear);
+  t.addEventListener('touchcancel', clear);
+  /* 桌面：鼠标长按同样可复制 */
+  t.addEventListener('mousedown', function(e){ start(e.clientX, e.clientY); });
+  t.addEventListener('mouseup', clear);
+  t.addEventListener('mouseleave', clear);
+}
+initDetailTitleLongPress();
 /* 顶部「返回」按钮：与边缘右滑一致的滑出退场动画（详情页从右移出、首页透出） */
 function animateDetailBack(){
   var page = document.getElementById('page-detail');
@@ -3885,6 +3903,7 @@ function openFilm(encId){
   });
 }
 var currentDetailFilmId = null;
+var currentDetailTitle = '';   // 详情页长按复制用的标题文本（即便显示 logo 也能取到 d.title）
 function openFilmDetail(encId){
   if (overviewSuppressClick){ overviewSuppressClick = false; return; }
   var id = decodeURIComponent(encId);
@@ -3976,6 +3995,7 @@ function renderFilmDetail(film){
   } else {
     titleEl.textContent = d.title || film.id;
   }
+  currentDetailTitle = (d.title || film.id) || '';   // 供长按复制使用
   // 第一行：⭐️评分 | 日期 | 国家 | 分级
   var info1 = [];
   if (d.rating) info1.push('<span class="dt-star">⭐️</span> ' + escapeHtml(d.rating));
