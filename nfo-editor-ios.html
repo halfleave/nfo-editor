@@ -217,7 +217,7 @@ img { display: block; }
   transition: background .15s, transform .08s;
 }
 .detail-act .da-ic svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.detail-act#dtActMagnet .da-ic svg { width: 21px; height: 21px; }
+.detail-act#dtActMagnet .da-ic svg { width: 21px; height: 21px; fill: currentColor; stroke: none; }
 .detail-act .da-lb { display: none; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
 .detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); }
@@ -958,7 +958,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-result { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 0.5px solid var(--sep); }
 .magnet-result:active { background: var(--gray-fill); border-radius: var(--radius-sm); }
 .magnet-result .mr-icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-fill); color: var(--accent-fg); display: flex; align-items: center; justify-content: center; }
-.magnet-result .mr-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.magnet-result .mr-icon svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
 .magnet-result .mr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .magnet-result .mr-title { font-size: 15px; font-weight: 600; color: var(--label); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .magnet-result .mr-meta { font-size: 12px; color: var(--label-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -1548,7 +1548,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
             <span class="da-lb">删除</span>
           </button>
           <button class="detail-act" id="dtActMagnet" onclick="openMagnetSheet()">
-            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="m6 15-4-4a6 6 0 0 1 8.5-8.5l3 3a6 6 0 0 1 0 8.5l-1.5 1.5"/><path d="m15 9 4 4a6 6 0 0 1-8.5 8.5l-3-3a6 6 0 0 1 0-8.5l1.5-1.5"/></svg></span>
+            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9v6a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-4a2 2 0 0 1 4 0v4a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-6c0-4.97-4.03-9-9-9z"/></svg></span>
             <span class="da-lb">磁力</span>
           </button>
         </div>
@@ -1597,65 +1597,63 @@ function switchPage(page) {
 }
 
 /* 详情页「从左边缘右滑返回首页」手势：兼容触摸与鼠标（桌面模式），与竖向滚动/下拉放大互斥 */
+/* 详情页「从左边缘右滑返回首页」手势：使用 touch 事件（iOS 可靠），与竖向滚动/下拉放大互斥 */
 function initEdgeSwipeBack(){
   var page = document.getElementById('page-detail');
   if (!page) return;
   var home = document.getElementById('page-home');
-  var EDGE = 28;                 // 触发区：距左边缘 28px
-  var startX = 0, startY = 0, dragging = false, axis = null, captured = false;
-  function threshold(){ return Math.max(80, window.innerWidth * 0.30); }
-  page.addEventListener('pointerdown', function(e){
-    if (dragging || captured) return;
-    if (!page.classList.contains('active')) return;       // 仅详情页激活时
-    if (e.clientX > EDGE) return;                          // 必须从左边缘开始
-    var sc = document.getElementById('detailScroll');
-    if (sc && sc.scrollTop > 2) return;                    // 仅顶部允许（与下拉放大互斥）
-    dragging = true; axis = null; startX = e.clientX; startY = e.clientY;
-    page.style.transition = 'none';
-  });
-  page.addEventListener('pointermove', function(e){
-    if (!dragging) return;
-    var mx = e.clientX - startX, my = e.clientY - startY;
-    if (axis === null){
-      if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;    // 方向未定
-      if (Math.abs(mx) > Math.abs(my) && mx > 0){ axis = 'h'; }
-      else { axis = 'v'; dragging = false; return; }        // 竖向/反向：放弃，交回滚动
-    }
-    if (axis !== 'h') return;
-    if (!captured){ try { page.setPointerCapture(e.pointerId); } catch(_){} captured = true; }
-    if (e.cancelable) e.preventDefault();
-    var dx = Math.max(0, mx);
-    page.style.userSelect = 'none';
-    if (home && !home.classList.contains('active')) home.classList.add('active'); // 首页透出到背景
-    page.style.transform = 'translateX(' + dx + 'px)';
-    var op = 1 - dx / (window.innerWidth * 1.6);
-    page.style.opacity = (op < 0.35 ? 0.35 : op).toFixed(3);
-  });
+  var EDGE = 30;                 // 触发区：距左边缘 30px
+  var startX = 0, startY = 0, dragging = false, axis = null, moved = 0;
+  function threshold(){ return Math.max(60, window.innerWidth * 0.25); }
   function finish(goHome){
-    if (!dragging && !captured) return;
-    dragging = false; captured = false; axis = null;
-    page.style.transition = 'transform .3s cubic-bezier(.32,.72,0,1), opacity .3s';
+    if (!dragging) return;
+    dragging = false; axis = null;
+    page.style.transition = 'transform .32s cubic-bezier(.32,.72,0,1), opacity .32s';
     if (goHome){
       page.style.transform = 'translateX(' + window.innerWidth + 'px)';
       page.style.opacity = '0';
       setTimeout(function(){
         page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = '';
-        switchPage('home');                                // 幂等：清掉首页临时 active，设定 home
-      }, 300);
+        switchPage('home');
+      }, 320);
     } else {
       page.style.transform = 'translateX(0)';
       page.style.opacity = '1';
       setTimeout(function(){
         page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = '';
         if (home) home.classList.remove('active');
-      }, 300);
+      }, 320);
     }
   }
-  function swipeDx(){ var m = /translateX\(([-\d.]+)px\)/.exec(page.style.transform || ''); return m ? parseFloat(m[1]) : 0; }
-  page.addEventListener('pointerup', function(e){
-    if (dragging || captured){ try { page.releasePointerCapture(e.pointerId); } catch(_){} finish(swipeDx() > threshold()); }
-  });
-  page.addEventListener('pointercancel', function(){ if (dragging || captured) finish(swipeDx() > threshold()); });
+  page.addEventListener('touchstart', function(e){
+    if (dragging) return;
+    if (!page.classList.contains('active')) return;       // 仅详情页激活时
+    if (e.touches[0].clientX > EDGE) return;              // 必须从左边缘开始
+    var sc = document.getElementById('detailScroll');
+    if (sc && sc.scrollTop > 2) return;                    // 仅顶部允许（与下拉放大互斥）
+    dragging = true; axis = null; startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    page.style.transition = 'none'; moved = 0;
+  }, { passive: true });
+  page.addEventListener('touchmove', function(e){
+    if (!dragging) return;
+    var mx = e.touches[0].clientX - startX, my = e.touches[0].clientY - startY;
+    if (axis === null){
+      if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;    // 方向未定
+      if (Math.abs(mx) > Math.abs(my) && mx > 0){ axis = 'h'; }
+      else { axis = 'v'; dragging = false; page.style.transition = ''; return; } // 竖向/反向：放弃，交回滚动
+    }
+    if (axis !== 'h') return;
+    if (e.cancelable) e.preventDefault();                  // 阻止原生横向滚动/橡皮筋
+    var dx = Math.max(0, mx);
+    moved = dx;
+    page.style.userSelect = 'none';
+    if (home && !home.classList.contains('active')) home.classList.add('active'); // 首页透出到背景
+    page.style.transform = 'translateX(' + dx + 'px)';
+    var op = 1 - dx / (window.innerWidth * 1.6);
+    page.style.opacity = (op < 0.35 ? 0.35 : op).toFixed(3);
+  }, { passive: false });
+  page.addEventListener('touchend', function(){ if (dragging) finish(moved > threshold()); });
+  page.addEventListener('touchcancel', function(){ if (dragging) finish(moved > threshold()); });
 }
 initEdgeSwipeBack();
 
@@ -2565,7 +2563,7 @@ function renderMagnetResults(items){
     if (it.leechers) meta.push('下载 ' + it.leechers);
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
     html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="copyMagnet(this)">'
-      + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="m6 15-4-4a6 6 0 0 1 8.5-8.5l3 3a6 6 0 0 1 0 8.5l-1.5 1.5"/><path d="m15 9 4 4a6 6 0 0 1-8.5 8.5l-3-3a6 6 0 0 1 0-8.5l1.5-1.5"/></svg></span>'
+      + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9v6a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-4a2 2 0 0 1 4 0v4a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-6c0-4.97-4.03-9-9-9z"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
       + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + (meta.length ? '<span>' + meta.join(' · ') + '</span>' : '') + '</div>'
