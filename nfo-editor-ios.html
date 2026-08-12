@@ -249,6 +249,14 @@ img { display: block; }
 .trailer-head button svg { width: 20px; height: 20px; }
 .trailer-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; }
 .trailer-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.trailer-bar { display: flex; padding: 0 2px; }
+.trailer-ext-btn {
+  flex: 1; height: 46px; border: none; border-radius: 12px;
+  background: var(--accent, #3D8CF0); color: #fff;
+  font-size: 16px; font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.trailer-ext-btn:active { opacity: 0.8; }
 
 /* 顶部大标题栏（fixed 固定顶部，避免 sticky 在 iOS 滚动子容器内失效） */
 .page-bar, .home-header {
@@ -1611,6 +1619,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <button onclick="closeTrailer()" aria-label="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
+    </div>
+    <div class="trailer-bar">
+      <button class="trailer-ext-btn" onclick="openTrailerExternal()">在 YouTube 打开</button>
     </div>
     <div class="trailer-frame">
       <iframe id="trailerFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
@@ -4154,6 +4165,16 @@ function renderFilmDetail(film){
 }
 function openTrailer(){
   if (!currentDetailTrailer) return;
+  // 方案 A：优先外跳 YouTube（走系统已登录会话，避开「请登录确认你不是聊天机器人」墙）
+  var url = 'https://www.youtube.com/watch?v=' + currentDetailTrailer;
+  var w = window.open(url, '_blank');
+  if (!w) showTrailerModal(); // 外跳被拦截时退回弹窗（iframe + 兜底按钮）
+}
+function openTrailerExternal(){
+  if (!currentDetailTrailer) return;
+  window.open('https://www.youtube.com/watch?v=' + currentDetailTrailer, '_blank');
+}
+function showTrailerModal(){
   var frame = document.getElementById('trailerFrame');
   frame.src = 'https://www.youtube.com/embed/' + encodeURIComponent(currentDetailTrailer) + '?autoplay=1&rel=0';
   document.getElementById('trailerMask').classList.add('show');
