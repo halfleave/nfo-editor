@@ -4165,10 +4165,8 @@ function renderFilmDetail(film){
 }
 function openTrailer(){
   if (!currentDetailTrailer) return;
-  // 方案 A：优先外跳 YouTube（走系统已登录会话，避开「请登录确认你不是聊天机器人」墙）
-  var url = 'https://www.youtube.com/watch?v=' + currentDetailTrailer;
-  var w = window.open(url, '_blank');
-  if (!w) showTrailerModal(); // 外跳被拦截时退回弹窗（iframe + 兜底按钮）
+  // 优先弹窗内嵌播放；若内嵌被 YouTube 登录墙拦截，可点「在 YouTube 打开」按钮外跳
+  showTrailerModal();
 }
 function openTrailerExternal(){
   if (!currentDetailTrailer) return;
