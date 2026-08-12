@@ -1166,7 +1166,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
     <div class="field field-stacked no-border">
       <label for="magnetWorkerInput">服务地址</label>
-      <input class="ios-input" type="text" id="magnetWorkerInput" value="https://nfo-magnet-proxy.halfleave.workers.dev/" placeholder="https://your-proxy.example.com">
+      <input class="ios-input" type="text" id="magnetWorkerInput" value="" placeholder="https://xxx.vercel.app（粘贴你的代理地址）">
     </div>
     <div class="field field-stacked no-border">
       <label for="magnetCategoryInput">分类</label>
@@ -1909,7 +1909,7 @@ var MPAA_LIST = ['G','PG','PG-13','R','NC-17','NR'];
 
 var state = {
   year: '', mpaa: '', countries: [], genres: [], apiKey: '',
-  magnetWorker: 'https://nfo-magnet-proxy.halfleave.workers.dev/',
+  magnetWorker: '',
   magnetCategory: 'movie',
   countryPresets: COUNTRY_DEFAULT.slice(),
   genreNormal: GENRE_NORMAL.slice(),
