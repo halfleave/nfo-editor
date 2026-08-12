@@ -2619,9 +2619,16 @@ function searchMagnet(){
     + '&source=bt4g'
     + '&cat=' + encodeURIComponent(state.magnetCategory || 'movie') + '&order=seeders';
   fetch(url)
-    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function(data){ renderMagnetResults(data && data.items ? data.items : []); })
-    .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; });
+    .then(function(r){
+      return r.json().then(function(data){ return { ok: r.ok, data: data || null }; }).catch(function(){ return { ok: r.ok, data: null }; });
+    })
+    .then(function(res){
+      var data = res.data;
+      if (data && data.error){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(data.error) + '</div>'; return; }
+      if (!res.ok){ box.innerHTML = '<div class="tmdb-msg">搜索失败：Worker 返回 HTTP ' + res.status + '，请检查 Worker 配置或稍后重试。</div>'; return; }
+      renderMagnetResults(data && data.items ? data.items : []);
+    })
+    .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'网络错误') + '，请确认 Worker 地址正确且可访问。</div>'; });
 }
 function renderMagnetResults(items){
   var box = document.getElementById('magnetResults');
