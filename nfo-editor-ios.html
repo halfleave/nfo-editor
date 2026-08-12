@@ -1164,7 +1164,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
     <div class="field field-stacked no-border">
       <label for="magnetWorkerInput">Worker</label>
-      <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://nfo-magnet-proxy.xxx.workers.dev" value="https://nfo-magnet-proxy.halfleave.workers.dev/">
+      <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://你的-worker.workers.dev">
     </div>
     <div class="field field-stacked no-border">
       <label for="magnetCategoryInput">分类</label>
@@ -1907,7 +1907,7 @@ var MPAA_LIST = ['G','PG','PG-13','R','NC-17','NR'];
 
 var state = {
   year: '', mpaa: '', countries: [], genres: [], apiKey: '',
-  magnetWorker: 'https://nfo-magnet-proxy.halfleave.workers.dev/',
+  magnetWorker: '',
   magnetCategory: 'movie',
   countryPresets: COUNTRY_DEFAULT.slice(),
   genreNormal: GENRE_NORMAL.slice(),
