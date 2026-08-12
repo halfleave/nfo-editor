@@ -1165,8 +1165,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <button class="sb-pill" onclick="saveMagnetConfig()">保存</button>
     </div>
     <div class="field field-stacked no-border">
-      <label for="magnetWorkerInput">Worker</label>
-      <input class="ios-input" type="text" id="magnetWorkerInput" value="https://nfo-magnet-proxy.halfleave.workers.dev/" placeholder="https://你的-worker.workers.dev">
+      <label for="magnetWorkerInput">服务地址</label>
+      <input class="ios-input" type="text" id="magnetWorkerInput" value="https://nfo-magnet-proxy.halfleave.workers.dev/" placeholder="https://your-proxy.example.com">
     </div>
     <div class="field field-stacked no-border">
       <label for="magnetCategoryInput">分类</label>
@@ -2547,7 +2547,7 @@ function openMagnetConfigSheet(){
 function refreshMagnetConfigNote(){
   var note = document.getElementById('magnetConfigNote');
   if (!note) return;
-  note.textContent = state.magnetWorker ? '已配置 Worker。' : '请先在 Cloudflare Workers 部署代理并填写地址。';
+  note.textContent = state.magnetWorker ? '已配置服务地址。' : '请先部署代理并填写地址。';
 }
 function saveMagnetConfig(){
   try {
@@ -2612,7 +2612,7 @@ function searchMagnet(){
   var q = (document.getElementById('magnetQueryInput').value || '').trim();
   var box = document.getElementById('magnetResults');
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置 Worker，请先到「设置 → 磁力搜索配置」填写。</div>'; return; }
+  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → 磁力搜索配置」填写。</div>'; return; }
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
   var url = state.magnetWorker.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
     + '&source=bt4g'
@@ -2626,12 +2626,12 @@ function searchMagnet(){
     .then(function(res){
       var data = res.data;
       if (data && data.error){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(data.error) + '</div>'; return; }
-      if (!res.ok){ box.innerHTML = '<div class="tmdb-msg">搜索失败：Worker 返回 HTTP ' + res.status + '，请检查 Worker 配置或稍后重试。</div>'; return; }
+      if (!res.ok){ box.innerHTML = '<div class="tmdb-msg">搜索失败：服务返回 HTTP ' + res.status + '，请检查服务配置或稍后重试。</div>'; return; }
       renderMagnetResults(data && data.items ? data.items : []);
     })
     .catch(function(err){
-      if (err && err.name === 'AbortError'){ box.innerHTML = '<div class="tmdb-msg">搜索超时（&gt;35s）：Worker 无响应，请稍后重试或检查 Worker 地址。</div>'; }
-      else { box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'网络错误') + '，请确认 Worker 地址正确且可访问。</div>'; }
+      if (err && err.name === 'AbortError'){ box.innerHTML = '<div class="tmdb-msg">搜索超时（&gt;35s）：服务无响应，请稍后重试或检查服务地址。</div>'; }
+      else { box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'网络错误') + '，请确认服务地址正确且可访问。</div>'; }
     })
     .finally(function(){ clearTimeout(to); });
 }
