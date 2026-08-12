@@ -495,11 +495,17 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 .media-crop-btn:disabled { color: var(--label-3); pointer-events: none; }
 .media-crop-btn:active { opacity: 0.5; }
-.poster-cell { flex: 0 0 43%; }
+.poster-cell { flex: 0 0 43%; display: flex; flex-direction: column; }
 .poster-cell .media-upload-col.poster {
   width: 100%;
+  flex: 1;
+  aspect-ratio: auto;
   max-width: none;
-  aspect-ratio: 2/3;
+}
+.poster-cell .media-upload-col.poster .media-thumb {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
 }
 .media-right-col {
   flex: 1;
@@ -588,10 +594,10 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .crop-ratios .seg { margin-left: 0; }
 .crop-ratios .seg button { font-size: 13px; padding: 5px 14px; }
 .subtitle-toggle {
-  display: flex; align-items: center; justify-content: space-between;
-  width: 100%; font-size: 17px; color: var(--label);
+  display: inline-flex; align-items: center; gap: 12px;
+  font-size: 17px; color: var(--label);
 }
-.subtitle-toggle > span:first-child { flex: 1; text-align: left; margin-right: 8px; }
+.subtitle-toggle > span:first-child { text-align: left; }
 
 /* 开关（iOS） */
 .switch { position: relative; width: 51px; height: 31px; flex-shrink: 0; }
