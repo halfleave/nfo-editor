@@ -453,12 +453,17 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 /* 人员信息输入框：卡片内右对齐，无独立背景 */
 #personName, #personRole { text-align: right; }
 
-/* 媒体上传（原型：海报/字幕/剧照/Logo 统一位于一个大卡片内，2x2 网格） */
+/* 媒体上传：左海报 + 右上剧照 + 右下 Logo + 底部字幕开关 */
 .media-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 28px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   padding: 16px var(--pad);
+}
+.media-top {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
 }
 .media-cell {
   display: flex;
@@ -490,24 +495,34 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 .media-crop-btn:disabled { color: var(--label-3); pointer-events: none; }
 .media-crop-btn:active { opacity: 0.5; }
-.media-cell.subtitle-cell {
-  position: relative;
-  align-items: flex-start;
+.poster-cell { flex: 0 0 43%; }
+.poster-cell .media-upload-col.poster {
+  width: 100%;
+  max-width: none;
+  aspect-ratio: 2/3;
 }
-.media-cell.subtitle-cell .switch {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+.media-right-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.media-right-col .media-upload-col {
+  width: 100%;
+  aspect-ratio: 16/9;
+}
+.media-right-col .media-upload-col.logo { aspect-ratio: 2/1; }
+.media-subtitle-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 .media-upload-col {
   width: 100%;
   text-align: center;
   position: relative;
 }
-.media-upload-col.poster { max-width: 120px; aspect-ratio: 2/3; }
-.media-upload-col.fanart { aspect-ratio: 16/9; }
-.media-upload-col.wide { aspect-ratio: 16/9; }
 .media-upload-col .media-add-box {
   width: 100%; height: 100%; border-radius: var(--radius-sm);
   border: 1.5px dashed rgba(0,0,0,0.18); background: #F2F1F6;
@@ -1409,42 +1424,48 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           </div>
 
           <div class="card media-layout">
-            <div class="media-cell">
-              <div class="media-label-row">
-                <div class="media-label">海报</div>
-                <button class="media-crop-btn" id="posterCropBtn" disabled onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
+            <div class="media-top">
+              <div class="media-cell poster-cell">
+                <div class="media-label-row">
+                  <div class="media-label">海报</div>
+                  <button class="media-crop-btn" id="posterCropBtn" disabled onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
+                </div>
+                <div class="media-upload-col poster" id="posterUpload" onclick="triggerUpload('poster')">
+                  <div class="media-add-box"><span>＋</span><small>添加</small></div>
+                  <button class="media-thumb-close" id="posterClose" onclick="event.stopPropagation(); deleteMedia('poster')" aria-label="删除">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
               </div>
-              <div class="media-upload-col poster" id="posterUpload" onclick="triggerUpload('poster')">
-                <div class="media-add-box"><span>＋</span><small>添加</small></div>
-                <button class="media-thumb-close" id="posterClose" onclick="event.stopPropagation(); deleteMedia('poster')" aria-label="删除">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                </button>
+              <div class="media-right-col">
+                <div class="media-cell fanart-cell">
+                  <div class="media-label-row">
+                    <div class="media-label">剧照</div>
+                    <button class="media-crop-btn" id="fanartCropBtn" disabled onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
+                  </div>
+                  <div class="media-upload-col fanart" id="fanartUpload" onclick="triggerUpload('fanart')">
+                    <div class="media-add-box"><span>＋</span><small>添加</small></div>
+                    <button class="media-thumb-close" id="fanartClose" onclick="event.stopPropagation(); deleteMedia('fanart')" aria-label="删除">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="media-cell logo-cell">
+                  <div class="media-label">Logo</div>
+                  <div class="media-upload-col logo" id="logoUpload" onclick="triggerUpload('logo')">
+                    <div class="media-add-box"><span>＋</span><small>添加</small></div>
+                    <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="media-cell subtitle-cell">
-              <div class="media-label">字幕</div>
-              <span class="switch" onclick="document.getElementById('hasSubtitle').click(); event.stopPropagation();"><input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()"><span class="slider"></span></span>
-            </div>
-            <div class="media-cell">
-              <div class="media-label-row">
-                <div class="media-label">剧照</div>
-                <button class="media-crop-btn" id="fanartCropBtn" disabled onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
-              </div>
-              <div class="media-upload-col fanart" id="fanartUpload" onclick="triggerUpload('fanart')">
-                <div class="media-add-box"><span>＋</span><small>添加</small></div>
-                <button class="media-thumb-close" id="fanartClose" onclick="event.stopPropagation(); deleteMedia('fanart')" aria-label="删除">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                </button>
-              </div>
-            </div>
-            <div class="media-cell">
-              <div class="media-label">Logo</div>
-              <div class="media-upload-col wide" id="logoUpload" onclick="triggerUpload('logo')">
-                <div class="media-add-box"><span>＋</span><small>添加</small></div>
-                <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                </button>
-              </div>
+            <div class="media-subtitle-row">
+              <span class="subtitle-toggle">
+                <span>字幕</span>
+                <span class="switch" onclick="document.getElementById('hasSubtitle').click(); event.stopPropagation();"><input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()"><span class="slider"></span></span>
+              </span>
             </div>
           </div>
 
