@@ -4174,7 +4174,8 @@ function openTrailerExternal(){
 }
 function showTrailerModal(){
   var frame = document.getElementById('trailerFrame');
-  frame.src = 'https://www.youtube.com/embed/' + encodeURIComponent(currentDetailTrailer) + '?autoplay=1&rel=0';
+  // 隐私增强模式（nocookie）：在 iOS PWA 内嵌场景里能减少「请登录验证」弹窗频率
+  frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(currentDetailTrailer) + '?autoplay=1&rel=0';
   document.getElementById('trailerMask').classList.add('show');
   document.getElementById('trailerModal').classList.add('show');
 }
