@@ -593,9 +593,8 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   padding: 12px var(--pad); border-bottom: 0.5px solid var(--sep); background: var(--card); text-align: left; font-size: 17px;
 }
 .settings-row:last-child { border-bottom: none; }
-/* 磁力配置项：仅深色（里）模式显示，浅色（表）模式隐藏 */
+/* 磁力配置项：仅「里模式」显示（点击设置标题三次进入），表模式隐藏 */
 .settings-row#magnetConfigRow { display: none; }
-[data-theme="dark"] .settings-row#magnetConfigRow { display: flex; }
 .settings-row .sr-icon {
   width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 17px; color: #fff;
@@ -4382,6 +4381,8 @@ function setThemeHidden(hidden){
 function updateHiddenBadge(){
   var badge = document.getElementById('hiddenBadge');
   if (badge) badge.style.display = state.themeHidden ? 'inline-flex' : 'none';
+  var mc = document.getElementById('magnetConfigRow');
+  if (mc) mc.style.display = state.themeHidden ? 'flex' : '';
 }
 var settingsTitleTap = { count: 0, last: 0 };
 function onSettingsTitleTap(){
