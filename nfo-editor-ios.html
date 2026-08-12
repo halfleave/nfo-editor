@@ -2619,7 +2619,7 @@ function searchMagnet(){
     + '&cat=' + encodeURIComponent(state.magnetCategory || 'movie') + '&order=seeders';
   var ctrl = new AbortController();
   var to = setTimeout(function(){ ctrl.abort(); }, 35000);
-  fetch(url, { signal: ctrl.signal })
+  fetch(url, { signal: ctrl.signal, cache: 'no-store' })
     .then(function(r){
       return r.json().then(function(data){ return { ok: r.ok, data: data || null }; }).catch(function(){ return { ok: r.ok, data: null }; });
     })
