@@ -1166,7 +1166,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
     <div class="field field-stacked no-border">
       <label for="magnetWorkerInput">Worker</label>
-      <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://你的-worker.workers.dev">
+      <input class="ios-input" type="text" id="magnetWorkerInput" value="https://nfo-magnet-proxy.halfleave.workers.dev/" placeholder="https://你的-worker.workers.dev">
     </div>
     <div class="field field-stacked no-border">
       <label for="magnetCategoryInput">分类</label>
@@ -1909,7 +1909,7 @@ var MPAA_LIST = ['G','PG','PG-13','R','NC-17','NR'];
 
 var state = {
   year: '', mpaa: '', countries: [], genres: [], apiKey: '',
-  magnetWorker: '',
+  magnetWorker: 'https://nfo-magnet-proxy.halfleave.workers.dev/',
   magnetCategory: 'movie',
   countryPresets: COUNTRY_DEFAULT.slice(),
   genreNormal: GENRE_NORMAL.slice(),
@@ -2617,7 +2617,9 @@ function searchMagnet(){
   var url = state.magnetWorker.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
     + '&source=bt4g'
     + '&cat=' + encodeURIComponent(state.magnetCategory || 'movie') + '&order=seeders';
-  fetch(url)
+  var ctrl = new AbortController();
+  var to = setTimeout(function(){ ctrl.abort(); }, 35000);
+  fetch(url, { signal: ctrl.signal })
     .then(function(r){
       return r.json().then(function(data){ return { ok: r.ok, data: data || null }; }).catch(function(){ return { ok: r.ok, data: null }; });
     })
@@ -2627,7 +2629,11 @@ function searchMagnet(){
       if (!res.ok){ box.innerHTML = '<div class="tmdb-msg">搜索失败：Worker 返回 HTTP ' + res.status + '，请检查 Worker 配置或稍后重试。</div>'; return; }
       renderMagnetResults(data && data.items ? data.items : []);
     })
-    .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'网络错误') + '，请确认 Worker 地址正确且可访问。</div>'; });
+    .catch(function(err){
+      if (err && err.name === 'AbortError'){ box.innerHTML = '<div class="tmdb-msg">搜索超时（&gt;35s）：Worker 无响应，请稍后重试或检查 Worker 地址。</div>'; }
+      else { box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'网络错误') + '，请确认 Worker 地址正确且可访问。</div>'; }
+    })
+    .finally(function(){ clearTimeout(to); });
 }
 function renderMagnetResults(items){
   var box = document.getElementById('magnetResults');
@@ -4675,7 +4681,7 @@ function resetDetailZoom(){
 }
 /* 滚动驱动的叠加曲线参数（均为「占视口高度的比例」，集中管理便于调参） */
 var DETAIL_ALPHA_CAP_AT = 0.35; // 上滑到此比例时，海报色叠加透明度达到封顶值
-var DETAIL_GLASS_START_AT = 0.25; // 上滑到此比例时，开始叠加磨砂玻璃
+var DETAIL_GLASS_START_AT = 0.17; // 上滑到此比例时，开始叠加磨砂玻璃
 var DETAIL_ALPHA_MAX = 0.6; // 海报色叠加透明度封顶（控制在 0.6：留出 40% 让磨砂模糊透出，过高会盖住模糊）
 var DETAIL_GLASS_MAX = 30; // 磨砂玻璃模糊最大值(px)
 var DETAIL_EXP_BASE = Math.exp(2.5); // 指数曲线分母预计算，避免每次滚动重算 Math.exp
