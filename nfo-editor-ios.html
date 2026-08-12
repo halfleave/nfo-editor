@@ -593,6 +593,9 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   padding: 12px var(--pad); border-bottom: 0.5px solid var(--sep); background: var(--card); text-align: left; font-size: 17px;
 }
 .settings-row:last-child { border-bottom: none; }
+/* 磁力配置项：仅深色（里）模式显示，浅色（表）模式隐藏 */
+.settings-row#magnetConfigRow { display: none; }
+[data-theme="dark"] .settings-row#magnetConfigRow { display: flex; }
 .settings-row .sr-icon {
   width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 17px; color: #fff;
@@ -1465,7 +1468,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <span class="sr-label">API 配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
-        <button class="settings-row" onclick="openMagnetConfigSheet()">
+        <button class="settings-row" id="magnetConfigRow" onclick="openMagnetConfigSheet()">
           <span class="sr-icon" style="background:#5856D6;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg></span>
           <span class="sr-label">磁力配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
