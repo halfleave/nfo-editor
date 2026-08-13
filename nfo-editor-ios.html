@@ -532,6 +532,39 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .preview-dots { position: absolute; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom)); display: none; justify-content: center; gap: 8px; z-index: 2; }
 .preview-dots .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.4); transition: background .2s, transform .2s; pointer-events: auto; }
 .preview-dots .dot.active { background: #fff; transform: scale(1.3); }
+
+/* ===== 启动页（避免进入时白屏） ===== */
+.splash {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg, #F2F1F6);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .35s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.splash.hide { opacity: 0; pointer-events: none; }
+.splash-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 0 24px; }
+.splash-logo {
+  width: 76px; height: 76px; border-radius: 20px;
+  background: linear-gradient(135deg, #3D8CF0, #5AC8FA);
+  color: #fff; font-weight: 800; font-size: 30px; letter-spacing: 1px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 24px rgba(61,140,240,0.35);
+}
+.splash-title { font-size: 17px; font-weight: 600; color: var(--label, #1c1c1e); }
+.splash-sub { font-size: 13px; color: var(--label-2, #8e8e93); }
+.splash-spinner {
+  width: 30px; height: 30px; margin-top: 4px;
+  border: 3px solid var(--label-3, #c7c7cc);
+  border-top-color: var(--accent, #3D8CF0);
+  border-radius: 50%;
+  animation: splash-spin .8s linear infinite;
+}
+.splash-step { font-size: 13px; color: var(--label-2, #8e8e93); min-height: 18px; }
+@keyframes splash-spin { to { transform: rotate(360deg); } }
+@media (prefers-color-scheme: dark) {
+  .splash { background: #000000; }
+  .splash-logo { box-shadow: 0 8px 24px rgba(61,140,240,0.25); }
+}
 .poster-cell { flex: 0 0 43%; display: flex; flex-direction: column; }
 .poster-cell .media-upload-col.poster {
   width: 100%;
@@ -1112,6 +1145,15 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 </style>
 </head>
 <body>
+<!-- 启动页：默认可见，先于 JS 渲染，避免进入页面白屏 -->
+<div id="splash" class="splash">
+  <div class="splash-inner">
+    <div class="splash-logo">NFO</div>
+    <div class="splash-title">影片资料编辑器</div>
+    <div class="splash-spinner"></div>
+    <div class="splash-step" id="splashStep">正在启动…</div>
+  </div>
+</div>
 <div class="ios-app">
 
   <!-- 共享遮罩 -->
@@ -3486,8 +3528,8 @@ function setWelcome(){
 function renderOverview(){
   var grid = document.getElementById('overviewGrid');
   var empty = document.getElementById('overviewEmpty');
-  if (!grid) return;
-  listFilms().then(function(films){
+  if (!grid) return Promise.resolve();
+  return listFilms().then(function(films){
     if (!films.length){
       grid.innerHTML = '';
       empty.style.display = '';
@@ -5244,50 +5286,82 @@ function onDetailScroll(){
   detailBgEl.style.setProperty('--dt-glass', glass.toFixed(1) + 'px');
 }
 
-/* ===== Init ===== */
-setupBigTitle();
-setWelcome();
-setInterval(setWelcome, 60000);
-renderCountryChips();
-renderGenreChips();
-loadPresets().then(function(){ renderCountryChips(); renderGenreChips(); }).catch(function(){});
-initNativeSelects();
-initDetailInteractions();
-syncAllSelectDisplays();
-populateSettingSelects();
-refreshApiKeyStatus();
-getTMDBKey().then(function(k){ state.apiKey = k || ''; refreshApiKeyStatus(); }).catch(function(){});
-getSubtitleAssrt().then(function(k){ state.subtitleAssrt = k || ''; refreshSubNote(); }).catch(function(){});
-getSubtitleOs().then(function(k){ state.subtitleOs = k || ''; refreshSubNote(); }).catch(function(){});
-updateSubtitleBtn();
-getThemeColor().then(function(c){
-  return idbGet('kv', 'themeHidden').then(function(hidden){
-    return idbGet('kv', 'lastThemeColor').then(function(last){
-      state.themeHidden = !!hidden;
-      state.lastThemeColor = last || '';
-      updateThemeRowVisibility();
-      updateHiddenBadge();
-      if (state.themeHidden) applyThemeColor('#1A1A1A', false);
-      else if (c) applyThemeColor(c, false);
-    });
-  });
-}).catch(function(){});
-getSaveMode().then(function(m){ state.saveMode = (m === 'save-download') ? 'save-download' : 'save'; updateSaveModeDisplay(); setSelectValue('saveModeSelect', state.saveMode); }).catch(function(){});
-getNsfw().then(function(on){ state.nsfw = !!on; var el = document.getElementById('nsfwToggle'); if (el) el.checked = state.nsfw; }).catch(function(){});
-getAutoClearMode().then(function(m){ state.autoClear = m || '3d'; updateAutoClearDisplay(); setSelectValue('autoClearSelect', state.autoClear); clearExpiredFilms(); }).catch(function(){});
-getAppearance().then(function(m){ state.appearance = (m === 'dark' || m === 'light' || m === 'auto') ? m : 'auto'; updateAppearanceDisplay(); setSelectValue('appearanceSelect', state.appearance); applyAppearance(state.appearance); }).catch(function(){});
-getMagnetConfig().then(function(cfg){
-  if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
-  if (cfg && cfg.category) state.magnetCategory = cfg.category;
-}).catch(function(){});
-renderOverview();
-renderCast();
-updateState();
-switchPage('home');
-switchHomeTab('basic');
-switchMetaTab('edit');
-// 进入网页时检查影片数量，达到上限附近时提醒
-checkFilmCap(700);
+/* ===== Init（渐进加载：先让启动页绘制，再分步初始化，最后淡出） ===== */
+function setSplashStep(text){
+  var el = document.getElementById('splashStep');
+  if (el && text) el.textContent = text;
+}
+function hideSplash(){
+  var s = document.getElementById('splash');
+  if (!s) return;
+  s.classList.add('hide');
+  setTimeout(function(){ if (s && s.parentNode) s.parentNode.removeChild(s); }, 420);
+}
+function bootApp(){
+  // ① 轻量 UI 装配（同步，先把界面骨架画出来）
+  setSplashStep('正在准备界面…');
+  setupBigTitle();
+  setWelcome();
+  setInterval(setWelcome, 60000);
+  renderCountryChips();
+  renderGenreChips();
+  loadPresets().then(function(){ renderCountryChips(); renderGenreChips(); }).catch(function(){});
+  initNativeSelects();
+  initDetailInteractions();
+  syncAllSelectDisplays();
+  populateSettingSelects();
+  refreshApiKeyStatus();
+  updateSubtitleBtn();
+
+  // ② 加载本地配置（异步，可并行）
+  setSplashStep('正在加载配置…');
+  Promise.all([
+    getTMDBKey().then(function(k){ state.apiKey = k || ''; refreshApiKeyStatus(); }).catch(function(){}),
+    getSubtitleAssrt().then(function(k){ state.subtitleAssrt = k || ''; refreshSubNote(); }).catch(function(){}),
+    getSubtitleOs().then(function(k){ state.subtitleOs = k || ''; refreshSubNote(); }).catch(function(){}),
+    getThemeColor().then(function(c){
+      return idbGet('kv', 'themeHidden').then(function(hidden){
+        return idbGet('kv', 'lastThemeColor').then(function(last){
+          state.themeHidden = !!hidden;
+          state.lastThemeColor = last || '';
+          updateThemeRowVisibility();
+          updateHiddenBadge();
+          if (state.themeHidden) applyThemeColor('#1A1A1A', false);
+          else if (c) applyThemeColor(c, false);
+        });
+      });
+    }).catch(function(){}),
+    getSaveMode().then(function(m){ state.saveMode = (m === 'save-download') ? 'save-download' : 'save'; updateSaveModeDisplay(); setSelectValue('saveModeSelect', state.saveMode); }).catch(function(){}),
+    getNsfw().then(function(on){ state.nsfw = !!on; var el = document.getElementById('nsfwToggle'); if (el) el.checked = state.nsfw; }).catch(function(){}),
+    getAutoClearMode().then(function(m){ state.autoClear = m || '3d'; updateAutoClearDisplay(); setSelectValue('autoClearSelect', state.autoClear); clearExpiredFilms(); }).catch(function(){}),
+    getAppearance().then(function(m){ state.appearance = (m === 'dark' || m === 'light' || m === 'auto') ? m : 'auto'; updateAppearanceDisplay(); setSelectValue('appearanceSelect', state.appearance); applyAppearance(state.appearance); }).catch(function(){}),
+    getMagnetConfig().then(function(cfg){
+      if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
+      if (cfg && cfg.category) state.magnetCategory = cfg.category;
+    }).catch(function(){})
+  ]).then(function(){
+    // ③ 加载影片列表（较重的同步渲染，放到一帧之后做，避免卡住启动页）
+    setSplashStep('正在加载影片…');
+    return new Promise(function(res){ requestAnimationFrame(function(){ renderOverview().then(res, res); }); });
+  }).then(function(){
+    // ④ 收尾：装配详情/状态/默认页，然后淡出启动页
+    setSplashStep('即将完成…');
+    renderCast();
+    updateState();
+    switchPage('home');
+    switchHomeTab('basic');
+    switchMetaTab('edit');
+    checkFilmCap(700);
+    requestAnimationFrame(function(){ requestAnimationFrame(hideSplash); });
+  }).catch(function(){ hideSplash(); });
+}
+
+// 注册启动：等首屏解析完成再执行重活，确保启动页先被绘制（避免白屏）
+if (document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', bootApp);
+} else {
+  requestAnimationFrame(bootApp);
+}
 document.addEventListener('visibilitychange', function(){ if (document.hidden) cancelDrag(); });
 
 /* —— PWA：Service Worker 离线缓存（仅 HTTPS / localhost 生效；file:// 直接跳过） —— */
