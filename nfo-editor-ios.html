@@ -3740,7 +3740,7 @@ function buildFilmFromCurrent(){
     locked: currentFilmLocked,
     posterDataUrl: state.poster || null,
     data: {
-      title: getVal('title'), originaltitle: getVal('originaltitle'),
+      title: getVal('title'), filename: getVal('filename'), originaltitle: getVal('originaltitle'),
       premiered: getVal('premiered'), year: getVal('year'), runtime: getVal('runtime'),
       plot: getVal('plot'), rating: getVal('rating'), mpaa: getVal('mpaa'),
       countries: state.countries.slice(), genres: state.genres.slice(),
@@ -3777,7 +3777,7 @@ function applyFilmData(film){
   var d = film.data || {};
   setFieldVal('title', d.title);
   _filenameManual = true;
-  document.getElementById('filename').value = film.id;
+  document.getElementById('filename').value = d.filename || film.id;
   onTitleChanged(document.getElementById('title'));
   setFieldVal('originaltitle', d.originaltitle);
   setFieldVal('premiered', d.premiered);
@@ -4119,7 +4119,7 @@ function downloadMetadata(id){
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
     var d = film.data || {};
-    var filename = sanitizeName(d.title || film.title || film.id || 'movie');
+    var filename = sanitizeName(d.filename || d.title || film.title || film.id || 'movie');
     var zipFiles = [];
     zipFiles.push({ name: filename + '.nfo', data: new TextEncoder().encode(buildNFOMovieXml(d)) });
     // 图片：仅处理已存为 data URL 的字符串；远程 URL 无法离线打包，跳过（与导出页行为一致）
