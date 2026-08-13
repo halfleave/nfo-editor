@@ -3036,7 +3036,16 @@ function downloadSubtitle(idx){
     + '&os=' + encodeURIComponent(state.subtitleOs || '');
   showToast('下载中…', 'success');
   fetch(url, { cache: 'no-store' })
-    .then(function(r){ if (!r.ok) return r.json().then(function(d){ throw new Error((d&&d.error)||('HTTP '+r.status)); }); return r.blob(); })
+    .then(function(r){
+      if (!r.ok) return r.json().then(function(d){ throw new Error((d&&d.error)||('HTTP '+r.status)); });
+      // 代理对下载失败也可能返回 HTTP 200 + application/json 错误体；若不拦截会被当成字幕
+      // 存成 .json（iOS 还会按 MIME 类型命名）。遇到 JSON 响应体直接解析并报错。
+      var ct = (r.headers && r.headers.get) ? (r.headers.get('Content-Type') || '') : '';
+      if (ct.indexOf('application/json') >= 0) {
+        return r.json().then(function(d){ throw new Error((d&&d.error)||'下载失败'); });
+      }
+      return r.blob();
+    })
     .then(function(blob){
       var bn = name + '.' + (it.ext || 'srt');
       var burl = URL.createObjectURL(blob);
