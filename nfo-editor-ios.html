@@ -1732,8 +1732,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <button class="sub-seg-chip" data-mode="original" onclick="selectSubTitleMode('original')">原始标题</button>
     </div>
     <div class="sub-src-row" id="subSrcRow">
-      <label class="sub-src-item" id="subSrcAssrtWrap"><input type="checkbox" id="subSrcAssrt" checked onchange="onSubSrcChange()"><span>伪射手</span></label>
-      <label class="sub-src-item" id="subSrcOsWrap"><input type="checkbox" id="subSrcOs" onchange="onSubSrcChange()"><span>OpenSubtitles</span></label>
+      <label class="sub-src-item" id="subSrcAssrtWrap"><input type="radio" name="subsrc" id="subSrcAssrt" checked onchange="onSubSrcChange()"><span>伪射手</span></label>
+      <label class="sub-src-item" id="subSrcOsWrap"><input type="radio" name="subsrc" id="subSrcOs" onchange="onSubSrcChange()"><span>OpenSubtitles</span></label>
     </div>
     <div class="sub-lang-row" id="subLangRow">
       <button class="sub-lang-chip" data-lang="all" onclick="selectSubLang('all')">全部</button>
@@ -2944,9 +2944,9 @@ function syncSubLangChips(){
   chips.forEach(function(c){ c.classList.toggle('active', c.getAttribute('data-lang') === subCurrentLang); });
 }
 function searchSubtitles(){
-  var q = (document.getElementById('subQueryInput').value || '').trim();
+  var rawQ = (document.getElementById('subQueryInput').value || '').trim();
   var box = document.getElementById('subResults');
-  if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
+  if (!rawQ){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   if (!(state.subtitleAssrt || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">未配置字幕源 Token</div>'; return; }
   if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未填写服务地址（设置 → 磁力配置）</div>'; return; }
   // 仅搜索已勾选且已配置 Token 的源；默认仅伪射手（优先、省 OpenSubtitles 配额）
@@ -2956,8 +2956,11 @@ function searchSubtitles(){
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
-  var yearMatch = q.match(/\b(19|20)\d{2}\b/);
+  // 年份从词中剥离，单独走 year 参数，避免代理再次拼接导致「名称 年份 年份」重复
+  var yearMatch = rawQ.match(/\b(19|20)\d{2}\b/);
   var year = yearMatch ? yearMatch[1] : '';
+  var q = rawQ.replace(/\b(19|20)\d{2}\b/g, '').replace(/\s+/g, ' ').trim();
+  if (!q) q = rawQ; // 极端情况：整个词就是年份时退回原值
   var url = state.magnetWorker.replace(/\/$/, '') + '/subtitles?action=search'
     + '&q=' + encodeURIComponent(q)
     + '&year=' + encodeURIComponent(year)
