@@ -2976,7 +2976,7 @@ function searchSubtitles(){
       var d = res.d;
       if (d && d.error){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(d.error) + '</div>'; return; }
       if (!res.ok){ box.innerHTML = '<div class="tmdb-msg">搜索失败：HTTP ' + res.status + '</div>'; return; }
-      renderSubtitleResults(d && d.items ? d.items : []);
+      renderSubtitleResults(d && d.items ? d.items : [], (d && d.warnings) ? d.warnings : []);
     })
     .catch(function(err){
       if (err && err.name === 'AbortError'){ box.innerHTML = '<div class="tmdb-msg">搜索超时，请重试</div>'; }
@@ -2984,7 +2984,7 @@ function searchSubtitles(){
     })
     .finally(function(){ clearTimeout(to); });
 }
-function renderSubtitleResults(items){
+function renderSubtitleResults(items, warnings){
   subResultsCache = items || [];
   // 优先展示伪射手（同语言下伪射手排在 OpenSubtitles 之前）；Array.sort 在现代引擎稳定
   if (items && items.length){
@@ -2993,7 +2993,15 @@ function renderSubtitleResults(items){
     });
   }
   var box = document.getElementById('subResults');
-  if (!items || !items.length){ box.innerHTML = '<div class="tmdb-msg">未找到字幕</div>'; return; }
+  if (!items || !items.length){
+    // 若某源报错（如 token 无效/配额用尽），把真实原因显式展示出来，而不是笼统显示「未找到字幕」
+    if (warnings && warnings.length){
+      box.innerHTML = '<div class="tmdb-msg">未找到字幕。<br><span style="font-size:12px;opacity:.72;line-height:1.5;display:block;margin-top:6px;">' + escapeHtml(warnings.join('；')) + '</span></div>';
+    } else {
+      box.innerHTML = '<div class="tmdb-msg">未找到字幕</div>';
+    }
+    return;
+  }
   var html = '';
   for (var i = 0; i < items.length; i++){
     var it = items[i];
