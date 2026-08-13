@@ -492,7 +492,37 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   width: 100%;
   gap: 8px;
 }
-.media-crop-btn {
+.media-thumb-bar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 0 0 env(safe-area-inset-bottom);
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  z-index: 5;
+  overflow: hidden;
+}
+.media-inline-btn {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  background: none;
+  border: none;
+  padding: 8px 0;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.media-inline-btn + .media-inline-btn { border-left: 0.5px solid rgba(255,255,255,0.22); }
+.media-inline-btn:active { background: rgba(255,255,255,0.15); }
+.media-replace-below {
+  display: none;
+  margin-top: 6px;
   font-size: 13px;
   font-weight: 500;
   color: var(--accent-fg);
@@ -501,8 +531,17 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   padding: 2px 0;
   -webkit-tap-highlight-color: transparent;
 }
-.media-crop-btn:disabled { color: var(--label-3); pointer-events: none; }
-.media-crop-btn:active { opacity: 0.5; }
+.media-replace-below:active { opacity: 0.5; }
+/* 图片全屏预览 */
+.image-preview-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 700; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.image-preview-mask.show { opacity: 1; pointer-events: auto; }
+.image-preview-modal {
+  position: fixed; inset: 0; z-index: 701;
+  display: none; align-items: center; justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.image-preview-modal.show { display: flex; }
+.image-preview-modal img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .poster-cell { flex: 0 0 43%; display: flex; flex-direction: column; }
 .poster-cell .media-upload-col.poster {
   width: 100%;
@@ -1442,36 +1481,43 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
               <div class="media-cell poster-cell">
                 <div class="media-label-row">
                   <div class="media-label">海报</div>
-                  <button class="media-crop-btn" id="posterCropBtn" disabled onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
                 </div>
-                <div class="media-upload-col poster" id="posterUpload" onclick="triggerUpload('poster')">
+                <div class="media-upload-col poster" id="posterUpload" onclick="onMediaColClick('poster')">
                   <div class="media-add-box"><span>＋</span><small>添加</small></div>
                   <button class="media-thumb-close" id="posterClose" onclick="event.stopPropagation(); deleteMedia('poster')" aria-label="删除">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                   </button>
+                  <div class="media-thumb-bar" id="posterBar" style="display:none;">
+                    <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('poster')">替换</button>
+                    <button class="media-inline-btn" onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
+                  </div>
                 </div>
               </div>
               <div class="media-right-col">
                 <div class="media-cell fanart-cell">
                   <div class="media-label-row">
                     <div class="media-label">剧照</div>
-                    <button class="media-crop-btn" id="fanartCropBtn" disabled onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
                   </div>
-                  <div class="media-upload-col fanart" id="fanartUpload" onclick="triggerUpload('fanart')">
+                  <div class="media-upload-col fanart" id="fanartUpload" onclick="onMediaColClick('fanart')">
                     <div class="media-add-box"><span>＋</span><small>添加</small></div>
                     <button class="media-thumb-close" id="fanartClose" onclick="event.stopPropagation(); deleteMedia('fanart')" aria-label="删除">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
+                    <div class="media-thumb-bar" id="fanartBar" style="display:none;">
+                      <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('fanart')">替换</button>
+                      <button class="media-inline-btn" onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
+                    </div>
                   </div>
                 </div>
                 <div class="media-cell logo-cell">
                   <div class="media-label">Logo</div>
-                  <div class="media-upload-col logo" id="logoUpload" onclick="triggerUpload('logo')">
+                  <div class="media-upload-col logo" id="logoUpload" onclick="onMediaColClick('logo')">
                     <div class="media-add-box"><span>＋</span><small>添加</small></div>
                     <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
                   </div>
+                  <button class="media-replace-below" id="logoReplaceBtn" style="display:none;" onclick="event.stopPropagation(); replaceMedia('logo')">替换</button>
                 </div>
               </div>
             </div>
@@ -1626,6 +1672,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="trailer-frame">
       <iframe id="trailerFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
     </div>
+  </div>
+
+  <!-- 图片全屏预览 -->
+  <div class="image-preview-mask" id="imagePreviewMask" onclick="closeImagePreview()"></div>
+  <div class="image-preview-modal" id="imagePreviewModal" onclick="closeImagePreview()">
+    <img id="imagePreviewImg" src="" alt="预览">
   </div>
 
   <!-- 底部固定 Tab 栏 -->
@@ -2757,6 +2809,24 @@ function validateRating(el){
 }
 function toggleSubtitle(){ state.hasSubtitle = document.getElementById('hasSubtitle').checked; updateState(); }
 function triggerUpload(type){ document.getElementById(type + 'Input').click(); }
+function replaceMedia(type){ triggerUpload(type); }
+function onMediaColClick(type){
+  if (state && state[type]) openImagePreview(type);
+  else triggerUpload(type);
+}
+function openImagePreview(type){
+  var src = state[type];
+  if (!src) return;
+  var img = document.getElementById('imagePreviewImg');
+  img.src = src;
+  document.getElementById('imagePreviewMask').classList.add('show');
+  document.getElementById('imagePreviewModal').classList.add('show');
+}
+function closeImagePreview(){
+  document.getElementById('imagePreviewMask').classList.remove('show');
+  document.getElementById('imagePreviewModal').classList.remove('show');
+  document.getElementById('imagePreviewImg').src = '';
+}
 function renderMediaThumb(type, url){
   var col = document.getElementById(type + 'Upload');
   if (!col) return;
@@ -2770,8 +2840,12 @@ function renderMediaThumb(type, url){
   if (toolbar) toolbar.style.display = 'flex';
   var close = document.getElementById(type + 'Close');
   if (close) close.style.display = 'flex';
-  var cropBtn = document.getElementById(type + 'CropBtn');
-  if (cropBtn) cropBtn.disabled = false;
+  var bar = document.getElementById(type + 'Bar');
+  if (bar) bar.style.display = 'flex';
+  if (type === 'logo'){
+    var replaceBtn = document.getElementById('logoReplaceBtn');
+    if (replaceBtn) replaceBtn.style.display = 'inline-block';
+  }
 }
 function deleteMedia(type){
   if (!state[type]) return;
@@ -3741,8 +3815,12 @@ function clearMediaThumb(type){
   if (toolbar) toolbar.style.display = 'flex';
   var close = document.getElementById(type + 'Close');
   if (close) close.style.display = 'none';
-  var cropBtn = document.getElementById(type + 'CropBtn');
-  if (cropBtn) cropBtn.disabled = true;
+  var bar = document.getElementById(type + 'Bar');
+  if (bar) bar.style.display = 'none';
+  if (type === 'logo'){
+    var replaceBtn = document.getElementById('logoReplaceBtn');
+    if (replaceBtn) replaceBtn.style.display = 'none';
+  }
 }
 
 /* —— 图片裁剪：裁剪框固定居中，移动/缩放图片取景 —— */
