@@ -498,40 +498,25 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   display: none;
   align-items: center;
   justify-content: center;
-  gap: 0;
-  padding: 0 0 env(safe-area-inset-bottom);
-  background: rgba(0,0,0,0.35);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  gap: 8px;
+  padding: 10px 8px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0));
   z-index: 5;
-  overflow: hidden;
 }
 .media-inline-btn {
-  flex: 1;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: #fff;
-  background: none;
-  border: none;
-  padding: 8px 0;
+  background: rgba(0,0,0,0.45);
+  border: 0.5px solid rgba(255,255,255,0.35);
+  border-radius: 999px;
+  padding: 7px 18px;
   text-align: center;
   -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
-.media-inline-btn + .media-inline-btn { border-left: 0.5px solid rgba(255,255,255,0.22); }
-.media-inline-btn:active { background: rgba(255,255,255,0.15); }
-.media-replace-below {
-  display: none;
-  margin-top: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--accent-fg);
-  background: none;
-  border: none;
-  padding: 2px 0;
-  -webkit-tap-highlight-color: transparent;
-}
-.media-replace-below:active { opacity: 0.5; }
+.media-inline-btn:active { background: rgba(0,0,0,0.7); }
 /* 图片全屏预览 */
 .image-preview-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 700; opacity: 0; pointer-events: none; transition: opacity .2s; }
 .image-preview-mask.show { opacity: 1; pointer-events: auto; }
@@ -1516,8 +1501,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
                     <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
+                    <div class="media-thumb-bar" id="logoBar" style="display:none;">
+                      <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('logo')">替换</button>
+                    </div>
                   </div>
-                  <button class="media-replace-below" id="logoReplaceBtn" style="display:none;" onclick="event.stopPropagation(); replaceMedia('logo')">替换</button>
                 </div>
               </div>
             </div>
@@ -2842,10 +2829,6 @@ function renderMediaThumb(type, url){
   if (close) close.style.display = 'flex';
   var bar = document.getElementById(type + 'Bar');
   if (bar) bar.style.display = 'flex';
-  if (type === 'logo'){
-    var replaceBtn = document.getElementById('logoReplaceBtn');
-    if (replaceBtn) replaceBtn.style.display = 'inline-block';
-  }
 }
 function deleteMedia(type){
   if (!state[type]) return;
@@ -3817,10 +3800,6 @@ function clearMediaThumb(type){
   if (close) close.style.display = 'none';
   var bar = document.getElementById(type + 'Bar');
   if (bar) bar.style.display = 'none';
-  if (type === 'logo'){
-    var replaceBtn = document.getElementById('logoReplaceBtn');
-    if (replaceBtn) replaceBtn.style.display = 'none';
-  }
 }
 
 /* —— 图片裁剪：裁剪框固定居中，移动/缩放图片取景 —— */
