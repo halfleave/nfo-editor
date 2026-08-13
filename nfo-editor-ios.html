@@ -1743,8 +1743,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <label class="sub-src-item" id="subSrcOsWrap"><input type="radio" name="subsrc" id="subSrcOs"><span>Sub</span></label>
     </div>
     <div class="sub-lang-row" id="subLangRow">
-      <button class="sub-lang-chip" data-lang="all" onclick="selectSubLang('all')">全部</button>
-      <button class="sub-lang-chip active" data-lang="zh" onclick="selectSubLang('zh')">简中</button>
+      <button class="sub-lang-chip active" data-lang="all" onclick="selectSubLang('all')">全部</button>
+      <button class="sub-lang-chip" data-lang="zh" onclick="selectSubLang('zh')">简中</button>
       <button class="sub-lang-chip" data-lang="zht" onclick="selectSubLang('zht')">繁中</button>
       <button class="sub-lang-chip" data-lang="en" onclick="selectSubLang('en')">英文</button>
     </div>
@@ -2873,7 +2873,7 @@ function copyMagnet(el){
 }
 
 /* ============ 字幕搜索 / 下载 ============ */
-var subCurrentLang = 'zh';
+var subCurrentLang = 'all';
 var subCtrl = null;
 var subResultsCache = [];
 var subTitleMode = 'title';
@@ -2886,7 +2886,7 @@ function openSubtitleSheet(){
   if (!state.magnetWorker){ showToast('请先填写服务地址（设置 → 磁力配置）', 'error'); return; }
   openSheet('subtitleSheet');
   document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">正在准备…</div>';
-  subCurrentLang = 'zh'; syncSubLangChips();
+  subCurrentLang = 'all'; syncSubLangChips();
   subTitleMode = 'title'; syncSubTitleSeg();
   // 配置字幕源复选框：优先伪射手（默认选中）；未配置 Token 的源禁用
   var aWrap = document.getElementById('subSrcAssrtWrap'), aChk = document.getElementById('subSrcAssrt');
@@ -2897,7 +2897,7 @@ function openSubtitleSheet(){
   aChk.checked = !!state.subtitleAssrt;
   oChk.checked = !state.subtitleAssrt && !!state.subtitleOs;
   var fillAndSearch = function(t, orig, year){
-    subTitleVal = t || ''; subOrigVal = orig || ''; subYear = year || '';
+    subTitleVal = t || ''; subOrigVal = orig || ''; subYear = '';
     subUserEdited = false;
     var init = (subTitleMode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
     document.getElementById('subQueryInput').value = init + (subYear ? ('.' + subYear) : '');
@@ -2919,7 +2919,7 @@ function selectSubTitleMode(mode){
   // 切换仅改输入框内容，不自动搜索（由「搜索」按钮触发）
   var v = (mode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
   var input = document.getElementById('subQueryInput');
-  input.value = v + (subYear ? ('.' + subYear) : '');
+  input.value = v;
   onSubQueryChange();
   subUserEdited = false;
 }
