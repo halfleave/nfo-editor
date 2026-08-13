@@ -528,7 +528,10 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 .image-preview-modal.show { display: flex; }
-.image-preview-modal img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.image-preview-modal img { max-width: 100%; max-height: 100%; object-fit: contain; transition: transform .25s ease; }
+.preview-dots { position: absolute; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom)); display: none; justify-content: center; gap: 8px; z-index: 2; }
+.preview-dots .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.4); transition: background .2s, transform .2s; pointer-events: auto; }
+.preview-dots .dot.active { background: #fff; transform: scale(1.3); }
 .poster-cell { flex: 0 0 43%; display: flex; flex-direction: column; }
 .poster-cell .media-upload-col.poster {
   width: 100%;
@@ -1758,6 +1761,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   <div class="image-preview-mask" id="imagePreviewMask" onclick="closeImagePreview()"></div>
   <div class="image-preview-modal" id="imagePreviewModal" onclick="closeImagePreview()">
     <img id="imagePreviewImg" src="" alt="预览">
+    <div class="preview-dots" id="previewDots"></div>
   </div>
 
   <!-- 底部固定 Tab 栏 -->
@@ -2091,6 +2095,7 @@ var state = {
   actors: [],
   personPhoto: null,
   poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null, subtitleAssrt: '', subtitleOs: '',
+  posterCandidates: [], fanartCandidates: [],
   saveMode: 'save',
   autoClear: '3d',
   nsfw: false,
@@ -3118,13 +3123,87 @@ function onMediaColClick(type){
   if (state && state[type]) openImagePreview(type);
   else triggerUpload(type);
 }
+var previewType = '', previewList = [], previewIndex = 0;
+var previewSwiping = false, previewStartX = 0, previewStartY = 0, previewDX = 0, previewMoved = false, previewBound = false;
 function openImagePreview(type){
-  var src = state[type];
-  if (!src) return;
+  var cur = state[type];
+  if (!cur) return;
+  previewType = type;
+  var cands = state[type + 'Candidates'];
+  previewList = (cands && cands.length > 1) ? cands.slice() : [cur];
+  previewIndex = previewList.indexOf(cur);
+  if (previewIndex < 0) previewIndex = 0;
   var img = document.getElementById('imagePreviewImg');
-  img.src = src;
+  img.style.transition = 'none';
+  img.style.transform = 'translateX(0)';
+  img.src = previewList[previewIndex];
+  renderPreviewDots();
+  setupImagePreviewSwipe();
   document.getElementById('imagePreviewMask').classList.add('show');
   document.getElementById('imagePreviewModal').classList.add('show');
+}
+function renderPreviewDots(){
+  var box = document.getElementById('previewDots');
+  if (!box) return;
+  if (previewList.length <= 1){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'flex';
+  box.innerHTML = '';
+  previewList.forEach(function(_, i){
+    var d = document.createElement('div');
+    d.className = 'dot' + (i === previewIndex ? ' active' : '');
+    d.onclick = function(e){ e.stopPropagation(); selectPreviewImage(i); };
+    box.appendChild(d);
+  });
+}
+function selectPreviewImage(i){
+  if (i < 0 || i >= previewList.length) return;
+  previewIndex = i;
+  var durl = previewList[i];
+  var img = document.getElementById('imagePreviewImg');
+  img.style.transition = 'transform .25s ease';
+  img.style.transform = 'translateX(0)';
+  img.src = durl;
+  renderPreviewDots();
+  if (previewType){
+    cropOriginals[previewType] = durl;
+    state[previewType] = durl;
+    renderMediaThumb(previewType, durl);
+  }
+}
+function setupImagePreviewSwipe(){
+  var modal = document.getElementById('imagePreviewModal');
+  if (!modal || previewBound) return;
+  previewBound = true;
+  var img = document.getElementById('imagePreviewImg');
+  modal.addEventListener('touchstart', function(e){
+    if (previewList.length <= 1) return;
+    var t = e.touches[0];
+    previewSwiping = true; previewMoved = false;
+    previewStartX = t.clientX; previewStartY = t.clientY; previewDX = 0;
+    img.style.transition = 'none';
+  }, { passive: true });
+  modal.addEventListener('touchmove', function(e){
+    if (!previewSwiping) return;
+    var t = e.touches[0];
+    var dx = t.clientX - previewStartX, dy = t.clientY - previewStartY;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6){
+      previewMoved = true;
+      if (e.cancelable) e.preventDefault();
+      previewDX = dx;
+      img.style.transform = 'translateX(' + dx + 'px)';
+    }
+  }, { passive: false });
+  modal.addEventListener('touchend', function(e){
+    if (!previewSwiping) return;
+    previewSwiping = false;
+    if (!previewMoved) return; // 纯点击：交给 onclick 关闭
+    var dx = previewDX;
+    img.style.transition = 'transform .25s ease';
+    if (dx < -40 && previewIndex < previewList.length - 1) selectPreviewImage(previewIndex + 1);
+    else if (dx > 40 && previewIndex > 0) selectPreviewImage(previewIndex - 1);
+    else img.style.transform = 'translateX(0)';
+    if (e.cancelable) e.preventDefault(); // 阻止随后的 click 误关闭
+  }, { passive: false });
 }
 function closeImagePreview(){
   document.getElementById('imagePreviewMask').classList.remove('show');
@@ -3784,6 +3863,7 @@ function populateFromTMDB(d){
   state.countries = []; state.genres = [];
   state.directors = []; state.actors = [];
   state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null;
+  state.posterCandidates = []; state.fanartCandidates = [];
   cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null; cropOriginals.detailPoster = null;
   clearMediaThumb('poster'); clearMediaThumb('fanart'); clearMediaThumb('logo');
 
@@ -3833,30 +3913,20 @@ function populateFromTMDB(d){
   renderCast();
 
   var imgPromises = [];
-  if (d.poster_path) imgPromises.push(loadImageFromTMDB(d.poster_path, 'poster', 'w780'));
+  state.posterCandidates = [];
+  state.fanartCandidates = [];
+  var posters = (d.images && d.images.posters) || [];
   var backdrops = (d.images && d.images.backdrops) || [];
-  if (backdrops.length) imgPromises.push(loadImageFromTMDB(backdrops[0].file_path, 'fanart', 'w1280'));
-  // 注意：无 backdrops 时不再回退到海报，避免「剧照」变成海报
+  // 海报：优先用 images.posters（多张），回退到 d.poster_path；最多缓存 3 张
+  if (posters.length) imgPromises = imgPromises.concat(loadMediaCandidates(posters.map(function(p){ return p.file_path; }), 'poster', 'w780'));
+  else if (d.poster_path) imgPromises = imgPromises.concat(loadMediaCandidates([d.poster_path], 'poster', 'w780'));
+  // 剧照：用 images.backdrops（多张），最多缓存 3 张；注意：无 backdrops 时不再回退到海报，避免「剧照」变成海报
+  if (backdrops.length) imgPromises = imgPromises.concat(loadMediaCandidates(backdrops.map(function(b){ return b.file_path; }), 'fanart', 'w1280'));
   if (d.images && d.images.logos && d.images.logos.length){
     var logos = d.images.logos;
     var zh = logos.find(function(l){ return l.iso_639_1 === 'zh'; });
     var en = logos.find(function(l){ return l.iso_639_1 === 'en'; });
     imgPromises.push(loadImageFromTMDB((zh || en || logos[0]).file_path, 'logo', 'w500'));
-  }
-  // 第二张海报：若有 2 张以上海报，拉取第二张缓存，作为详情底图优先项
-  var posters = (d.images && d.images.posters) || [];
-  if (posters.length >= 2){
-    imgPromises.push(
-      fetch(TMDB_IMG_BASE + '/w780' + posters[1].file_path).then(function(r){ return r.ok ? r.blob() : null; })
-        .then(function(blob){
-          if (!blob) return;
-          return new Promise(function(res){
-            var rd = new FileReader();
-            rd.onload = function(e){ state.detailPoster = e.target.result; cropOriginals.detailPoster = e.target.result; res(); };
-            rd.readAsDataURL(blob);
-          });
-        }).catch(function(){})
-    );
   }
   // 预告片：语言无关合并后的 YouTube 视频，优先官方 Trailer
   var trailerKey = '';
@@ -3897,6 +3967,42 @@ function loadImageFromTMDB(posterPath, type, size){
         reader.readAsDataURL(blob);
       });
     }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
+/* 批量拉取某类图片的多张候选（最多 3 张），第 1 张裁剪后作为当前选中图，其余缓存到 state[type+'Candidates'] 供全屏轮播 */
+function loadMediaCandidates(paths, type, size){
+  var list = (paths || []).slice(0, 3);
+  var promises = [];
+  if (!list.length) return promises;
+  var ratio = (type === 'poster') ? 2/3 : (type === 'fanart' ? 4/3 : 0);
+  state[type + 'Candidates'] = list.map(function(){ return null; });
+  var done = 0;
+  list.forEach(function(p, i){
+    var url = TMDB_IMG_BASE + '/' + size + p;
+    var pr = fetch(url)
+      .then(function(r){ return r.ok ? r.blob() : null; })
+      .then(function(blob){
+        if (!blob) return null;
+        return new Promise(function(res){ var rd = new FileReader(); rd.onload = function(e){ res(e.target.result); }; rd.readAsDataURL(blob); });
+      })
+      .then(function(durl){
+        if (!durl) return;
+        cropOriginals[type] = durl; // 原图缓存供裁剪按钮使用
+        return cropToRatio(durl, ratio).then(function(cropped){
+          state[type + 'Candidates'][i] = cropped; // 候选存裁剪后（与 state[type] 一致）
+          if (i === 0){ state[type] = cropped; renderMediaThumb(type, cropped); }
+        });
+      })
+      .catch(function(){})
+      .then(function(){
+        done++;
+        if (done === list.length){
+          state[type + 'Candidates'] = state[type + 'Candidates'].filter(Boolean);
+          if (type === 'poster'){ state.detailPoster = state.posterCandidates[1] || null; cropOriginals.detailPoster = state.detailPoster; }
+        }
+      });
+    promises.push(pr);
+  });
+  return promises;
+}
 }
 function loadPersonPhotoFromTMDB(profilePath, mode, idx){
   var url = TMDB_IMG_BASE + '/w185' + profilePath;
@@ -4050,6 +4156,7 @@ function buildFilmFromCurrent(){
       countries: state.countries.slice(), genres: state.genres.slice(),
       directors: state.directors, actors: state.actors,
       poster: state.poster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
+      posterCandidates: state.posterCandidates || null, fanartCandidates: state.fanartCandidates || null,
       hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null
     },
     updatedAt: Date.now()
@@ -4094,6 +4201,7 @@ function applyFilmData(film){
   state.genres = (d.genres || []).slice(); renderGenreChips();
   state.directors = d.directors || []; state.actors = d.actors || []; renderCast();
   state.poster = d.poster || null; state.fanart = d.fanart || null; state.logo = d.logo || null; state.detailPoster = d.detailPoster || null;
+  state.posterCandidates = d.posterCandidates || []; state.fanartCandidates = d.fanartCandidates || [];
   cropOriginals.poster = state.poster;
   cropOriginals.fanart = state.fanart;
   cropOriginals.logo = state.logo;
