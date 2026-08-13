@@ -4009,6 +4009,7 @@ function loadImageFromTMDB(posterPath, type, size){
         reader.readAsDataURL(blob);
       });
     }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
+}
 /* 批量拉取某类图片的多张候选（最多 3 张），第 1 张裁剪后作为当前选中图，其余缓存到 state[type+'Candidates'] 供全屏轮播 */
 function loadMediaCandidates(paths, type, size){
   var list = (paths || []).slice(0, 3);
@@ -4044,7 +4045,6 @@ function loadMediaCandidates(paths, type, size){
     promises.push(pr);
   });
   return promises;
-}
 }
 function loadPersonPhotoFromTMDB(profilePath, mode, idx){
   var url = TMDB_IMG_BASE + '/w185' + profilePath;
