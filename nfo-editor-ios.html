@@ -1069,6 +1069,23 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .search-box input[type="text"]:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .search-box .btn-pill { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 7px 20px; font-size: 15px; font-weight: 600; }
 #searchPanel .tmdb-result:first-child { padding-top: 4px; }
+/* 详情页字幕按钮：5 个图标按钮时收紧间距 */
+.detail-actions { gap: 14px; }
+.sub-lang-row { display: flex; gap: 8px; padding: 10px 4px 6px; flex-wrap: wrap; }
+.sub-lang-chip { font-size: 13px; font-weight: 500; color: var(--label-2); background: var(--gray-fill); border: none; border-radius: 999px; padding: 6px 14px; -webkit-tap-highlight-color: transparent; }
+.sub-lang-chip.active { color: #fff; background: var(--accent); }
+.sub-lang-chip:active { opacity: 0.6; }
+.sub-results { padding: 6px 4px 16px; max-height: 56vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.sub-item { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 0.5px solid var(--sep); }
+.sub-item:active { background: var(--gray-fill); }
+.sub-badge { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; height: 18px; padding: 0 7px; font-size: 11px; font-weight: 700; border-radius: 5px; color: #fff; }
+.sub-badge-assrt { background: #FF7A00; }
+.sub-badge-os { background: #2D7FF9; }
+.sub-info { flex: 1; min-width: 0; }
+.sub-title { font-size: 14px; color: var(--label); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sub-meta { font-size: 12px; color: var(--label-2); margin-top: 3px; display: flex; gap: 8px; }
+.sub-lang { color: var(--accent-fg); font-weight: 600; }
+.sub-dl { flex: 0 0 auto; font-size: 20px; color: var(--accent); margin-left: 2px; }
 </style>
 </head>
 <body>
@@ -1205,7 +1222,26 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         </button>
       </div>
     </div>
+    <div class="field field-stacked no-border">
+      <label for="subAssrtInput">字幕源 · 伪射手 Token</label>
+      <div class="api-input-wrap">
+        <input class="ios-input" type="text" id="subAssrtInput" placeholder="粘贴 assrt.net API Token" oninput="toggleSubAssrtClear()">
+        <button class="api-clear" id="subAssrtClearBtn" onclick="clearSubAssrtInput()" aria-label="清除" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="field field-stacked no-border">
+      <label for="subOsInput">字幕源 · OpenSubtitles Key</label>
+      <div class="api-input-wrap">
+        <input class="ios-input" type="text" id="subOsInput" placeholder="粘贴 OpenSubtitles API Key" oninput="toggleSubOsClear()">
+        <button class="api-clear" id="subOsClearBtn" onclick="clearSubOsInput()" aria-label="清除" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
     <p class="sheet-note" id="apiKeyNote">尚未配置 Key。</p>
+    <p class="sheet-note" id="subNote"></p>
   </div>
 
   <!-- 磁力搜索配置 -->
@@ -1637,6 +1673,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
             <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>
             <span class="da-lb">磁力</span>
           </button>
+          <button class="detail-act" id="dtActSub" onclick="openSubtitleSheet()" style="display:none;">
+            <span class="da-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M7 10h4M7 13.5h6M14 10h3"/></svg></span>
+            <span class="da-lb">字幕</span>
+          </button>
         </div>
         <div class="detail-plot" id="detailPlot"></div>
         <div class="detail-cast" id="detailCast"></div>
@@ -1659,6 +1699,32 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="trailer-frame">
       <iframe id="trailerFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
     </div>
+  </div>
+
+  <!-- 字幕搜索 -->
+  <div class="sheet" id="subtitleSheet">
+    <div class="sheet-bar sheet-bar-center">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="sb-title">字幕下载</span>
+      <button class="sb-pill" onclick="searchSubtitles()">搜索</button>
+    </div>
+    <div class="field field-stacked no-border" style="padding-top:4px;">
+      <div class="api-input-wrap">
+        <input class="ios-input" type="text" id="subQueryInput" placeholder="影片名" oninput="onSubQueryChange()">
+        <button class="api-clear" id="subQueryClear" onclick="clearSubQuery()" aria-label="清除" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="sub-lang-row" id="subLangRow">
+      <button class="sub-lang-chip" data-lang="all" onclick="selectSubLang('all')">全部</button>
+      <button class="sub-lang-chip active" data-lang="zh" onclick="selectSubLang('zh')">简中</button>
+      <button class="sub-lang-chip" data-lang="zht" onclick="selectSubLang('zht')">繁中</button>
+      <button class="sub-lang-chip" data-lang="en" onclick="selectSubLang('en')">英文</button>
+    </div>
+    <div class="sub-results" id="subResults"><div class="tmdb-msg">正在搜索…</div></div>
   </div>
 
   <!-- 图片全屏预览 -->
@@ -1997,7 +2063,7 @@ var state = {
   directors: [],
   actors: [],
   personPhoto: null,
-  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null,
+  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null, subtitleAssrt: '', subtitleOs: '',
   saveMode: 'save',
   autoClear: '3d',
   nsfw: false,
@@ -2582,7 +2648,12 @@ function clearReorderAnim(list, excludeRow){
 function openApiKeySheet(){
   document.getElementById('apiKeyInput').value = state.apiKey || '';
   toggleApiClear();
+  document.getElementById('subAssrtInput').value = state.subtitleAssrt || '';
+  toggleSubAssrtClear();
+  document.getElementById('subOsInput').value = state.subtitleOs || '';
+  toggleSubOsClear();
   refreshApiKeyNote();
+  refreshSubNote();
   openSheet('apiSheet');
 }
 function toggleApiClear(){
@@ -2594,6 +2665,35 @@ function clearApiInput(){
   var input = document.getElementById('apiKeyInput');
   if (input){ input.value = ''; toggleApiClear(); input.focus(); }
 }
+function toggleSubAssrtClear(){
+  var btn = document.getElementById('subAssrtClearBtn');
+  var input = document.getElementById('subAssrtInput');
+  if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
+}
+function clearSubAssrtInput(){
+  var input = document.getElementById('subAssrtInput');
+  if (input){ input.value = ''; toggleSubAssrtClear(); input.focus(); }
+}
+function toggleSubOsClear(){
+  var btn = document.getElementById('subOsClearBtn');
+  var input = document.getElementById('subOsInput');
+  if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
+}
+function clearSubOsInput(){
+  var input = document.getElementById('subOsInput');
+  if (input){ input.value = ''; toggleSubOsClear(); input.focus(); }
+}
+function refreshSubNote(){
+  var note = document.getElementById('subNote');
+  if (!note) return;
+  var a = state.subtitleAssrt ? '伪射手✓' : '伪射手✗';
+  var o = state.subtitleOs ? 'OpenSubtitles✓' : 'OpenSubtitles✗';
+  note.textContent = '字幕源：' + a + '  ' + o;
+}
+function updateSubtitleBtn(){
+  var btn = document.getElementById('dtActSub');
+  if (btn) btn.style.display = (state.subtitleAssrt || state.subtitleOs) ? '' : 'none';
+}
 function refreshApiKeyNote(){
   var note = document.getElementById('apiKeyNote');
   if (note) note.textContent = state.apiKey ? '当前已配置 Key。' : '尚未配置 Key。';
@@ -2604,10 +2704,13 @@ function refreshApiKeyStatus(){
 function saveApiKey(){
   try {
     state.apiKey = (document.getElementById('apiKeyInput').value || '').trim();
+    state.subtitleAssrt = (document.getElementById('subAssrtInput').value || '').trim();
+    state.subtitleOs = (document.getElementById('subOsInput').value || '').trim();
     refreshApiKeyStatus();
+    refreshSubNote();
     closeAllSheets();
-    setTMDBKey(state.apiKey)
-      .then(function(){ showToast('已保存', 'success'); })
+    Promise.all([ setTMDBKey(state.apiKey), setSubtitleAssrt(state.subtitleAssrt), setSubtitleOs(state.subtitleOs) ])
+      .then(function(){ showToast('已保存', 'success'); updateSubtitleBtn(); })
       .catch(function(){ showToast('保存失败', 'error'); });
   } catch(e) {
     showToast('保存失败', 'error');
@@ -2744,6 +2847,131 @@ function copyMagnet(el){
     showToast(ok ? '已复制 magnet 链接' : '复制失败，请长按链接手动复制', ok ? 'success' : 'error');
   });
 }
+
+/* ============ 字幕搜索 / 下载 ============ */
+var subCurrentLang = 'zh';
+var subCtrl = null;
+var subResultsCache = [];
+function openSubtitleSheet(){
+  if (!(state.subtitleAssrt || state.subtitleOs)){ showToast('请先到「设置 → API 配置」填写字幕源 Token', 'error'); return; }
+  if (!state.magnetWorker){ showToast('请先填写服务地址（设置 → 磁力配置）', 'error'); return; }
+  var q = currentDetailTitle || '';
+  openSheet('subtitleSheet');
+  document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">正在准备…</div>';
+  subCurrentLang = 'zh'; syncSubLangChips();
+  var fillAndSearch = function(t, year){
+    document.getElementById('subQueryInput').value = t + (year ? (' ' + year) : '');
+    onSubQueryChange();
+    if (t) searchSubtitles();
+  };
+  if (currentDetailFilmId){
+    loadFilm(currentDetailFilmId).then(function(film){
+      var f = (film && film.data) || {};
+      fillAndSearch(f.title || currentDetailTitle || '', (f.premiered || '').slice(0,4));
+    }).catch(function(){ fillAndSearch(currentDetailTitle || '', ''); });
+  } else {
+    fillAndSearch(currentDetailTitle || '', '');
+  }
+}
+function onSubQueryChange(){
+  var btn = document.getElementById('subQueryClear');
+  var input = document.getElementById('subQueryInput');
+  if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
+}
+function clearSubQuery(){
+  var input = document.getElementById('subQueryInput');
+  if (input){ input.value = ''; onSubQueryChange(); input.focus(); }
+}
+function selectSubLang(lang){
+  subCurrentLang = lang; syncSubLangChips(); searchSubtitles();
+}
+function syncSubLangChips(){
+  var chips = document.querySelectorAll('#subLangRow .sub-lang-chip');
+  chips.forEach(function(c){ c.classList.toggle('active', c.getAttribute('data-lang') === subCurrentLang); });
+}
+function searchSubtitles(){
+  var q = (document.getElementById('subQueryInput').value || '').trim();
+  var box = document.getElementById('subResults');
+  if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
+  if (!(state.subtitleAssrt || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">未配置字幕源 Token</div>'; return; }
+  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未填写服务地址（设置 → 磁力配置）</div>'; return; }
+  box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
+  if (subCtrl) subCtrl.abort();
+  subCtrl = new AbortController();
+  var yearMatch = q.match(/\b(19|20)\d{2}\b/);
+  var year = yearMatch ? yearMatch[1] : '';
+  var url = state.magnetWorker.replace(/\/$/, '') + '/subtitles?action=search'
+    + '&q=' + encodeURIComponent(q)
+    + '&year=' + encodeURIComponent(year)
+    + '&lang=' + encodeURIComponent(subCurrentLang)
+    + (state.subtitleAssrt ? '&assrt=' + encodeURIComponent(state.subtitleAssrt) : '')
+    + (state.subtitleOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '');
+  var to = setTimeout(function(){ subCtrl.abort(); }, 35000);
+  fetch(url, { signal: subCtrl.signal, cache: 'no-store' })
+    .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d || null }; }).catch(function(){ return { ok: r.ok, d: null }; }); })
+    .then(function(res){
+      var d = res.d;
+      if (d && d.error){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(d.error) + '</div>'; return; }
+      if (!res.ok){ box.innerHTML = '<div class="tmdb-msg">搜索失败：HTTP ' + res.status + '</div>'; return; }
+      renderSubtitleResults(d && d.items ? d.items : []);
+    })
+    .catch(function(err){
+      if (err && err.name === 'AbortError'){ box.innerHTML = '<div class="tmdb-msg">搜索超时，请重试</div>'; }
+      else { box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'网络错误') + '</div>'; }
+    })
+    .finally(function(){ clearTimeout(to); });
+}
+function renderSubtitleResults(items){
+  subResultsCache = items || [];
+  var box = document.getElementById('subResults');
+  if (!items || !items.length){ box.innerHTML = '<div class="tmdb-msg">未找到字幕</div>'; return; }
+  var html = '';
+  for (var i = 0; i < items.length; i++){
+    var it = items[i];
+    var title = escapeHtml(it.title || '无标题');
+    var src = it.source === 'assrt' ? '伪射手' : 'OS';
+    var srcCls = it.source === 'assrt' ? 'sub-badge-assrt' : 'sub-badge-os';
+    var lang = escapeHtml(it.langDesc || it.lang || '');
+    var meta = [];
+    if (it.downloads) meta.push('下载 ' + it.downloads);
+    if (it.meta) meta.push(it.meta);
+    html += '<div class="sub-item" onclick="downloadSubtitle(' + i + ')">'
+      + '<span class="sub-badge ' + srcCls + '">' + src + '</span>'
+      + '<div class="sub-info"><div class="sub-title">' + title + '</div>'
+      + '<div class="sub-meta"><span class="sub-lang">' + lang + '</span>' + (meta.length ? '<span>' + meta.join(' · ') + '</span>' : '') + '</div></div>'
+      + '<span class="sub-dl">\u2193</span>'
+      + '</div>';
+  }
+  box.innerHTML = html;
+}
+function downloadSubtitle(idx){
+  var it = subResultsCache[idx];
+  if (!it) return;
+  var base = state.magnetWorker.replace(/\/$/, '');
+  if (!base){ showToast('请先填写服务地址（设置 → 磁力配置）', 'error'); return; }
+  var name = (it.title || 'subtitle').replace(/[\\/:*?"<>|]/g, '_');
+  var url = base + '/subtitles?action=download'
+    + '&source=' + encodeURIComponent(it.source)
+    + '&id=' + encodeURIComponent(it.id)
+    + '&name=' + encodeURIComponent(name)
+    + '&ext=' + encodeURIComponent(it.ext || 'srt')
+    + '&assrt=' + encodeURIComponent(state.subtitleAssrt || '')
+    + '&os=' + encodeURIComponent(state.subtitleOs || '');
+  showToast('下载中…', 'success');
+  fetch(url, { cache: 'no-store' })
+    .then(function(r){ if (!r.ok) return r.json().then(function(d){ throw new Error((d&&d.error)||('HTTP '+r.status)); }); return r.blob(); })
+    .then(function(blob){
+      var bn = name + '.' + (it.ext || 'srt');
+      var burl = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = burl; a.download = bn;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(burl); }, 4000);
+      showToast('已下载，可在「文件」App 中查看', 'success');
+    })
+    .catch(function(err){ showToast('下载失败：' + escapeHtml((err&&err.message)||'网络错误'), 'error'); });
+}
+
 function copyText(text, cb){
   if (navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(text).then(function(){ cb(true); }, function(){ fallbackCopy(text, cb); });
@@ -3220,6 +3448,10 @@ function listFilms(){
 /* —— API Key（kv store） —— */
 function getTMDBKey(){ return idbGet('kv', 'apiKey').then(function(v){ return v || ''; }); }
 function setTMDBKey(k){ return idbPut('kv', 'apiKey', k || ''); }
+function getSubtitleAssrt(){ return idbGet('kv', 'subAssrt').then(function(v){ return v || ''; }); }
+function setSubtitleAssrt(k){ return idbPut('kv', 'subAssrt', k || ''); }
+function getSubtitleOs(){ return idbGet('kv', 'subOs').then(function(v){ return v || ''; }); }
+function setSubtitleOs(k){ return idbPut('kv', 'subOs', k || ''); }
 function getMagnetConfig(){ return idbGet('kv', 'magnetConfig').then(function(v){ return v || null; }); }
 function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
 
@@ -4188,6 +4420,8 @@ function renderFilmDetail(film){
   // 磁力按钮：未配置 Worker 时隐藏
   var mb = document.getElementById('dtActMagnet');
   if (mb) mb.style.display = state.magnetWorker ? '' : 'none';
+  // 字幕按钮：未配置任一字幕源 Token 时隐藏
+  updateSubtitleBtn();
   // 剧情：最前方增加 [影片名]
   document.getElementById('detailPlot').textContent = d.plot ? ('[' + (d.title || film.id) + '] ' + d.plot) : '';
   // 演职人员：导演 + 演员（合并展示）
@@ -4826,6 +5060,9 @@ syncAllSelectDisplays();
 populateSettingSelects();
 refreshApiKeyStatus();
 getTMDBKey().then(function(k){ state.apiKey = k || ''; refreshApiKeyStatus(); }).catch(function(){});
+getSubtitleAssrt().then(function(k){ state.subtitleAssrt = k || ''; refreshSubNote(); }).catch(function(){});
+getSubtitleOs().then(function(k){ state.subtitleOs = k || ''; refreshSubNote(); }).catch(function(){});
+updateSubtitleBtn();
 getThemeColor().then(function(c){
   return idbGet('kv', 'themeHidden').then(function(hidden){
     return idbGet('kv', 'lastThemeColor').then(function(last){
