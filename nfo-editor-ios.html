@@ -2900,7 +2900,7 @@ function openSubtitleSheet(){
     subTitleVal = t || ''; subOrigVal = orig || ''; subYear = year || '';
     subUserEdited = false;
     var init = (subTitleMode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
-    document.getElementById('subQueryInput').value = init + (subYear ? (' ' + subYear) : '');
+    document.getElementById('subQueryInput').value = init + (subYear ? ('.' + subYear) : '');
     onSubQueryChange();
     subUserEdited = false;
     if (init) searchSubtitles();
@@ -2919,7 +2919,7 @@ function selectSubTitleMode(mode){
   // 切换仅改输入框内容，不自动搜索（由「搜索」按钮触发）
   var v = (mode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
   var input = document.getElementById('subQueryInput');
-  input.value = v + (subYear ? (' ' + subYear) : '');
+  input.value = v + (subYear ? ('.' + subYear) : '');
   onSubQueryChange();
   subUserEdited = false;
 }
@@ -2938,7 +2938,8 @@ function clearSubQuery(){
   if (input){ input.value = ''; onSubQueryChange(); input.focus(); }
 }
 function selectSubLang(lang){
-  subCurrentLang = lang; syncSubLangChips(); searchSubtitles();
+  subCurrentLang = lang; syncSubLangChips();
+  // 仅切换语言筛选，不自动搜索（由「搜索」按钮触发）
 }
 function syncSubLangChips(){
   var chips = document.querySelectorAll('#subLangRow .sub-lang-chip');
@@ -2957,11 +2958,11 @@ function searchSubtitles(){
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
-  // 年份从词中剥离，单独走 year 参数，避免代理再次拼接导致「名称 年份 年份」重复
+  // 年份从词中剥离，单独走 year 参数；代理再拼成「名称.年份」（点）。移除年份后清掉尾部多余的 . 和空格
   var yearMatch = rawQ.match(/\b(19|20)\d{2}\b/);
   var year = yearMatch ? yearMatch[1] : '';
-  var q = rawQ.replace(/\b(19|20)\d{2}\b/g, '').replace(/\s+/g, ' ').trim();
-  if (!q) q = rawQ; // 极端情况：整个词就是年份时退回原值
+  var q = rawQ.replace(/\b(19|20)\d{2}\b/g, '').replace(/[.\s]+$/g, '').replace(/\s+/g, ' ').trim();
+  if (!q) q = rawQ.replace(/\b(19|20)\d{2}\b/g, '').trim(); // 极端情况：整个词就是年份时退回原值
   var url = state.magnetWorker.replace(/\/$/, '') + '/subtitles?action=search'
     + '&q=' + encodeURIComponent(q)
     + '&year=' + encodeURIComponent(year)
