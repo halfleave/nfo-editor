@@ -1096,6 +1096,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .sub-src-item input { width: 18px; height: 18px; accent-color: var(--accent); }
 .sub-src-item.disabled { opacity: 0.4; }
 .sub-src-item.disabled input { opacity: 0.5; }
+.sub-search-row { display: flex; gap: 10px; align-items: center; padding: 4px 4px 2px; }
+.sub-input-wrap { flex: 1; min-width: 0; }
+.sub-search-btn { flex: 0 0 auto; background: var(--accent); color: var(--accent-text); border: none; border-radius: 12px; padding: 0 22px; height: 42px; font-size: 15px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
+.sub-search-btn:active { opacity: 0.6; }
+.sub-ctrl-row { display: flex; gap: 10px; align-items: center; padding: 12px 4px 2px; }
+.sub-ctrl-row .sub-seg-chip { flex: 0 0 auto; padding: 7px 16px; }
+.sub-ctrl-row .sub-src-item:first-of-type { margin-left: auto; }
 </style>
 </head>
 <body>
@@ -1718,23 +1725,22 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
       <span class="sb-title">字幕下载</span>
-      <button class="sb-pill" onclick="searchSubtitles()">搜索</button>
+      <span class="sb-spacer"></span>
     </div>
-    <div class="field field-stacked no-border" style="padding-top:4px;">
-      <div class="api-input-wrap">
+    <div class="sub-search-row">
+      <div class="api-input-wrap sub-input-wrap">
         <input class="ios-input" type="text" id="subQueryInput" placeholder="影片名" oninput="onSubQueryChange()">
         <button class="api-clear" id="subQueryClear" onclick="clearSubQuery()" aria-label="清除" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
       </div>
+      <button class="sub-search-btn" onclick="searchSubtitles()">搜索</button>
     </div>
-    <div class="sub-seg-row" id="subTitleSeg">
+    <div class="sub-ctrl-row" id="subCtrlRow">
       <button class="sub-seg-chip active" data-mode="title" onclick="selectSubTitleMode('title')">影片名</button>
       <button class="sub-seg-chip" data-mode="original" onclick="selectSubTitleMode('original')">原始标题</button>
-    </div>
-    <div class="sub-src-row" id="subSrcRow">
-      <label class="sub-src-item" id="subSrcAssrtWrap"><input type="radio" name="subsrc" id="subSrcAssrt" checked onchange="onSubSrcChange()"><span>伪射手</span></label>
-      <label class="sub-src-item" id="subSrcOsWrap"><input type="radio" name="subsrc" id="subSrcOs" onchange="onSubSrcChange()"><span>OpenSubtitles</span></label>
+      <label class="sub-src-item" id="subSrcAssrtWrap"><input type="radio" name="subsrc" id="subSrcAssrt" checked><span>伪射手</span></label>
+      <label class="sub-src-item" id="subSrcOsWrap"><input type="radio" name="subsrc" id="subSrcOs"><span>Sub</span></label>
     </div>
     <div class="sub-lang-row" id="subLangRow">
       <button class="sub-lang-chip" data-lang="all" onclick="selectSubLang('all')">全部</button>
@@ -2910,21 +2916,16 @@ function openSubtitleSheet(){
 }
 function selectSubTitleMode(mode){
   subTitleMode = mode; syncSubTitleSeg();
-  // 点击分段是显式操作：始终按所选标题模式刷新查询并重搜（不再受 subUserEdited 拦截）
+  // 切换仅改输入框内容，不自动搜索（由「搜索」按钮触发）
   var v = (mode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
   var input = document.getElementById('subQueryInput');
   input.value = v + (subYear ? (' ' + subYear) : '');
   onSubQueryChange();
   subUserEdited = false;
-  if (v) searchSubtitles();
 }
 function syncSubTitleSeg(){
-  var chips = document.querySelectorAll('#subTitleSeg .sub-seg-chip');
+  var chips = document.querySelectorAll('#subCtrlRow .sub-seg-chip');
   chips.forEach(function(c){ c.classList.toggle('active', c.getAttribute('data-mode') === subTitleMode); });
-}
-function onSubSrcChange(){
-  var q = (document.getElementById('subQueryInput').value || '').trim();
-  if (q) searchSubtitles();
 }
 function onSubQueryChange(){
   subUserEdited = true;
