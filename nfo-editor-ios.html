@@ -545,11 +545,11 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .splash-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 0 24px; }
 .splash-logo {
   width: 76px; height: 76px; border-radius: 20px;
-  background: linear-gradient(135deg, #3D8CF0, #5AC8FA);
-  color: #fff; font-weight: 800; font-size: 30px; letter-spacing: 1px;
+  background: #000;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 8px 24px rgba(61,140,240,0.35);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
 }
+.splash-logo svg { display: block; }
 .splash-title { font-size: 17px; font-weight: 600; color: var(--label, #1c1c1e); }
 .splash-bar-track {
   width: 160px; height: 3px; margin-top: 6px;
@@ -1141,7 +1141,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 <!-- 启动页：默认可见，先于 JS 渲染，避免进入页面白屏 -->
 <div id="splash" class="splash">
   <div class="splash-inner">
-    <div class="splash-logo">NFO</div>
+    <div class="splash-logo">
+      <svg viewBox="0 0 32 32" width="34" height="34" aria-hidden="true"><path d="M12 10 l10 6 l-10 6 z" fill="#fff"/></svg>
+    </div>
     <div class="splash-title">NFO</div>
     <div class="splash-bar-track"><div class="splash-bar" id="splashBar"></div></div>
   </div>
@@ -5292,7 +5294,9 @@ function startSplashProgress(){
   function frame(){
     if (splashDone || !splashBarEl) return;
     var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    var p = Math.min(96, ((now - splashT0) / 1000) * 4);
+    var e = (now - splashT0) / 1000;
+    var p = (e <= 5) ? (e * 6) : (30 + (e - 5) * 4); // 前 5 秒 6%/s，之后 4%/s
+    if (p > 96) p = 96;
     splashBarEl.style.width = p.toFixed(2) + '%';
     splashRAF = requestAnimationFrame(frame);
   }
@@ -5301,11 +5305,14 @@ function startSplashProgress(){
 function finishSplashProgress(){
   splashDone = true;
   if (splashRAF) cancelAnimationFrame(splashRAF);
-  if (splashBarEl) splashBarEl.style.width = '100%';
+  if (splashBarEl) {
+    splashBarEl.style.transition = 'width .5s ease-out'; // 从当前位置快速滑到末尾
+    splashBarEl.style.width = '100%';
+  }
 }
 function enterHome(){
   finishSplashProgress();
-  setTimeout(hideSplash, 300);
+  setTimeout(hideSplash, 1000); // 0.5s 滑到末尾 + 0.5s 停留后再进首页
 }
 function hideSplash(){
   var s = document.getElementById('splash');
