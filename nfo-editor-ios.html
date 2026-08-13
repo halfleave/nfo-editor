@@ -1086,6 +1086,15 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .sub-meta { font-size: 12px; color: var(--label-2); margin-top: 3px; display: flex; gap: 8px; }
 .sub-lang { color: var(--accent-fg); font-weight: 600; }
 .sub-dl { flex: 0 0 auto; font-size: 20px; color: var(--accent); margin-left: 2px; }
+.sub-seg-row { display: flex; gap: 6px; padding: 8px 4px 2px; }
+.sub-seg-chip { flex: 1; font-size: 13px; font-weight: 500; color: var(--label-2); background: var(--gray-fill); border: none; border-radius: 9px; padding: 8px 0; -webkit-tap-highlight-color: transparent; }
+.sub-seg-chip.active { color: #fff; background: var(--accent); }
+.sub-seg-chip:active { opacity: 0.6; }
+.sub-src-row { display: flex; gap: 18px; padding: 10px 4px 2px; align-items: center; }
+.sub-src-item { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: var(--label); -webkit-tap-highlight-color: transparent; }
+.sub-src-item input { width: 18px; height: 18px; accent-color: var(--accent); }
+.sub-src-item.disabled { opacity: 0.4; }
+.sub-src-item.disabled input { opacity: 0.5; }
 </style>
 </head>
 <body>
@@ -1214,7 +1223,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <button class="sb-pill" onclick="saveApiKey()">保存</button>
     </div>
     <div class="field field-stacked no-border api-key-field">
-      <label for="apiKeyInput">TMDB API Key</label>
+      <label for="apiKeyInput">TMDB Key</label>
       <div class="api-input-wrap">
         <input class="ios-input" type="text" id="apiKeyInput" placeholder="粘贴 TMDB API Key" oninput="toggleApiClear()">
         <button class="api-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" style="display:none;">
@@ -1223,7 +1232,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       </div>
     </div>
     <div class="field field-stacked no-border">
-      <label for="subAssrtInput">字幕源 · 伪射手 Token</label>
+      <label for="subAssrtInput">Assrt Token</label>
       <div class="api-input-wrap">
         <input class="ios-input" type="text" id="subAssrtInput" placeholder="粘贴 assrt.net API Token" oninput="toggleSubAssrtClear()">
         <button class="api-clear" id="subAssrtClearBtn" onclick="clearSubAssrtInput()" aria-label="清除" style="display:none;">
@@ -1232,7 +1241,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       </div>
     </div>
     <div class="field field-stacked no-border">
-      <label for="subOsInput">字幕源 · OpenSubtitles Key</label>
+      <label for="subOsInput">OpenSubtitles Key</label>
       <div class="api-input-wrap">
         <input class="ios-input" type="text" id="subOsInput" placeholder="粘贴 OpenSubtitles API Key" oninput="toggleSubOsClear()">
         <button class="api-clear" id="subOsClearBtn" onclick="clearSubOsInput()" aria-label="清除" style="display:none;">
@@ -1717,6 +1726,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
       </div>
+    </div>
+    <div class="sub-seg-row" id="subTitleSeg">
+      <button class="sub-seg-chip active" data-mode="title" onclick="selectSubTitleMode('title')">影片名</button>
+      <button class="sub-seg-chip" data-mode="original" onclick="selectSubTitleMode('original')">原始标题</button>
+    </div>
+    <div class="sub-src-row" id="subSrcRow">
+      <label class="sub-src-item" id="subSrcAssrtWrap"><input type="checkbox" id="subSrcAssrt" checked onchange="onSubSrcChange()"><span>伪射手</span></label>
+      <label class="sub-src-item" id="subSrcOsWrap"><input type="checkbox" id="subSrcOs" onchange="onSubSrcChange()"><span>OpenSubtitles</span></label>
     </div>
     <div class="sub-lang-row" id="subLangRow">
       <button class="sub-lang-chip" data-lang="all" onclick="selectSubLang('all')">全部</button>
@@ -2852,28 +2869,65 @@ function copyMagnet(el){
 var subCurrentLang = 'zh';
 var subCtrl = null;
 var subResultsCache = [];
+var subTitleMode = 'title';
+var subTitleVal = '';
+var subOrigVal = '';
+var subYear = '';
+var subUserEdited = false;
 function openSubtitleSheet(){
   if (!(state.subtitleAssrt || state.subtitleOs)){ showToast('请先到「设置 → API 配置」填写字幕源 Token', 'error'); return; }
   if (!state.magnetWorker){ showToast('请先填写服务地址（设置 → 磁力配置）', 'error'); return; }
-  var q = currentDetailTitle || '';
   openSheet('subtitleSheet');
   document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">正在准备…</div>';
   subCurrentLang = 'zh'; syncSubLangChips();
-  var fillAndSearch = function(t, year){
-    document.getElementById('subQueryInput').value = t + (year ? (' ' + year) : '');
+  subTitleMode = 'title'; syncSubTitleSeg();
+  // 配置字幕源复选框：优先伪射手（默认选中）；未配置 Token 的源禁用
+  var aWrap = document.getElementById('subSrcAssrtWrap'), aChk = document.getElementById('subSrcAssrt');
+  var oWrap = document.getElementById('subSrcOsWrap'), oChk = document.getElementById('subSrcOs');
+  aChk.disabled = !state.subtitleAssrt; oChk.disabled = !state.subtitleOs;
+  aWrap.classList.toggle('disabled', !state.subtitleAssrt);
+  oWrap.classList.toggle('disabled', !state.subtitleOs);
+  aChk.checked = !!state.subtitleAssrt;
+  oChk.checked = !state.subtitleAssrt && !!state.subtitleOs;
+  var fillAndSearch = function(t, orig, year){
+    subTitleVal = t || ''; subOrigVal = orig || ''; subYear = year || '';
+    subUserEdited = false;
+    var init = (subTitleMode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
+    document.getElementById('subQueryInput').value = init + (subYear ? (' ' + subYear) : '');
     onSubQueryChange();
-    if (t) searchSubtitles();
+    subUserEdited = false;
+    if (init) searchSubtitles();
   };
   if (currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
       var f = (film && film.data) || {};
-      fillAndSearch(f.title || currentDetailTitle || '', (f.premiered || '').slice(0,4));
-    }).catch(function(){ fillAndSearch(currentDetailTitle || '', ''); });
+      fillAndSearch(f.title || currentDetailTitle || '', f.originaltitle || '', (f.premiered || '').slice(0,4));
+    }).catch(function(){ fillAndSearch(currentDetailTitle || '', '', ''); });
   } else {
-    fillAndSearch(currentDetailTitle || '', '');
+    fillAndSearch(currentDetailTitle || '', '', '');
   }
 }
+function selectSubTitleMode(mode){
+  subTitleMode = mode; syncSubTitleSeg();
+  if (!subUserEdited){
+    var v = (mode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
+    var input = document.getElementById('subQueryInput');
+    input.value = v + (subYear ? (' ' + subYear) : '');
+    onSubQueryChange();
+    subUserEdited = false;
+    if (v) searchSubtitles();
+  }
+}
+function syncSubTitleSeg(){
+  var chips = document.querySelectorAll('#subTitleSeg .sub-seg-chip');
+  chips.forEach(function(c){ c.classList.toggle('active', c.getAttribute('data-mode') === subTitleMode); });
+}
+function onSubSrcChange(){
+  var q = (document.getElementById('subQueryInput').value || '').trim();
+  if (q) searchSubtitles();
+}
 function onSubQueryChange(){
+  subUserEdited = true;
   var btn = document.getElementById('subQueryClear');
   var input = document.getElementById('subQueryInput');
   if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
@@ -2895,6 +2949,10 @@ function searchSubtitles(){
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   if (!(state.subtitleAssrt || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">未配置字幕源 Token</div>'; return; }
   if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未填写服务地址（设置 → 磁力配置）</div>'; return; }
+  // 仅搜索已勾选且已配置 Token 的源；默认仅伪射手（优先、省 OpenSubtitles 配额）
+  var useAssrt = document.getElementById('subSrcAssrt').checked && !!state.subtitleAssrt;
+  var useOs = document.getElementById('subSrcOs').checked && !!state.subtitleOs;
+  if (!useAssrt && !useOs){ box.innerHTML = '<div class="tmdb-msg">请至少选择一个字幕源</div>'; return; }
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
@@ -2904,8 +2962,8 @@ function searchSubtitles(){
     + '&q=' + encodeURIComponent(q)
     + '&year=' + encodeURIComponent(year)
     + '&lang=' + encodeURIComponent(subCurrentLang)
-    + (state.subtitleAssrt ? '&assrt=' + encodeURIComponent(state.subtitleAssrt) : '')
-    + (state.subtitleOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '');
+    + (useAssrt ? '&assrt=' + encodeURIComponent(state.subtitleAssrt) : '')
+    + (useOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '');
   var to = setTimeout(function(){ subCtrl.abort(); }, 35000);
   fetch(url, { signal: subCtrl.signal, cache: 'no-store' })
     .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d || null }; }).catch(function(){ return { ok: r.ok, d: null }; }); })
@@ -2923,6 +2981,12 @@ function searchSubtitles(){
 }
 function renderSubtitleResults(items){
   subResultsCache = items || [];
+  // 优先展示伪射手（同语言下伪射手排在 OpenSubtitles 之前）；Array.sort 在现代引擎稳定
+  if (items && items.length){
+    items = items.slice().sort(function(a, b){
+      return (a.source === 'assrt' ? 0 : 1) - (b.source === 'assrt' ? 0 : 1);
+    });
+  }
   var box = document.getElementById('subResults');
   if (!items || !items.length){ box.innerHTML = '<div class="tmdb-msg">未找到字幕</div>'; return; }
   var html = '';
