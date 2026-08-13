@@ -795,6 +795,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   min-height: 44vh; min-height: 44dvh;
   max-height: 82vh; max-height: 82dvh; overflow-y: auto;
 }
+#subtitleSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
 .sheet.show { transform: translateY(0); }
 .sheet::before {
   content: ""; display: block; width: 36px; height: 5px; border-radius: 3px;
@@ -2909,14 +2910,13 @@ function openSubtitleSheet(){
 }
 function selectSubTitleMode(mode){
   subTitleMode = mode; syncSubTitleSeg();
-  if (!subUserEdited){
-    var v = (mode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
-    var input = document.getElementById('subQueryInput');
-    input.value = v + (subYear ? (' ' + subYear) : '');
-    onSubQueryChange();
-    subUserEdited = false;
-    if (v) searchSubtitles();
-  }
+  // 点击分段是显式操作：始终按所选标题模式刷新查询并重搜（不再受 subUserEdited 拦截）
+  var v = (mode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
+  var input = document.getElementById('subQueryInput');
+  input.value = v + (subYear ? (' ' + subYear) : '');
+  onSubQueryChange();
+  subUserEdited = false;
+  if (v) searchSubtitles();
 }
 function syncSubTitleSeg(){
   var chips = document.querySelectorAll('#subTitleSeg .sub-seg-chip');
