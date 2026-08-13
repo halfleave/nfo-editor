@@ -536,7 +536,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 /* ===== 启动页（避免进入时白屏） ===== */
 .splash {
   position: fixed; inset: 0; z-index: 9999;
-  background: var(--bg, #F2F1F6);
+  background: #ffffff;
   display: flex; align-items: center; justify-content: center;
   transition: opacity .35s ease;
   -webkit-tap-highlight-color: transparent;
@@ -551,19 +551,12 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   box-shadow: 0 8px 24px rgba(61,140,240,0.35);
 }
 .splash-title { font-size: 17px; font-weight: 600; color: var(--label, #1c1c1e); }
-.splash-sub { font-size: 13px; color: var(--label-2, #8e8e93); }
-.splash-spinner {
-  width: 30px; height: 30px; margin-top: 4px;
-  border: 3px solid var(--label-3, #c7c7cc);
-  border-top-color: var(--accent, #3D8CF0);
-  border-radius: 50%;
-  animation: splash-spin .8s linear infinite;
+.splash-bar-track {
+  width: 160px; height: 3px; margin-top: 6px;
+  background: rgba(0,0,0,0.10); border-radius: 2px; overflow: hidden;
 }
-.splash-step { font-size: 13px; color: var(--label-2, #8e8e93); min-height: 18px; }
-@keyframes splash-spin { to { transform: rotate(360deg); } }
-@media (prefers-color-scheme: dark) {
-  .splash { background: #000000; }
-  .splash-logo { box-shadow: 0 8px 24px rgba(61,140,240,0.25); }
+.splash-bar {
+  height: 100%; width: 0%; background: #000; border-radius: 2px;
 }
 .poster-cell { flex: 0 0 43%; display: flex; flex-direction: column; }
 .poster-cell .media-upload-col.poster {
@@ -1149,9 +1142,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 <div id="splash" class="splash">
   <div class="splash-inner">
     <div class="splash-logo">NFO</div>
-    <div class="splash-title">影片资料编辑器</div>
-    <div class="splash-spinner"></div>
-    <div class="splash-step" id="splashStep">正在启动…</div>
+    <div class="splash-title">NFO</div>
+    <div class="splash-bar-track"><div class="splash-bar" id="splashBar"></div></div>
   </div>
 </div>
 <div class="ios-app">
@@ -5291,6 +5283,30 @@ function setSplashStep(text){
   var el = document.getElementById('splashStep');
   if (el && text) el.textContent = text;
 }
+/* ===== 启动页进度条（RAF 丝滑增长，每秒约 4%） ===== */
+var splashBarEl = null, splashRAF = 0, splashT0 = 0, splashDone = false;
+function startSplashProgress(){
+  splashBarEl = document.getElementById('splashBar');
+  if (!splashBarEl) return;
+  splashT0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  function frame(){
+    if (splashDone || !splashBarEl) return;
+    var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    var p = Math.min(96, ((now - splashT0) / 1000) * 4);
+    splashBarEl.style.width = p.toFixed(2) + '%';
+    splashRAF = requestAnimationFrame(frame);
+  }
+  splashRAF = requestAnimationFrame(frame);
+}
+function finishSplashProgress(){
+  splashDone = true;
+  if (splashRAF) cancelAnimationFrame(splashRAF);
+  if (splashBarEl) splashBarEl.style.width = '100%';
+}
+function enterHome(){
+  finishSplashProgress();
+  setTimeout(hideSplash, 300);
+}
 function hideSplash(){
   var s = document.getElementById('splash');
   if (!s) return;
@@ -5299,7 +5315,7 @@ function hideSplash(){
 }
 function bootApp(){
   // ① 轻量 UI 装配（同步，先把界面骨架画出来）
-  setSplashStep('正在准备界面…');
+  startSplashProgress();
   setupBigTitle();
   setWelcome();
   setInterval(setWelcome, 60000);
@@ -5352,8 +5368,8 @@ function bootApp(){
     switchHomeTab('basic');
     switchMetaTab('edit');
     checkFilmCap(700);
-    requestAnimationFrame(function(){ requestAnimationFrame(hideSplash); });
-  }).catch(function(){ hideSplash(); });
+    enterHome();
+  }).catch(function(){ enterHome(); });
 }
 
 // 注册启动：等首屏解析完成再执行重活，确保启动页先被绘制（避免白屏）
