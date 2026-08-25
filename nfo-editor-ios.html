@@ -4174,7 +4174,8 @@ function refreshFromTMDB(id){
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
     // AV 影片：用番号从 R18 重新拉取，而非 TMDB（否则会搜不到或用普通影片数据覆盖 AV 字段）
-    if (film.data && film.data.adult){
+    // 注：adult 标志在 film 顶层（buildFilmFromCurrent 结构），film.data 内无 adult 字段
+    if (film.adult || (film.data && film.data.adult)){
       return refreshFromR18(film);
     }
     var tid = (film.data && film.data.tmdbId) || null;
@@ -4237,19 +4238,19 @@ function refreshFromR18(film){
   showToast('正在从 R18 刷新…', 'success');
   currentFilmId = film.id;
   currentFilmLocked = !!film.locked;
-  javRequest(dvdId).then(function(d){
+  return javRequest(dvdId).then(function(d){
     if (!d || !d.title) return showToast('未能从 R18 获取该番号数据', 'error');
     d._dvdId = dvdId;   // 刷新时把已记录的番号回填，避免回退成 content_id
     var imgP = populateFromJAV(d);
-    // 文本元数据已填充完成：立即覆盖保存一次（保持原 id），图片后台加载完再静默补存
+    // 文本元数据已填充完成：先覆盖保存一次（保持原 id），待图片加载完再静默补存
     var f = buildFilmFromCurrent();
     f.id = film.id;
     f.locked = !!film.locked;
-    saveFilm(f).then(function(){
+    return saveFilm(f).then(function(){
       renderOverview();
       showToast('已从 R18 刷新元数据', 'success');
-    });
-    imgP.then(function(){ silentRefreshCurrentFilm(); }).catch(function(){});
+      return imgP;   // 继续等待封面/剧照加载
+    }).then(function(){ return silentRefreshCurrentFilm(); });
   }).catch(function(err){
     showToast(err && err.message ? err.message : '刷新失败', 'error');
   });
