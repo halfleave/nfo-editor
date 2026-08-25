@@ -188,8 +188,10 @@ img { display: block; }
 .detail-logo-img { max-width: 78%; max-height: 88px; object-fit: contain; margin: 0 auto; display: block; filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5)); }
 .detail-info1 { text-align: center; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.95); line-height: 1.6; margin: 0 0 4px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
 .detail-info1 .dt-star { font-size: 0.8em; vertical-align: middle; }
+.detail-info-av { text-align: center; font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.6; margin: 0 0 4px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
 .detail-info2 { text-align: center; font-size: 13px; color: rgba(255,255,255,0.72); line-height: 1.6; margin-bottom: 16px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
-.detail-info1:empty, .detail-info2:empty { display: none; }
+.detail-info1:empty, .detail-info2:empty, .detail-info-av:empty { display: none; }
+.edit-type-seg { display: flex; margin: 0 0 6px; }
 /* 胶囊主按钮：占屏宽约 80%，水平居中 */
 .detail-trailer-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -231,6 +233,13 @@ img { display: block; }
 .detail-cast-spacer { flex: 0 0 auto; width: 4px; height: 1px; }
 .detail-cast-row::-webkit-scrollbar { display: none; }
 .detail-person { flex: 0 0 auto; width: 72px; text-align: center; }
+/* 详情页「剧照」—— 演职人员/女优下方，横向滚动 */
+.detail-shots { margin-top: 22px; padding-top: 16px; }
+.detail-shots:empty { display: none; }
+.detail-shots-title { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 12px; }
+.detail-shots-row { display: flex; flex-direction: column; gap: 12px; }
+.detail-shot { width: 100%; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.06); }
+.detail-shot img { display: block; width: 100%; height: auto; }
 .detail-person .dp-ava { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; color: rgba(255,255,255,0.85); font-size: 24px; font-weight: 600; }
 .detail-person .dp-name { font-size: 12px; color: #fff; line-height: 1.3; }
 .detail-person .dp-role { font-size: 11px; color: rgba(255,255,255,0.65); line-height: 1.3; }
@@ -268,7 +277,7 @@ img { display: block; }
   transition: background .2s, border-color .2s, backdrop-filter .2s;
 }
 .page-bar {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 16px;
 }
 .page-bar.scrolled {
   border-bottom-color: transparent;
@@ -312,7 +321,8 @@ img { display: block; }
 /* 滚动区 */
 .page-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 var(--pad) calc(var(--sab) + 92px); }
 #page-settings .page-scroll { padding-top: calc(var(--sat) + 64px); }
-#page-home .page-scroll { padding-top: calc(var(--sat) + 98px); }
+#page-home .page-scroll { padding-top: calc(var(--sat) + 118px); }
+#page-search .page-scroll { padding-top: calc(var(--sat) + 84px); }
 .meta-panel { display: none; }
 .meta-panel.active { display: block; }
 
@@ -397,9 +407,19 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 
 /* 分段小控件（普通/成人） */
-.seg { display: inline-flex; background: var(--gray-fill); border-radius: 9px; padding: 2px; margin-left: auto; }
-.seg button { padding: 5px 14px; font-size: 13px; font-weight: 600; color: var(--label-2); border-radius: 7px; transition: .2s; }
+.seg { display: inline-flex; background: var(--gray-fill); border-radius: 20px; padding: 3px; margin-left: auto; }
+.seg button { padding: 6px 16px; font-size: 14px; font-weight: 600; color: var(--label-2); border-radius: 17px; transition: .2s; }
 .seg button.active { background: #fff; color: var(--label); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.meta-source-seg { display: flex; justify-content: center; margin: 12px 0 4px; }
+#page-search .meta-source-seg { margin: 0; justify-content: flex-start; }
+#page-search .meta-source-seg .seg { margin-left: 0; }
+.link-btn { display: block; width: 100%; text-align: center; background: none; border: none; color: var(--accent); font-size: 15px; font-weight: 600; padding: 4px 0 16px; cursor: pointer; }
+.link-btn:active { opacity: .55; }
+.btn-back { background: none; border: none; color: var(--label); font-size: 30px; line-height: 1; padding: 0 6px 0 2px; margin-right: 2px; cursor: pointer; }
+.btn-back:active { opacity: .55; }
+#page-edit.active ~ .ios-tabbar { display: none; }
+.overview-tabs { display: flex; align-items: center; margin-top: 2px; }
+.overview-tabs .seg { margin-left: 0; }
 /* 列表内分类切换：左对齐独立胶囊 */
 .sheet-seg { display: flex; justify-content: flex-start; padding: 4px 0 12px; }
 .sheet-seg .seg { background: transparent; padding: 0; margin-left: 0; gap: 8px; }
@@ -679,7 +699,6 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 .settings-row:last-child { border-bottom: none; }
 /* 磁力配置项：仅「里模式」显示（点击设置标题三次进入），表模式隐藏 */
-.settings-row#magnetConfigRow { display: none; }
 .settings-row .sr-icon {
   width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 17px; color: #fff;
@@ -754,8 +773,8 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .required { color: var(--danger); margin-right: 3px; }
 
 /* 首页概览：三列网格海报 */
-.overview-section { padding-top: 8px; }
-.overview-head { display: flex; align-items: center; justify-content: space-between; }
+.overview-section { padding-top: 32px; }
+.overview-head { display: flex; align-items: center; justify-content: flex-start; }
 .ov-new { background: none; border: 0; padding: 0; font-size: 14px; font-weight: 500; color: var(--accent-fg); }
 .ov-new:active { opacity: 0.5; }
 .overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 2px; align-items: start; }
@@ -792,6 +811,8 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 /* 按钮 */
 .btn { padding: 8px 16px; border-radius: 10px; font-size: 16px; font-weight: 600; }
 .btn-primary { background: var(--accent); color: var(--accent-text); }
+.btn-ghost { background: var(--gray-fill); color: var(--label-2); border: none; }
+.btn-ghost:active { opacity: 0.75; }
 .btn-pill { border-radius: 20px; padding: 7px 22px; font-size: 15px; }
 .btn-ghost { background: var(--gray-fill); color: var(--label); }
 .btn-text { background: none; border: none; color: var(--accent-fg); font-size: 15px; font-weight: 600; padding: 7px 10px; -webkit-tap-highlight-color: transparent; transition: color .2s; }
@@ -981,9 +1002,17 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #listSheet .sheet-row .sr-name, #listSheet .sheet-row .check { position: relative; z-index: 1; }
 #listSheet .list-sheet-header .sheet-seg { padding-bottom: 8px; }
 
-/* API 配置弹窗：输入框浅灰底，提示语居中 */
-#apiSheet .ios-input { background: #F2F2F7; }
-#apiSheet .sheet-note { text-align: center; }
+/* API 配置弹窗：输入框浅灰底，提示语 */
+#apiSheet .ios-input,
+#apiSheet select.ios-input { background: #F2F2F7; }
+#apiSheet .sheet-note { text-align: left; color: var(--label-2); font-size: 13px; padding: 0 16px; }
+#apiSheet .api-help-note { text-align: center; cursor: pointer; }
+#apiHelpSheet .help-body { padding: 16px; }
+#apiHelpSheet .help-section { margin-bottom: 20px; }
+#apiHelpSheet .help-section h4 { margin: 0 0 6px; font-size: 15px; color: var(--label); }
+#apiHelpSheet .help-section p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--label-2); }
+#apiHelpSheet .help-section a { color: var(--accent); }
+#apiHelpSheet .help-section code { background: var(--card-fill); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
 
 /* 隐藏应用内所有滚动条 */
 *::-webkit-scrollbar { display: none; }
@@ -1073,13 +1102,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #magnetSheet .magnet-field-tabs .mft input { position: absolute; opacity: 0; width: 0; height: 0; }
 #magnetSheet .magnet-field-tabs .mft span { display: block; text-align: center; padding: 9px 0; font-size: 13px; font-weight: 600; color: var(--label-2); background: var(--card-fill); border-radius: 11px; border: 1px solid var(--sep); transition: background .15s, color .15s, border-color .15s; cursor: pointer; }
 #magnetSheet .magnet-field-tabs .mft input:checked + span { color: #fff; background: var(--accent); border-color: var(--accent); }
-#magnetConfigSheet .field-stacked { margin-bottom: 12px; }
-#magnetConfigSheet .field-stacked label { display: block; font-size: 14px; font-weight: 600; color: var(--label-2); margin-bottom: 6px; }
-#magnetConfigSheet .ios-input,
-#magnetConfigSheet select { width: 100%; border: none; background: var(--card-fill); border-radius: 12px; padding: 12px 14px; font-size: 16px; color: var(--label); -webkit-appearance: none; appearance: none; }
-#magnetConfigSheet .ios-input:focus,
-#magnetConfigSheet select:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
-#magnetConfigSheet .sheet-note { text-align: center; margin-top: 8px; }
 
 /* 搜索页 */
 .search-box { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
@@ -1299,35 +1321,46 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         </button>
       </div>
     </div>
-    <p class="sheet-note" id="apiKeyNote">尚未配置 Key。</p>
-    <p class="sheet-note" id="subNote"></p>
+    <div class="field field-stacked no-border">
+      <label for="magnetWorkerInput">磁力 / R18 Worker 地址</label>
+      <div class="api-input-wrap">
+        <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app（粘贴你的代理地址）">
+      </div>
+    </div>
+    <p class="sheet-note api-help-note" onclick="openApiHelpSheet()">如何获取这些 API？</p>
   </div>
 
-  <!-- 磁力搜索配置 -->
-  <div class="sheet" id="magnetConfigSheet">
+  <!-- API 说明页 -->
+  <div class="sheet sheet-tall" id="apiHelpSheet">
     <div class="sheet-bar sheet-bar-center">
       <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
-      <span class="sb-title">磁力配置</span>
-      <button class="sb-pill" onclick="saveMagnetConfig()">保存</button>
+      <span class="sb-title">API 说明</span>
+      <span class="sb-spacer"></span>
     </div>
-    <div class="field field-stacked no-border">
-      <label for="magnetWorkerInput">服务地址</label>
-      <input class="ios-input" type="text" id="magnetWorkerInput" value="" placeholder="https://xxx.vercel.app（粘贴你的代理地址）">
+    <div class="help-body">
+      <div class="help-section">
+        <h4>TMDB Key</h4>
+        <p>访问 <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a>，注册并登录后创建 API Key，复制后粘贴到「TMDB Key」。</p>
+      </div>
+      <div class="help-section">
+        <h4>Assrt Token</h4>
+        <p>访问 <a href="https://assrt.net/usercp.php" target="_blank">assrt.net/usercp.php</a> 登录，在用户中心找到 API Token 并粘贴到「Assrt Token」。</p>
+      </div>
+      <div class="help-section">
+        <h4>OpenSubtitles Key</h4>
+        <p>访问 <a href="https://www.opensubtitles.com/en/consumers" target="_blank">opensubtitles.com/consumers</a>，注册应用后获取 API Key，粘贴到「OpenSubtitles Key」。</p>
+      </div>
+      <div class="help-section">
+        <h4>R18（AV 元数据）</h4>
+        <p>AV 元数据来自 <a href="https://r18.dev" target="_blank">r18.dev</a>，免费、无需 Key，但被 Cloudflare 拦浏览器直连，需经你的代理访问。请在「磁力 / R18 Worker 地址」填写同一个 Worker 地址——它需同时支持磁力搜索与 <code>/r18?dvd_id=番号</code> 路由（封面图走 <code>/img?url=</code> 路由）。不填则无法搜 AV。</p>
+      </div>
+      <div class="help-section">
+        <h4>磁力 Worker 地址</h4>
+        <p>需要自行部署一个代理服务（如 Cloudflare Worker）来转发磁力搜索请求，将服务的 HTTPS 地址粘贴到「磁力 / R18 Worker 地址」。不填则无法使用「搜磁力」与「搜 AV」。</p>
+      </div>
     </div>
-    <div class="field field-stacked no-border">
-      <label for="magnetCategoryInput">分类</label>
-      <select id="magnetCategoryInput">
-        <option value="movie">电影 movie</option>
-        <option value="all">全部 all</option>
-        <option value="audio">音频 audio</option>
-        <option value="doc">文档 doc</option>
-        <option value="app">应用 app</option>
-        <option value="other">其他 other</option>
-      </select>
-    </div>
-    <p class="sheet-note" id="magnetConfigNote">配置后可在影片详情页点击「搜磁力」。</p>
   </div>
 
   <!-- 磁力搜索结果 -->
@@ -1419,7 +1452,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="page-scroll">
       <div class="overview-section">
         <div class="overview-head">
-          <h2 class="section-heading">概览</h2>
+          <div class="overview-tabs" id="overviewTabs" style="display:none;">
+            <span class="seg">
+              <button type="button" class="active" data-tab="movie" onclick="setOverviewTab('movie',this)">影片</button>
+              <button type="button" data-tab="av" id="overviewTabAv" onclick="setOverviewTab('av',this)">AV</button>
+            </span>
+          </div>
         </div>
         <div class="overview-grid" id="overviewGrid"></div>
         <div class="empty-hint" id="overviewEmpty">暂无影片~</div>
@@ -1427,14 +1465,37 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
   </section>
 
+  <!-- ====================== 搜索（二级页） ====================== -->
+  <section class="page" id="page-search">
+    <header class="page-bar" id="searchPageBar">
+      <h1 class="page-title">搜索</h1>
+      <div class="meta-source-seg" id="searchMetaSeg" style="display:none;">
+        <span class="seg">
+          <button type="button" class="active" data-source="tmdb" onclick="setMetaSource('tmdb',this)">TMDB</button>
+          <button type="button" data-source="jav" onclick="setMetaSource('jav',this)">JAV</button>
+        </span>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-ghost btn-pill" style="padding:6px 16px;font-size:14px;background:rgba(120,120,128,0.5);" onclick="openCustomEdit()">自定义</button>
+      </div>
+    </header>
+    <div class="page-scroll">
+      <div class="search-box">
+        <div class="search-input-wrap">
+          <input class="ios-input" type="text" id="tmdbQuery" placeholder="搜索影片" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
+          <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
+        </div>
+        <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
+      </div>
+      <div id="tmdbResults"></div>
+    </div>
+  </section>
+
   <!-- ====================== 元数据 ====================== -->
   <section class="page" id="page-edit">
     <header class="page-bar" id="editPageBar">
+      <button class="btn-back" onclick="switchPage('search')" aria-label="返回">‹</button>
       <h1 class="page-title">元数据</h1>
-      <div class="meta-tabs" id="metaTabs">
-        <button id="metaTabSearch" onclick="switchMetaTab('search')">搜索</button>
-        <button id="metaTabEdit" class="active" onclick="switchMetaTab('edit')">编辑</button>
-      </div>
       <div class="page-actions">
         <button class="btn btn-text muted" id="btnClear" onclick="newFilm()">清空</button>
         <button class="btn btn-primary btn-pill" id="btnSave" onclick="saveToDisk()">保存</button>
@@ -1443,19 +1504,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
     <div class="page-scroll" id="editScroll">
 
-      <div class="meta-panel" id="searchPanel" style="display:none;">
-        <div class="search-box">
-          <div class="search-input-wrap">
-            <input class="ios-input" type="text" id="tmdbQuery" placeholder="请输入" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchTMDB()">
-            <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
-          </div>
-          <button class="btn btn-primary btn-pill" onclick="searchTMDB()">搜索</button>
-        </div>
-        <div id="tmdbResults"></div>
-      </div>
-
       <div class="meta-panel active" id="editPanel">
         <h2 class="section-heading">影片信息</h2>
+        <div class="edit-type-seg" id="editTypeSeg" style="display:none;">
+          <span class="seg">
+            <button type="button" data-type="movie" onclick="setEditType('movie')">影片</button>
+            <button type="button" data-type="av" onclick="setEditType('av')">AV</button>
+          </span>
+        </div>
         <div class="card">
           <div class="field">
             <label for="title"><span class="required">*</span>影片名</label>
@@ -1476,6 +1532,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <!-- 卡片2：分段内容 -->
         <div class="home-panel active" id="tab-basic">
           <div class="card">
+            <div class="field" id="dvdidField" style="display:none;">
+              <label for="dvdid">番号</label>
+              <input class="ios-input" type="text" id="dvdid" placeholder="如 IPX-011" oninput="updateState()">
+            </div>
             <div class="field">
               <label for="originaltitle">原始标题</label>
               <input class="ios-input" type="text" id="originaltitle" placeholder="请输入" oninput="updateState()">
@@ -1524,6 +1584,22 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
             <div class="tags-area" id="genreTags" style="display:none;"></div>
           </div>
 
+          <!-- AV 专属字段（仅 AV 模式显示）：制作商 / 发行商 / 系列 -->
+          <div class="card" id="avFieldsCard" style="display:none;">
+            <div class="field">
+              <label for="studio">制作商</label>
+              <input class="ios-input" type="text" id="studio" placeholder="请输入" oninput="updateState()">
+            </div>
+            <div class="field">
+              <label for="label">发行商</label>
+              <input class="ios-input" type="text" id="label" placeholder="请输入" oninput="updateState()">
+            </div>
+            <div class="field">
+              <label for="series">系列</label>
+              <input class="ios-input" type="text" id="series" placeholder="请输入" oninput="updateState()">
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-title">剧情简介</div>
             <div class="field field-stacked" style="padding-top:0;">
@@ -1535,11 +1611,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <!-- 演职人员 -->
         <div class="home-panel" id="tab-cast" style="display:none;">
           <h2 class="section-heading">职员</h2>
-          <div class="card cast-row-card">
+          <div class="card cast-row-card" id="directorSection">
             <div class="cast-scroll" id="directorCard"></div>
           </div>
 
-          <h2 class="section-heading">演员</h2>
+          <h2 class="section-heading" id="actorHeading">演员</h2>
           <div class="card cast-row-card">
             <div class="cast-scroll" id="actorCards"></div>
           </div>
@@ -1630,11 +1706,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <span class="sr-label">API 配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
-        <button class="settings-row" id="magnetConfigRow" onclick="openMagnetConfigSheet()">
-          <span class="sr-icon" style="background:#5856D6;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg></span>
-          <span class="sr-label">磁力配置</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
-        </button>
         <button class="settings-row" onclick="openCountryManage()">
           <span class="sr-icon" style="background:#34C759;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1 17.93a8 8 0 0 1-6-6.93h3.2a17.8 17.8 0 0 0 1.14 4.93A9.9 9.9 0 0 0 11 19.93Zm2 0a9.9 9.9 0 0 0 1.66-2A17.8 17.8 0 0 0 15.8 13H19a8 8 0 0 1-6 6.93ZM5 11H8.45A18.3 18.3 0 0 0 9.35 6.07 8 8 0 0 0 5 11Zm7-5.85A16.6 16.6 0 0 1 14.55 11H9.45A16.6 16.6 0 0 1 12 5.15ZM16.65 6.07A18.3 18.3 0 0 1 17.55 11H19a8 8 0 0 0-2.35-4.93Z"/></svg></span>
           <span class="sr-label">国家/地区配置</span>
@@ -1661,18 +1732,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <span class="sr-label">主题</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
-        <div class="settings-row" id="nsfwRow" style="display:none;">
-          <span class="sr-icon" style="background:#FF2D55;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5C21.3 7.6 17 4.5 12 4.5zm0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg></span>
-          <span class="sr-label">NSFW</span>
-          <span class="switch" onclick="document.getElementById('nsfwToggle').click(); event.stopPropagation();"><input type="checkbox" id="nsfwToggle" onchange="onNsfwChange(this)"><span class="slider"></span></span>
-        </div>
-        <div class="settings-row select-row">
-          <span class="sr-icon" style="background:#007AFF;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M17 3H7c-1.1 0-2 .9-2 2v14l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg></span>
-          <span class="sr-label">保存配置</span>
-          <span class="sr-value" id="saveModeValue">仅保存</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
-          <select class="select-overlay" id="saveModeSelect" onchange="onSaveModeSelect(this)"></select>
-        </div>
         <div class="settings-row select-row">
           <span class="sr-icon" style="background:#AF52DE;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></span>
           <span class="sr-label">自动清除缓存</span>
@@ -1710,6 +1769,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <div class="detail-content">
         <h1 class="detail-title" id="detailTitle"></h1>
         <div class="detail-info1" id="detailInfo1"></div>
+        <div class="detail-info-av" id="detailInfoAv"></div>
         <div class="detail-info2" id="detailInfo2"></div>
         <button class="detail-trailer-btn" id="detailTrailer" onclick="openTrailer()">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -1739,6 +1799,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         </div>
         <div class="detail-plot" id="detailPlot"></div>
         <div class="detail-cast" id="detailCast"></div>
+        <div class="detail-shots" id="detailShots"></div>
       </div>
     </div>
   </section>
@@ -1753,7 +1814,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       </button>
     </div>
     <div class="trailer-bar">
-      <button class="trailer-ext-btn" onclick="openTrailerExternal()">在 YouTube 打开</button>
+      <button class="trailer-ext-btn" id="trailerExtBtn" onclick="openTrailerExternal()">在 YouTube 打开</button>
     </div>
     <div class="trailer-frame">
       <iframe id="trailerFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
@@ -1805,8 +1866,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <button class="tab-item active" data-page="home" onclick="switchPage('home')">
       <span class="ti-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></span><span>首页</span>
     </button>
-    <button class="tab-item" data-page="edit" onclick="switchPage('edit')">
-      <span class="ti-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg></span><span>元数据</span>
+    <button class="tab-item" data-page="search" onclick="switchPage('search')">
+      <span class="ti-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg></span><span>搜索</span>
     </button>
     <button class="tab-item" data-page="settings" onclick="switchPage('settings')">
       <span class="ti-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></span><span>设置</span>
@@ -1822,6 +1883,22 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 function switchPage(page) {
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
+}
+function setOverviewTab(tab, btn){
+  state.overviewTab = tab;
+  var seg = document.getElementById('overviewTabs');
+  if (seg) seg.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === tab); });
+  renderOverview();
+}
+function updateOverviewTabVisibility(){
+  var tabs = document.getElementById('overviewTabs');
+  if (tabs) tabs.style.display = state.themeHidden ? '' : 'none';
+  var searchSeg = document.getElementById('searchMetaSeg');
+  if (searchSeg) searchSeg.style.display = state.themeHidden ? 'flex' : 'none';
+  if (!state.themeHidden){
+    state.overviewTab = 'movie';
+    if (tabs) tabs.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === 'movie'); });
+  }
 }
 
 /* 详情页「从左边缘右滑返回首页」手势：兼容触摸与鼠标（桌面模式），与竖向滚动/下拉放大互斥 */
@@ -1928,19 +2005,6 @@ function switchHomeTab(tab) {
   document.getElementById('tab-basic').style.display = (tab === 'basic') ? 'block' : 'none';
   document.getElementById('tab-cast').style.display  = (tab === 'cast')  ? 'block' : 'none';
   document.getElementById('tab-media').style.display = (tab === 'media') ? 'block' : 'none';
-}
-
-function switchMetaTab(tab){
-  var isSearch = tab === 'search';
-  document.getElementById('metaTabSearch').classList.toggle('active', isSearch);
-  document.getElementById('metaTabEdit').classList.toggle('active', !isSearch);
-  document.getElementById('searchPanel').style.display = isSearch ? 'block' : 'none';
-  document.getElementById('searchPanel').classList.toggle('active', isSearch);
-  if (isSearch) toggleSearchClear();
-  document.getElementById('editPanel').style.display = isSearch ? 'none' : 'block';
-  document.getElementById('editPanel').classList.toggle('active', !isSearch);
-  document.getElementById('btnClear').style.display = isSearch ? 'none' : '';
-  document.getElementById('btnSave').style.display = isSearch ? 'none' : '';
 }
 
 function showToast(msg, type, duration) {
@@ -2120,7 +2184,6 @@ var MPAA_LIST = ['G','PG','PG-13','R','NC-17','NR'];
 var state = {
   year: '', mpaa: '', countries: [], genres: [], apiKey: '',
   magnetWorker: '',
-  magnetCategory: 'movie',
   countryPresets: COUNTRY_DEFAULT.slice(),
   genreNormal: GENRE_NORMAL.slice(),
   genreAdult: GENRE_ADULT.slice(),
@@ -2129,15 +2192,16 @@ var state = {
   genreAdultDisabled: new Set(),
   directors: [],
   actors: [],
+  studio: '', label: '', series: '', dvdId: '',
   personPhoto: null,
   poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null, subtitleAssrt: '', subtitleOs: '',
   posterCandidates: [], fanartCandidates: [],
-  saveMode: 'save',
   autoClear: '3d',
-  nsfw: false,
   appearance: 'auto',
   themeHidden: false,
-  lastThemeColor: ''
+  overviewTab: 'movie',
+  adult: false,
+  metaSource: 'tmdb'
 };
 var personState = { mode: 'actor', index: -1 }; // 'director' | 'actor'
 var currentGenreTab = 'normal';
@@ -2302,7 +2366,7 @@ function removeCountry(idx){
 }
 function openGenreSheet(){
   listState.kind = 'genre';
-  if (!state.nsfw) {
+  if (!state.themeHidden) {
     document.getElementById('listGenreSeg').style.display = 'none';
     currentGenreTab = 'normal';
   } else {
@@ -2311,7 +2375,7 @@ function openGenreSheet(){
   }
   document.getElementById('listSheet').classList.remove('sheet-tall');
   document.getElementById('listSheet').classList.add('sheet-select');
-  var isAdult = (currentGenreTab === 'adult' && state.nsfw);
+  var isAdult = (currentGenreTab === 'adult' && state.themeHidden);
   var items = isAdult ? state.genreAdult : state.genreNormal;
   var disabled = isAdult ? state.genreAdultDisabled : state.genreNormalDisabled;
   openMultiSheet({ title: '类型', kind: 'genre',
@@ -2338,7 +2402,7 @@ function removeGenre(idx){
   updateState();
 }
 function switchGenreTab(tab){
-  if (!state.nsfw && tab === 'adult') tab = 'normal';
+  if (!state.themeHidden && tab === 'adult') tab = 'normal';
   currentGenreTab = tab;
   var segNormal = document.getElementById('genreSegNormal');
   var segAdult = document.getElementById('genreSegAdult');
@@ -2406,7 +2470,7 @@ function openCountryManage(){
 }
 function openGenreManage(){
   listState.mode = 'manage'; listState.kind = 'genre';
-  if (!state.nsfw) {
+  if (!state.themeHidden) {
     document.getElementById('listGenreSeg').style.display = 'none';
     currentGenreTab = 'normal';
   } else {
@@ -2720,8 +2784,7 @@ function openApiKeySheet(){
   toggleSubAssrtClear();
   document.getElementById('subOsInput').value = state.subtitleOs || '';
   toggleSubOsClear();
-  refreshApiKeyNote();
-  refreshSubNote();
+  document.getElementById('magnetWorkerInput').value = state.magnetWorker || '';
   openSheet('apiSheet');
 }
 function toggleApiClear(){
@@ -2751,65 +2814,33 @@ function clearSubOsInput(){
   var input = document.getElementById('subOsInput');
   if (input){ input.value = ''; toggleSubOsClear(); input.focus(); }
 }
-function refreshSubNote(){
-  var note = document.getElementById('subNote');
-  if (!note) return;
-  var a = state.subtitleAssrt ? '伪射手✓' : '伪射手✗';
-  var o = state.subtitleOs ? 'OpenSubtitles✓' : 'OpenSubtitles✗';
-  note.textContent = '字幕源：' + a + '  ' + o;
-}
 function updateSubtitleBtn(){
   var btn = document.getElementById('dtActSub');
   if (btn) btn.style.display = (state.subtitleAssrt || state.subtitleOs) ? '' : 'none';
-}
-function refreshApiKeyNote(){
-  var note = document.getElementById('apiKeyNote');
-  if (note) note.textContent = state.apiKey ? '当前已配置 Key。' : '尚未配置 Key。';
-}
-function refreshApiKeyStatus(){
-  refreshApiKeyNote();
 }
 function saveApiKey(){
   try {
     state.apiKey = (document.getElementById('apiKeyInput').value || '').trim();
     state.subtitleAssrt = (document.getElementById('subAssrtInput').value || '').trim();
     state.subtitleOs = (document.getElementById('subOsInput').value || '').trim();
-    refreshApiKeyStatus();
-    refreshSubNote();
+    state.magnetWorker = (document.getElementById('magnetWorkerInput').value || '').trim();
     closeAllSheets();
-    Promise.all([ setTMDBKey(state.apiKey), setSubtitleAssrt(state.subtitleAssrt), setSubtitleOs(state.subtitleOs) ])
+    showToast('保存中…');
+    Promise.all([
+      setTMDBKey(state.apiKey),
+      setSubtitleAssrt(state.subtitleAssrt),
+      setSubtitleOs(state.subtitleOs),
+      setMagnetConfig({ worker: state.magnetWorker, category: 'video' })
+    ])
       .then(function(){ showToast('已保存', 'success'); updateSubtitleBtn(); })
       .catch(function(){ showToast('保存失败', 'error'); });
   } catch(e) {
     showToast('保存失败', 'error');
   }
 }
+function openApiHelpSheet(){ openSheet('apiHelpSheet'); }
 
-/* —— 磁力搜索配置与结果 —— */
-function openMagnetConfigSheet(){
-  document.getElementById('magnetWorkerInput').value = state.magnetWorker || '';
-  setSelectValue('magnetCategoryInput', state.magnetCategory || 'movie');
-  refreshMagnetConfigNote();
-  openSheet('magnetConfigSheet');
-}
-function refreshMagnetConfigNote(){
-  var note = document.getElementById('magnetConfigNote');
-  if (!note) return;
-  note.textContent = state.magnetWorker ? '已配置服务地址。' : '请先部署代理并填写地址。';
-}
-function saveMagnetConfig(){
-  try {
-    state.magnetWorker = (document.getElementById('magnetWorkerInput').value || '').trim();
-    state.magnetCategory = document.getElementById('magnetCategoryInput').value || 'movie';
-    refreshMagnetConfigNote();
-    closeAllSheets();
-    setMagnetConfig({ worker: state.magnetWorker, category: state.magnetCategory })
-      .then(function(){ showToast('已保存', 'success'); })
-      .catch(function(){ showToast('保存失败', 'error'); });
-  } catch(e) {
-    showToast('保存失败', 'error');
-  }
-}
+/* —— 磁力搜索结果 —— */
 var magnetCurrentFilm = null;
 function openMagnetSheet(){
   document.getElementById('magnetResults').innerHTML = '';
@@ -2860,11 +2891,11 @@ function searchMagnet(){
   var q = (document.getElementById('magnetQueryInput').value || '').trim();
   var box = document.getElementById('magnetResults');
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → 磁力搜索配置」填写。</div>'; return; }
+  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → API 配置」填写磁力 Worker 地址。</div>'; return; }
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
   var url = state.magnetWorker.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
     + '&source=bt4g'
-    + '&cat=' + encodeURIComponent(state.magnetCategory || 'movie') + '&order=seeders';
+    + '&cat=video&order=seeders';
   var ctrl = new AbortController();
   var to = setTimeout(function(){ ctrl.abort(); }, 35000);
   fetch(url, { signal: ctrl.signal, cache: 'no-store' })
@@ -2927,7 +2958,7 @@ var subYear = '';
 var subUserEdited = false;
 function openSubtitleSheet(){
   if (!(state.subtitleAssrt || state.subtitleOs)){ showToast('请先到「设置 → API 配置」填写字幕源 Token', 'error'); return; }
-  if (!state.magnetWorker){ showToast('请先填写服务地址（设置 → 磁力配置）', 'error'); return; }
+  if (!state.magnetWorker){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
   openSheet('subtitleSheet');
   document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">正在准备…</div>';
   subCurrentLang = 'all'; syncSubLangChips();
@@ -2994,7 +3025,7 @@ function searchSubtitles(){
   var box = document.getElementById('subResults');
   if (!rawQ){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   if (!(state.subtitleAssrt || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">未配置字幕源 Token</div>'; return; }
-  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未填写服务地址（设置 → 磁力配置）</div>'; return; }
+  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未填写磁力 Worker 地址（设置 → API 配置）</div>'; return; }
   // 仅搜索已勾选且已配置 Token 的源；默认仅伪射手（优先、省 OpenSubtitles 配额）
   var useAssrt = document.getElementById('subSrcAssrt').checked && !!state.subtitleAssrt;
   var useOs = document.getElementById('subSrcOs').checked && !!state.subtitleOs;
@@ -3069,7 +3100,7 @@ function downloadSubtitle(idx){
   var it = subResultsCache[idx];
   if (!it) return;
   var base = state.magnetWorker.replace(/\/$/, '');
-  if (!base){ showToast('请先填写服务地址（设置 → 磁力配置）', 'error'); return; }
+  if (!base){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
   var name = (it.title || 'subtitle').replace(/[\\/:*?"<>|]/g, '_');
   var url = base + '/subtitles?action=download'
     + '&source=' + encodeURIComponent(it.source)
@@ -3452,16 +3483,34 @@ function saveToDisk(){
     renderOverview();
     // 保存完成后按配置自动清理过期缓存
     clearExpiredFilms();
-    if (state.saveMode === 'save-download'){
-      exportShare();
-    } else {
-      showToast('已保存', 'success');
-    }
+    showToast('已保存', 'success');
     // 保存后检查影片数量，达到上限附近时提醒（延迟以免覆盖保存提示）
     checkFilmCap(1500);
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
+}
+/* 搜索结果点击：抓到元数据后立即保存并跳首页（图片后台加载完再静默补存，见 silentRefreshCurrentFilm） */
+function quickSaveAndHome(){
+  var title = getVal('title'); var filename = getVal('filename');
+  if (!filename && !title){ showToast('缺少影片名，无法保存', 'error'); return; }
+  var film = buildFilmFromCurrent();
+  currentFilmId = film.id;
+  saveFilm(film).then(function(){
+    renderOverview(); clearExpiredFilms();
+    switchPage('home');
+    showToast('已保存，返回首页', 'success');
+    checkFilmCap(1500);
+  }).catch(function(err){
+    showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
+  });
+}
+/* 图片加载完成后，用当前编辑态覆盖保存一次，补全 poster/fanart 等，并刷新首页（无提示） */
+function silentRefreshCurrentFilm(){
+  if (!currentFilmId) return;
+  var film = buildFilmFromCurrent();
+  film.id = currentFilmId;
+  saveFilm(film).then(function(){ renderOverview(); }).catch(function(){});
 }
 
 /* 列表 sheet 完成按钮 */
@@ -3523,7 +3572,10 @@ function renderOverview(){
   var grid = document.getElementById('overviewGrid');
   var empty = document.getElementById('overviewEmpty');
   if (!grid) return Promise.resolve();
+  if (!state.themeHidden) state.overviewTab = 'movie';
   return listFilms().then(function(films){
+    if (state.overviewTab === 'av') films = films.filter(function(f){ return !!f.adult; });
+    else films = films.filter(function(f){ return !f.adult; });
     if (!films.length){
       grid.innerHTML = '';
       empty.style.display = '';
@@ -3541,8 +3593,11 @@ function renderOverview(){
       if (hasTrailer) badgeHtml += '<div class="mc-trailer"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>';
       var badges = badgeHtml ? '<div class="mc-badges">' + badgeHtml + '</div>' : '';
       var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
-      var title = '<div class="mc-title">' + escapeHtml(f.title || f.id) + '</div>';
-      return '<div class="movie-card-wrap" data-id="' + enc + '" onclick="openFilmDetail(\'' + enc + '\')">'
+      var cardTitle = (f.adult && f.data && f.data.dvdId) ? (f.data.dvdId || '').toUpperCase() : (f.title || f.id);
+      var title = '<div class="mc-title">' + escapeHtml(cardTitle) + '</div>';
+      // 注意：点击走 addEventListener 绑定（见 bindOverviewLongPress），不在此内联 onclick 嵌入 id，
+      // 避免片名含单引号时 escapeAttr 转义破坏 JS 字符串导致点击失效。
+      return '<div class="movie-card-wrap" data-id="' + enc + '">'
            + '<div class="movie-card">' + poster + badges + lock + '</div>' + title + '</div>';
     }).join('');
     bindOverviewLongPress();
@@ -3680,8 +3735,8 @@ function searchTMDB(){
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
   getTMDBKey().then(function(key){
     if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → API 配置」填写 TMDB Key', 'error'); return; }
-    // 是否包含成人内容由 NSFW 开关控制：开启时 include_adult=true，否则 false
-    var adult = state.nsfw ? 'true' : 'false';
+    // TMDB 成人内容：里模式解锁后包含，否则不包含
+    var adult = state.themeHidden ? 'true' : 'false';
     var url = TMDB_API_BASE + '/search/movie?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
     fetch(url)
       .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -3689,6 +3744,334 @@ function searchTMDB(){
       .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; });
   });
 }
+
+/* ===== R18.dev 元数据搜索（AV 元数据来源，经 Worker 代理） ===== */
+var javResults = [];
+function javPick(obj, keys){
+  if (!obj) return '';
+  for (var i = 0; i < keys.length; i++){
+    var v = obj[keys[i]];
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return '';
+}
+/* R18 字段形态混杂（maker={name}、director=字符串、actresses[].name 可能是 name_kanji/name），
+   统一安全转字符串，避免 [object Object]。优先取日文（name_ja/name_kanji），回退英文/原始。 */
+function javStr(v){
+  if (v == null || v === '') return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return String(v);
+  if (Array.isArray(v)) return v.map(javStr).filter(Boolean).join(', ');
+  if (typeof v === 'object') return javStr(v.name_ja || v.name_kanji || v.name_en || v.name_romaji || v.name || v.title || v.text || '');
+  return String(v);
+}
+/* 取 maker/label/series：可能是 {name} 对象，或扁平字符串 / 日文扁平字段（maker_name_ja…） */
+function javName(v){
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  return javStr(v.name_ja || v.name_en || v.name || v);
+}
+/* 从任意字符串中提取 AV 番号（如 IPX-011 / RKI-481 / MIDE-123），用于刷新时兜底定位番号。
+   匹配「2-6 位字母 + 可选连字符 + 2-5 位数字」，返回统一大写形式；无匹配返回空串 */
+function extractDvdId(s){
+  if (!s) return '';
+  var m = String(s).match(/[A-Za-z]{2,6}-?\d{2,5}/);
+  return m ? m[0].toUpperCase() : '';
+}
+/* R18 / DMM 类型「英文 → 中文」通用映射。键为 r18.dev 返回的英文类别名（categories[].name）。
+   未命中的英文原样保留，绝不丢数据。新增类别只需在此表补充即可。 */
+var GENRE_EN2ZH = {
+  'IDOL': '偶像', 'SF': '科幻', 'VR': 'VR', 'VRSION': 'VR', '4HR+': '4小时以上',
+  'Acme': '阿酷', 'Amateur': '素人', 'Anal': '肛交', 'Anal Play': '肛交', 'Anime': '动画',
+  'Ass Lover': '美臀', 'Bakunyu': '爆乳', 'BDSM': '调教', 'Beautiful Girl': '美少女',
+  'Big Breasts': '巨乳', 'Big Pennis': '巨根', 'Big Tits': '巨乳', 'Black': '黑人',
+  'BL': '耽美', 'Blow': '口交', 'Bodysuit': '紧身衣', 'Bukkake': '潮吹颜射',
+  'Costume': '角色扮演', 'Creampie': '中出', 'Cuckold': '寝取', 'Dildo': '按摩棒',
+  'DocPro': '医生', 'Documentary': '纪录片', 'Drink': '饮尿', 'Dream': '梦幻',
+  'Embarrassment': '羞辱', 'Exclusive Distribution': '独占配信', 'Fetish': '恋物',
+  'Fingering': '指交', 'Foot Job': '足交', 'Ganimen': '假阳具', 'Glasses': '眼镜',
+  'Golden Shower': '饮尿', 'Hand Job': '手交', 'Hi-Def': '高清', 'Huge Butt': '巨臀',
+  'Idol': '偶像', 'Incest': '近亲相奸', 'JAV': '国产', 'Lady': '人妻',
+  'Lesbian': '女同', 'Lotion': '润滑剂', 'Married Woman': '人妻', 'Masturbation': '自慰',
+  'Mature': '熟女', 'Miscellaneous': '其他', 'Nampa': '逆搭讪', 'Naughty': '恶作剧',
+  'Nurse': '护士', 'OL': '女职员', 'Onanie': '自慰', 'Orgy': '乱交', 'Other': '其他',
+  'Outdoor': '户外', 'Pantyhose': '丝袜', 'Pervert': '变态', 'Piss Drinking': '饮尿',
+  'School': '校园', 'Series': '系列', 'Slender': '苗条', 'Small Breasts': '贫乳',
+  'Sm': '调教', 'Soap': '泡泡浴', 'Sweat': '汗液', 'Swim': '泳装', 'Threesome': '3P',
+  'Titty Fuck': '乳交', 'Tokudai': '特大', 'Training': '调教', 'Variety': '综合',
+  'Virgin': '处女', 'Wife': '人妻', 'Yariman': '荡妇', 'Bishojo': '美少女',
+  'Featured': '精选', 'Best': '精选', 'Compilation': '合集', 'Solo': '单人',
+  'Couple': '情侣', 'Fetishism': '恋物', 'Girl': '少女', 'Hard': '凌辱',
+  'Humiliation': '羞辱', 'Interracial': '跨种族', 'Maid': '女仆', 'Nurse': '护士'
+};
+function mapGenreEnToZh(en){
+  if (!en) return en;
+  if (GENRE_EN2ZH[en]) return GENRE_EN2ZH[en];
+  var lower = String(en).toLowerCase();
+  for (var k in GENRE_EN2ZH){ if (k.toLowerCase() === lower) return GENRE_EN2ZH[k]; }
+  return en; // 未命中保留英文
+}
+/* R18 / DMM 女优「英文罗马字 → 中文/日文汉字」通用映射。
+   键为 r18.dev 返回的 actresses[].name（如 "Mika Aikawa"）。
+   为兼容来源可能的「名 姓 / 姓 名」两种顺序，对每个女优同时索引正序与反序。
+   未命中则原样保留英文罗马字，绝不丢数据。新增女优只需在 ACTRESS_LIST 增加一行。 */
+var ACTRESS_LIST = [
+  ['Yua Mikami', '三上悠亜'], ['Arina Hashimoto', '橋本有菜'], ['Miku Abeno', '阿部乃みく'],
+  ['Eimi Fukada', '深田えいみ'], ['Yui Hatano', '波多野結衣'], ['Maria Ozawa', '小澤マリア'],
+  ['Sora Aoi', '蒼井そら'], ['Akiho Yoshizawa', '吉沢明歩'], ['Rio', '柚木ティナ'],
+  ['Jessica Kizaki', '希崎ジェシカ'], ['Yu Shinoda', '篠田ゆう'], ['Minori Hatsune', '初音みのり'],
+  ['Anri Okita', '沖田杏梨'], ['Rin Aoki', '青木りん'], ['Nao Oikawa', '及川奈央'],
+  ['Hitomi Tanaka', '田中ヒトミ'], ['Bunko Kanazawa', '金沢文子'], ['Risa Kasumi', '霞リカ'],
+  ['Tsukasa Aoi', '葵つかさ'], ['JULIA', 'じゅりあ'], ['Aika', '愛珂'], ['Rion', 'りおん'],
+  ['Mana Sakura', '桜まな'], ['Chihiro Hara', '原ちひろ'], ['Nao Jinguji', '神宮寺ナオ'],
+  ['Minami Kojima', '小島みなみ'], ['Hibiki Otsuki', '大槻ひびき'], ['Aoi Tsukino', '月野あおい'],
+  ['Mei Washio', '鷲尾めい'], ['Nanami Matsumoto', '松本菜奈実'], ['Shiori Tsukada', '塚田詩織'],
+  ['Nene Tanaka', '田中ねね'], ['Hana Himesaki', '姫咲はな'], ['Moe Amatsuka', '天使もえ'],
+  ['Rara Yoshikawa', '吉川らら'], ['Sakura Kirishima', '霧島さくら'], ['Shoko Takahashi', '高橋しょう子'],
+  ['Aimi Yoshikawa', '吉川あいみ'], ['Riona Hirose', '広瀬りおな'], ['Airi Kijima', '木島愛里'],
+  ['Maria Nagai', '永井マリア'], ['Aino Kori', '越智ありな'], ['Honoka', 'ほのか'],
+  ['Ruka Kanae', '香苗るか'], ['Yuma Asami', '麻美ゆま'], ['Rola Takizawa', '竹田ろら'],
+  ['Akari Hoshino', '星野明'], ['Asahi Mizuno', '水野朝陽'], ['Ena Satsuki', '紗月えな'],
+  ['Yui Obata', '小幡ゆい'], ['Yume Nishimiya', '西山ゆめ'], ['Shizuku Hoshino', '星乃せあら'],
+  ['Ai Uehara', '上原亜衣'], ['Saki Hatsumi', '初美沙希'], ['Mao Hamasaki', '浜崎真緒'],
+  ['Maki Tomoda', '友田真希'], ['Risa Onodera', '小野瀬りさ'], ['Ayumi Shinoda', '篠田あゆみ'],
+  ['Tsubasa Hachimitsu', 'ハチミツ翼'], ['Kaho Imai', '今井かほい'], ['Shion Utsunomiya', '宇都宮しをん'],
+  ['Natsuki Iori', '伊織なつき'], ['Kaede Hondo', '楓ふうあ'], ['Rei Mizuna', '水菜麗'],
+  ['AIKA', '愛花'], ['Miki', '美希'], ['Mirai', 'みらい'], ['Choco', 'ちょこ'], ['Mako', 'まこ'],
+  ['Yuri Oshikawa', '押川ゆり'], ['Riko Honda', '本田りこ'], ['Kurea Hasumi', '蓮実クレア'],
+  ['Yui Nishikawa', '西川ゆい'], ['Hotaru Akane', '紅音ほたる'], ['Yua Aida', '愛田ゆあ'],
+  ['Ayane Asakura', '朝倉あやね'], ['Ruka', 'るか'], ['Marin', 'まりん'], ['Sana', 'さな'],
+  ['Hime', 'ひめ'], ['Nami', 'なみ'], ['Rena', 'れな'], ['Hina', 'ひな'], ['Yuki', 'ゆき'],
+  ['Nanami', 'ななみ'], ['Ria', 'りあ'], ['Erika', 'えりか'], ['Ayaka', 'あやか'],
+  ['Saki Kozina', '小篠恵奈'], ['Aoi', 'あおい'], ['Yui', 'ゆい'], ['Miku', 'みく'],
+  ['Hibiki', 'ひびき'], ['Sakura', 'さくら'], ['Mei', 'めい'], ['Rara', 'らら'], ['Moe', 'もえ'],
+  ['Nene', 'ねね'], ['Hana', 'はな'], ['Saki', 'さき'], ['Yuma', 'ゆま'], ['Nao', 'なお'],
+  ['Yua', 'ゆあ']
+];
+var ACTRESS_EN2ZH = {};
+ACTRESS_LIST.forEach(function(p){
+  var parts = String(p[0]).toLowerCase().split(/\s+/).filter(Boolean);
+  ACTRESS_EN2ZH[parts.join(' ')] = p[1];
+  if (parts.length === 2) ACTRESS_EN2ZH[parts[1] + ' ' + parts[0]] = p[1]; // 反序索引，兼容「姓 名」
+});
+function mapActressEnToZh(en){
+  if (!en) return '';
+  var key = String(en).toLowerCase().replace(/\s+/g, ' ').trim();
+  return ACTRESS_EN2ZH[key] || en; // 未命中原样返回英文
+}
+/* 防御性字段规范化：把可能是对象（如旧数据/来源字段为对象）的 studio/label/series 转成可读的字符串 */
+function normalizeTextField(v){
+  if (v == null || v === '') return '';
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return v.join(', ');
+  if (typeof v === 'object'){
+    var s = v.name_ja || v.name_en || v.name || v.title || v.label || v.studio || v.series || v.maker_name_ja || v.maker_name_en || v.maker || v.label_name_ja || v.label_name_en || v.series_name_ja || v.series_name_en || v.text || '';
+    if (s) return s;
+  }
+  return String(v);
+}
+/* R18.dev 数据源：免费、无需 Key，但被 Cloudflare 拦浏览器直连，需经用户自己的代理（复用磁力 Worker）。
+   代理路由：<worker>/r18?dvd_id=<番号>  → 代理请求 https://r18.dev/.../dvd_id=<番号>/json 并带回 CORS 头。 */
+function javRequest(dvdId){
+  var base = (state.magnetWorker || '').replace(/\/$/, '');
+  if (!base) return Promise.reject(new Error('NO_WORKER'));
+  var url = base + '/r18?dvd_id=' + encodeURIComponent(dvdId);
+  return fetch(url)
+    .then(function(r){
+      if (r.status === 404) throw new Error('未找到该番号');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+}
+function setMetaSource(src, btn){
+  state.metaSource = src;
+  var seg = btn.parentNode;
+  seg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
+  document.getElementById('tmdbResults').innerHTML = '';
+  document.getElementById('tmdbQuery').placeholder = (src === 'jav') ? '请输入番号（如 IPX-011）' : '搜索影片';
+}
+function searchMeta(){
+  if (state.metaSource === 'jav') searchJAV();
+  else searchTMDB();
+}
+function searchJAV(){
+  var q = document.getElementById('tmdbQuery').value.trim();
+  if (!q){ showToast('请输入番号', 'error'); return; }
+  var box = document.getElementById('tmdbResults');
+  box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
+  if (!state.magnetWorker){
+    box.innerHTML = '<div class="tmdb-msg">未配置代理地址，请到「设置 → API 配置」填写磁力 / R18 Worker 地址。</div>';
+    showToast('请先配置 Worker 地址', 'error');
+    return;
+  }
+  javRequest(q)
+    .then(function(d){
+      // R18 按精确番号返回单条详情，包装成结果列表以保持点选交互
+      var item = {};
+      for (var k in d) if (d.hasOwnProperty(k)) item[k] = d[k];
+      item._dvdId = q;
+      javResults = [ item ];
+      renderJAVResults(javResults);
+    })
+    .catch(function(err){
+      var msg = (err && err.message) || '请求失败';
+      if (msg === 'NO_WORKER'){ box.innerHTML = '<div class="tmdb-msg">未配置代理地址，请到「设置 → API 配置」填写磁力 / R18 Worker 地址。</div>'; showToast('请先配置 Worker 地址', 'error'); }
+      else box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(msg) + '</div>';
+    });
+}
+/* 封面域名 pics.dmm.co.jp 无 CORS 头，已配 Worker 时经 /img 路由代理以绕跨域。
+   搜索列表与保存导入共用同一代理 URL，浏览器即可命中缓存、避免重复拉取 */
+function javCoverUrl(raw){
+  if (raw && state.magnetWorker && raw.indexOf('pics.dmm.co.jp') > -1){
+    return (state.magnetWorker.replace(/\/$/, '')) + '/img?url=' + encodeURIComponent(raw);
+  }
+  return raw;
+}
+function renderJAVResults(results){
+  var box = document.getElementById('tmdbResults');
+  if (!results.length){ box.innerHTML = '<div class="tmdb-msg">未找到匹配结果</div>'; return; }
+  var html = '';
+  results.slice(0, 20).forEach(function(item, idx){
+    var title = javStr(item.title_ja || item.title_en || item.title || item.name) || '';
+    var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
+    var date = javStr(item.release_date || item.releaseDate || item.date) || '';
+    var coverRaw = javStr(item.jacket_full_url || item.jacket_thumb_url);
+    if (!coverRaw && item.images && item.images.jacket_image) coverRaw = item.images.jacket_image.large2 || item.images.jacket_image.large || '';
+    var cover = javCoverUrl(coverRaw);
+    var metaParts = [];
+    if (date) metaParts.push(date);
+    if (dvdId && dvdId !== title) metaParts.push(dvdId);
+    var meta = metaParts.join(' · ');
+    html += '<div class="tmdb-result" data-jav-idx="' + idx + '" onclick="selectJAV(' + idx + ')">';
+    html += cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
+    html += '<div class="tr-info">';
+    html += '<div class="tr-title">' + escapeHtml(title) + '<span class="adult-tag">AV</span></div>';
+    if (meta) html += '<div class="tr-meta">' + escapeHtml(meta) + '</div>';
+    html += '</div></div>';
+  });
+  box.innerHTML = html;
+}
+function selectJAV(i){
+  var item = javResults[i];
+  if (!item) return;
+  showToast('正在获取详情…', 'success');
+  var imgP = populateFromJAV(item);
+  // 文本元数据已填充完成：立即保存并跳首页，图片后台加载完再静默补存
+  quickSaveAndHome();
+  imgP.then(function(){ silentRefreshCurrentFilm(); }).catch(function(){});
+}
+function populateFromJAV(d){
+  ['title','originaltitle','premiered','runtime','plot','rating'].forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
+  state.year = ''; state.mpaa = '';
+  var pv = document.getElementById('premieredVal'); if (pv){ pv.textContent = '请选择'; pv.classList.add('empty'); }
+  var yv = document.getElementById('year'); if (yv) yv.value = '';
+  var yvv = document.getElementById('yearVal'); if (yvv){ yvv.textContent = '请选择'; yvv.classList.add('empty'); }
+  var mv = document.getElementById('mpaaVal'); if (mv){ mv.textContent = '请选择'; mv.classList.add('empty'); }
+  state.countries = []; state.genres = [];
+  state.directors = []; state.actors = []; state.adult = true;
+  state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null;
+  state.posterCandidates = []; state.fanartCandidates = [];
+  cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null; cropOriginals.detailPoster = null;
+  clearMediaThumb('poster'); clearMediaThumb('fanart'); clearMediaThumb('logo');
+
+  // ===== 字段兼容：同时支持 r18.dev 线上「英文简化 schema」与更丰富的「日文 schema」=====
+  // 线上 r18.dev /json 实测只返回：title / actresses[].name / categories[].name / director(字符串) /
+  //   images.jacket_image.large2 / maker.name / label.name / series.name / release_date /
+  //   runtime_minutes / sample.high / content_id。不含日文、不含 gallery 剧照、不含 dvd_id。
+  // 若将来接入返回日文的源，下列「优先日文」取法会自动生效。
+  var title = javStr(d.title_ja || d.title_en || d.title || d.name) || '';        // 日文原标题优先，回退英文
+  var dvdId = javStr(d._dvdId || d.dvd_id || d.dvdId || d.content_id || d.id) || ''; // _dvdId=搜索时输入的番号
+  var date = javStr(d.release_date || d.releaseDate || d.date) || '';
+  var year = (date || '').slice(0, 4);
+  var runtime = javStr(d.runtime_mins || d.runtime_minutes || d.runtime || d.length) || '';
+  var overview = '';  // R18.dev 不提供独立剧情简介
+  var rating = ''; // R18 不提供评分
+  var countries = ['日本'];
+  // R18 categories：优先取日文类型名 name_ja，回退英文 name_en / name；英文再经通用映射转中文（未命中保留英文）
+  var rawGenres = (d.categories || []).map(function(c){ return javStr(c && (c.name_ja || c.name_en || c.name)); }).filter(Boolean);
+  var genres = rawGenres.map(function(g){ return mapGenreEnToZh(g); });
+  genres.forEach(function(g){ if (state.genreAdult.indexOf(g) < 0) state.genreAdult.push(g); });
+
+  setFieldVal('title', title);
+  setFieldVal('originaltitle', title);   // 原始标题 = 原标题
+  setFieldVal('dvdid', dvdId);           // 番号存独立字段
+  _filenameManual = false;
+  // AV 文件名以番号命名更直观
+  onTitleChanged(document.getElementById('dvdid'));
+  setFieldVal('premiered', date);
+  if (date){ onPremieredChange({ value: date }); } else { setYear(year); }
+  setFieldVal('runtime', runtime);
+  setFieldVal('plot', overview);
+  setFieldVal('rating', rating);
+
+  state.countries = countries.slice();
+  renderCountryChips();
+  savePresets();
+  state.genres = genres.slice();
+  renderGenreChips();
+
+  // 演员：优先日文名 name_kanji，回退 name_romaji / name（线上为英文 name）。javStr 同时兼容字符串与对象
+  // 再套 mapActressEnToZh：把英文罗马字映射成中文/日文汉字（如 "Mika Aikawa" → "藍川美夏"），未命中保留英文
+  var rawCast = (d.actresses || []).map(function(a){ return mapActressEnToZh(javStr(a)); }).filter(Boolean);
+  state.actors = rawCast.slice(0, 5).map(function(n){ return { name: n, role: '', photo: null }; });
+  // 导演：可能是字符串（线上），也可能是 [{name_kanji…}] 数组（富 schema）
+  var dirSrc = d.directors;
+  if (!dirSrc && d.director) dirSrc = (typeof d.director === 'string') ? [d.director] : (Array.isArray(d.director) ? d.director : [d.director]);
+  var rawDirectors = (dirSrc || []).map(function(a){ return javStr(a); }).filter(Boolean);
+  state.directors = rawDirectors.slice(0, 5).map(function(n){ return { name: n, role: '', photo: null }; });
+  // 制作商 / 发行商 / 系列：优先日文扁平字段，回退嵌套 {name} 对象
+  state.studio = javName(d.maker_name_ja || d.maker_name_en || d.maker || d.studio);
+  state.label  = javName(d.label_name_ja || d.label_name_en || d.label || d.publisher || d.distributor);
+  state.series = javName(d.series_name_ja || d.series_name_en || d.series || d.seriesName);
+  state.dvdId = dvdId;
+  // 预告片：sample_url（富 schema）或 sample.high（线上）
+  state.trailer = javStr(d.sample_url || (d.sample && d.sample.high) || (typeof d.sample === 'string' ? d.sample : '') || d.trailer) || '';
+  renderCast();
+
+  // 封面：jacket_full_url / jacket_thumb_url（富 schema），回退 images.jacket_image.large2（线上）
+  var coverRaw = javStr(d.jacket_full_url || d.jacket_thumb_url);
+  if (!coverRaw && d.images && d.images.jacket_image) coverRaw = d.images.jacket_image.large2 || d.images.jacket_image.large || '';
+  var cover = javCoverUrl(coverRaw);   // 与搜索列表共用同一 URL，浏览器缓存命中、无需重复拉取
+  // 剧照：gallery[].image_full（富 schema 才有；线上 r18.dev 无 gallery）
+  var gallery = (d.gallery || []).map(function(g){ return g && (g.image_full || g.image) ? javCoverUrl(g.image_full || g.image) : ''; }).filter(Boolean);
+  var fanart = gallery[0] || '';
+  state.fanartCandidates = gallery.slice(1, 6);
+  // AV：r18.dev 无 gallery，用「未裁剪」的完整封面作为剧照（仅 AV）
+  if (!fanart && state.adult && cover) {
+    fanart = cover;
+    state.fanartCandidates = [];
+  }
+  var imgPromises = [];
+  if (cover) imgPromises.push(loadImageFromURL(cover, 'poster', 2/3, 'right'));   // 海报：右裁
+  if (fanart) imgPromises.push(loadImageFromURL(fanart, 'fanart', 0, 'full'));    // 剧照：未裁剪完整封面
+  setFieldVal('studio', state.studio); setFieldVal('label', state.label); setFieldVal('series', state.series);
+  applyEditMode();
+  updateState();
+  return Promise.all(imgPromises);
+}
+function loadImageFromURL(url, type, ratio, cropMode){
+  ratio = ratio || 0;
+  var cropFn;
+  if (cropMode === 'right') cropFn = cropRightHalf;
+  else if (cropMode === 'full') cropFn = function(durl){ return Promise.resolve(durl); };  // 不裁剪，保留原图
+  else cropFn = function(durl){ return cropToRatio(durl, ratio); };
+  return fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
+    .then(function(blob){
+      return new Promise(function(resolve){
+        var reader = new FileReader();
+        reader.onload = function(evt){
+          cropOriginals[type] = evt.target.result;
+          cropFn(evt.target.result).then(function(cropped){
+            state[type] = cropped;
+            renderMediaThumb(type, cropped);
+            resolve();
+          });
+        };
+        reader.readAsDataURL(blob);
+      });
+    }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
+}
+
 function toggleSearchClear(){
   var el = document.getElementById('tmdbQuery');
   var btn = document.getElementById('searchClear');
@@ -3715,7 +4098,7 @@ function renderTMDBResults(results){
     if (date) metaParts.push(date);
     if (orig && orig !== name) metaParts.push(orig);
     var meta = metaParts.join(' · ');
-    html += '<div class="tmdb-result" data-tmdb-id="' + item.id + '" onclick="selectTMDB(' + item.id + ')">';
+    html += '<div class="tmdb-result" data-tmdb-id="' + item.id + '" data-poster-path="' + escapeAttr(item.poster_path || '') + '" onclick="selectTMDB(' + item.id + ')">';
     html += poster ? '<img src="' + poster + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
     html += '<div class="tr-info">';
     html += '<div class="tr-title">' + escapeHtml(name) + (item.adult ? '<span class="adult-tag">18+</span>' : '') + '</div>';
@@ -3727,9 +4110,16 @@ function renderTMDBResults(results){
   // A+B+C：限并发拉取每个结果的预告信息，按 tmdb id 缓存到 IndexedDB，列表先渲染后懒加载点亮角标
   fetchTrailersForResults(results.slice(0, 20));
 }
-function selectTMDB(id){ applyTMDBById(id, function(){ switchMetaTab('edit'); showToast('已获取影片元数据', 'success'); }); }
+function selectTMDB(id){
+  // 从搜索结果卡片读取已展示的 poster_path（属性已转义），保存时直接复用已加载封面
+  var pp = null;
+  var el = document.querySelector('.tmdb-result[data-tmdb-id="' + id + '"]');
+  if (el) pp = el.getAttribute('data-poster-path') || null;
+  applyTMDBById(id, null, true, pp);
+}
 // 按 TMDB id 拉取影片详情并填充编辑态；afterApply（可选）在图片加载完成后回调
-function applyTMDBById(id, afterApply){
+// posterHint：搜索列表已展示过的 poster_path，用于保存时直接复用已加载封面、免去再次拉取
+function applyTMDBById(id, afterApply, quick, posterHint){
   getTMDBKey().then(function(key){
     if (!key) return;
     showToast('正在获取详情…', 'success');
@@ -3763,8 +4153,18 @@ function applyTMDBById(id, afterApply){
           }).catch(function(){ return d2; });
         });
       })
-      .then(function(d2){ return populateFromTMDB(d2); })
-      .then(function(){ if (afterApply) afterApply(); })
+      .then(function(d2){
+        var imgP = populateFromTMDB(d2);
+        if (quick){
+          // 文本元数据已填充完成：先把搜索列表已加载的封面（浏览器缓存）即时带进首页，
+          // 再保存并跳回；w780 高清图在后台加载完由 silentRefreshCurrentFilm 静默升级覆盖
+          prefetchSearchPoster(posterHint).then(function(){ quickSaveAndHome(); }).catch(function(){ quickSaveAndHome(); });
+          imgP.then(function(){ silentRefreshCurrentFilm(); }).catch(function(){});
+          if (afterApply) afterApply();
+          return;
+        }
+        return imgP.then(function(){ if (afterApply) afterApply(); }).catch(function(){ if (afterApply) afterApply(); });
+      })
       .catch(function(err){ showToast('获取详情失败：' + ((err&&err.message)||'请求失败'), 'error'); });
   });
 }
@@ -3773,6 +4173,10 @@ function applyTMDBById(id, afterApply){
 function refreshFromTMDB(id){
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
+    // AV 影片：用番号从 R18 重新拉取，而非 TMDB（否则会搜不到或用普通影片数据覆盖 AV 字段）
+    if (film.data && film.data.adult){
+      return refreshFromR18(film);
+    }
     var tid = (film.data && film.data.tmdbId) || null;
     if (tid) return doApplyRefresh(film, tid);
     // 未关联 TMDB：后台按标题静默搜索，取最相关项
@@ -3789,7 +4193,7 @@ function refreshFromTMDB(id){
 function searchTMDBIdByTitle(q, cb){
   getTMDBKey().then(function(key){
     if (!key) return cb(null);
-    var adult = state.nsfw ? 'true' : 'false';
+    var adult = state.themeHidden ? 'true' : 'false';
     var url = TMDB_API_BASE + '/search/movie?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
     fetch(url)
       .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -3821,6 +4225,33 @@ function doApplyRefresh(film, tid){
       renderOverview();
       showToast('已从 TMDB 刷新元数据', 'success');
     });
+  });
+}
+// AV 影片刷新：用已记录的番号从 R18 重新拉取元数据并覆盖保存（保持原影片 id）
+function refreshFromR18(film){
+  var data = film.data || {};
+  // 番号来源多级兜底：库字段 → 当前编辑态（详情页打开时已归位） → 从文件名/原始标题/标题里提取
+  var dvdId = data.dvdId || state.dvdId || extractDvdId(data.filename) || extractDvdId(data.originaltitle) || extractDvdId(data.title) || '';
+  if (!dvdId) return showToast('此 AV 未记录番号，无法刷新', 'error');
+  if (!state.magnetWorker) return showToast('请先到「设置 → API 配置」填写磁力 / R18 Worker 地址', 'error');
+  showToast('正在从 R18 刷新…', 'success');
+  currentFilmId = film.id;
+  currentFilmLocked = !!film.locked;
+  javRequest(dvdId).then(function(d){
+    if (!d || !d.title) return showToast('未能从 R18 获取该番号数据', 'error');
+    d._dvdId = dvdId;   // 刷新时把已记录的番号回填，避免回退成 content_id
+    var imgP = populateFromJAV(d);
+    // 文本元数据已填充完成：立即覆盖保存一次（保持原 id），图片后台加载完再静默补存
+    var f = buildFilmFromCurrent();
+    f.id = film.id;
+    f.locked = !!film.locked;
+    saveFilm(f).then(function(){
+      renderOverview();
+      showToast('已从 R18 刷新元数据', 'success');
+    });
+    imgP.then(function(){ silentRefreshCurrentFilm(); }).catch(function(){});
+  }).catch(function(err){
+    showToast(err && err.message ? err.message : '刷新失败', 'error');
   });
 }
 function fetchVideosMerged(urls){
@@ -3897,7 +4328,7 @@ function populateFromTMDB(d){
   var mv = document.getElementById('mpaaVal'); if (mv){ mv.textContent = '请选择'; mv.classList.add('empty'); }
   // 只清空本次的已选值（countries/genres），保留用户维护的类型预设库 genreNormal
   state.countries = []; state.genres = [];
-  state.directors = []; state.actors = [];
+  state.directors = []; state.actors = []; state.adult = !!d.adult;
   state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null;
   state.posterCandidates = []; state.fanartCandidates = [];
   cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null; cropOriginals.detailPoster = null;
@@ -3982,8 +4413,31 @@ function populateFromTMDB(d){
   // 记录 TMDB id，供「刷新」功能重新拉取元数据
   if (d.id != null) state.tmdbId = d.id;
 
+  applyEditMode();
   updateState();
   return Promise.all(imgPromises);
+}
+/* 把远程图片转成 dataURL（供写入 IndexedDB）。优先打浏览器缓存，避免重复网络请求 */
+function fetchImageDataURL(url){
+  return fetch(url, { mode: 'cors', cache: 'force-cache' })
+    .then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
+    .then(function(blob){
+      return new Promise(function(resolve){
+        var rd = new FileReader();
+        rd.onload = function(evt){ resolve(evt.target.result); };
+        rd.readAsDataURL(blob);
+      });
+    });
+}
+/* 保存时直接复用搜索列表已加载的封面（w154，浏览器已缓存）：即时转为 dataURL 作初始封面，
+   让首页立刻有图；后续 w780 高清图在后台加载完再静默升级覆盖 */
+function prefetchSearchPoster(posterPath){
+  if (!posterPath) return Promise.resolve();
+  var url = TMDB_IMG_BASE + '/w154' + posterPath;
+  return fetchImageDataURL(url)
+    .then(function(durl){ return cropToRatio(durl, 2/3); })
+    .then(function(cropped){ if (!state.poster) state.poster = cropped; })
+    .catch(function(){});
 }
 function loadImageFromTMDB(posterPath, type, size){
   size = size || 'original';
@@ -4072,6 +4526,23 @@ function cropToRatio(dataUrl, ratio){
       canvas.width = Math.round(cw); canvas.height = Math.round(ch);
       var ctx = canvas.getContext('2d');
       ctx.drawImage(img, cx, cy, cw, ch, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
+    };
+    img.onerror = function(){ resolve(dataUrl); };
+    img.src = dataUrl;
+  });
+}
+/* —— AV 海报默认裁封面右侧 1/2（x 从宽度一半起、取右半幅、整高） —— */
+function cropRightHalf(dataUrl){
+  return new Promise(function(resolve){
+    var img = new Image();
+    img.onload = function(){
+      var sw = img.width, sh = img.height;
+      var cw = Math.max(1, Math.round(sw / 2)), ch = sh;
+      var canvas = document.createElement('canvas');
+      canvas.width = cw; canvas.height = ch;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, Math.round(sw / 2), 0, cw, ch, 0, 0, cw, ch);
       resolve(canvas.toDataURL('image/jpeg', 0.92));
     };
     img.onerror = function(){ resolve(dataUrl); };
@@ -4179,8 +4650,9 @@ function imageToBlob(dataUrl, mime, withBadge){
 /* —— 当前影片 ↔ 记录 互转 —— */
 function buildFilmFromCurrent(){
   var id = sanitizeName(getVal('filename') || getVal('title') || ('film-' + Date.now()));
+  var adult = !!state.adult || (state.genres || []).some(function(g){ return state.genreAdult.indexOf(g) >= 0; });
   return {
-    __type: 'film', id: id,
+    __type: 'film', id: id, adult: adult,
     title: getVal('title'),
     rating: getVal('rating'),
     locked: currentFilmLocked,
@@ -4191,6 +4663,7 @@ function buildFilmFromCurrent(){
       plot: getVal('plot'), rating: getVal('rating'), mpaa: getVal('mpaa'),
       countries: state.countries.slice(), genres: state.genres.slice(),
       directors: state.directors, actors: state.actors,
+      studio: normalizeTextField(state.studio), label: normalizeTextField(state.label), series: normalizeTextField(state.series), dvdId: state.dvdId || null,
       poster: state.poster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
       posterCandidates: state.posterCandidates || null, fanartCandidates: state.fanartCandidates || null,
       hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null
@@ -4221,12 +4694,22 @@ function onTrailerInput(el){
 }
 function applyFilmData(film){
   currentFilmLocked = !!film.locked;
+  state.adult = !!(film.adult);
   var d = film.data || {};
   setFieldVal('title', d.title);
   _filenameManual = true;
   document.getElementById('filename').value = d.filename || film.id;
   onTitleChanged(document.getElementById('title'));
   setFieldVal('originaltitle', d.originaltitle);
+  // 兼容旧数据：AV 且 dvdId 为空、originaltitle 形如番号时，将番号归位到独立 dvdId 字段，
+  // 原始标题恢复为日文原标题，避免番号同时出现在两个字段
+  state.dvdId = d.dvdId || '';
+  if (state.adult && !state.dvdId && d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle)){
+    state.dvdId = d.originaltitle;
+    state.originaltitle = d.title || '';
+    setFieldVal('originaltitle', state.originaltitle);
+  }
+  setFieldVal('dvdid', state.dvdId);
   setFieldVal('premiered', d.premiered);
   if (d.premiered) onPremieredChange({ value: d.premiered }); else setYear(d.year);
   setFieldVal('runtime', d.runtime);
@@ -4236,6 +4719,10 @@ function applyFilmData(film){
   state.countries = (d.countries || []).slice(); renderCountryChips();
   state.genres = (d.genres || []).slice(); renderGenreChips();
   state.directors = d.directors || []; state.actors = d.actors || []; renderCast();
+  state.studio = normalizeTextField(d.studio);
+  state.label = normalizeTextField(d.label);
+  state.series = normalizeTextField(d.series);
+  setFieldVal('studio', state.studio); setFieldVal('label', state.label); setFieldVal('series', state.series);
   state.poster = d.poster || null; state.fanart = d.fanart || null; state.logo = d.logo || null; state.detailPoster = d.detailPoster || null;
   state.posterCandidates = d.posterCandidates || []; state.fanartCandidates = d.fanartCandidates || [];
   cropOriginals.poster = state.poster;
@@ -4251,6 +4738,34 @@ function applyFilmData(film){
   if (state.logo) renderMediaThumb('logo', state.logo); else clearMediaThumb('logo');
   state.hasSubtitle = !!d.hasSubtitle;
   document.getElementById('hasSubtitle').checked = state.hasSubtitle;
+  applyEditMode();
+  updateState();
+}
+/* —— 编辑页字段按 影片 / AV 自适应 —— */
+function applyEditMode(){
+  var adult = !!state.adult;
+  var ot = document.querySelector('label[for="originaltitle"]');
+  if (ot) ot.textContent = '原始标题';
+  var avCard = document.getElementById('avFieldsCard');
+  if (avCard) avCard.style.display = adult ? '' : 'none';
+  var dvdf = document.getElementById('dvdidField');
+  if (dvdf) dvdf.style.display = adult ? '' : 'none';
+  var dirSec = document.getElementById('directorSection');
+  if (dirSec) dirSec.style.display = adult ? 'none' : '';
+  var actH = document.getElementById('actorHeading');
+  if (actH) actH.textContent = adult ? '女优' : '演员';
+  // 影片/AV 切换仅在里模式可见（AV 属里模式内容）
+  var seg = document.getElementById('editTypeSeg');
+  if (seg){
+    seg.style.display = state.themeHidden ? 'flex' : 'none';
+    Array.prototype.forEach.call(seg.querySelectorAll('button'), function(b){
+      b.classList.toggle('active', (b.dataset.type === 'av') === adult);
+    });
+  }
+}
+function setEditType(t){
+  state.adult = (t === 'av');
+  applyEditMode();
   updateState();
 }
 function clearMediaThumb(type){
@@ -4487,7 +5002,6 @@ function openFilm(encId){
     if (!film) return showToast('未找到影片', 'error');
     applyFilmData(film);
     currentFilmId = film.id;
-    switchMetaTab('edit');
     switchPage('edit');
   });
 }
@@ -4604,6 +5118,7 @@ function applyDetailTint(url, bgEl){
 }
 function renderFilmDetail(film){
   var d = film.data || {};
+  var adult = !!film.adult;
   var bgUrl = d.detailPoster || film.posterDataUrl || d.poster || d.fanart || '';
   var bgEl = document.getElementById('detailBg');
   var pe = document.getElementById('detailPoster');
@@ -4616,12 +5131,14 @@ function renderFilmDetail(film){
   applyDetailTint(bgUrl, bgEl);
   // 标题：有 logo 则用 logo 取代文字
   var titleEl = document.getElementById('detailTitle');
-  if (d.logo){
+  // AV 详情大标题显示番号；普通影片显示片名（或 logo）
+  var dispTitle = (adult && d.dvdId) ? (d.dvdId || '').toUpperCase() : (d.title || film.id);
+  if (!adult && d.logo){
     titleEl.innerHTML = '<img class="detail-logo-img" src="' + escapeAttr(d.logo) + '" alt="' + escapeAttr(d.title || film.id) + '">';
   } else {
-    titleEl.textContent = d.title || film.id;
+    titleEl.textContent = dispTitle;
   }
-  currentDetailTitle = (d.title || film.id) || '';   // 供长按复制使用
+  currentDetailTitle = dispTitle;   // 供长按复制使用
   // 第一行：⭐️评分 | 日期 | 国家 | 分级
   var info1 = [];
   if (d.rating) info1.push('<span class="dt-star">⭐️</span> ' + escapeHtml(d.rating));
@@ -4631,13 +5148,19 @@ function renderFilmDetail(film){
   var el1 = document.getElementById('detailInfo1');
   el1.innerHTML = info1.join(' ｜ ');
   el1.style.display = info1.length ? '' : 'none';
-  // 第二行：标签（逗号分割）
+  // 制作商 ｜ 发行商 ｜ 系列 —— 仅 AV 影片显示；普通影片不展示
+  var avParts = [d.studio, d.label, d.series].map(normalizeTextField).filter(function(x){ return x; });
+  var elAv = document.getElementById('detailInfoAv');
+  if (elAv){ elAv.innerHTML = avParts.map(escapeHtml).join(' ｜ '); elAv.style.display = (adult && avParts.length) ? '' : 'none'; }
+  // 第二行：类型/标签（逗号分割）—— 所有影片都显示
   var tags = (d.genres && d.genres.length) ? d.genres.slice() : [];
   var el2 = document.getElementById('detailInfo2');
   el2.textContent = tags.length ? tags.join(', ') : '';
   el2.style.display = tags.length ? '' : 'none';
   // 播放预告按钮：有预告片显示「播放预告片」可点击；无预告片显示「暂无预告片」且不可点击
   currentDetailTrailer = d.trailer || '';
+  var extBtn = document.getElementById('trailerExtBtn');
+  if (extBtn) extBtn.textContent = (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)) ? '在浏览器打开' : '在 YouTube 打开';
   var tb = document.getElementById('detailTrailer');
   var tbt = document.getElementById('detailTrailerText');
   if (tb) {
@@ -4655,15 +5178,20 @@ function renderFilmDetail(film){
   if (mb) mb.style.display = state.magnetWorker ? '' : 'none';
   // 字幕按钮：未配置任一字幕源 Token 时隐藏
   updateSubtitleBtn();
-  // 剧情：最前方增加 [影片名]
-  document.getElementById('detailPlot').textContent = d.plot ? ('[' + (d.title || film.id) + '] ' + d.plot) : '';
-  // 演职人员：导演 + 演员（合并展示）
+  // 剧情：最前方增加标题；AV 显示 [番号 标题]；无真实剧情时仍展示 [番号 标题] 占位
+  var plotTitle = (d.title || film.id);
+  if (adult) {
+    var code = (d.dvdId ? d.dvdId.toUpperCase() : (d.originaltitle || ''));
+    if (code) plotTitle = code + ' ' + plotTitle;
+  }
+  document.getElementById('detailPlot').textContent = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
+  // 演职人员：影片显示「导演 + 演员」；AV 不显示导演，演员改标「女优」
   var people = [];
-  (d.directors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.dept || '导演', photo: p.photo }); });
+  if (!adult) (d.directors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.dept || '导演', photo: p.photo }); });
   (d.actors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.role || '', photo: p.photo }); });
   var castEl = document.getElementById('detailCast');
   if (people.length){
-    var ch = '<div class="detail-cast-title">演职人员</div><div class="detail-cast-row"><div class="detail-cast-spacer"></div>';
+    var ch = '<div class="detail-cast-title">' + (adult ? '女优' : '演职人员') + '</div><div class="detail-cast-row"><div class="detail-cast-spacer"></div>';
     people.forEach(function(p){
       var nm = p.name || '?';
       var ini = escapeHtml(nm.charAt(0) || '?');
@@ -4681,6 +5209,27 @@ function renderFilmDetail(film){
   } else {
     castEl.innerHTML = '';
   }
+  // 剧照：在演职人员/女优下方展示（AV 为未裁剪完整封面；普通影片为 TMDB 背景图）
+  var shotEl = document.getElementById('detailShots');
+  if (shotEl){
+    var shots = [];
+    if (d.fanart) shots.push(d.fanart);
+    if (d.fanartCandidates && d.fanartCandidates.length) shots = shots.concat(d.fanartCandidates);
+    var seen = {};
+    shots = shots.filter(function(s){ if (!s || seen[s]) return false; seen[s] = 1; return true; });
+    if (shots.length){
+      var sh = '<div class="detail-shots-title">剧照</div><div class="detail-shots-row">';
+      shots.forEach(function(s){
+        sh += '<div class="detail-shot"><img src="' + escapeAttr(s) + '" alt="剧照" loading="lazy"></div>';
+      });
+      sh += '</div>';
+      shotEl.innerHTML = sh;
+      shotEl.style.display = '';
+    } else {
+      shotEl.innerHTML = '';
+      shotEl.style.display = 'none';
+    }
+  }
   // 内容初始位置距顶部 40%：每次打开从顶部开始（内容随 .detail-scroll 的 padding-top 定位）
   requestAnimationFrame(function(){
     var sc = document.getElementById('detailScroll');
@@ -4692,21 +5241,50 @@ function openTrailer(){
   // 优先弹窗内嵌播放；若内嵌被 YouTube 登录墙拦截，可点「在 YouTube 打开」按钮外跳
   showTrailerModal();
 }
+function isDirectVideoUrl(s){
+  return /^https?:\/\//i.test(s) && !/(?:youtube\.com|youtu\.be|youtube-nocookie\.com)/i.test(s);
+}
 function openTrailerExternal(){
   if (!currentDetailTrailer) return;
-  window.open('https://www.youtube.com/watch?v=' + currentDetailTrailer, '_blank');
+  // 直接视频链接（如 R18 sample）直接打开；YouTube ID 则拼 YouTube 链接
+  window.open(isDirectVideoUrl(currentDetailTrailer) ? currentDetailTrailer : ('https://www.youtube.com/watch?v=' + currentDetailTrailer), '_blank');
 }
 function showTrailerModal(){
   var frame = document.getElementById('trailerFrame');
-  // 隐私增强模式（nocookie）：在 iOS PWA 内嵌场景里能减少「请登录验证」弹窗频率
-  frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(currentDetailTrailer) + '?autoplay=1&rel=0';
+  var url = currentDetailTrailer || '';
+  var container = frame.parentNode;
+  // 清理上一次遗留的 <video>
+  var oldV = container.querySelector('video.trailer-video');
+  if (oldV) oldV.remove();
+  if (isDirectVideoUrl(url)){
+    // 直接视频（AV 预告/R18 sample）：用 <video> 内嵌播放，不走 YouTube
+    frame.removeAttribute('src');
+    frame.style.display = 'none';
+    var v = document.createElement('video');
+    v.className = 'trailer-video';
+    v.src = url;
+    v.controls = true;
+    v.autoplay = true;
+    v.setAttribute('playsinline', '');
+    v.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;background:#000;';
+    container.appendChild(v);
+  } else {
+    // YouTube 视频 ID：隐私增强模式（nocookie）内嵌
+    frame.style.display = '';
+    frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(url) + '?autoplay=1&rel=0';
+  }
   document.getElementById('trailerMask').classList.add('show');
   document.getElementById('trailerModal').classList.add('show');
 }
 function closeTrailer(){
   document.getElementById('trailerMask').classList.remove('show');
   document.getElementById('trailerModal').classList.remove('show');
-  document.getElementById('trailerFrame').src = '';
+  var frame = document.getElementById('trailerFrame');
+  frame.src = '';
+  frame.style.display = '';
+  var container = frame.parentNode;
+  var v = container.querySelector('video.trailer-video');
+  if (v){ try { v.pause(); } catch(e){} v.remove(); }
 }
 /* —— 详情页底部胶囊按钮下的图标操作 —— */
 function detailEdit(){
@@ -4735,7 +5313,6 @@ function newFilm(){
   currentFilmId = null;
   currentFilmLocked = false;
   applyFilmData({ id: '', data: {} });
-  switchMetaTab('edit');
   ['title','originaltitle','premiered','year','runtime','plot','rating','filename','mpaa'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
@@ -4744,6 +5321,10 @@ function newFilm(){
   state.mpaa = '';
   _filenameManual = false;
   updateState();
+}
+function openCustomEdit(){
+  newFilm();
+  switchPage('edit');
 }
 
 /* —— 概览长按操作：iOS 原生风格底部 Action Sheet —— */
@@ -4805,6 +5386,12 @@ function bindOverviewLongPress(){
       card.addEventListener('touchend', end, { passive: false });
       card.addEventListener('touchcancel', end, { passive: true });
       card.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+      // 点击打开详情：从 data-id 读取并走 openFilmDetail，避免内联 onclick 因片名特殊字符转义失败
+      card.addEventListener('click', function(){
+        var rawId = card.getAttribute('data-id');
+        if (!rawId) return;
+        openFilmDetail(rawId);
+      });
     })(cards[i]);
   }
 }
@@ -4910,7 +5497,7 @@ function directDownload(blob, name){
 var THEME_COLORS = [
   '#E85D75', '#F28C6A', '#F0B05A', '#F4C542', '#66C266',
   '#5DD3A5', '#4FB8F9', '#3D8CF0', '#5568C4', '#8B5FCD',
-  '#B084E8', '#E990D0', '#8E95A1', '#8FAE9A', '#B89A7A'
+  '#B084E8', '#E990D0', '#8E95A1', '#8FAE9A', '#2C2C2E'
 ];
 function hexToRgba(hex, a){
   var m = hex.replace('#', '').match(/^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/);
@@ -4947,23 +5534,16 @@ function liftAccentForDark(hex){
 }
 /* 外观切换后，按新明暗重新推导主题色相关变量 */
 function reapplyThemeColor(){ if (state.appliedThemeColor) applyThemeColor(state.appliedThemeColor, false); }
-function updateThemeRowVisibility(){
-  var row = document.getElementById('themeRow');
-  if (row) row.style.display = state.themeHidden ? 'none' : 'flex';
-  var nsfw = document.getElementById('nsfwRow');
-  if (nsfw) nsfw.style.display = state.themeHidden ? 'flex' : 'none';
-}
 function setThemeHidden(hidden){
   state.themeHidden = !!hidden;
-  updateThemeRowVisibility();
   updateHiddenBadge();
+  updateOverviewTabVisibility();
+  applyEditMode();
   idbPut('kv', 'themeHidden', state.themeHidden).catch(function(){});
 }
 function updateHiddenBadge(){
   var badge = document.getElementById('hiddenBadge');
   if (badge) badge.style.display = state.themeHidden ? 'inline-flex' : 'none';
-  var mc = document.getElementById('magnetConfigRow');
-  if (mc) mc.style.display = state.themeHidden ? 'flex' : '';
 }
 var settingsTitleTap = { count: 0, last: 0 };
 function onSettingsTitleTap(){
@@ -4973,21 +5553,7 @@ function onSettingsTitleTap(){
   settingsTitleTap.last = now;
   if (settingsTitleTap.count >= 3){
     settingsTitleTap.count = 0;
-    if (state.themeHidden){
-      var c = state.lastThemeColor || '#3D8CF0';
-      state.lastThemeColor = '';
-      setThemeHidden(false);
-      idbPut('kv', 'lastThemeColor', '').catch(function(){});
-      applyThemeColor(c);
-      setNsfw(false);
-    } else {
-      var current = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#3D8CF0').trim();
-      state.lastThemeColor = current;
-      setThemeHidden(true);
-      idbPut('kv', 'lastThemeColor', current).catch(function(){});
-      applyThemeColor('#1A1A1A');
-      setNsfw(true);
-    }
+    setThemeHidden(!state.themeHidden);
   }
 }
 function renderThemeGrid(){
@@ -5002,56 +5568,6 @@ function openThemeSheet(){
   renderThemeGrid();
   openSheet('themeSheet');
 }
-
-/* —— 保存配置 —— */
-var SAVE_MODES = [
-  { key: 'save', label: '仅保存' },
-  { key: 'save-download', label: '保存并下载' }
-];
-function getSaveModeLabel(key){
-  var label = '仅保存';
-  SAVE_MODES.forEach(function(m){ if (m.key === key) label = m.label; });
-  return label;
-}
-function getSaveMode(){ return idbGet('kv', 'saveMode').then(function(v){ return v || ''; }); }
-function setSaveMode(mode){
-  state.saveMode = mode === 'save-download' ? 'save-download' : 'save';
-  updateSaveModeDisplay();
-  setSelectValue('saveModeSelect', state.saveMode);
-  idbPut('kv', 'saveMode', state.saveMode).catch(function(){});
-}
-function updateSaveModeDisplay(){
-  var el = document.getElementById('saveModeValue');
-  if (el) el.textContent = getSaveModeLabel(state.saveMode);
-}
-function onSaveModeSelect(sel){ setSaveMode(sel.value); }
-
-/* —— NSFW（搜索结果是否包含成人内容） —— */
-function getNsfw(){ return idbGet('kv', 'nsfw').then(function(v){ return !!v; }); }
-function setNsfw(on){
-  state.nsfw = !!on;
-  var el = document.getElementById('nsfwToggle');
-  if (el) el.checked = state.nsfw;
-  idbPut('kv', 'nsfw', state.nsfw).catch(function(){});
-  // 类型配置/选择弹窗打开时，实时响应 NSFW 开关变化
-  var sheet = document.getElementById('listSheet');
-  if (sheet && sheet.classList.contains('show') && listState.kind === 'genre') {
-    if (!state.nsfw) {
-      document.getElementById('listGenreSeg').style.display = 'none';
-      switchGenreTab('normal');
-    } else {
-      document.getElementById('listGenreSeg').style.display = 'flex';
-      switchGenreTab(currentGenreTab);
-    }
-    if (listState.mode === 'multi') {
-      listState.items = (currentGenreTab === 'adult' && state.nsfw) ? state.genreAdult : state.genreNormal;
-      renderMultiList();
-    } else if (listState.mode === 'manage') {
-      renderManageList();
-    }
-  }
-}
-function onNsfwChange(box){ setNsfw(box.checked); }
 
 /* —— 自动清除缓存 —— */
 var AUTO_CLEAR_MODES = [
@@ -5128,13 +5644,10 @@ function updateAppearanceDisplay(){
 function onAppearanceSelect(sel){ setAppearance(sel.value); }
 /* 填充设置页的原生 select 选项，并同步当前选中值 */
 function populateSettingSelects(){
-  var sm = document.getElementById('saveModeSelect');
-  if (sm) sm.innerHTML = SAVE_MODES.map(function(m){ return '<option value="' + m.key + '">' + m.label + '</option>'; }).join('');
   var ac = document.getElementById('autoClearSelect');
   if (ac) ac.innerHTML = AUTO_CLEAR_MODES.map(function(m){ return '<option value="' + m.key + '">' + m.label + '</option>'; }).join('');
   var ap = document.getElementById('appearanceSelect');
   if (ap) ap.innerHTML = APPEARANCE_MODES.map(function(m){ return '<option value="' + m.key + '">' + m.label + '</option>'; }).join('');
-  setSelectValue('saveModeSelect', state.saveMode);
   setSelectValue('autoClearSelect', state.autoClear);
   setSelectValue('appearanceSelect', state.appearance);
 }
@@ -5333,34 +5846,21 @@ function bootApp(){
   initDetailInteractions();
   syncAllSelectDisplays();
   populateSettingSelects();
-  refreshApiKeyStatus();
   updateSubtitleBtn();
 
   // ② 加载本地配置（异步，可并行）
   setSplashStep('正在加载配置…');
   Promise.all([
-    getTMDBKey().then(function(k){ state.apiKey = k || ''; refreshApiKeyStatus(); }).catch(function(){}),
-    getSubtitleAssrt().then(function(k){ state.subtitleAssrt = k || ''; refreshSubNote(); }).catch(function(){}),
-    getSubtitleOs().then(function(k){ state.subtitleOs = k || ''; refreshSubNote(); }).catch(function(){}),
+    getTMDBKey().then(function(k){ state.apiKey = k || ''; }).catch(function(){}),
+    getSubtitleAssrt().then(function(k){ state.subtitleAssrt = k || ''; updateSubtitleBtn(); }).catch(function(){}),
+    getSubtitleOs().then(function(k){ state.subtitleOs = k || ''; updateSubtitleBtn(); }).catch(function(){}),
     getThemeColor().then(function(c){
-      return idbGet('kv', 'themeHidden').then(function(hidden){
-        return idbGet('kv', 'lastThemeColor').then(function(last){
-          state.themeHidden = !!hidden;
-          state.lastThemeColor = last || '';
-          updateThemeRowVisibility();
-          updateHiddenBadge();
-          if (state.themeHidden) applyThemeColor('#1A1A1A', false);
-          else if (c) applyThemeColor(c, false);
-        });
-      });
+      if (c) applyThemeColor(c, false);
     }).catch(function(){}),
-    getSaveMode().then(function(m){ state.saveMode = (m === 'save-download') ? 'save-download' : 'save'; updateSaveModeDisplay(); setSelectValue('saveModeSelect', state.saveMode); }).catch(function(){}),
-    getNsfw().then(function(on){ state.nsfw = !!on; var el = document.getElementById('nsfwToggle'); if (el) el.checked = state.nsfw; }).catch(function(){}),
     getAutoClearMode().then(function(m){ state.autoClear = m || '3d'; updateAutoClearDisplay(); setSelectValue('autoClearSelect', state.autoClear); clearExpiredFilms(); }).catch(function(){}),
     getAppearance().then(function(m){ state.appearance = (m === 'dark' || m === 'light' || m === 'auto') ? m : 'auto'; updateAppearanceDisplay(); setSelectValue('appearanceSelect', state.appearance); applyAppearance(state.appearance); }).catch(function(){}),
     getMagnetConfig().then(function(cfg){
       if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
-      if (cfg && cfg.category) state.magnetCategory = cfg.category;
     }).catch(function(){})
   ]).then(function(){
     // ③ 加载影片列表（较重的同步渲染，放到一帧之后做，避免卡住启动页）
@@ -5373,7 +5873,7 @@ function bootApp(){
     updateState();
     switchPage('home');
     switchHomeTab('basic');
-    switchMetaTab('edit');
+    updateOverviewTabVisibility();
     checkFilmCap(700);
     enterHome();
   }).catch(function(){ enterHome(); });
