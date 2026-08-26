@@ -1062,6 +1062,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tmdb-result .tr-ph { width: 80px; height: 120px; border-radius: 8px; background: var(--card-fill); flex-shrink: 0; }
 .tmdb-result .tr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .tmdb-result .tr-title { font-size: 16px; font-weight: 600; color: var(--label); }
+.tmdb-result .tr-title-text { transition: opacity .2s ease; }
+.tmdb-result.jav-result-loading .tr-title-text { opacity: 0.55; animation: jav-pulse 1.2s ease-in-out infinite; }
+@keyframes jav-pulse { 0%,100%{ opacity: 0.55; } 50%{ opacity: 0.85; } }
 .tmdb-result .tr-meta { font-size: 13px; color: var(--label-2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tmdb-result .tr-overview { font-size: 13px; color: var(--label-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .adult-tag {
@@ -3807,6 +3810,7 @@ function searchTMDB(){
 var javResults = [];
 var javActressResults = [];
 var javRenderOffset = 0;
+var javRichCache = {}; // 按 dvd_id 缓存 /r18rich 结果，避免列表页和详情页重复请求
 function javPick(obj, keys){
   if (!obj) return '';
   for (var i = 0; i < keys.length; i++){
@@ -4109,6 +4113,13 @@ function javCoverUrl(raw){
   }
   return raw;
 }
+function fetchJAVRichCached(dvdId){
+  var key = String(dvdId).toUpperCase();
+  if (javRichCache[key]) return javRichCache[key];
+  var p = javRequestMerged(dvdId).then(function(d){ javRichCache[key] = Promise.resolve(d); return d; });
+  javRichCache[key] = p;
+  return p;
+}
 function renderJAVResults(){
   var box = document.getElementById('tmdbResults');
   if (javRenderOffset === 0){
@@ -4117,10 +4128,8 @@ function renderJAVResults(){
   }
   var slice = javResults.slice(javRenderOffset, javRenderOffset + 10);
   if (!slice.length) return;
-  var html = '';
   slice.forEach(function(item, k){
     var idx = javRenderOffset + k;
-    var title = javStr(item.title_ja || item.title_en || item.title || item.name) || '';
     var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
     var date = javStr(item.release_date || item.releaseDate || item.date) || '';
     var coverRaw = javStr(item.jacket_full_url || item.jacket_thumb_url);
@@ -4128,23 +4137,52 @@ function renderJAVResults(){
     var cover = javCoverUrl(coverRaw);
     var metaParts = [];
     if (date) metaParts.push(date);
-    if (dvdId && dvdId !== title) metaParts.push(dvdId);
+    if (dvdId) metaParts.push(dvdId);
     var meta = metaParts.join(' · ');
-    html += '<div class="tmdb-result" data-jav-idx="' + idx + '" onclick="selectJAV(' + idx + ')">';
-    html += cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
-    html += '<div class="tr-info">';
-    html += '<div class="tr-title">' + escapeHtml(title) + '<span class="adult-tag">AV</span></div>';
-    if (meta) html += '<div class="tr-meta">' + escapeHtml(meta) + '</div>';
-    html += '</div></div>';
+    var placeholderTitle = dvdId || '加载中…';
+    var el = document.createElement('div');
+    el.className = 'tmdb-result jav-result-loading';
+    el.dataset.javIdx = idx;
+    el.onclick = function(){ selectJAV(idx); };
+    el.innerHTML = (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>') +
+      '<div class="tr-info">' +
+      '<div class="tr-title"><span class="tr-title-text">' + escapeHtml(placeholderTitle) + '</span><span class="adult-tag">AV</span></div>' +
+      (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '') +
+      '</div>';
+    box.appendChild(el);
+    if (dvdId) enrichJAVResult(idx, el);
   });
   var oldMore = box.querySelector('.jav-more'); if (oldMore) oldMore.remove();
-  box.insertAdjacentHTML('beforeend', html);
   javRenderOffset += slice.length;
   if (javRenderOffset < javResults.length){
     box.insertAdjacentHTML('beforeend', '<div class="jav-more" onclick="javLoadMore()">看更多？</div>');
   } else {
     box.insertAdjacentHTML('beforeend', '<div class="jav-more jav-more-end">已显示全部 ' + javResults.length + ' 条</div>');
   }
+}
+function enrichJAVResult(idx, el){
+  var item = javResults[idx];
+  var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
+  if (!dvdId) return;
+  fetchJAVRichCached(dvdId)
+    .then(function(d){
+      item._rich = d;
+      item.title_ja = d.title_ja || item.title_ja;
+      item.title_en = d.title_en || item.title_en;
+      item.title = d.title || item.title;
+      var titleText = javStr(d.title_ja || d.title_en || d.title || dvdId) || dvdId;
+      var titleSpan = el.querySelector('.tr-title-text');
+      if (titleSpan) titleSpan.textContent = titleText;
+      var coverRaw = javStr(d.jacket_full_url || (d.images && d.images.jacket_image && (d.images.jacket_image.large2 || d.images.jacket_image.large)));
+      if (coverRaw){
+        var img = el.querySelector('img');
+        if (img) img.src = javCoverUrl(coverRaw);
+      }
+      el.classList.remove('jav-result-loading');
+    })
+    .catch(function(){
+      el.classList.remove('jav-result-loading');
+    });
 }
 function javLoadMore(){ renderJAVResults(); }
 function selectJAV(i){
@@ -4153,7 +4191,7 @@ function selectJAV(i){
   var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
   if (!dvdId){ showToast('该条目缺少番号', 'error'); return; }
   showToast('正在获取详情…', 'success');
-  javRequestMerged(dvdId)
+  fetchJAVRichCached(dvdId)
     .then(function(d){
       var imgP = populateFromJAV(d);
       // 文本元数据已填充完成：立即保存并跳首页，图片后台加载完再静默补存
