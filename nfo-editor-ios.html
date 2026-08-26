@@ -3883,6 +3883,34 @@ function javRequest(dvdId){
       return r.json();
     });
 }
+/* 合并查询：r18.dev 线上 /r18（canonical 基础字段）+ Turso /r18rich（富日文/剧情/剧照/女优汉字）。
+   两者任一缺失都不影响：rich 优先补日文与剧照，basic 兜底；若 Turso 未配置则 rich 为空自动回退 basic。 */
+function javRequestMerged(dvdId){
+  var base = (state.magnetWorker || '').replace(/\/$/, '');
+  if (!base) return Promise.reject(new Error('NO_WORKER'));
+  var q = encodeURIComponent(dvdId);
+  var pBasic = fetch(base + '/r18?dvd_id=' + q).then(function(r){
+    if (r.status === 404) throw new Error('未找到该番号');
+    return r.ok ? r.json() : null;
+  }).catch(function(e){ if (e && e.message === '未找到该番号') throw e; return null; });
+  var pRich = fetch(base + '/r18rich?dvd_id=' + q).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+  return Promise.all([pBasic, pRich]).then(function(pair){
+    var basic = pair[0] || {}, rich = pair[1] || {};
+    var m = {};
+    ['title_ja','title_en','dvd_id','content_id','release_date','runtime_mins','runtime_minutes',
+     'sample_url','jacket_full_url','jacket_thumb_url'].forEach(function(k){ m[k] = (basic[k] != null ? basic[k] : rich[k]); });
+    m.plot = rich.plot_ja || rich.plot_en || basic.plot || '';
+    m.categories = (rich.categories && rich.categories.length) ? rich.categories : (basic.categories || []);
+    m.actresses = (rich.actresses && rich.actresses.length) ? rich.actresses : (basic.actresses || []);
+    m.directors = (rich.directors && rich.directors.length) ? rich.directors : (basic.directors || basic.director || []);
+    m.maker  = rich.maker  || basic.maker  || null;
+    m.label  = rich.label  || basic.label  || null;
+    m.series = rich.series || basic.series || null;
+    m.gallery = (rich.gallery && rich.gallery.length) ? rich.gallery : (basic.gallery || []);
+    m._dvdId = dvdId;
+    return m;
+  });
+}
 function setMetaSource(src, btn){
   state.metaSource = src;
   var seg = btn.parentNode;
@@ -3904,7 +3932,7 @@ function searchJAV(){
     showToast('请先配置 Worker 地址', 'error');
     return;
   }
-  javRequest(q)
+  javRequestMerged(q)
     .then(function(d){
       // R18 按精确番号返回单条详情，包装成结果列表以保持点选交互
       var item = {};
@@ -3984,11 +4012,11 @@ function populateFromJAV(d){
   var date = javStr(d.release_date || d.releaseDate || d.date) || '';
   var year = (date || '').slice(0, 4);
   var runtime = javStr(d.runtime_mins || d.runtime_minutes || d.runtime || d.length) || '';
-  var overview = '';  // R18.dev 不提供独立剧情简介
+  var overview = javStr(d.plot || d.plot_ja || d.comment_ja || d.comment_en || d.comment || d.overview) || '';  // 富源（Turso /r18rich）提供日文剧情，r18.dev 线上无则空
   var rating = ''; // R18 不提供评分
   var countries = ['日本'];
-  // R18 categories：优先取日文类型名 name_ja，回退英文 name_en / name；英文再经通用映射转中文（未命中保留英文）
-  var rawGenres = (d.categories || []).map(function(c){ return javStr(c && (c.name_ja || c.name_en || c.name)); }).filter(Boolean);
+  // R18 categories：优先英文 name_en（再经通用映射转中文），回退日文 name_ja / name；未命中保留原文
+  var rawGenres = (d.categories || []).map(function(c){ return javStr(c && (c.name_en || c.en || c.name_ja || c.ja || c.name)); }).filter(Boolean);
   var genres = rawGenres.map(function(g){ return mapGenreEnToZh(g); });
   genres.forEach(function(g){ if (state.genreAdult.indexOf(g) < 0) state.genreAdult.push(g); });
 
@@ -4013,7 +4041,11 @@ function populateFromJAV(d){
   // 演员：优先日文名 name_kanji，回退 name_romaji / name（线上为英文 name）。javStr 同时兼容字符串与对象
   // 再套 mapActressEnToZh：把英文罗马字映射成中文/日文汉字（如 "Mika Aikawa" → "藍川美夏"），未命中保留英文
   var rawCast = (d.actresses || []).map(function(a){ return mapActressEnToZh(javStr(a)); }).filter(Boolean);
-  state.actors = rawCast.slice(0, 5).map(function(n){ return { name: n, role: '', photo: null }; });
+  state.actors = (d.actresses || []).slice(0, 5).map(function(a){
+    var n = mapActressEnToZh(javStr(a)) || javStr(a);
+    var photo = (a && a.image_url) ? javCoverUrl(a.image_url) : null;  // 富源女优头像（经 /img 代理绕跨域）
+    return { name: n, role: '', photo: photo };
+  });
   // 导演：可能是字符串（线上），也可能是 [{name_kanji…}] 数组（富 schema）
   var dirSrc = d.directors;
   if (!dirSrc && d.director) dirSrc = (typeof d.director === 'string') ? [d.director] : (Array.isArray(d.director) ? d.director : [d.director]);
@@ -4032,8 +4064,11 @@ function populateFromJAV(d){
   var coverRaw = javStr(d.jacket_full_url || d.jacket_thumb_url);
   if (!coverRaw && d.images && d.images.jacket_image) coverRaw = d.images.jacket_image.large2 || d.images.jacket_image.large || '';
   var cover = javCoverUrl(coverRaw);   // 与搜索列表共用同一 URL，浏览器缓存命中、无需重复拉取
-  // 剧照：gallery[].image_full（富 schema 才有；线上 r18.dev 无 gallery）
-  var gallery = (d.gallery || []).map(function(g){ return g && (g.image_full || g.image) ? javCoverUrl(g.image_full || g.image) : ''; }).filter(Boolean);
+  // 剧照：富源（/r18rich）返回字符串 URL 数组；富 schema 也可能为 {image_full} 对象（线上 r18.dev 无 gallery）
+  var gallery = (d.gallery || []).map(function(g){
+    if (typeof g === 'string') return javCoverUrl(g);
+    return g && (g.image_full || g.image) ? javCoverUrl(g.image_full || g.image) : '';
+  }).filter(Boolean);
   var fanart = gallery[0] || '';
   state.fanartCandidates = gallery.slice(1, 6);
   // AV：r18.dev 无 gallery，用「未裁剪」的完整封面作为剧照（仅 AV）
@@ -4238,7 +4273,7 @@ function refreshFromR18(film){
   showToast('正在从 R18 刷新…', 'success');
   currentFilmId = film.id;
   currentFilmLocked = !!film.locked;
-  return javRequest(dvdId).then(function(d){
+  return javRequestMerged(dvdId).then(function(d){
     if (!d || !d.title) return showToast('未能从 R18 获取该番号数据', 'error');
     d._dvdId = dvdId;   // 刷新时把已记录的番号回填，避免回退成 content_id
     var imgP = populateFromJAV(d);
