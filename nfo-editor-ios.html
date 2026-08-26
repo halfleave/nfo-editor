@@ -192,6 +192,7 @@ img { display: block; }
 .detail-info2 { text-align: center; font-size: 13px; color: rgba(255,255,255,0.72); line-height: 1.6; margin-bottom: 16px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
 .detail-info1:empty, .detail-info2:empty, .detail-info-av:empty { display: none; }
 .edit-type-seg { display: flex; margin: 0 0 6px; }
+.meta-type-tag { display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: var(--label-2); background: var(--card); border-radius: 10px; }
 /* 胶囊主按钮：占屏宽约 80%，水平居中 */
 .detail-trailer-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -1118,13 +1119,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .search-box .search-input-wrap .ios-input,
 .search-box .search-input-wrap input[type="text"] { padding-right: 40px; }
 .search-clear {
-  position: absolute; right: 52px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   width: 22px; height: 22px; border: none; background: transparent; color: var(--label-3);
   font-size: 18px; line-height: 1;
   display: none; align-items: center; justify-content: center;
   cursor: pointer; padding: 0; -webkit-appearance: none; appearance: none;
 }
 .search-clear.show { display: flex; }
+.search-box .search-input-wrap.jav-mode-on .search-clear { right: 52px; }
 .search-box .ios-input::placeholder,
 .search-box input[type="text"]::placeholder { color: var(--label-3); }
 .search-box .ios-input:focus,
@@ -1132,15 +1134,16 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .search-box .btn-pill { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 7px 20px; font-size: 15px; font-weight: 600; }
 .jav-mode-toggle {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  z-index: 2; background: none; border: none; padding: 4px 6px;
+  z-index: 2; background: none; border: none; padding: 0 6px;
   font-size: 13px; font-weight: 500; color: var(--label-2);
   -webkit-tap-highlight-color: transparent; transition: color .2s, opacity .2s;
   white-space: nowrap; cursor: pointer; overflow: hidden;
-  height: 22px; line-height: 22px;
+  height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 .jav-mode-toggle:active { opacity: 0.5; }
-.jav-roll { position: relative; display: inline-block; height: 22px; line-height: 22px; width: 30px; text-align: center; vertical-align: middle; overflow: hidden; }
-.jav-roll-item { position: absolute; left: 0; top: 0; width: 100%; text-align: center; transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease; }
+.jav-roll { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 22px; width: 30px; overflow: hidden; }
+.jav-roll-item { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: inline-flex; align-items: center; justify-content: center; transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease; }
 .jav-roll-item.jm-below { transform: translateY(120%); opacity: 0; }
 .jav-roll-item.jm-above { transform: translateY(-120%); opacity: 0; }
 .search-box .search-input-wrap.jav-mode-on .ios-input,
@@ -1504,7 +1507,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="page-scroll">
       <div class="search-box">
         <div class="search-input-wrap">
-          <input class="ios-input" type="text" id="tmdbQuery" placeholder="搜索影片" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
+          <input class="ios-input" type="text" id="tmdbQuery" placeholder="泰坦尼克号" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
           <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
           <button type="button" class="jav-mode-toggle" id="javModeSeg" style="display:none;" onclick="setJavMode()" data-anim="0"><span class="jav-roll" id="javRoll"><span class="jav-roll-item">番号</span></span></button>
         </div>
@@ -1519,6 +1522,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <header class="page-bar" id="editPageBar">
       <button class="btn-back" onclick="switchPage('search')" aria-label="返回">‹</button>
       <h1 class="page-title">元数据</h1>
+      <span class="meta-type-tag" id="editMetaTag">影片</span>
       <div class="page-actions">
         <button class="btn btn-text muted" id="btnClear" onclick="newFilm()">清空</button>
         <button class="btn btn-primary btn-pill" id="btnSave" onclick="saveToDisk()">保存</button>
@@ -1529,12 +1533,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
       <div class="meta-panel active" id="editPanel">
         <h2 class="section-heading">影片信息</h2>
-        <div class="edit-type-seg" id="editTypeSeg" style="display:none;">
-          <span class="seg">
-            <button type="button" data-type="movie" onclick="setEditType('movie')">影片</button>
-            <button type="button" data-type="av" onclick="setEditType('av')">AV</button>
-          </span>
-        </div>
         <div class="card">
           <div class="field">
             <label for="title"><span class="required">*</span>影片名</label>
@@ -3506,6 +3504,12 @@ function saveToDisk(){
   var film = buildFilmFromCurrent();
   saveFilm(film).then(function(){
     currentFilmId = film.id;
+    // 保存后回到首页对应的 影片/AV 列表
+    state.overviewTab = film.adult ? 'av' : 'movie';
+    if (!state.themeHidden) state.overviewTab = 'movie';
+    var tabs = document.getElementById('overviewTabs');
+    if (tabs) tabs.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === state.overviewTab); });
+    switchPage('home');
     renderOverview();
     // 保存完成后按配置自动清理过期缓存
     clearExpiredFilms();
@@ -3945,6 +3949,7 @@ function setMetaSource(src, btn){
   else {
     javBtn.style.display = 'none';
     if (wrap) wrap.classList.remove('jav-mode-on');
+    updateSearchPlaceholder();
   }
 }
 function setJavToggleLabel(text){
@@ -3985,8 +3990,14 @@ function setJavMode(){
   updateJavPlaceholder();
 }
 function updateJavPlaceholder(){
-  var ph = (state.javSearchMode === 'actress') ? '请输入女优名（如 三上、Mika）' : '请输入番号（如 IPX-011、rki）';
+  var ph = (state.javSearchMode === 'actress') ? '三上悠亞' : 'IPX-011';
   document.getElementById('tmdbQuery').placeholder = ph;
+}
+function updateSearchPlaceholder(){
+  var el = document.getElementById('tmdbQuery');
+  if (!el) return;
+  if (state.metaSource === 'jav') updateJavPlaceholder();
+  else el.placeholder = '泰坦尼克号';
 }
 function searchMeta(){
   if (state.metaSource === 'jav') searchJAV();
@@ -4927,14 +4938,9 @@ function applyEditMode(){
   if (dirSec) dirSec.style.display = adult ? 'none' : '';
   var actH = document.getElementById('actorHeading');
   if (actH) actH.textContent = adult ? '女优' : '演员';
-  // 影片/AV 切换仅在里模式可见（AV 属里模式内容）
-  var seg = document.getElementById('editTypeSeg');
-  if (seg){
-    seg.style.display = state.themeHidden ? 'flex' : 'none';
-    Array.prototype.forEach.call(seg.querySelectorAll('button'), function(b){
-      b.classList.toggle('active', (b.dataset.type === 'av') === adult);
-    });
-  }
+  // 元数据类型标签（影片 / AV）
+  var tag = document.getElementById('editMetaTag');
+  if (tag) tag.textContent = adult ? 'AV' : '影片';
 }
 function setEditType(t){
   state.adult = (t === 'av');
