@@ -1135,9 +1135,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   z-index: 2; background: none; border: none; padding: 4px 6px;
   font-size: 13px; font-weight: 500; color: var(--label-2);
   -webkit-tap-highlight-color: transparent; transition: color .2s, opacity .2s;
-  white-space: nowrap;
+  white-space: nowrap; cursor: pointer; overflow: hidden;
+  height: 22px; line-height: 22px;
 }
 .jav-mode-toggle:active { opacity: 0.5; }
+.jav-roll { position: relative; display: inline-block; height: 22px; line-height: 22px; width: 30px; text-align: center; vertical-align: middle; overflow: hidden; }
+.jav-roll-item { position: absolute; left: 0; top: 0; width: 100%; text-align: center; transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease; }
+.jav-roll-item.jm-below { transform: translateY(120%); opacity: 0; }
+.jav-roll-item.jm-above { transform: translateY(-120%); opacity: 0; }
 .search-box .search-input-wrap.jav-mode-on .ios-input,
 .search-box .search-input-wrap.jav-mode-on input[type="text"] { padding-right: 88px; }
 #searchPanel .tmdb-result:first-child { padding-top: 4px; }
@@ -1501,7 +1506,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <div class="search-input-wrap">
           <input class="ios-input" type="text" id="tmdbQuery" placeholder="搜索影片" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
           <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
-          <button type="button" class="jav-mode-toggle" id="javModeSeg" style="display:none;" onclick="setJavMode()">番号</button>
+          <button type="button" class="jav-mode-toggle" id="javModeSeg" style="display:none;" onclick="setJavMode()" data-anim="0"><span class="jav-roll" id="javRoll"><span class="jav-roll-item">番号</span></span></button>
         </div>
         <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
       </div>
@@ -3933,7 +3938,7 @@ function setMetaSource(src, btn){
   var wrap = document.getElementById('tmdbQuery').closest('.search-input-wrap');
   if (src === 'jav'){
     javBtn.style.display = '';
-    javBtn.textContent = (state.javSearchMode === 'dvd') ? '番号' : '女优';
+    setJavToggleLabel((state.javSearchMode === 'dvd') ? '番号' : '女优');
     if (wrap) wrap.classList.add('jav-mode-on');
     updateJavPlaceholder();
   }
@@ -3942,10 +3947,40 @@ function setMetaSource(src, btn){
     if (wrap) wrap.classList.remove('jav-mode-on');
   }
 }
+function setJavToggleLabel(text){
+  var roll = document.getElementById('javRoll');
+  if (!roll) return;
+  var item = roll.querySelector('.jav-roll-item');
+  if (item) item.textContent = text;
+  else {
+    var span = document.createElement('span');
+    span.className = 'jav-roll-item';
+    span.textContent = text;
+    roll.appendChild(span);
+  }
+}
 function setJavMode(){
   var btn = document.getElementById('javModeSeg');
-  state.javSearchMode = (state.javSearchMode === 'dvd') ? 'actress' : 'dvd';
-  btn.textContent = (state.javSearchMode === 'dvd') ? '番号' : '女优';
+  if (btn.dataset.anim === '1') return; /* 动画进行中，忽略连点 */
+  var roll = document.getElementById('javRoll');
+  var next = (state.javSearchMode === 'dvd') ? 'actress' : 'dvd';
+  var nextText = (next === 'dvd') ? '番号' : '女优';
+  var curItem = roll.querySelector('.jav-roll-item');
+  var newItem = document.createElement('span');
+  newItem.className = 'jav-roll-item jm-below';
+  newItem.textContent = nextText;
+  roll.appendChild(newItem);
+  void newItem.offsetWidth; /* 强制回流后再去掉起点类，触发过渡 */
+  btn.dataset.anim = '1';
+  requestAnimationFrame(function(){
+    if (curItem) curItem.classList.add('jm-above');
+    newItem.classList.remove('jm-below');
+  });
+  setTimeout(function(){
+    if (curItem && curItem.parentNode) curItem.parentNode.removeChild(curItem);
+    btn.dataset.anim = '0';
+  }, 340);
+  state.javSearchMode = next;
   document.getElementById('tmdbResults').innerHTML = '';
   updateJavPlaceholder();
 }
