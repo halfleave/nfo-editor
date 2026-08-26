@@ -3942,7 +3942,9 @@ function javRequestMerged(dvdId){
       m.maker  = rich.maker  || null;
       m.label  = rich.label  || null;
       m.series = rich.series || null;
-      m.gallery = (rich.gallery && rich.gallery.length) ? rich.gallery : [];
+      // 兼容多种来源：gallery 可能是数组，也可能误为单个字符串/对象
+      var galleryArr = Array.isArray(rich.gallery) ? rich.gallery : (rich.gallery ? [rich.gallery] : []);
+      m.gallery = galleryArr.map(function(g){ return g && (g.image_full || g.image || g.url || String(g)) || ''; }).filter(Boolean);
       m._dvdId = dvdId;
       return m;
     })
@@ -4488,8 +4490,20 @@ function populateFromTMDB(d){
   // 剧照：用 images.backdrops（多张），最多缓存 3 张；注意：无 backdrops 时不再回退到海报，避免「剧照」变成海报
   if (backdrops.length){
     imgPromises = imgPromises.concat(loadMediaCandidates(backdrops.map(function(b){ return b.file_path; }), 'fanart', 'w1280'));
-    // 同时把原比例剧照存进 state.gallery（不裁剪），供详情页「剧照」区展示（封面放第一张的逻辑留给 AV 流程）
-    imgPromises = imgPromises.concat(loadMediaCandidates(backdrops.map(function(b){ return b.file_path; }), 'gallery', 'w1280'));
+    // 同时把原比例剧照存进 state.gallery（数组，不裁剪），供详情页「剧照」区展示
+    var galleryPromises = backdrops.slice(0, 6).map(function(b){
+      var url = tmdbImgUrl(b.file_path, 'w1280');
+      var pr = fetch(url)
+        .then(function(r){ return r.ok ? r.blob() : null; })
+        .then(function(blob){
+          if (!blob) return null;
+          return new Promise(function(res){ var rd = new FileReader(); rd.onload = function(e){ res(e.target.result); }; rd.readAsDataURL(blob); });
+        })
+        .catch(function(){ return null; });
+      imgPromises.push(pr);
+      return pr;
+    });
+    Promise.all(galleryPromises).then(function(urls){ state.gallery = urls.filter(Boolean); });
   }
   if (d.images && d.images.logos && d.images.logos.length){
     var logos = d.images.logos;
@@ -4838,7 +4852,9 @@ function applyFilmData(film){
   state.series = normalizeTextField(d.series);
   setFieldVal('studio', state.studio); setFieldVal('label', state.label); setFieldVal('series', state.series);
   state.poster = d.poster || null; state.fanart = d.fanart || null; state.logo = d.logo || null; state.detailPoster = d.detailPoster || null;
-  state.posterCandidates = d.posterCandidates || []; state.fanartCandidates = d.fanartCandidates || []; state.gallery = d.gallery || [];
+  state.posterCandidates = d.posterCandidates || []; state.fanartCandidates = d.fanartCandidates || [];
+  // 兼容旧数据：gallery 字段可能被存成单个字符串
+  state.gallery = Array.isArray(d.gallery) ? d.gallery : (d.gallery ? [d.gallery] : []);
   cropOriginals.poster = state.poster;
   cropOriginals.fanart = state.fanart;
   cropOriginals.logo = state.logo;
@@ -5326,7 +5342,9 @@ function renderFilmDetail(film){
   var shotEl = document.getElementById('detailShots');
   if (shotEl){
     var shots = [];
-    if (d.gallery && d.gallery.length) shots = d.gallery.slice(0, 6);
+    // 兼容旧数据：gallery 可能存成单个字符串；统一转成数组
+    var galleryArr = Array.isArray(d.gallery) ? d.gallery : (d.gallery ? [d.gallery] : []);
+    if (galleryArr.length) shots = galleryArr.slice(0, 6);
     else {
       if (d.fanart) shots.push(d.fanart);
       if (d.fanartCandidates && d.fanartCandidates.length) shots = shots.concat(d.fanartCandidates);
