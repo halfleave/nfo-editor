@@ -130,13 +130,16 @@ img { display: block; }
   transition: transform .5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* 海报底图：独立图层，固定在底部作背景，不随滚动移动（视差已移除），渐变叠层在其之上。
-   磨砂模糊直接作用于本图层（filter），这样无论滚动叠加层是否透明都能稳定生效 */
+   磨砂模糊直接作用于本图层（filter），这样无论滚动叠加层是否透明都能稳定生效。
+   transform: scale(0.8) + origin top center → 底图向上等比缩小为 80% */
 .detail-poster {
   position: absolute; inset: 0; z-index: 0;
   background-size: cover; background-position: center;
+  transform: scale(0.8);
+  transform-origin: top center;
   filter: blur(var(--dt-glass, 0px));
   -webkit-filter: blur(var(--dt-glass, 0px));
-  will-change: filter;
+  will-change: filter, transform;
 }
 /* 基线渐变：底部 35% 始终为不透明海报色（不随滚动变化） */
 .detail-bg::before {
