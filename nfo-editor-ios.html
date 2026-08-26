@@ -4168,7 +4168,7 @@ function populateFromJAV(d){
 function loadImageFromURL(url, type, ratio, cropMode){
   ratio = ratio || 0;
   var cropFn;
-  if (cropMode === 'right') cropFn = cropRightHalf;
+  if (cropMode === 'right') cropFn = cropRightHalfAuto;   // 横图右切去标题；竖图取整张
   else if (cropMode === 'full') cropFn = function(durl){ return Promise.resolve(durl); };  // 不裁剪，保留原图
   else cropFn = function(durl){ return cropToRatio(durl, ratio); };
   return fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
@@ -4660,7 +4660,19 @@ function cropRightHalf(dataUrl){
       canvas.width = cw; canvas.height = ch;
       var ctx = canvas.getContext('2d');
       ctx.drawImage(img, Math.round(sw / 2), 0, cw, ch, 0, 0, cw, ch);
-      resolve(canvas.toDataURL('image/jpeg', 0.92));
+      resolve(canvas.toDataURL('image/jpeg', 0.95));
+    };
+    img.onerror = function(){ resolve(dataUrl); };
+    img.src = dataUrl;
+  });
+}
+// 方向感知：竖图（高>=宽）直接取整张，避免右切把竖图切成奇怪的窄条；横图才右切去标题
+function cropRightHalfAuto(dataUrl){
+  return new Promise(function(resolve){
+    var img = new Image();
+    img.onload = function(){
+      if (img.height >= img.width) resolve(dataUrl);   // 竖图：原图
+      else cropRightHalf(dataUrl).then(resolve);
     };
     img.onerror = function(){ resolve(dataUrl); };
     img.src = dataUrl;
