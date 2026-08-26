@@ -1118,7 +1118,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .search-box .search-input-wrap .ios-input,
 .search-box .search-input-wrap input[type="text"] { padding-right: 40px; }
 .search-clear {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 52px; top: 50%; transform: translateY(-50%);
   width: 22px; height: 22px; border: none; background: transparent; color: var(--label-3);
   font-size: 18px; line-height: 1;
   display: none; align-items: center; justify-content: center;
@@ -1131,7 +1131,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .search-box input[type="text"]:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .search-box .btn-pill { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 7px 20px; font-size: 15px; font-weight: 600; }
 .jav-mode-toggle {
-  position: absolute; right: 40px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   z-index: 2; background: none; border: none; padding: 4px 6px;
   font-size: 13px; font-weight: 500; color: var(--label-2);
   -webkit-tap-highlight-color: transparent; transition: color .2s, opacity .2s;
@@ -1139,7 +1139,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 }
 .jav-mode-toggle:active { opacity: 0.5; }
 .search-box .search-input-wrap.jav-mode-on .ios-input,
-.search-box .search-input-wrap.jav-mode-on input[type="text"] { padding-right: 76px; }
+.search-box .search-input-wrap.jav-mode-on input[type="text"] { padding-right: 88px; }
 #searchPanel .tmdb-result:first-child { padding-top: 4px; }
 /* 详情页字幕按钮：5 个图标按钮时收紧间距 */
 .detail-actions { gap: 14px; }
@@ -1500,8 +1500,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <div class="search-box">
         <div class="search-input-wrap">
           <input class="ios-input" type="text" id="tmdbQuery" placeholder="搜索影片" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
-          <button type="button" class="jav-mode-toggle" id="javModeSeg" style="display:none;" onclick="setJavMode()">番号</button>
           <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
+          <button type="button" class="jav-mode-toggle" id="javModeSeg" style="display:none;" onclick="setJavMode()">番号</button>
         </div>
         <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
       </div>
