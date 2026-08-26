@@ -1063,8 +1063,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tmdb-result .tr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .tmdb-result .tr-title { font-size: 16px; font-weight: 600; color: var(--label); }
 .tmdb-result .tr-title-text { transition: opacity .2s ease; }
-.tmdb-result.jav-result-loading .tr-title-text { opacity: 0.55; animation: jav-pulse 1.2s ease-in-out infinite; }
-@keyframes jav-pulse { 0%,100%{ opacity: 0.55; } 50%{ opacity: 0.85; } }
 .tmdb-result .tr-meta { font-size: 13px; color: var(--label-2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tmdb-result .tr-overview { font-size: 13px; color: var(--label-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .adult-tag {
@@ -1084,11 +1082,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tr-trailer-tag.show { opacity: 1; transform: scale(1); }
 .tr-trailer-tag svg { width: 11px; height: 11px; display: block; }
 .tmdb-msg { padding: 16px 4px; color: var(--label-2); font-size: 14px; text-align: center; }
-.jav-more { padding: 14px 4px 20px; text-align: center; color: var(--label-2); font-size: 13px; opacity: 0.7; cursor: pointer; }
-.jav-more:active { opacity: 1; }
-.jav-more-end { cursor: default; }
-.jav-back { padding: 8px 4px 12px; color: var(--accent, #0a84ff); font-size: 14px; cursor: pointer; }
-.jav-back:active { opacity: 0.6; }
 
 /* ===== 磁力搜索结果 ===== */
 .magnet-result { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 0.5px solid var(--sep); }
@@ -1130,28 +1123,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   cursor: pointer; padding: 0; -webkit-appearance: none; appearance: none;
 }
 .search-clear.show { display: flex; }
-.search-box .search-input-wrap.jav-mode-on .search-clear { right: 52px; }
 .search-box .ios-input::placeholder,
 .search-box input[type="text"]::placeholder { color: var(--label-3); }
 .search-box .ios-input:focus,
 .search-box input[type="text"]:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .search-box .btn-pill { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 7px 20px; font-size: 15px; font-weight: 600; }
-.jav-mode-toggle {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  z-index: 2; background: none; border: none; padding: 0 6px;
-  font-size: 13px; font-weight: 500; color: var(--label-2);
-  -webkit-tap-highlight-color: transparent; transition: color .2s, opacity .2s;
-  white-space: nowrap; cursor: pointer; overflow: hidden;
-  height: 24px;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.jav-mode-toggle:active { opacity: 0.5; }
-.jav-roll { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 22px; width: 30px; overflow: hidden; }
-.jav-roll-item { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: inline-flex; align-items: center; justify-content: center; transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease; }
-.jav-roll-item.jm-below { transform: translateY(120%); opacity: 0; }
-.jav-roll-item.jm-above { transform: translateY(-120%); opacity: 0; }
-.search-box .search-input-wrap.jav-mode-on .ios-input,
-.search-box .search-input-wrap.jav-mode-on input[type="text"] { padding-right: 88px; }
 #searchPanel .tmdb-result:first-child { padding-top: 4px; }
 /* 详情页字幕按钮：5 个图标按钮时收紧间距 */
 .detail-actions { gap: 14px; }
