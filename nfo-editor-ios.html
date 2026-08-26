@@ -1103,11 +1103,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #magnetSheet .magnet-sheet-head .magnet-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; background: transparent; color: var(--label-3); font-size: 18px; line-height: 1; }
 #magnetSheet .magnet-sheet-head .magnet-clear.show { display: flex; }
 #magnetSheet .magnet-sheet-head .magnet-clear:active { opacity: 0.5; }
-#magnetSheet .magnet-field-tabs { display: flex; gap: 8px; padding: 2px 0 12px; }
-#magnetSheet .magnet-field-tabs .mft { flex: 1; position: relative; display: block; }
-#magnetSheet .magnet-field-tabs .mft input { position: absolute; opacity: 0; width: 0; height: 0; }
-#magnetSheet .magnet-field-tabs .mft span { display: block; text-align: center; padding: 9px 0; font-size: 13px; font-weight: 600; color: var(--label-2); background: var(--card-fill); border-radius: 11px; border: 1px solid var(--sep); transition: background .15s, color .15s, border-color .15s; cursor: pointer; }
-#magnetSheet .magnet-field-tabs .mft input:checked + span { color: #fff; background: var(--accent); border-color: var(--accent); }
 
 /* 搜索页 */
 .search-box { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
@@ -1384,11 +1379,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <button type="button" id="magnetClear" class="magnet-clear" onclick="clearMagnetQuery()" aria-label="清除">×</button>
       </div>
       <button onclick="searchMagnet()">搜索</button>
-    </div>
-    <div class="magnet-field-tabs" id="magnetFieldTabs">
-      <label class="mft"><input type="radio" name="magnetField" id="magnetFieldTitle" value="title" checked onchange="onMagnetFieldChange()"><span>影片名</span></label>
-      <label class="mft"><input type="radio" name="magnetField" id="magnetFieldOriginal" value="original" onchange="onMagnetFieldChange()"><span>原始标题</span></label>
-      <label class="mft"><input type="radio" name="magnetField" id="magnetFieldDvd" value="dvd" onchange="onMagnetFieldChange()"><span>番号</span></label>
     </div>
     <div class="sheet-list" id="magnetResults"></div>
   </div>
@@ -2862,51 +2852,21 @@ var magnetCurrentFilm = null;
 function openMagnetSheet(){
   document.getElementById('magnetResults').innerHTML = '';
   openSheet('magnetSheet');
-  var titleEl = document.getElementById('magnetFieldTitle');
-  var origEl = document.getElementById('magnetFieldOriginal');
-  var dvdEl = document.getElementById('magnetFieldDvd');
   if (currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
       magnetCurrentFilm = film;
       var f = (film && film.data) || {};
-      // AV 影片（里模式或含番号）：默认用番号搜索，命中率最高
+      // AV 影片（里模式或含番号）：直接用番号搜索，命中率最高；普通影片用标题
       var isAv = !!(state.adult || f.dvdId);
-      if (isAv && dvdEl && f.dvdId){
-        dvdEl.checked = true;
-        origEl.checked = false; if (titleEl) titleEl.checked = false;
-        document.getElementById('magnetQueryInput').value = f.dvdId;
-      } else {
-        if (titleEl) titleEl.checked = true;
-        if (origEl) origEl.checked = false;
-        if (dvdEl) dvdEl.checked = false;
-        document.getElementById('magnetQueryInput').value = f.title || '';
-      }
+      document.getElementById('magnetQueryInput').value = (isAv && f.dvdId) ? f.dvdId : (f.title || '');
       toggleMagnetClear();
       var q = document.getElementById('magnetQueryInput').value;
       if (q) searchMagnet();
     }).catch(function(){ magnetCurrentFilm = null; document.getElementById('magnetQueryInput').value = ''; toggleMagnetClear(); });
   } else {
     magnetCurrentFilm = null;
-    if (titleEl) titleEl.checked = true;
-    if (origEl) origEl.checked = false;
-    if (dvdEl) dvdEl.checked = false;
     document.getElementById('magnetQueryInput').value = '';
     toggleMagnetClear();
-  }
-}
-function onMagnetFieldChange(){
-  var sel = 'title';
-  var chk = document.querySelector('input[name="magnetField"]:checked');
-  if (chk) sel = chk.value || 'title';
-  if (magnetCurrentFilm){
-    var f = magnetCurrentFilm.data || {};
-    var q = '';
-    if (sel === 'original') q = f.originaltitle || '';
-    else if (sel === 'dvd') q = f.dvdId || '';
-    else q = f.title || '';
-    document.getElementById('magnetQueryInput').value = q;
-    toggleMagnetClear();
-    if (q) searchMagnet();
   }
 }
 function toggleMagnetClear(){
@@ -2928,12 +2888,11 @@ function searchMagnet(){
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → API 配置」填写磁力 Worker 地址。</div>'; return; }
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
-  // 番号搜索不限制 category（bt4g 的 cat 过滤对番号不可靠，常返回 0 结果）；
-  // 影片名/原始标题用 cat=movie 更精准。
-  var chk = document.querySelector('input[name="magnetField"]:checked');
-  var mode = chk ? (chk.value || 'title') : 'title';
+  // 番号（如 IPX-011）不限制 category（bt4g 的 cat 过滤对番号不可靠，常返回 0 结果）；
+  // 普通关键词用 cat=movie 更精准。
+  var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
   var url = state.magnetWorker.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
-    + (mode !== 'dvd' ? '&cat=movie' : '')
+    + (isDvd ? '' : '&cat=movie')
     + '&source=bt4g&order=seeders';
   var ctrl = new AbortController();
   var to = setTimeout(function(){ ctrl.abort(); }, 35000);
