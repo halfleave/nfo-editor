@@ -3774,7 +3774,13 @@ function searchTMDB(){
     var adult = state.themeHidden ? 'true' : 'false';
     var url = TMDB_API_BASE + '/search/movie?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
     fetch(url)
-      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(r){
+        if (!r.ok){
+          if (r.status === 401) throw new Error('TMDB API Key 无效或已过期，请去「设置 → API 配置」重新填写');
+          throw new Error('HTTP ' + r.status);
+        }
+        return r.json();
+      })
       .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
       .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; });
   });
