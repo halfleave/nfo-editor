@@ -5488,10 +5488,12 @@ function detailDelete(){
       } }
   ]);
 }
-function newFilm(){
+function newFilm(adult){
   currentFilmId = null;
   currentFilmLocked = false;
-  applyFilmData({ id: '', data: {} });
+  var film = { id: '', data: {} };
+  if (adult) film.adult = true;
+  applyFilmData(film);
   ['title','originaltitle','premiered','year','runtime','plot','rating','filename','mpaa'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
@@ -5502,7 +5504,7 @@ function newFilm(){
   updateState();
 }
 function openCustomEdit(){
-  newFilm();
+  newFilm(state.metaSource === 'jav');
   switchPage('edit');
 }
 
