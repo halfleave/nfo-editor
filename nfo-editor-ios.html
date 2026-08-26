@@ -224,8 +224,9 @@ img { display: block; }
 .detail-act#dtActMagnet .da-ic svg { width: 24px; height: 24px; fill: currentColor; stroke: none; }
 .detail-act .da-lb { display: none; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
-.detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); }
+.detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-plot:empty { display: none; }
+.detail-plot:active { opacity: 0.7; }
 /* 详情页底部「演职人员」 */
 .detail-cast { margin-top: 22px; padding-top: 16px; }
 .detail-cast:empty { display: none; }
@@ -239,10 +240,12 @@ img { display: block; }
 .detail-shots:empty { display: none; }
 .detail-shots-title { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 12px; }
 .detail-shots-row { display: flex; flex-direction: column; gap: 12px; }
-.detail-shot { width: 100%; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.06); }
+.detail-shot { width: 100%; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.06); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.detail-shot:active { opacity: 0.85; }
 .detail-shot img { display: block; width: 100%; height: auto; }
-.detail-person .dp-ava { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; color: rgba(255,255,255,0.85); font-size: 24px; font-weight: 600; }
-.detail-person .dp-name { font-size: 12px; color: #fff; line-height: 1.3; }
+.detail-person .dp-ava { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; color: rgba(255,255,255,0.85); font-size: 24px; font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.detail-person .dp-ava:active, .detail-person .dp-name:active { opacity: 0.7; }
+.detail-person .dp-name { font-size: 12px; color: #fff; line-height: 1.3; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-person .dp-role { font-size: 11px; color: rgba(255,255,255,0.65); line-height: 1.3; }
 .trailer-mask { position: fixed; inset: 0; z-index: 700; background: rgba(0,0,0,0.6); display: none; }
 .trailer-mask.show { display: block; }
@@ -2037,6 +2040,19 @@ function showToast(msg, type, duration) {
   clearTimeout(showToast._t);
   showToast._t = setTimeout(function(){ t.className = 'toast'; }, duration || 1800);
 }
+function copyText(text, label){
+  if (!text) return;
+  var ok = function(){ showToast((label || '内容') + '已复制', 'success'); };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(ok).catch(function(){ showToast('复制失败', 'error'); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); ok(); } catch(e){ showToast('复制失败', 'error'); }
+    document.body.removeChild(ta);
+  }
+}
 
 function openSheet(id) {
   document.getElementById('sheetMask').classList.add('show');
@@ -2218,7 +2234,7 @@ var state = {
   studio: '', label: '', series: '', dvdId: '',
   personPhoto: null,
   poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null, subtitleAssrt: '', subtitleOs: '',
-  posterCandidates: [], fanartCandidates: [],
+  posterCandidates: [], fanartCandidates: [], gallery: [],
   autoClear: '3d',
   appearance: 'auto',
   themeHidden: false,
@@ -3301,6 +3317,20 @@ function closeImagePreview(){
   document.getElementById('imagePreviewModal').classList.remove('show');
   document.getElementById('imagePreviewImg').src = '';
 }
+function openFullscreenStills(idx){
+  if (!currentDetailShots || !currentDetailShots.length) return;
+  previewType = '';   // 不关联编辑态字段，仅预览
+  previewList = currentDetailShots.slice();
+  previewIndex = Math.max(0, Math.min(idx, previewList.length - 1));
+  var img = document.getElementById('imagePreviewImg');
+  img.style.transition = 'none';
+  img.style.transform = 'translateX(0)';
+  img.src = previewList[previewIndex];
+  renderPreviewDots();
+  setupImagePreviewSwipe();
+  document.getElementById('imagePreviewMask').classList.add('show');
+  document.getElementById('imagePreviewModal').classList.add('show');
+}
 function renderMediaThumb(type, url){
   var col = document.getElementById(type + 'Upload');
   if (!col) return;
@@ -4213,20 +4243,25 @@ function populateFromJAV(d){
   if (!coverRaw && d.images && d.images.jacket_image) coverRaw = d.images.jacket_image.large2 || d.images.jacket_image.large || '';
   var cover = javCoverUrl(coverRaw);   // 与搜索列表共用同一 URL，浏览器缓存命中、无需重复拉取
   // 剧照：富源（/r18rich）返回字符串 URL 数组；富 schema 也可能为 {image_full} 对象（线上 r18.dev 无 gallery）
-  var gallery = (d.gallery || []).map(function(g){
+  var rawGallery = (d.gallery || []).map(function(g){
     if (typeof g === 'string') return javCoverUrl(g);
     return g && (g.image_full || g.image) ? javCoverUrl(g.image_full || g.image) : '';
   }).filter(Boolean);
-  var fanart = gallery[0] || '';
-  state.fanartCandidates = gallery.slice(1, 6);
-  // AV：r18.dev 无 gallery，用「未裁剪」的完整封面作为剧照（仅 AV）
-  if (!fanart && state.adult && cover) {
-    fanart = cover;
-    state.fanartCandidates = [];
+  // 构建 gallery：海报放在第一位，后面跟剧照，最多 6 张
+  var gallery = [];
+  if (cover) gallery.push(cover);
+  rawGallery.forEach(function(url){ if (url && gallery.indexOf(url) < 0) gallery.push(url); });
+  // AV：r18.dev 无 gallery 时，用完整封面补一张剧照
+  if (state.adult && cover && gallery.length < 2 && gallery.indexOf(cover) >= 0) {
+    // 只有海报时仍保留，gallery 至少有一张海报
   }
+  gallery = gallery.slice(0, 6);
+  state.gallery = gallery;
+  state.fanart = gallery[0] || '';
+  state.fanartCandidates = gallery.slice(1);
   var imgPromises = [];
   if (cover) imgPromises.push(loadImageFromURL(cover, 'poster', 2/3, 'right'));   // 海报：右裁
-  if (fanart) imgPromises.push(loadImageFromURL(fanart, 'fanart', 0, 'full'));    // 剧照：未裁剪完整封面
+  if (state.fanart) imgPromises.push(loadImageFromURL(state.fanart, 'fanart', 0, 'full'));    // 背景：未裁剪完整封面
   setFieldVal('studio', state.studio); setFieldVal('label', state.label); setFieldVal('series', state.series);
   applyEditMode();
   updateState();
@@ -4850,7 +4885,7 @@ function buildFilmFromCurrent(){
       studio: normalizeTextField(state.studio), label: normalizeTextField(state.label), series: normalizeTextField(state.series), dvdId: state.dvdId || null,
       poster: state.poster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
       posterCandidates: state.posterCandidates || null, fanartCandidates: state.fanartCandidates || null,
-      hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null
+      gallery: state.gallery || [], hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null
     },
     updatedAt: Date.now()
   };
@@ -4908,7 +4943,7 @@ function applyFilmData(film){
   state.series = normalizeTextField(d.series);
   setFieldVal('studio', state.studio); setFieldVal('label', state.label); setFieldVal('series', state.series);
   state.poster = d.poster || null; state.fanart = d.fanart || null; state.logo = d.logo || null; state.detailPoster = d.detailPoster || null;
-  state.posterCandidates = d.posterCandidates || []; state.fanartCandidates = d.fanartCandidates || [];
+  state.posterCandidates = d.posterCandidates || []; state.fanartCandidates = d.fanartCandidates || []; state.gallery = d.gallery || [];
   cropOriginals.poster = state.poster;
   cropOriginals.fanart = state.fanart;
   cropOriginals.logo = state.logo;
@@ -5186,6 +5221,7 @@ function openFilm(encId){
 }
 var currentDetailFilmId = null;
 var currentDetailTitle = '';   // 详情页长按复制用的标题文本（即便显示 logo 也能取到 d.title）
+var currentDetailShots = [];   // 当前详情页剧照列表（用于全屏查看）
 function openFilmDetail(encId){
   if (overviewSuppressClick){ overviewSuppressClick = false; return; }
   var id = decodeURIComponent(encId);
@@ -5363,7 +5399,9 @@ function renderFilmDetail(film){
     var code = (d.dvdId ? d.dvdId.toUpperCase() : (d.originaltitle || ''));
     if (code) plotTitle = code + ' ' + plotTitle;
   }
-  document.getElementById('detailPlot').textContent = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
+  var plotText = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
+  document.getElementById('detailPlot').textContent = plotText;
+  document.getElementById('detailPlot').onclick = function(){ copyText(plotText, '简介'); };
   // 演职人员：影片显示「导演 + 演员」；AV 不显示导演，演员改标「女优」
   var people = [];
   if (!adult) (d.directors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.dept || '导演', photo: p.photo }); });
@@ -5377,9 +5415,10 @@ function renderFilmDetail(film){
       var ph = !p.photo;
       var avaCls = 'dp-ava' + (ph ? ' ph' : '');
       var avaAttr = p.photo ? ' style="background-image:url(' + escapeAttr(p.photo) + ');background-size:cover;background-position:center;"' : '';
+      var copyAttr = ' data-name="' + escapeAttr(nm) + '" onclick="copyText(this.dataset.name, \'女优名\');event.stopPropagation();"';
       ch += '<div class="detail-person">'
-          + '<div class="' + avaCls + '"' + avaAttr + '>' + (ph ? ini : '') + '</div>'
-          + '<div class="dp-name">' + escapeHtml(nm) + '</div>'
+          + '<div class="' + avaCls + '"' + avaAttr + copyAttr + '>' + (ph ? ini : '') + '</div>'
+          + '<div class="dp-name"' + copyAttr + '>' + escapeHtml(nm) + '</div>'
           + (p.role ? '<div class="dp-role">' + escapeHtml(p.role) + '</div>' : '')
           + '</div>';
     });
@@ -5388,18 +5427,22 @@ function renderFilmDetail(film){
   } else {
     castEl.innerHTML = '';
   }
-  // 剧照：在演职人员/女优下方展示（AV 为未裁剪完整封面；普通影片为 TMDB 背景图）
+  // 剧照：优先使用 gallery（AV 时海报放第一张），最多 6 张；兼容旧数据 fanart/fanartCandidates
   var shotEl = document.getElementById('detailShots');
   if (shotEl){
     var shots = [];
-    if (d.fanart) shots.push(d.fanart);
-    if (d.fanartCandidates && d.fanartCandidates.length) shots = shots.concat(d.fanartCandidates);
+    if (d.gallery && d.gallery.length) shots = d.gallery.slice(0, 6);
+    else {
+      if (d.fanart) shots.push(d.fanart);
+      if (d.fanartCandidates && d.fanartCandidates.length) shots = shots.concat(d.fanartCandidates);
+    }
     var seen = {};
     shots = shots.filter(function(s){ if (!s || seen[s]) return false; seen[s] = 1; return true; });
+    currentDetailShots = shots.slice();
     if (shots.length){
       var sh = '<div class="detail-shots-title">剧照</div><div class="detail-shots-row">';
-      shots.forEach(function(s){
-        sh += '<div class="detail-shot"><img src="' + escapeAttr(s) + '" alt="剧照" loading="lazy"></div>';
+      shots.forEach(function(s, idx){
+        sh += '<div class="detail-shot" onclick="openFullscreenStills(' + idx + ')"><img src="' + escapeAttr(s) + '" alt="剧照" loading="lazy"></div>';
       });
       sh += '</div>';
       shotEl.innerHTML = sh;
@@ -5494,6 +5537,7 @@ function newFilm(adult){
   var film = { id: '', data: {} };
   if (adult) film.adult = true;
   applyFilmData(film);
+  state.gallery = [];
   ['title','originaltitle','premiered','year','runtime','plot','rating','filename','mpaa'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
