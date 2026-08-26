@@ -1513,7 +1513,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <div class="search-input-wrap">
           <input class="ios-input" type="text" id="tmdbQuery" placeholder="泰坦尼克号" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
           <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
-          <button type="button" class="jav-mode-toggle" id="javModeSeg" style="display:none;" onclick="setJavMode()" data-anim="0"><span class="jav-roll" id="javRoll"><span class="jav-roll-item">番号</span></span></button>
         </div>
         <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
       </div>
@@ -2241,8 +2240,7 @@ var state = {
   themeHidden: false,
   overviewTab: 'movie',
   adult: false,
-  metaSource: 'tmdb',
-  javSearchMode: 'dvd'
+  metaSource: 'tmdb'
 };
 var personState = { mode: 'actor', index: -1 }; // 'director' | 'actor'
 var currentGenreTab = 'normal';
@@ -3807,9 +3805,6 @@ function searchTMDB(){
 }
 
 /* ===== R18.dev 元数据搜索（AV 元数据来源，经 Worker 代理） ===== */
-var javResults = [];
-var javActressResults = [];
-var javRenderOffset = 0;
 var javRichCache = {}; // 按 dvd_id 缓存 /r18rich 结果，避免列表页和详情页重复请求
 function javPick(obj, keys){
   if (!obj) return '';
@@ -3940,16 +3935,22 @@ function javRequestMerged(dvdId){
   var base = (state.magnetWorker || '').replace(/\/$/, '');
   if (!base) return Promise.reject(new Error('NO_WORKER'));
   var q = encodeURIComponent(dvdId);
-  return fetch(base + '/r18rich?dvd_id=' + q)
+  // 8 秒超时：精确搜索若长时间无响应则中止，避免前端一直转圈
+  var controller = ('AbortController' in window) ? new AbortController() : null;
+  var timer = setTimeout(function(){ if (controller) controller.abort(); }, 8000);
+  return fetch(base + '/r18rich?dvd_id=' + q, controller ? { signal: controller.signal } : undefined)
     .then(function(r){
       if (r.status === 404) throw new Error('未找到该番号');
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
+    }, function(err){
+      if (err && err.name === 'AbortError') throw new Error('TIMEOUT');
+      throw err;
     })
     .then(function(rich){
       if (!rich || rich.error) throw new Error((rich && rich.error) || '未找到该番号');
       var m = Object.assign({}, rich);
-      // 保持与 populateFromJAV / renderJAVResults / refreshFromR18 一致的取值键
+      // 保持与 populateFromJAV / refreshFromR18 一致的取值键
       m.title = rich.title_ja || rich.title_en || rich.title || '';
       m.title_ja = rich.title_ja || '';
       m.title_en = rich.title_en || rich.title || '';
@@ -3963,67 +3964,23 @@ function javRequestMerged(dvdId){
       m.gallery = (rich.gallery && rich.gallery.length) ? rich.gallery : [];
       m._dvdId = dvdId;
       return m;
-    });
+    })
+    .finally(function(){ clearTimeout(timer); });
 }
 function setMetaSource(src, btn){
   state.metaSource = src;
   var seg = btn.parentNode;
   seg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
   document.getElementById('tmdbResults').innerHTML = '';
-  var javBtn = document.getElementById('javModeSeg');
-  var wrap = document.getElementById('tmdbQuery').closest('.search-input-wrap');
   if (src === 'jav'){
-    javBtn.style.display = '';
-    setJavToggleLabel((state.javSearchMode === 'dvd') ? '番号' : '女优');
-    if (wrap) wrap.classList.add('jav-mode-on');
     updateJavPlaceholder();
   }
   else {
-    javBtn.style.display = 'none';
-    if (wrap) wrap.classList.remove('jav-mode-on');
     updateSearchPlaceholder();
   }
 }
-function setJavToggleLabel(text){
-  var roll = document.getElementById('javRoll');
-  if (!roll) return;
-  var item = roll.querySelector('.jav-roll-item');
-  if (item) item.textContent = text;
-  else {
-    var span = document.createElement('span');
-    span.className = 'jav-roll-item';
-    span.textContent = text;
-    roll.appendChild(span);
-  }
-}
-function setJavMode(){
-  var btn = document.getElementById('javModeSeg');
-  if (btn.dataset.anim === '1') return; /* 动画进行中，忽略连点 */
-  var roll = document.getElementById('javRoll');
-  var next = (state.javSearchMode === 'dvd') ? 'actress' : 'dvd';
-  var nextText = (next === 'dvd') ? '番号' : '女优';
-  var curItem = roll.querySelector('.jav-roll-item');
-  var newItem = document.createElement('span');
-  newItem.className = 'jav-roll-item jm-below';
-  newItem.textContent = nextText;
-  roll.appendChild(newItem);
-  void newItem.offsetWidth; /* 强制回流后再去掉起点类，触发过渡 */
-  btn.dataset.anim = '1';
-  requestAnimationFrame(function(){
-    if (curItem) curItem.classList.add('jm-above');
-    newItem.classList.remove('jm-below');
-  });
-  setTimeout(function(){
-    if (curItem && curItem.parentNode) curItem.parentNode.removeChild(curItem);
-    btn.dataset.anim = '0';
-  }, 340);
-  state.javSearchMode = next;
-  document.getElementById('tmdbResults').innerHTML = '';
-  updateJavPlaceholder();
-}
 function updateJavPlaceholder(){
-  var ph = (state.javSearchMode === 'actress') ? '三上悠亞' : 'IPX-011';
-  document.getElementById('tmdbQuery').placeholder = ph;
+  document.getElementById('tmdbQuery').placeholder = 'IPX-011';
 }
 function updateSearchPlaceholder(){
   var el = document.getElementById('tmdbQuery');
@@ -4037,7 +3994,13 @@ function searchMeta(){
 }
 function searchJAV(){
   var q = document.getElementById('tmdbQuery').value.trim();
-  if (!q){ showToast('请输入关键词', 'error'); return; }
+  if (!q){ showToast('请输入番号', 'error'); return; }
+  var dvd = q.toUpperCase();
+  // 必须完整番号：仅含字母/数字/连字符，且至少一处连字符、长度>=4
+  if (!/^[A-Z0-9-]+$/.test(dvd) || dvd.indexOf('-') < 0 || dvd.length < 4){
+    showToast('请输入完整番号（例如 IPX-011）', 'error');
+    return;
+  }
   var base = (state.magnetWorker || '').replace(/\/$/, '');
   if (!base){
     var b0 = document.getElementById('tmdbResults');
@@ -4047,63 +4010,15 @@ function searchJAV(){
   }
   var box = document.getElementById('tmdbResults');
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
-  javRenderOffset = 0; javResults = []; javActressResults = [];
-  var mode = state.javSearchMode;
-  var param = (mode === 'actress') ? ('actress=' + encodeURIComponent(q)) : ('q=' + encodeURIComponent(q));
-  fetch(base + '/r18search?' + param)
-    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function(j){
-      if (!j || j.error){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((j && j.error) || '未知') + '</div>'; return; }
-      if (mode === 'actress'){
-        javActressResults = j.items || [];
-        renderActressResults(javActressResults);
-      } else {
-        javResults = j.items || [];
-        renderJAVResults();
-      }
+  fetchJAVRichCached(dvd)
+    .then(function(d){
+      if (!d || d.error){ box.innerHTML = '<div class="tmdb-msg">未找到该番号：' + escapeHtml(dvd) + '</div>'; return; }
+      renderSingleJAV(d, box);
     })
-    .catch(function(e){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((e && e.message) || '未知') + '</div>'; });
-}
-function renderActressResults(items){
-  var box = document.getElementById('tmdbResults');
-  if (!items.length){ box.innerHTML = '<div class="tmdb-msg">未找到女优</div>'; return; }
-  var html = '<div class="jav-back" onclick="backToActressList()">‹ 返回女优列表</div>';
-  items.forEach(function(a, idx){
-    var name = javStr(a.name_kanji || a.name_romaji || a.name) || '';
-    var sub = (a.name_romaji && a.name_kanji && a.name_romaji !== a.name_kanji) ? a.name_romaji : '';
-    var img = javCoverUrl(a.image_url);
-    html += '<div class="tmdb-result" data-actress-idx="' + idx + '" onclick="selectActress(' + idx + ')">';
-    html += img ? '<img src="' + escapeAttr(img) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
-    html += '<div class="tr-info">';
-    html += '<div class="tr-title">' + escapeHtml(name) + '</div>';
-    if (sub) html += '<div class="tr-meta">' + escapeHtml(sub) + '</div>';
-    html += '</div></div>';
-  });
-  box.innerHTML = html;
-}
-function selectActress(idx){
-  var a = javActressResults[idx];
-  if (!a || !a.id) return;
-  showToast('正在加载作品…', 'success');
-  javSearchWorks(a.id);
-}
-function javSearchWorks(actressId){
-  var base = (state.magnetWorker || '').replace(/\/$/, '');
-  if (!base){ showToast('未配置 Worker 地址', 'error'); return; }
-  var box = document.getElementById('tmdbResults');
-  box.innerHTML = '<div class="tmdb-msg">加载作品中…</div>';
-  fetch(base + '/r18search?actress_id=' + encodeURIComponent(actressId))
-    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function(j){
-      if (!j || j.error){ box.innerHTML = '<div class="tmdb-msg">加载失败：' + escapeHtml((j && j.error) || '未知') + '</div>'; return; }
-      javResults = j.items || [];
-      javRenderOffset = 0;
-      renderJAVResults();
-    })
-    .catch(function(e){ box.innerHTML = '<div class="tmdb-msg">请求失败：' + escapeHtml((e && e.message) || '未知') + '</div>'; });
-}
-function backToActressList(){
-  if (javActressResults && javActressResults.length) renderActressResults(javActressResults);
+    .catch(function(e){
+      var msg = (e && e.message === 'TIMEOUT') ? '搜索超时（8 秒无响应，请稍后重试）' : '搜索失败：' + escapeHtml((e && e.message) || '未知');
+      box.innerHTML = '<div class="tmdb-msg">' + msg + '</div>';
+    });
 }
 /* 封面域名 pics.dmm.co.jp 无 CORS 头，已配 Worker 时经 /img 路由代理以绕跨域。
    搜索列表与保存导入共用同一代理 URL，浏览器即可命中缓存、避免重复拉取 */
@@ -4116,91 +4031,38 @@ function javCoverUrl(raw){
 function fetchJAVRichCached(dvdId){
   var key = String(dvdId).toUpperCase();
   if (javRichCache[key]) return javRichCache[key];
-  var p = javRequestMerged(dvdId).then(function(d){ javRichCache[key] = Promise.resolve(d); return d; });
+  var p = javRequestMerged(dvdId)
+    .then(function(d){ javRichCache[key] = Promise.resolve(d); return d; })
+    .catch(function(err){ delete javRichCache[key]; throw err; }); // 超时/失败不缓存，允许重试
   javRichCache[key] = p;
   return p;
 }
-function renderJAVResults(){
-  var box = document.getElementById('tmdbResults');
-  if (javRenderOffset === 0){
-    if (!javResults.length){ box.innerHTML = '<div class="tmdb-msg">未找到匹配结果</div>'; return; }
-    box.innerHTML = '';
-  }
-  var slice = javResults.slice(javRenderOffset, javRenderOffset + 10);
-  if (!slice.length) return;
-  slice.forEach(function(item, k){
-    var idx = javRenderOffset + k;
-    var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
-    var date = javStr(item.release_date || item.releaseDate || item.date) || '';
-    var coverRaw = javStr(item.jacket_full_url || item.jacket_thumb_url);
-    if (!coverRaw && item.images && item.images.jacket_image) coverRaw = item.images.jacket_image.large2 || item.images.jacket_image.large || '';
-    var cover = javCoverUrl(coverRaw);
-    var metaParts = [];
-    if (date) metaParts.push(date);
-    if (dvdId) metaParts.push(dvdId);
-    var meta = metaParts.join(' · ');
-    var placeholderTitle = dvdId || '加载中…';
-    var el = document.createElement('div');
-    el.className = 'tmdb-result jav-result-loading';
-    el.dataset.javIdx = idx;
-    el.onclick = function(){ selectJAV(idx); };
-    el.innerHTML = (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>') +
-      '<div class="tr-info">' +
-      '<div class="tr-title"><span class="tr-title-text">' + escapeHtml(placeholderTitle) + '</span><span class="adult-tag">AV</span></div>' +
-      (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '') +
-      '</div>';
-    box.appendChild(el);
-    if (dvdId) enrichJAVResult(idx, el);
-  });
-  var oldMore = box.querySelector('.jav-more'); if (oldMore) oldMore.remove();
-  javRenderOffset += slice.length;
-  if (javRenderOffset < javResults.length){
-    box.insertAdjacentHTML('beforeend', '<div class="jav-more" onclick="javLoadMore()">看更多？</div>');
-  } else {
-    box.insertAdjacentHTML('beforeend', '<div class="jav-more jav-more-end">已显示全部 ' + javResults.length + ' 条</div>');
-  }
+var lastSingleJAV = null;
+function renderSingleJAV(d, box){
+  lastSingleJAV = d;
+  var dvdId = javStr(d.dvd_id || d._dvdId || d.content_id || d.id) || '';
+  var title = javStr(d.title_ja || d.title_en || d.title || d.name) || dvdId || '未命名';
+  var date = javStr(d.release_date || d.releaseDate || d.date) || '';
+  var coverRaw = javStr(d.jacket_full_url || d.jacket_thumb_url);
+  if (!coverRaw && d.images && d.images.jacket_image) coverRaw = d.images.jacket_image.large2 || d.images.jacket_image.large || '';
+  var cover = javCoverUrl(coverRaw);
+  var metaParts = [];
+  if (date) metaParts.push(date);
+  if (dvdId) metaParts.push(dvdId);
+  var meta = metaParts.join(' · ');
+  box.innerHTML = '<div class="tmdb-result" onclick="applySingleJAV()">' +
+    (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>') +
+    '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + '<span class="adult-tag">AV</span></div>' +
+    (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '') +
+    '</div></div>';
 }
-function enrichJAVResult(idx, el){
-  var item = javResults[idx];
-  var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
-  if (!dvdId) return;
-  fetchJAVRichCached(dvdId)
-    .then(function(d){
-      item._rich = d;
-      item.title_ja = d.title_ja || item.title_ja;
-      item.title_en = d.title_en || item.title_en;
-      item.title = d.title || item.title;
-      var titleText = javStr(d.title_ja || d.title_en || d.title || dvdId) || dvdId;
-      var titleSpan = el.querySelector('.tr-title-text');
-      if (titleSpan) titleSpan.textContent = titleText;
-      var coverRaw = javStr(d.jacket_full_url || (d.images && d.images.jacket_image && (d.images.jacket_image.large2 || d.images.jacket_image.large)));
-      if (coverRaw){
-        var img = el.querySelector('img');
-        if (img) img.src = javCoverUrl(coverRaw);
-      }
-      el.classList.remove('jav-result-loading');
-    })
-    .catch(function(){
-      el.classList.remove('jav-result-loading');
-    });
-}
-function javLoadMore(){ renderJAVResults(); }
-function selectJAV(i){
-  var item = javResults[i];
-  if (!item) return;
-  var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
-  if (!dvdId){ showToast('该条目缺少番号', 'error'); return; }
-  showToast('正在获取详情…', 'success');
-  fetchJAVRichCached(dvdId)
-    .then(function(d){
-      var imgP = populateFromJAV(d);
-      // 文本元数据已填充完成：立即保存并跳首页，图片后台加载完再静默补存
-      quickSaveAndHome();
-      imgP.then(function(){ silentRefreshCurrentFilm(); }).catch(function(){});
-    })
-    .catch(function(err){
-      showToast('获取详情失败：' + ((err && err.message) || '未知'), 'error');
-    });
+function applySingleJAV(){
+  var d = lastSingleJAV;
+  if (!d) return;
+  var imgP = populateFromJAV(d);
+  // 文本元数据已填充完成：立即保存并跳首页，图片后台加载完再静默补存
+  quickSaveAndHome();
+  imgP.then(function(){ silentRefreshCurrentFilm(); }).catch(function(){});
 }
 function populateFromJAV(d){
   ['title','originaltitle','premiered','runtime','plot','rating'].forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
