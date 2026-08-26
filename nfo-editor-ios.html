@@ -767,6 +767,8 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
+.hh-right { display: flex; align-items: center; flex-shrink: 0; gap: 8px; }
+.hh-right .overview-tabs { margin-top: 0; }
 
 /* 首页/影视：分组小标题 */
 .section-heading { font-size: 15px; font-weight: 600; color: var(--label-2); margin: 22px 0 10px; padding-left: 2px; }
@@ -1128,6 +1130,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .search-box .ios-input:focus,
 .search-box input[type="text"]:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .search-box .btn-pill { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 7px 20px; font-size: 15px; font-weight: 600; }
+.jav-mode-inline { display: inline-flex; align-items: center; flex-shrink: 0; }
+.jav-mode-track { display: inline-flex; position: relative; align-items: center; }
+.jav-mode-track button { position: relative; z-index: 1; background: none; border: none; padding: 6px 9px; font-size: 13px; font-weight: 500; color: var(--label-3); transition: color .2s; -webkit-tap-highlight-color: transparent; }
+.jav-mode-track button.active { color: var(--label); font-weight: 600; }
+.jav-mode-indicator { position: absolute; bottom: 1px; left: 0; height: 2px; background: var(--label); border-radius: 1px; transition: transform .25s ease, width .25s ease; pointer-events: none; }
 #searchPanel .tmdb-result:first-child { padding-top: 4px; }
 /* 详情页字幕按钮：5 个图标按钮时收紧间距 */
 .detail-actions { gap: 14px; }
@@ -1450,20 +1457,20 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <p class="home-sub" id="welcomeSub">下午好，</p>
         <div class="hh-main">
           <h1 class="home-greeting" id="welcomeTitle">慢慢变好就行 <span class="hh-star">✨</span></h1>
-          <div class="date-pill" id="datePill">8月6日 周四</div>
+          <div class="hh-right">
+            <div class="date-pill" id="datePill">8月6日 周四</div>
+            <div class="overview-tabs" id="overviewTabs" style="display:none;">
+              <span class="seg">
+                <button type="button" class="active" data-tab="movie" onclick="setOverviewTab('movie',this)">影片</button>
+                <button type="button" data-tab="av" id="overviewTabAv" onclick="setOverviewTab('av',this)">AV</button>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
     <div class="page-scroll">
       <div class="overview-section">
-        <div class="overview-head">
-          <div class="overview-tabs" id="overviewTabs" style="display:none;">
-            <span class="seg">
-              <button type="button" class="active" data-tab="movie" onclick="setOverviewTab('movie',this)">影片</button>
-              <button type="button" data-tab="av" id="overviewTabAv" onclick="setOverviewTab('av',this)">AV</button>
-            </span>
-          </div>
-        </div>
         <div class="overview-grid" id="overviewGrid"></div>
         <div class="empty-hint" id="overviewEmpty">暂无影片~</div>
       </div>
@@ -1481,7 +1488,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         </span>
       </div>
       <div class="page-actions">
-        <button class="btn btn-ghost btn-pill" style="padding:6px 16px;font-size:14px;background:rgba(120,120,128,0.5);" onclick="openCustomEdit()">自定义</button>
+        <button class="btn btn-text muted" style="font-size:13px;padding:6px 8px;" onclick="openCustomEdit()">自定义</button>
       </div>
     </header>
     <div class="page-scroll">
@@ -1490,13 +1497,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <input class="ios-input" type="text" id="tmdbQuery" placeholder="搜索影片" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
           <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
         </div>
+        <div class="jav-mode-inline" id="javModeSeg" style="display:none;">
+          <div class="jav-mode-track">
+            <button type="button" class="active" data-javmode="dvd" onclick="setJavMode('dvd',this)">番号</button>
+            <button type="button" data-javmode="actress" onclick="setJavMode('actress',this)">女优</button>
+            <span class="jav-mode-indicator"></span>
+          </div>
+        </div>
         <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
-      </div>
-      <div class="meta-source-seg" id="javModeSeg" style="display:none;margin:4px 16px 8px;">
-        <span class="seg">
-          <button type="button" class="active" data-javmode="dvd" onclick="setJavMode('dvd',this)">番号</button>
-          <button type="button" data-javmode="actress" onclick="setJavMode('actress',this)">女优</button>
-        </span>
       </div>
       <div id="tmdbResults"></div>
     </div>
@@ -1903,7 +1911,9 @@ function setOverviewTab(tab, btn){
 }
 function updateOverviewTabVisibility(){
   var tabs = document.getElementById('overviewTabs');
+  var datePill = document.getElementById('datePill');
   if (tabs) tabs.style.display = state.themeHidden ? '' : 'none';
+  if (datePill) datePill.style.display = state.themeHidden ? 'none' : '';
   var searchSeg = document.getElementById('searchMetaSeg');
   if (searchSeg) searchSeg.style.display = state.themeHidden ? 'flex' : 'none';
   if (!state.themeHidden){
@@ -3921,13 +3931,26 @@ function setMetaSource(src, btn){
   seg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
   document.getElementById('tmdbResults').innerHTML = '';
   var javSeg = document.getElementById('javModeSeg');
-  if (src === 'jav'){ javSeg.style.display = ''; updateJavPlaceholder(); }
+  if (src === 'jav'){
+    javSeg.style.display = '';
+    updateJavPlaceholder();
+    positionJavIndicator(javSeg.querySelector('.jav-mode-track'));
+  }
   else javSeg.style.display = 'none';
+}
+function positionJavIndicator(track){
+  if (!track) return;
+  var btn = track.querySelector('button.active');
+  var indicator = track.querySelector('.jav-mode-indicator');
+  if (!btn || !indicator) return;
+  indicator.style.width = btn.offsetWidth + 'px';
+  indicator.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
 }
 function setJavMode(mode, btn){
   state.javSearchMode = mode;
-  var seg = btn.parentNode;
-  seg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
+  var track = btn.parentNode;
+  track.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
+  positionJavIndicator(track);
   document.getElementById('tmdbResults').innerHTML = '';
   updateJavPlaceholder();
 }
