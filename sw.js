@@ -6,7 +6,7 @@
  *  - 其余（TMDB API 等）：走网络，不缓存
  * 注意：2026-08-12 升 v2，清掉旧版缓存，避免 iOS 主屏 PWA 一直跑旧 HTML。
  */
-const CACHE = 'nfo-ios-v2';
+const CACHE = 'nfo-ios-v3';
 const APP_SHELL = ['./nfo-editor-ios.html'];
 const WORKER_RE = /workers\.dev$/i;
 

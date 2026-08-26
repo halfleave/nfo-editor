@@ -1077,6 +1077,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tr-trailer-tag.show { opacity: 1; transform: scale(1); }
 .tr-trailer-tag svg { width: 11px; height: 11px; display: block; }
 .tmdb-msg { padding: 16px 4px; color: var(--label-2); font-size: 14px; text-align: center; }
+.jav-more { padding: 14px 4px 20px; text-align: center; color: var(--label-2); font-size: 13px; opacity: 0.7; cursor: pointer; }
+.jav-more:active { opacity: 1; }
+.jav-more-end { cursor: default; }
+.jav-back { padding: 8px 4px 12px; color: var(--accent, #0a84ff); font-size: 14px; cursor: pointer; }
+.jav-back:active { opacity: 0.6; }
 
 /* ===== 磁力搜索结果 ===== */
 .magnet-result { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 0.5px solid var(--sep); }
@@ -1354,7 +1359,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       </div>
       <div class="help-section">
         <h4>R18（AV 元数据）</h4>
-        <p>AV 元数据来自 <a href="https://r18.dev" target="_blank">r18.dev</a>，免费、无需 Key，但被 Cloudflare 拦浏览器直连，需经你的代理访问。请在「磁力 / R18 Worker 地址」填写同一个 Worker 地址——它需同时支持磁力搜索与 <code>/r18?dvd_id=番号</code> 路由（封面图走 <code>/img?url=</code> 路由）。不填则无法搜 AV。</p>
+        <p>AV 元数据来自 Turso 富数据源（经你的 Worker <code>/r18rich?dvd_id=番号</code> 路由读取，覆盖番号/标题/剧情/女优/剧照/封面等），免费、无需 Key。请在「磁力 / R18 Worker 地址」填写同一个 Worker 地址——它需同时支持磁力搜索与 <code>/r18rich</code> 路由（封面图走 <code>/img?url=</code> 路由）。不填则无法搜 AV。</p>
       </div>
       <div class="help-section">
         <h4>磁力 Worker 地址</h4>
@@ -1486,6 +1491,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
         </div>
         <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
+      </div>
+      <div class="meta-source-seg" id="javModeSeg" style="display:none;margin:4px 16px 8px;">
+        <span class="seg">
+          <button type="button" class="active" data-javmode="dvd" onclick="setJavMode('dvd',this)">番号</button>
+          <button type="button" data-javmode="actress" onclick="setJavMode('actress',this)">女优</button>
+        </span>
       </div>
       <div id="tmdbResults"></div>
     </div>
@@ -2201,7 +2212,8 @@ var state = {
   themeHidden: false,
   overviewTab: 'movie',
   adult: false,
-  metaSource: 'tmdb'
+  metaSource: 'tmdb',
+  javSearchMode: 'dvd'
 };
 var personState = { mode: 'actor', index: -1 }; // 'director' | 'actor'
 var currentGenreTab = 'normal';
@@ -3747,6 +3759,8 @@ function searchTMDB(){
 
 /* ===== R18.dev 元数据搜索（AV 元数据来源，经 Worker 代理） ===== */
 var javResults = [];
+var javActressResults = [];
+var javRenderOffset = 0;
 function javPick(obj, keys){
   if (!obj) return '';
   for (var i = 0; i < keys.length; i++){
@@ -3870,53 +3884,56 @@ function normalizeTextField(v){
   }
   return String(v);
 }
-/* R18.dev 数据源：免费、无需 Key，但被 Cloudflare 拦浏览器直连，需经用户自己的代理（复用磁力 Worker）。
-   代理路由：<worker>/r18?dvd_id=<番号>  → 代理请求 https://r18.dev/.../dvd_id=<番号>/json 并带回 CORS 头。 */
-function javRequest(dvdId){
-  var base = (state.magnetWorker || '').replace(/\/$/, '');
-  if (!base) return Promise.reject(new Error('NO_WORKER'));
-  var url = base + '/r18?dvd_id=' + encodeURIComponent(dvdId);
-  return fetch(url)
-    .then(function(r){
-      if (r.status === 404) throw new Error('未找到该番号');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    });
-}
-/* 合并查询：r18.dev 线上 /r18（canonical 基础字段）+ Turso /r18rich（富日文/剧情/剧照/女优汉字）。
-   两者任一缺失都不影响：rich 优先补日文与剧照，basic 兜底；若 Turso 未配置则 rich 为空自动回退 basic。 */
+/* AV 元数据仅来自 Turso 富数据源 /r18rich（番号/标题/剧情/女优/剧照/封面等）。
+   不再调用 r18.dev 线上 /r18 旧源——富源已完全覆盖所需字段。 */
 function javRequestMerged(dvdId){
   var base = (state.magnetWorker || '').replace(/\/$/, '');
   if (!base) return Promise.reject(new Error('NO_WORKER'));
   var q = encodeURIComponent(dvdId);
-  var pBasic = fetch(base + '/r18?dvd_id=' + q).then(function(r){
-    if (r.status === 404) throw new Error('未找到该番号');
-    return r.ok ? r.json() : null;
-  }).catch(function(e){ if (e && e.message === '未找到该番号') throw e; return null; });
-  var pRich = fetch(base + '/r18rich?dvd_id=' + q).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
-  return Promise.all([pBasic, pRich]).then(function(pair){
-    var basic = pair[0] || {}, rich = pair[1] || {};
-    var m = {};
-    ['title_ja','title_en','dvd_id','content_id','release_date','runtime_mins','runtime_minutes',
-     'sample_url','jacket_full_url','jacket_thumb_url'].forEach(function(k){ m[k] = (basic[k] != null ? basic[k] : rich[k]); });
-    m.plot = rich.plot_ja || rich.plot_en || basic.plot || '';
-    m.categories = (rich.categories && rich.categories.length) ? rich.categories : (basic.categories || []);
-    m.actresses = (rich.actresses && rich.actresses.length) ? rich.actresses : (basic.actresses || []);
-    m.directors = (rich.directors && rich.directors.length) ? rich.directors : (basic.directors || basic.director || []);
-    m.maker  = rich.maker  || basic.maker  || null;
-    m.label  = rich.label  || basic.label  || null;
-    m.series = rich.series || basic.series || null;
-    m.gallery = (rich.gallery && rich.gallery.length) ? rich.gallery : (basic.gallery || []);
-    m._dvdId = dvdId;
-    return m;
-  });
+  return fetch(base + '/r18rich?dvd_id=' + q)
+    .then(function(r){
+      if (r.status === 404) throw new Error('未找到该番号');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(rich){
+      if (!rich || rich.error) throw new Error((rich && rich.error) || '未找到该番号');
+      var m = Object.assign({}, rich);
+      // 保持与 populateFromJAV / renderJAVResults / refreshFromR18 一致的取值键
+      m.title = rich.title_ja || rich.title_en || rich.title || '';
+      m.title_ja = rich.title_ja || '';
+      m.title_en = rich.title_en || rich.title || '';
+      m.plot = rich.plot_ja || rich.plot_en || rich.comment_ja || rich.comment_en || '';
+      m.categories = (rich.categories && rich.categories.length) ? rich.categories : [];
+      m.actresses = (rich.actresses && rich.actresses.length) ? rich.actresses : [];
+      m.directors = (rich.directors && rich.directors.length) ? rich.directors : (rich.director || []);
+      m.maker  = rich.maker  || null;
+      m.label  = rich.label  || null;
+      m.series = rich.series || null;
+      m.gallery = (rich.gallery && rich.gallery.length) ? rich.gallery : [];
+      m._dvdId = dvdId;
+      return m;
+    });
 }
 function setMetaSource(src, btn){
   state.metaSource = src;
   var seg = btn.parentNode;
   seg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
   document.getElementById('tmdbResults').innerHTML = '';
-  document.getElementById('tmdbQuery').placeholder = (src === 'jav') ? '请输入番号（如 IPX-011）' : '搜索影片';
+  var javSeg = document.getElementById('javModeSeg');
+  if (src === 'jav'){ javSeg.style.display = ''; updateJavPlaceholder(); }
+  else javSeg.style.display = 'none';
+}
+function setJavMode(mode, btn){
+  state.javSearchMode = mode;
+  var seg = btn.parentNode;
+  seg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
+  document.getElementById('tmdbResults').innerHTML = '';
+  updateJavPlaceholder();
+}
+function updateJavPlaceholder(){
+  var ph = (state.javSearchMode === 'actress') ? '请输入女优名（如 三上、Mika）' : '请输入番号（如 IPX-011、rki）';
+  document.getElementById('tmdbQuery').placeholder = ph;
 }
 function searchMeta(){
   if (state.metaSource === 'jav') searchJAV();
@@ -3924,28 +3941,73 @@ function searchMeta(){
 }
 function searchJAV(){
   var q = document.getElementById('tmdbQuery').value.trim();
-  if (!q){ showToast('请输入番号', 'error'); return; }
-  var box = document.getElementById('tmdbResults');
-  box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
-  if (!state.magnetWorker){
-    box.innerHTML = '<div class="tmdb-msg">未配置代理地址，请到「设置 → API 配置」填写磁力 / R18 Worker 地址。</div>';
+  if (!q){ showToast('请输入关键词', 'error'); return; }
+  var base = (state.magnetWorker || '').replace(/\/$/, '');
+  if (!base){
+    var b0 = document.getElementById('tmdbResults');
+    b0.innerHTML = '<div class="tmdb-msg">未配置代理地址，请到「设置 → API 配置」填写磁力 / R18 Worker 地址。</div>';
     showToast('请先配置 Worker 地址', 'error');
     return;
   }
-  javRequestMerged(q)
-    .then(function(d){
-      // R18 按精确番号返回单条详情，包装成结果列表以保持点选交互
-      var item = {};
-      for (var k in d) if (d.hasOwnProperty(k)) item[k] = d[k];
-      item._dvdId = q;
-      javResults = [ item ];
-      renderJAVResults(javResults);
+  var box = document.getElementById('tmdbResults');
+  box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
+  javRenderOffset = 0; javResults = []; javActressResults = [];
+  var mode = state.javSearchMode;
+  var param = (mode === 'actress') ? ('actress=' + encodeURIComponent(q)) : ('q=' + encodeURIComponent(q));
+  fetch(base + '/r18search?' + param)
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j){
+      if (!j || j.error){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((j && j.error) || '未知') + '</div>'; return; }
+      if (mode === 'actress'){
+        javActressResults = j.items || [];
+        renderActressResults(javActressResults);
+      } else {
+        javResults = j.items || [];
+        renderJAVResults();
+      }
     })
-    .catch(function(err){
-      var msg = (err && err.message) || '请求失败';
-      if (msg === 'NO_WORKER'){ box.innerHTML = '<div class="tmdb-msg">未配置代理地址，请到「设置 → API 配置」填写磁力 / R18 Worker 地址。</div>'; showToast('请先配置 Worker 地址', 'error'); }
-      else box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(msg) + '</div>';
-    });
+    .catch(function(e){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((e && e.message) || '未知') + '</div>'; });
+}
+function renderActressResults(items){
+  var box = document.getElementById('tmdbResults');
+  if (!items.length){ box.innerHTML = '<div class="tmdb-msg">未找到女优</div>'; return; }
+  var html = '<div class="jav-back" onclick="backToActressList()">‹ 返回女优列表</div>';
+  items.forEach(function(a, idx){
+    var name = javStr(a.name_kanji || a.name_romaji || a.name) || '';
+    var sub = (a.name_romaji && a.name_kanji && a.name_romaji !== a.name_kanji) ? a.name_romaji : '';
+    var img = javCoverUrl(a.image_url);
+    html += '<div class="tmdb-result" data-actress-idx="' + idx + '" onclick="selectActress(' + idx + ')">';
+    html += img ? '<img src="' + escapeAttr(img) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
+    html += '<div class="tr-info">';
+    html += '<div class="tr-title">' + escapeHtml(name) + '</div>';
+    if (sub) html += '<div class="tr-meta">' + escapeHtml(sub) + '</div>';
+    html += '</div></div>';
+  });
+  box.innerHTML = html;
+}
+function selectActress(idx){
+  var a = javActressResults[idx];
+  if (!a || !a.id) return;
+  showToast('正在加载作品…', 'success');
+  javSearchWorks(a.id);
+}
+function javSearchWorks(actressId){
+  var base = (state.magnetWorker || '').replace(/\/$/, '');
+  if (!base){ showToast('未配置 Worker 地址', 'error'); return; }
+  var box = document.getElementById('tmdbResults');
+  box.innerHTML = '<div class="tmdb-msg">加载作品中…</div>';
+  fetch(base + '/r18search?actress_id=' + encodeURIComponent(actressId))
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(j){
+      if (!j || j.error){ box.innerHTML = '<div class="tmdb-msg">加载失败：' + escapeHtml((j && j.error) || '未知') + '</div>'; return; }
+      javResults = j.items || [];
+      javRenderOffset = 0;
+      renderJAVResults();
+    })
+    .catch(function(e){ box.innerHTML = '<div class="tmdb-msg">请求失败：' + escapeHtml((e && e.message) || '未知') + '</div>'; });
+}
+function backToActressList(){
+  if (javActressResults && javActressResults.length) renderActressResults(javActressResults);
 }
 /* 封面域名 pics.dmm.co.jp 无 CORS 头，已配 Worker 时经 /img 路由代理以绕跨域。
    搜索列表与保存导入共用同一代理 URL，浏览器即可命中缓存、避免重复拉取 */
@@ -3955,11 +4017,17 @@ function javCoverUrl(raw){
   }
   return raw;
 }
-function renderJAVResults(results){
+function renderJAVResults(){
   var box = document.getElementById('tmdbResults');
-  if (!results.length){ box.innerHTML = '<div class="tmdb-msg">未找到匹配结果</div>'; return; }
+  if (javRenderOffset === 0){
+    if (!javResults.length){ box.innerHTML = '<div class="tmdb-msg">未找到匹配结果</div>'; return; }
+    box.innerHTML = '';
+  }
+  var slice = javResults.slice(javRenderOffset, javRenderOffset + 10);
+  if (!slice.length) return;
   var html = '';
-  results.slice(0, 20).forEach(function(item, idx){
+  slice.forEach(function(item, k){
+    var idx = javRenderOffset + k;
     var title = javStr(item.title_ja || item.title_en || item.title || item.name) || '';
     var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
     var date = javStr(item.release_date || item.releaseDate || item.date) || '';
@@ -3977,16 +4045,32 @@ function renderJAVResults(results){
     if (meta) html += '<div class="tr-meta">' + escapeHtml(meta) + '</div>';
     html += '</div></div>';
   });
-  box.innerHTML = html;
+  var oldMore = box.querySelector('.jav-more'); if (oldMore) oldMore.remove();
+  box.insertAdjacentHTML('beforeend', html);
+  javRenderOffset += slice.length;
+  if (javRenderOffset < javResults.length){
+    box.insertAdjacentHTML('beforeend', '<div class="jav-more" onclick="javLoadMore()">看更多？</div>');
+  } else {
+    box.insertAdjacentHTML('beforeend', '<div class="jav-more jav-more-end">已显示全部 ' + javResults.length + ' 条</div>');
+  }
 }
+function javLoadMore(){ renderJAVResults(); }
 function selectJAV(i){
   var item = javResults[i];
   if (!item) return;
+  var dvdId = javStr(item._dvdId || item.dvd_id || item.dvdId || item.content_id || item.id) || '';
+  if (!dvdId){ showToast('该条目缺少番号', 'error'); return; }
   showToast('正在获取详情…', 'success');
-  var imgP = populateFromJAV(item);
-  // 文本元数据已填充完成：立即保存并跳首页，图片后台加载完再静默补存
-  quickSaveAndHome();
-  imgP.then(function(){ silentRefreshCurrentFilm(); }).catch(function(){});
+  javRequestMerged(dvdId)
+    .then(function(d){
+      var imgP = populateFromJAV(d);
+      // 文本元数据已填充完成：立即保存并跳首页，图片后台加载完再静默补存
+      quickSaveAndHome();
+      imgP.then(function(){ silentRefreshCurrentFilm(); }).catch(function(){});
+    })
+    .catch(function(err){
+      showToast('获取详情失败：' + ((err && err.message) || '未知'), 'error');
+    });
 }
 function populateFromJAV(d){
   ['title','originaltitle','premiered','runtime','plot','rating'].forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
@@ -5581,6 +5665,7 @@ function updateHiddenBadge(){
   var badge = document.getElementById('hiddenBadge');
   if (badge) badge.style.display = state.themeHidden ? 'inline-flex' : 'none';
 }
+function getThemeHidden(){ return idbGet('kv', 'themeHidden').then(function(v){ return !!v; }); }
 var settingsTitleTap = { count: 0, last: 0 };
 function onSettingsTitleTap(){
   var now = Date.now();
@@ -5897,6 +5982,12 @@ function bootApp(){
     getAppearance().then(function(m){ state.appearance = (m === 'dark' || m === 'light' || m === 'auto') ? m : 'auto'; updateAppearanceDisplay(); setSelectValue('appearanceSelect', state.appearance); applyAppearance(state.appearance); }).catch(function(){}),
     getMagnetConfig().then(function(cfg){
       if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
+    }).catch(function(){}),
+    getThemeHidden().then(function(h){
+      state.themeHidden = !!h;
+      updateHiddenBadge();
+      updateOverviewTabVisibility();
+      applyEditMode();
     }).catch(function(){})
   ]).then(function(){
     // ③ 加载影片列表（较重的同步渲染，放到一帧之后做，避免卡住启动页）
