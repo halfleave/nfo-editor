@@ -1130,11 +1130,16 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .search-box .ios-input:focus,
 .search-box input[type="text"]:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .search-box .btn-pill { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 7px 20px; font-size: 15px; font-weight: 600; }
-.jav-mode-inline { display: inline-flex; align-items: center; flex-shrink: 0; }
-.jav-mode-track { display: inline-flex; position: relative; align-items: center; }
-.jav-mode-track button { position: relative; z-index: 1; background: none; border: none; padding: 6px 9px; font-size: 13px; font-weight: 500; color: var(--label-3); transition: color .2s; -webkit-tap-highlight-color: transparent; }
-.jav-mode-track button.active { color: var(--label); font-weight: 600; }
-.jav-mode-indicator { position: absolute; bottom: 1px; left: 0; height: 2px; background: var(--label); border-radius: 1px; transition: transform .25s ease, width .25s ease; pointer-events: none; }
+.jav-mode-toggle {
+  position: absolute; right: 40px; top: 50%; transform: translateY(-50%);
+  z-index: 2; background: none; border: none; padding: 4px 6px;
+  font-size: 13px; font-weight: 500; color: var(--label-2);
+  -webkit-tap-highlight-color: transparent; transition: color .2s, opacity .2s;
+  white-space: nowrap;
+}
+.jav-mode-toggle:active { opacity: 0.5; }
+.search-box .search-input-wrap.jav-mode-on .ios-input,
+.search-box .search-input-wrap.jav-mode-on input[type="text"] { padding-right: 76px; }
 #searchPanel .tmdb-result:first-child { padding-top: 4px; }
 /* 详情页字幕按钮：5 个图标按钮时收紧间距 */
 .detail-actions { gap: 14px; }
@@ -1495,14 +1500,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <div class="search-box">
         <div class="search-input-wrap">
           <input class="ios-input" type="text" id="tmdbQuery" placeholder="搜索影片" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
+          <button type="button" class="jav-mode-toggle" id="javModeSeg" style="display:none;" onclick="setJavMode()">番号</button>
           <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
-        </div>
-        <div class="jav-mode-inline" id="javModeSeg" style="display:none;">
-          <div class="jav-mode-track">
-            <button type="button" class="active" data-javmode="dvd" onclick="setJavMode('dvd',this)">番号</button>
-            <button type="button" data-javmode="actress" onclick="setJavMode('actress',this)">女优</button>
-            <span class="jav-mode-indicator"></span>
-          </div>
         </div>
         <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
       </div>
@@ -3930,27 +3929,23 @@ function setMetaSource(src, btn){
   var seg = btn.parentNode;
   seg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
   document.getElementById('tmdbResults').innerHTML = '';
-  var javSeg = document.getElementById('javModeSeg');
+  var javBtn = document.getElementById('javModeSeg');
+  var wrap = document.getElementById('tmdbQuery').closest('.search-input-wrap');
   if (src === 'jav'){
-    javSeg.style.display = '';
+    javBtn.style.display = '';
+    javBtn.textContent = (state.javSearchMode === 'dvd') ? '番号' : '女优';
+    if (wrap) wrap.classList.add('jav-mode-on');
     updateJavPlaceholder();
-    positionJavIndicator(javSeg.querySelector('.jav-mode-track'));
   }
-  else javSeg.style.display = 'none';
+  else {
+    javBtn.style.display = 'none';
+    if (wrap) wrap.classList.remove('jav-mode-on');
+  }
 }
-function positionJavIndicator(track){
-  if (!track) return;
-  var btn = track.querySelector('button.active');
-  var indicator = track.querySelector('.jav-mode-indicator');
-  if (!btn || !indicator) return;
-  indicator.style.width = btn.offsetWidth + 'px';
-  indicator.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
-}
-function setJavMode(mode, btn){
-  state.javSearchMode = mode;
-  var track = btn.parentNode;
-  track.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
-  positionJavIndicator(track);
+function setJavMode(){
+  var btn = document.getElementById('javModeSeg');
+  state.javSearchMode = (state.javSearchMode === 'dvd') ? 'actress' : 'dvd';
+  btn.textContent = (state.javSearchMode === 'dvd') ? '番号' : '女优';
   document.getElementById('tmdbResults').innerHTML = '';
   updateJavPlaceholder();
 }
