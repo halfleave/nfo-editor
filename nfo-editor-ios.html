@@ -3740,6 +3740,17 @@ function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
 /* —— TMDB 常量 —— */
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
 var TMDB_IMG_BASE = 'https://image.tmdb.org/t/p';
+/* 拼 TMDB 图片地址。若已配置磁力/R18 Worker，则统一走 Worker 的 /img 代理：
+   - 绕过部分网络/地区对 image.tmdb.org 的拦截（Worker 在服务端拉取，浏览器只连 Worker 域）；
+   - Worker 回包带 Access-Control-Allow-Origin:*，保证 fetch+blob+canvas 转 dataURL 不被污染，海报/剧照才能存进 IndexedDB。
+   未配置 Worker 时回退直连（原行为）。 */
+function tmdbImgUrl(path, size){
+  var direct = TMDB_IMG_BASE + '/' + size + (path || '');
+  if (state && state.magnetWorker){
+    return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(direct);
+  }
+  return direct;
+}
 var CC_MAP = {
   US:'美国', GB:'英国', CN:'中国大陆', HK:'香港', TW:'台湾', JP:'日本', KR:'韩国',
   FR:'法国', DE:'德国', IN:'印度', TH:'泰国', CA:'加拿大', AU:'澳大利亚',
@@ -4178,7 +4189,7 @@ function renderTMDBResults(results){
     var name = item.title || item.original_title || '';
     var orig = item.original_title || '';
     var date = item.release_date || '';
-    var poster = item.poster_path ? TMDB_IMG_BASE + '/w154' + item.poster_path : '';
+    var poster = item.poster_path ? tmdbImgUrl(item.poster_path, 'w154') : '';
     var overview = item.overview || '';
     var metaParts = [];
     if (date) metaParts.push(date);
@@ -4417,7 +4428,7 @@ function populateFromTMDB(d){
   state.countries = []; state.genres = [];
   state.directors = []; state.actors = []; state.adult = !!d.adult;
   state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null;
-  state.posterCandidates = []; state.fanartCandidates = [];
+  state.posterCandidates = []; state.fanartCandidates = []; state.gallery = [];
   cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null; cropOriginals.detailPoster = null;
   clearMediaThumb('poster'); clearMediaThumb('fanart'); clearMediaThumb('logo');
 
@@ -4475,7 +4486,11 @@ function populateFromTMDB(d){
   if (posters.length) imgPromises = imgPromises.concat(loadMediaCandidates(posters.map(function(p){ return p.file_path; }), 'poster', 'w780'));
   else if (d.poster_path) imgPromises = imgPromises.concat(loadMediaCandidates([d.poster_path], 'poster', 'w780'));
   // 剧照：用 images.backdrops（多张），最多缓存 3 张；注意：无 backdrops 时不再回退到海报，避免「剧照」变成海报
-  if (backdrops.length) imgPromises = imgPromises.concat(loadMediaCandidates(backdrops.map(function(b){ return b.file_path; }), 'fanart', 'w1280'));
+  if (backdrops.length){
+    imgPromises = imgPromises.concat(loadMediaCandidates(backdrops.map(function(b){ return b.file_path; }), 'fanart', 'w1280'));
+    // 同时把原比例剧照存进 state.gallery（不裁剪），供详情页「剧照」区展示（封面放第一张的逻辑留给 AV 流程）
+    imgPromises = imgPromises.concat(loadMediaCandidates(backdrops.map(function(b){ return b.file_path; }), 'gallery', 'w1280'));
+  }
   if (d.images && d.images.logos && d.images.logos.length){
     var logos = d.images.logos;
     var zh = logos.find(function(l){ return l.iso_639_1 === 'zh'; });
@@ -4520,7 +4535,7 @@ function fetchImageDataURL(url){
    让首页立刻有图；后续 w780 高清图在后台加载完再静默升级覆盖 */
 function prefetchSearchPoster(posterPath){
   if (!posterPath) return Promise.resolve();
-  var url = TMDB_IMG_BASE + '/w154' + posterPath;
+  var url = tmdbImgUrl(posterPath, 'w154');
   return fetchImageDataURL(url)
     .then(function(durl){ return cropToRatio(durl, 2/3); })
     .then(function(cropped){ if (!state.poster) state.poster = cropped; })
@@ -4528,7 +4543,7 @@ function prefetchSearchPoster(posterPath){
 }
 function loadImageFromTMDB(posterPath, type, size){
   size = size || 'original';
-  var url = TMDB_IMG_BASE + '/' + size + posterPath;
+  var url = tmdbImgUrl(posterPath, size);
   return fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
     .then(function(blob){
       return new Promise(function(resolve){
@@ -4554,7 +4569,7 @@ function loadMediaCandidates(paths, type, size){
   state[type + 'Candidates'] = list.map(function(){ return null; });
   var done = 0;
   list.forEach(function(p, i){
-    var url = TMDB_IMG_BASE + '/' + size + p;
+    var url = tmdbImgUrl(p, size);
     var pr = fetch(url)
       .then(function(r){ return r.ok ? r.blob() : null; })
       .then(function(blob){
@@ -4582,7 +4597,7 @@ function loadMediaCandidates(paths, type, size){
   return promises;
 }
 function loadPersonPhotoFromTMDB(profilePath, mode, idx){
-  var url = TMDB_IMG_BASE + '/w185' + profilePath;
+  var url = tmdbImgUrl(profilePath, 'w185');
   fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
     .then(function(blob){
       var reader = new FileReader();
