@@ -1105,6 +1105,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #magnetSheet .magnet-sheet-head .magnet-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; background: transparent; color: var(--label-3); font-size: 18px; line-height: 1; }
 #magnetSheet .magnet-sheet-head .magnet-clear.show { display: flex; }
 #magnetSheet .magnet-sheet-head .magnet-clear:active { opacity: 0.5; }
+#magnetSheet .magnet-title-mode { display: none; align-items: center; gap: 8px; padding: 0 0 12px; }
+#magnetSheet .magnet-title-mode.show { display: flex; }
+#magnetSheet .magnet-title-mode .mtm-option { position: relative; display: block; }
+#magnetSheet .magnet-title-mode .mtm-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+#magnetSheet .magnet-title-mode .mtm-option span { display: block; padding: 5px 12px; font-size: 13px; font-weight: 600; color: var(--label-2); background: var(--card-fill); border-radius: 15px; border: 1px solid var(--sep); transition: background .15s, color .15s, border-color .15s; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+#magnetSheet .magnet-title-mode .mtm-option input:checked + span { color: #fff; background: var(--accent); border-color: var(--accent); }
+#magnetSheet .magnet-title-mode .mtm-option input:disabled + span { opacity: 0.45; cursor: not-allowed; }
 
 /* 搜索页 */
 .search-box { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
@@ -1381,6 +1388,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <button type="button" id="magnetClear" class="magnet-clear" onclick="clearMagnetQuery()" aria-label="清除">×</button>
       </div>
       <button onclick="searchMagnet()">搜索</button>
+    </div>
+    <div class="magnet-title-mode" id="magnetTitleMode">
+      <label class="mtm-option"><input type="radio" name="magnetTitleMode" value="title" checked onchange="onMagnetTitleModeChange()"><span>影片名</span></label>
+      <label class="mtm-option"><input type="radio" name="magnetTitleMode" value="original" onchange="onMagnetTitleModeChange()"><span>标题名</span></label>
     </div>
     <div class="sheet-list" id="magnetResults"></div>
   </div>
@@ -2850,26 +2861,60 @@ function saveApiKey(){
 function openApiHelpSheet(){ openSheet('apiHelpSheet'); }
 
 /* —— 磁力搜索结果 —— */
+var magnetTitleMode = 'title';
 var magnetCurrentFilm = null;
 function openMagnetSheet(){
   document.getElementById('magnetResults').innerHTML = '';
   openSheet('magnetSheet');
+  var modeBox = document.getElementById('magnetTitleMode');
+  var radioTitle = document.querySelector('input[name="magnetTitleMode"][value="title"]');
+  var radioOriginal = document.querySelector('input[name="magnetTitleMode"][value="original"]');
   if (currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
       magnetCurrentFilm = film;
       var f = (film && film.data) || {};
-      // AV 影片（里模式或含番号）：直接用番号搜索，命中率最高；普通影片用标题
+      // AV 影片（里模式或含番号）：直接用番号搜索，命中率最高；不显示影片名/标题名切换
       var isAv = !!(state.adult || f.dvdId);
-      document.getElementById('magnetQueryInput').value = (isAv && f.dvdId) ? f.dvdId : (f.title || '');
+      if (modeBox) modeBox.classList.toggle('show', !isAv);
+      if (radioTitle) radioTitle.checked = true;
+      if (radioOriginal) radioOriginal.checked = false;
+      if (isAv){
+        document.getElementById('magnetQueryInput').value = f.dvdId || '';
+      } else {
+        // 普通影片：显示「影片名 / 标题名」切换；无原始标题时禁用「标题名」
+        var hasOriginal = !!(f.originaltitle && f.originaltitle !== f.title);
+        if (radioOriginal) radioOriginal.disabled = !hasOriginal;
+        var mode = (hasOriginal && magnetTitleMode === 'original') ? 'original' : 'title';
+        if (radioTitle) radioTitle.checked = (mode === 'title');
+        if (radioOriginal) radioOriginal.checked = (mode === 'original');
+        document.getElementById('magnetQueryInput').value = (mode === 'original' ? (f.originaltitle || f.title || '') : (f.title || ''));
+      }
       toggleMagnetClear();
       var q = document.getElementById('magnetQueryInput').value;
       if (q) searchMagnet();
-    }).catch(function(){ magnetCurrentFilm = null; document.getElementById('magnetQueryInput').value = ''; toggleMagnetClear(); });
+    }).catch(function(){ magnetCurrentFilm = null; document.getElementById('magnetQueryInput').value = ''; toggleMagnetClear(); if (modeBox) modeBox.classList.remove('show'); });
   } else {
     magnetCurrentFilm = null;
+    if (modeBox) modeBox.classList.remove('show');
+    if (radioTitle) radioTitle.checked = true;
+    if (radioOriginal) radioOriginal.checked = false;
     document.getElementById('magnetQueryInput').value = '';
     toggleMagnetClear();
   }
+}
+function onMagnetTitleModeChange(){
+  if (!magnetCurrentFilm) return;
+  var f = magnetCurrentFilm.data || {};
+  var isAv = !!(state.adult || f.dvdId);
+  if (isAv) return; // AV 影片不走切换逻辑，避免互相影响
+  var chk = document.querySelector('input[name="magnetTitleMode"]:checked');
+  var mode = chk ? chk.value : 'title';
+  magnetTitleMode = mode;
+  var q = (mode === 'original' ? (f.originaltitle || f.title || '') : (f.title || ''));
+  var inp = document.getElementById('magnetQueryInput');
+  if (inp) inp.value = q;
+  toggleMagnetClear();
+  if (q) searchMagnet();
 }
 function toggleMagnetClear(){
   var inp = document.getElementById('magnetQueryInput');
