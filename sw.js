@@ -4,9 +4,9 @@
  *  - 同源（nfo-editor-ios.html 等应用壳）：网络优先，离线回退缓存（支持离线打开）
  *  - 跨域图片（image.tmdb.org 等海报）：缓存优先，离线可见已加载过的图
  *  - 其余（TMDB API 等）：走网络，不缓存
- * 注意：2026-08-12 升 v2，2026-08-26 升 v5→v6→v7→v8→v9→v10→v11→v12→v13→v14→v15→v16→v17→v18→v19→v20→v21→v22→v23（详情页底图：向上等比缩小为 80%，transform: scale(0.8) + origin top center），清掉旧版缓存，避免 iOS 主屏 PWA 一直跑旧 HTML。
+ * 注意：2026-08-12 升 v2，2026-08-26 升 v5→v6→v7→v8→v9→v10→v11→v12→v13→v14→v15→v16→v17→v18→v19→v20→v21→v22→v23→v24→v25→v26→v27（四项微调：① 切 TMDB/JAV tab 清空输入框；② API 配置标签去「磁力 / R18」、API 说明文案更新、说明弹窗关闭返回配置弹窗；③ 预告片「在浏览器打开」按钮改灰白色；④ 剧照全屏改为横向 scroll-snap 轮播，滑动丝滑），清掉旧版缓存，避免 iOS 主屏 PWA 一直跑旧 HTML。
  */
-const CACHE = 'nfo-ios-v23';
+const CACHE = 'nfo-ios-v27';
 const APP_SHELL = ['./nfo-editor-ios.html'];
 const WORKER_RE = /workers\.dev$/i;
 
