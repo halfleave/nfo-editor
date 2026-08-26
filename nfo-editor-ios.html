@@ -255,17 +255,19 @@ img { display: block; }
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }
 .trailer-modal.show { display: flex; }
-.trailer-head { display: flex; align-items: center; justify-content: space-between; color: #fff; font-size: 16px; font-weight: 600; padding: 2px 4px; }
-.trailer-head button { width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255,255,255,0.16); color: #fff; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
-.trailer-head button svg { width: 20px; height: 20px; }
+.trailer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #fff; font-size: 16px; font-weight: 600; padding: 2px 4px; }
+.trailer-head-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.trailer-head-left span { white-space: nowrap; }
+.trailer-close-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255,255,255,0.16); color: #fff; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; flex-shrink: 0; }
+.trailer-close-btn svg { width: 20px; height: 20px; }
 .trailer-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; }
 .trailer-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.trailer-bar { display: flex; padding: 0 2px; }
 .trailer-ext-btn {
-  flex: 1; height: 46px; border: none; border-radius: 12px;
+  height: 26px; padding: 0 10px; border: none; border-radius: 7px;
   background: var(--accent, #3D8CF0); color: #fff;
-  font-size: 16px; font-weight: 600;
+  font-size: 12px; font-weight: 600;
   -webkit-tap-highlight-color: transparent;
+  white-space: nowrap; flex-shrink: 0;
 }
 .trailer-ext-btn:active { opacity: 0.8; }
 
@@ -1800,13 +1802,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   <div class="trailer-mask" id="trailerMask" onclick="closeTrailer()"></div>
   <div class="trailer-modal" id="trailerModal">
     <div class="trailer-head">
-      <span>播放预告片</span>
-      <button onclick="closeTrailer()" aria-label="关闭">
+      <div class="trailer-head-left">
+        <span>播放预告片</span>
+        <button class="trailer-ext-btn" id="trailerExtBtn" onclick="openTrailerExternal()">在 YouTube 打开</button>
+      </div>
+      <button class="trailer-close-btn" onclick="closeTrailer()" aria-label="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
-    </div>
-    <div class="trailer-bar">
-      <button class="trailer-ext-btn" id="trailerExtBtn" onclick="openTrailerExternal()">在 YouTube 打开</button>
     </div>
     <div class="trailer-frame">
       <iframe id="trailerFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
