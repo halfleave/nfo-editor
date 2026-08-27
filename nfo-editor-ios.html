@@ -235,11 +235,12 @@ img { display: block; }
 .detail-cast-spacer { flex: 0 0 auto; width: 4px; height: 1px; }
 .detail-cast-row::-webkit-scrollbar { display: none; }
 .detail-person { flex: 0 0 auto; width: 72px; text-align: center; }
-/* 详情页「剧照」—— 演职人员/女优下方，横向滚动 */
+/* 详情页「剧照」—— 演职人员/女优下方，两列瀑布流 */
 .detail-shots { margin-top: 22px; padding-top: 16px; }
 .detail-shots:empty { display: none; }
 .detail-shots-title { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 12px; }
-.detail-shots-row { display: flex; flex-direction: column; gap: 12px; }
+.detail-shots-row { display: flex; gap: 10px; align-items: flex-start; }
+.detail-shots-col { flex: 1; display: flex; flex-direction: column; gap: 10px; }
 .detail-shot { width: 100%; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.06); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-shot:active { opacity: 0.85; }
 .detail-shot img { display: block; width: 100%; height: auto; }
@@ -259,6 +260,9 @@ img { display: block; }
 .dm-date { font-size: 11px; color: rgba(255,255,255,0.5); flex: 0 0 auto; }
 .dm-hd { color: #fff; background: #e0457b; }
 .dm-sub { color: #fff; background: #2f8fd6; }
+.detail-magnet-rest { display: none; flex-direction: column; gap: 8px; }
+.detail-magnet-toggle { margin-top: 8px; padding: 10px; text-align: center; font-size: 13px; color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.08); border-radius: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.detail-magnet-toggle:active { background: rgba(255,255,255,0.15); }
 .trailer-mask { position: fixed; inset: 0; z-index: 700; background: rgba(0,0,0,0.6); display: none; }
 .trailer-mask.show { display: block; }
 .trailer-modal {
@@ -278,12 +282,36 @@ img { display: block; }
 .trailer-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .trailer-ext-btn {
   height: 26px; padding: 0 10px; border: none; border-radius: 7px;
-  background: var(--gray-fill, #E5E5EA); color: var(--label, #1C1C1E);
+  background: rgba(255,255,255,0.92); color: #000;
   font-size: 12px; font-weight: 600;
   -webkit-tap-highlight-color: transparent;
   white-space: nowrap; flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
 }
-.trailer-ext-btn:active { opacity: 0.6; }
+.trailer-ext-btn:active { opacity: 0.75; }
+
+/* 居中确认弹窗 */
+.confirm-mask { position: fixed; inset: 0; z-index: 720; background: rgba(0,0,0,0.45); display: none; }
+.confirm-mask.show { display: block; }
+.confirm-modal {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 721;
+  width: min(80vw, 300px);
+  background: var(--card, #fff); border-radius: 16px;
+  padding: 22px 18px 16px;
+  display: none; flex-direction: column; align-items: center; gap: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.confirm-modal.show { display: flex; }
+.confirm-title { font-size: 17px; font-weight: 600; color: var(--label, #1C1C1E); text-align: center; line-height: 1.35; }
+.confirm-actions { display: flex; width: 100%; gap: 12px; }
+.confirm-btn {
+  flex: 1; padding: 11px 0; font-size: 16px; font-weight: 600;
+  border: none; border-radius: 10px;
+  background: rgba(120,120,128,0.12); color: var(--label, #1C1C1E);
+  -webkit-tap-highlight-color: transparent;
+}
+.confirm-btn.danger { background: var(--danger, #FF3B30); color: #fff; }
+.confirm-btn:active { opacity: 0.8; }
 
 /* 顶部大标题栏（fixed 固定顶部，避免 sticky 在 iOS 滚动子容器内失效） */
 .page-bar, .home-header {
@@ -1393,7 +1421,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="field field-stacked no-border">
       <label for="magnetWorkerInput">Worker 代理地址</label>
       <div class="api-input-wrap">
-        <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app（粘贴你的代理地址）" oninput="toggleMagnetClear()" onblur="persistApiSettings()">
+        <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app（粘贴你的代理地址）" oninput="toggleMagnetWorkerClear()" onblur="persistApiSettings()">
         <button class="api-clear" id="magnetClearBtn" onclick="clearMagnetInput()" aria-label="清除" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
@@ -1904,6 +1932,16 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
   </div>
 
+  <!-- 居中确认弹窗（删除等二次确认） -->
+  <div class="confirm-mask" id="confirmMask" onclick="closeDeleteConfirm()"></div>
+  <div class="confirm-modal" id="confirmModal">
+    <div class="confirm-title" id="confirmTitle">确认删除该影片？</div>
+    <div class="confirm-actions">
+      <button class="confirm-btn" onclick="closeDeleteConfirm()">取消</button>
+      <button class="confirm-btn danger" onclick="confirmDelete()">删除</button>
+    </div>
+  </div>
+
   <!-- 字幕搜索 -->
   <div class="sheet" id="subtitleSheet">
     <div class="sheet-bar sheet-bar-center">
@@ -2115,16 +2153,19 @@ function showToast(msg, type, duration) {
   clearTimeout(showToast._t);
   showToast._t = setTimeout(function(){ t.className = 'toast'; }, duration || 1800);
 }
-function copyText(text, label){
+function copyText(text, labelOrCb){
   if (!text) return;
-  var ok = function(){ showToast((label || '内容') + '已复制', 'success'); };
+  var cb = (typeof labelOrCb === 'function') ? labelOrCb : null;
+  var label = (typeof labelOrCb === 'string' && labelOrCb) ? labelOrCb : '内容';
+  var ok = function(){ if (cb) cb(true); else showToast(label + '已复制', 'success'); };
+  var fail = function(){ if (cb) cb(false); else showToast('复制失败', 'error'); };
   if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(ok).catch(function(){ showToast('复制失败', 'error'); });
+    navigator.clipboard.writeText(text).then(ok).catch(function(){ fail(); });
   } else {
     var ta = document.createElement('textarea');
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand('copy'); ok(); } catch(e){ showToast('复制失败', 'error'); }
+    try { document.execCommand('copy'); ok(); } catch(e){ fail(); }
     document.body.removeChild(ta);
   }
 }
@@ -2913,7 +2954,7 @@ function openApiKeySheet(){
   document.getElementById('subOsInput').value = state.subtitleOs || '';
   toggleSubOsClear();
   document.getElementById('magnetWorkerInput').value = state.magnetWorker || '';
-  toggleMagnetClear();
+  toggleMagnetWorkerClear();
   document.getElementById('javbusBaseInput').value = state.javbusBase || '';
   toggleJavbusClear();
   openSheet('apiSheet');
@@ -2945,7 +2986,7 @@ function clearSubOsInput(){
   var input = document.getElementById('subOsInput');
   if (input){ input.value = ''; toggleSubOsClear(); input.focus(); }
 }
-function toggleMagnetClear(){
+function toggleMagnetWorkerClear(){
   var btn = document.getElementById('magnetClearBtn');
   var input = document.getElementById('magnetWorkerInput');
   if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
@@ -2961,7 +3002,7 @@ function clearJavbusInput(){
 }
 function clearMagnetInput(){
   var input = document.getElementById('magnetWorkerInput');
-  if (input){ input.value = ''; toggleMagnetClear(); input.focus(); }
+  if (input){ input.value = ''; toggleMagnetWorkerClear(); input.focus(); }
 }
 function updateSubtitleBtn(){
   var btn = document.getElementById('dtActSub');
@@ -3321,28 +3362,6 @@ function downloadSubtitle(idx){
     .catch(function(err){ showToast('下载失败：' + escapeHtml((err&&err.message)||'网络错误'), 'error'); });
 }
 
-function copyText(text, cb){
-  if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(function(){ cb(true); }, function(){ fallbackCopy(text, cb); });
-  } else {
-    fallbackCopy(text, cb);
-  }
-}
-function fallbackCopy(text, cb){
-  try {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.top = '-9999px';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
-    var ok = document.execCommand && document.execCommand('copy');
-    document.body.removeChild(ta);
-    cb(!!ok);
-  } catch(e){ cb(false); }
-}
 /* 文件名只读，自动同步：优先番号，无番号则同步影片名 */
 function syncFilename(){
   var dvdidEl = document.getElementById('dvdid');
@@ -4247,7 +4266,7 @@ function setMetaSource(src, btn){
   renderSearchHistory(); // 切源后按当前源刷新历史（输入框已清空→显示历史）
 }
 function updateJavPlaceholder(){
-  document.getElementById('tmdbQuery').placeholder = '番号或关键词（如 IPX-011 / 女优名）';
+  document.getElementById('tmdbQuery').placeholder = '番号/关键词（如 IPX-011 / 女优名）';
 }
 function updateSearchPlaceholder(){
   var el = document.getElementById('tmdbQuery');
@@ -4443,20 +4462,29 @@ function applyJavbusResult(i){
       showToast('加载详情失败：' + ((e && e.message) || '未知'), 'error');
     });
 }
-function populateFromJAV(d){
-  ['title','originaltitle','premiered','runtime','plot','rating'].forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
-  state.year = ''; state.mpaa = '';
+/* 切换元数据源前统一重置：防止上一个源残留的字段污染下一个源的影片（如 AV 的磁力/封面混入 TMDB） */
+function resetSourceState(){
+  ['title','originaltitle','premiered','runtime','plot','rating','filename','dvdid','studio','label','series'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
   var pv = document.getElementById('premieredVal'); if (pv){ pv.textContent = '请选择'; pv.classList.add('empty'); }
   var yv = document.getElementById('year'); if (yv) yv.value = '';
   var yvv = document.getElementById('yearVal'); if (yvv){ yvv.textContent = '请选择'; yvv.classList.add('empty'); }
   var mv = document.getElementById('mpaaVal'); if (mv){ mv.textContent = '请选择'; mv.classList.add('empty'); }
-  state.countries = []; state.genres = [];
-  state.directors = []; state.actors = []; state.adult = true;
-  state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null;
-  state.posterCandidates = []; state.fanartCandidates = [];
+  state.year = ''; state.mpaa = ''; state.countries = []; state.genres = [];
+  state.directors = []; state.actors = []; state.adult = false;
+  state.dvdId = ''; state.studio = ''; state.label = ''; state.series = '';
+  state.trailer = null; state.tmdbId = null; state.javbusId = null;
+  state.javbusMagnets = []; state.source = '';
+  state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null; state.originalPoster = null;
+  state.posterCandidates = []; state.fanartCandidates = []; state.gallery = []; state.hasSubtitle = false;
   cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null; cropOriginals.detailPoster = null;
-  state.source = 'jav';   // 记录来源，供「刷新」按源刷新
   clearMediaThumb('poster'); clearMediaThumb('fanart'); clearMediaThumb('logo');
+}
+function populateFromJAV(d){
+  resetSourceState();
+  state.adult = true;
+  state.source = 'jav';   // 记录来源，供「刷新」按源刷新
 
   // ===== 字段兼容：同时支持 r18.dev 线上「英文简化 schema」与更丰富的「日文 schema」=====
   // 线上 r18.dev /json 实测只返回：title / actresses[].name / categories[].name / director(字符串) /
@@ -4558,20 +4586,10 @@ function populateFromJAV(d){
    director{id,name} / producer{id,name}(制作商) / publisher{id,name}(发行商) /
    series{id,name} / genres[{id,name}] / stars[{id,name}](演员) / samples[{id,thumbnail,src,alt}](剧照) */
 function populateFromJavbus(d){
-  ['title','originaltitle','premiered','runtime','plot','rating'].forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
-  state.year = ''; state.mpaa = '';
-  var pv = document.getElementById('premieredVal'); if (pv){ pv.textContent = '请选择'; pv.classList.add('empty'); }
-  var yv = document.getElementById('year'); if (yv) yv.value = '';
-  var yvv = document.getElementById('yearVal'); if (yvv){ yvv.textContent = '请选择'; yvv.classList.add('empty'); }
-  var mv = document.getElementById('mpaaVal'); if (mv){ mv.textContent = '请选择'; mv.classList.add('empty'); }
-  state.countries = []; state.genres = [];
-  state.directors = []; state.actors = []; state.adult = true;   // JavBus 内容均为成人 → 编辑页显示 AV 字段
-  state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null;
-  state.posterCandidates = []; state.fanartCandidates = [];
-  cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null; cropOriginals.detailPoster = null;
+  resetSourceState();
+  state.adult = true;   // JavBus 内容均为成人 → 编辑页显示 AV 字段
   state.source = 'javbus';   // 记录来源，供「刷新」按源刷新
   state.javbusId = (d && (d.id)) || state.dvdId || null;   // 记录番号，供刷新重新拉取
-  clearMediaThumb('poster'); clearMediaThumb('fanart'); clearMediaThumb('logo');
 
   var title = (d.title || d.id || '').trim();
   var dvdId = (d.id || '').trim();   // JavBus 的 id 即番号
@@ -5024,25 +5042,10 @@ function fetchTrailersForResults(results, mediaType){
   });
 }
 function populateFromTMDB(d){
-  state.source = 'tmdb';   // 记录来源，供「刷新」按源刷新
+  resetSourceState();
+  state.adult = !!d.adult;
   var isTV = state.tmdbMediaType === 'tv';   // 剧集详情字段与电影不同（name/first_air_date/episode_run_time/created_by/content_ratings）
-  // 先清空已有数据再导入
-  ['title','originaltitle','premiered','runtime','plot','rating'].forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
-  state.year = ''; state.mpaa = '';
-  var pv = document.getElementById('premieredVal'); if (pv){ pv.textContent = '请选择'; pv.classList.add('empty'); }
-  var yv = document.getElementById('year'); if (yv) yv.value = '';
-  var yvv = document.getElementById('yearVal'); if (yvv){ yvv.textContent = '请选择'; yvv.classList.add('empty'); }
-  var mv = document.getElementById('mpaaVal'); if (mv){ mv.textContent = '请选择'; mv.classList.add('empty'); }
-  // 只清空本次的已选值（countries/genres），保留用户维护的类型预设库 genreNormal
-  state.countries = []; state.genres = [];
-  state.directors = []; state.actors = []; state.adult = !!d.adult;
-  // TMDB 不含 番号/制作商/发行商/系列/预告，清空以免串入上次 JAV 搜索的残留
-  state.dvdId = ''; state.studio = ''; state.label = ''; state.series = ''; state.trailer = null; state.tmdbId = null;
-  ['dvdid','studio','label','series'].forEach(function(id){ var el = document.getElementById(id); if (el) el.value = ''; });
-  state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null;
-  state.posterCandidates = []; state.fanartCandidates = []; state.gallery = [];
-  cropOriginals.poster = null; cropOriginals.fanart = null; cropOriginals.logo = null; cropOriginals.detailPoster = null;
-  clearMediaThumb('poster'); clearMediaThumb('fanart'); clearMediaThumb('logo');
+  state.source = 'tmdb';   // 记录来源，供「刷新」按源刷新
 
   var title = d.title || (isTV ? d.name : '') || d.original_title || (isTV ? d.original_name : '') || '';
   var orig = d.original_title || (isTV ? d.original_name : '') || d.title || (isTV ? d.name : '') || '';
@@ -5764,6 +5767,7 @@ function openFilm(encId){
   });
 }
 var currentDetailFilmId = null;
+var currentDetailFilm = null;  // 当前详情页影片对象（AV 预告片跳转用）
 var currentDetailTitle = '';   // 详情页长按复制用的标题文本（即便显示 logo 也能取到 d.title）
 var currentDetailShots = [];   // 当前详情页剧照列表（用于全屏查看）
 function openFilmDetail(encId){
@@ -5876,6 +5880,7 @@ function applyDetailTint(url, bgEl){
   img.src = url;
 }
 function renderFilmDetail(film){
+  currentDetailFilm = film || null;
   var d = film.data || {};
   var adult = !!film.adult;
   var bgUrl = d.detailPoster || film.posterDataUrl || d.poster || d.fanart || '';
@@ -5916,16 +5921,17 @@ function renderFilmDetail(film){
   var el2 = document.getElementById('detailInfo2');
   el2.textContent = tags.length ? tags.join(', ') : '';
   el2.style.display = tags.length ? '' : 'none';
-  // 播放预告按钮：有预告片显示「播放预告片」可点击；无预告片显示「暂无预告片」且不可点击
+  // 播放预告按钮：AV 且存在番号时，点击跳转 missav；有预告片时弹窗播放；否则禁用
   currentDetailTrailer = d.trailer || '';
+  var isAvTrailer = d.adult && d.dvdId;
   var extBtn = document.getElementById('trailerExtBtn');
   if (extBtn) extBtn.textContent = (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)) ? '在浏览器打开' : '在 YouTube 打开';
   var tb = document.getElementById('detailTrailer');
   var tbt = document.getElementById('detailTrailerText');
   if (tb) {
-    if (currentDetailTrailer) {
+    if (isAvTrailer || currentDetailTrailer) {
       tb.removeAttribute('disabled');
-      if (tbt) tbt.textContent = '播放预告片';
+      if (tbt) tbt.textContent = isAvTrailer ? '播放预告片' : '播放预告片';
     } else {
       tb.setAttribute('disabled', 'disabled');
       if (tbt) tbt.textContent = '暂无预告片';
@@ -5939,7 +5945,6 @@ function renderFilmDetail(film){
   updateSubtitleBtn();
   // 剧情：最前方增加 [番号 标题]；无番号则显示 [标题]
   var plotTitle = (d.title || film.id);
-  if (d.dvdId) plotTitle = (d.dvdId || '').toUpperCase() + ' ' + plotTitle;
   var plotText = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
   document.getElementById('detailPlot').textContent = plotText;
   document.getElementById('detailPlot').onclick = function(){ copyText(plotText, '简介'); };
@@ -5974,20 +5979,30 @@ function renderFilmDetail(film){
   if (magEl){
     var mags = (d.javbusMagnets || []).filter(function(m){ return m && m.link; });
     if (mags.length){
-      var mh = '<div class="detail-cast-title">磁力链接</div><div class="detail-magnet-list">';
-      mags.forEach(function(m){
+      var MAX_VISIBLE = 3;
+      var total = mags.length;
+      var stripMagnetTitle = function(t){
+        if (!t) return t;
+        // 去除与 HD/字幕 标签重复的中文标记，避免标题出现 "RKI-481 高清 字幕"
+        return t.replace(/(?:^|\s)(高清|字幕)(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+      };
+      var renderMagnetItem = function(m){
         var tags = [];
         if (m.isHD) tags.push('<span class="dm-tag dm-hd">HD</span>');
         if (m.hasSubtitle) tags.push('<span class="dm-tag dm-sub">字幕</span>');
         var tagHtml = tags.length ? '<span class="dm-tags">' + tags.join('') + '</span>' : '';
-        var rawTitle = m.title || '磁力链接';
+        var rawTitle = stripMagnetTitle(m.title) || '磁力链接';
         var showTitle = rawTitle.length > 30 ? rawTitle.slice(0, 30) + '【…】' : rawTitle;
-        mh += '<div class="detail-magnet" data-link="' + escapeAttr(m.link) + '" onclick="copyText(this.dataset.link, \'磁链\')">'
+        return '<div class="detail-magnet" data-link="' + escapeAttr(m.link) + '" onclick="copyText(this.dataset.link, \'磁链\')">'
             + '<div class="dm-row"><div class="dm-title" title="' + escapeAttr(rawTitle) + '">' + escapeHtml(showTitle) + tagHtml + '</div></div>'
             + '<div class="dm-line"><span class="dm-size">' + (m.size ? escapeHtml(m.size) : '') + '</span><span class="dm-date">' + (m.shareDate ? escapeHtml(m.shareDate) : '') + '</span></div>'
             + '</div>';
-      });
-      mh += '</div>';
+      };
+      var visibleHtml = mags.slice(0, MAX_VISIBLE).map(renderMagnetItem).join('');
+      var hiddenHtml = total > MAX_VISIBLE ? '<div class="detail-magnet-rest" style="display:none;">' + mags.slice(MAX_VISIBLE).map(renderMagnetItem).join('') + '</div>' : '';
+      var toggleHtml = total > MAX_VISIBLE ? '<div class="detail-magnet-toggle" onclick="toggleMagnetExpand(this)">展开（' + (total - MAX_VISIBLE) + '）</div>' : '';
+      // 展开/收起按钮放在全部磁力后方
+      var mh = '<div class="detail-cast-title">磁力链接</div><div class="detail-magnet-list">' + visibleHtml + hiddenHtml + toggleHtml + '</div>';
       magEl.innerHTML = mh;
       magEl.style.display = '';
     } else {
@@ -6013,11 +6028,21 @@ function renderFilmDetail(film){
     shots = shots.filter(function(s){ if (!s || seen[s]) return false; seen[s] = 1; return true; }).slice(0, 6);
     currentDetailShots = shots.slice();
     if (shots.length){
-      var sh = '<div class="detail-shots-title">剧照</div><div class="detail-shots-row">';
+      var left = [], right = [];
+      // 灵活补位：每次把下一张剧照放到当前数量较少的列，避免最后一列落单
       shots.forEach(function(s, idx){
-        sh += '<div class="detail-shot" onclick="openFullscreenStills(' + idx + ')"><img src="' + escapeAttr(s) + '" alt="剧照" loading="lazy"></div>';
+        var item = { s: s, idx: idx };
+        if (left.length <= right.length) left.push(item); else right.push(item);
       });
-      sh += '</div>';
+      var colHtml = function(items){
+        return items.map(function(item){
+          return '<div class="detail-shot" onclick="openFullscreenStills(' + item.idx + ')"><img src="' + escapeAttr(item.s) + '" alt="剧照" loading="lazy"></div>';
+        }).join('');
+      };
+      var sh = '<div class="detail-shots-title">剧照</div><div class="detail-shots-row">'
+          + '<div class="detail-shots-col">' + colHtml(left) + '</div>'
+          + '<div class="detail-shots-col">' + colHtml(right) + '</div>'
+          + '</div>';
       shotEl.innerHTML = sh;
       shotEl.style.display = '';
     } else {
@@ -6031,7 +6056,20 @@ function renderFilmDetail(film){
     if (sc) sc.scrollTop = 0;
   });
 }
+function toggleMagnetExpand(btn){
+  var rest = btn.previousElementSibling;
+  if (!rest || !rest.classList.contains('detail-magnet-rest')) return;
+  var expanded = rest.style.display !== 'none';
+  rest.style.display = expanded ? 'none' : 'flex';
+  btn.textContent = expanded ? ('展开（' + (rest.children.length) + '）') : '收起';
+}
 function openTrailer(){
+  // AV 影片：点击预告片按钮直接跳转 missav 在线页
+  if (currentDetailFilm && currentDetailFilm.data && currentDetailFilm.data.adult && currentDetailFilm.data.dvdId){
+    var dvd = String(currentDetailFilm.data.dvdId).toLowerCase();
+    window.open('https://missav.live/cn/' + encodeURIComponent(dvd), '_blank');
+    return;
+  }
   if (!currentDetailTrailer) return;
   // 优先弹窗内嵌播放；若内嵌被 YouTube 登录墙拦截，可点「在 YouTube 打开」按钮外跳
   showTrailerModal();
@@ -6090,19 +6128,29 @@ function detailDownloadMeta(){
   if (!currentDetailFilmId) return;
   downloadMetadata(currentDetailFilmId);
 }
-function detailDelete(){
+function showDeleteConfirm(){
   if (!currentDetailFilmId) return;
-  showActionSheet('确认删除该影片？', [
-    { label: '取消' },
-    { label: '删除', danger: true, onClick: function(){
-        deleteFilm(currentDetailFilmId).then(function(){
-          showToast('已删除');
-          currentDetailFilmId = null;
-          switchPage('home');
-          renderOverview();
-        });
-      } }
-  ]);
+  document.getElementById('confirmTitle').textContent = '确认删除该影片？';
+  document.getElementById('confirmMask').classList.add('show');
+  document.getElementById('confirmModal').classList.add('show');
+}
+function closeDeleteConfirm(){
+  document.getElementById('confirmMask').classList.remove('show');
+  document.getElementById('confirmModal').classList.remove('show');
+}
+function confirmDelete(){
+  if (!currentDetailFilmId) return;
+  closeDeleteConfirm();
+  deleteFilm(currentDetailFilmId).then(function(){
+    showToast('已删除');
+    currentDetailFilmId = null;
+    currentDetailFilm = null;
+    switchPage('home');
+    renderOverview();
+  });
+}
+function detailDelete(){
+  showDeleteConfirm();
 }
 function newFilm(adult){
   currentFilmId = null;
