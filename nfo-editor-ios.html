@@ -249,14 +249,14 @@ img { display: block; }
 .detail-person .dp-role { font-size: 11px; color: rgba(255,255,255,0.65); line-height: 1.3; }
 .detail-magnets { margin-top: 22px; padding-top: 16px; }
 .detail-magnet-list { display: flex; flex-direction: column; gap: 8px; margin: 0 -20px; padding: 0 20px; }
-.detail-magnet { background: rgba(255,255,255,0.12); border-radius: 12px; padding: 12px 14px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.detail-magnet { background: rgba(255,255,255,0.12); border-radius: 12px; padding: 8px 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-magnet:active { background: rgba(255,255,255,0.2); }
 .dm-row { display: flex; align-items: center; gap: 8px; }
 .dm-title { font-size: 13px; color: #fff; line-height: 1.4; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dm-size { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+.dm-size { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 2px; }
 .dm-tags { display: inline-flex; gap: 4px; flex: 0 0 auto; }
 .dm-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
-.dm-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.dm-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
 .dm-date { font-size: 11px; color: rgba(255,255,255,0.5); flex: 0 0 auto; }
 .dm-hd { color: #fff; background: #e0457b; }
 .dm-sub { color: #fff; background: #2f8fd6; }
@@ -4376,7 +4376,9 @@ function javCoverUrl(raw){
 }
 /* JavBus 封面/剧照经 Worker /img 代理绕跨域（JavBus 图床无 CORS 头，dataURL 转换需服务端代理）；未配 Worker 时直连 */
 function javbusImgUrl(raw){
-  if (raw && state.magnetWorker){
+  if (!raw) return raw;
+  if (raw.startsWith('data:')) return raw;   // 已转 dataURL 无需再代理
+  if (state.magnetWorker){
     return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(raw);
   }
   return raw;
@@ -5958,9 +5960,11 @@ function renderFilmDetail(film){
     people.forEach(function(p){
       var nm = p.name || '?';
       var ini = escapeHtml(nm.charAt(0) || '?');
-      var ph = !p.photo;
+      // 女优头像走 Worker /img 代理（兼容保存前未转 dataURL 的原始 URL）
+      var photoUrl = p.photo ? javbusImgUrl(p.photo) : null;
+      var ph = !photoUrl;
       var avaCls = 'dp-ava' + (ph ? ' ph' : '');
-      var avaAttr = p.photo ? ' style="background-image:url(' + escapeAttr(p.photo) + ');background-size:cover;background-position:center;"' : '';
+      var avaAttr = photoUrl ? ' style="background-image:url(' + escapeAttr(photoUrl) + ');background-size:cover;background-position:center;"' : '';
       var roleLabel = (p.role === '导演') ? '导演名' : '演员名';
       var copyAttr = ' data-name="' + escapeAttr(nm) + '" onclick="copyText(this.dataset.name, \'' + roleLabel + '\');event.stopPropagation();"';
       ch += '<div class="detail-person">'
@@ -5992,9 +5996,9 @@ function renderFilmDetail(film){
         if (m.hasSubtitle) tags.push('<span class="dm-tag dm-sub">字幕</span>');
         var tagHtml = tags.length ? '<span class="dm-tags">' + tags.join('') + '</span>' : '';
         var rawTitle = stripMagnetTitle(m.title) || '磁力链接';
-        var showTitle = rawTitle.length > 30 ? rawTitle.slice(0, 30) + '【…】' : rawTitle;
+        // 省略号完全交给 CSS text-overflow:ellipsis，不再手动拼接
         return '<div class="detail-magnet" data-link="' + escapeAttr(m.link) + '" onclick="copyText(this.dataset.link, \'磁链\')">'
-            + '<div class="dm-row"><div class="dm-title" title="' + escapeAttr(rawTitle) + '">' + escapeHtml(showTitle) + tagHtml + '</div></div>'
+            + '<div class="dm-row"><div class="dm-title" title="' + escapeAttr(rawTitle) + '">' + escapeHtml(rawTitle) + '</div>' + tagHtml + '</div>'
             + '<div class="dm-line"><span class="dm-size">' + (m.size ? escapeHtml(m.size) : '') + '</span><span class="dm-date">' + (m.shareDate ? escapeHtml(m.shareDate) : '') + '</span></div>'
             + '</div>';
       };
