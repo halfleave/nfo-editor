@@ -5507,6 +5507,7 @@ function buildFilmFromCurrent(){
     posterDataUrl: state.poster || null,
     data: {
       title: getVal('title'), filename: getVal('filename'), originaltitle: getVal('originaltitle'),
+      adult: adult,
       premiered: getVal('premiered'), year: getVal('year'), runtime: getVal('runtime'),
       plot: getVal('plot'), rating: getVal('rating'), mpaa: getVal('mpaa'),
       countries: state.countries.slice(), genres: state.genres.slice(),
@@ -6008,7 +6009,7 @@ function renderFilmDetail(film){
   el2.style.display = tags.length ? '' : 'none';
   // 播放预告按钮：AV 且存在番号时，点击跳转 missav；有预告片时弹窗播放；否则禁用
   currentDetailTrailer = d.trailer || '';
-  var isAvTrailer = d.adult && d.dvdId;
+  var isAvTrailer = adult && d.dvdId;
   var extBtn = document.getElementById('trailerExtBtn');
   if (extBtn) extBtn.textContent = (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)) ? '在浏览器打开' : '在 YouTube 打开';
   var tb = document.getElementById('detailTrailer');
@@ -6209,8 +6210,13 @@ function appendMoreShots(){
   currentDetailShots = detailFullShots.slice(0, detailRenderedShots);
 }
 function openTrailer(){
-  // AV 影片：点击预告片按钮直接跳转 missav 在线页
-  if (currentDetailFilm && currentDetailFilm.data && currentDetailFilm.data.adult && currentDetailFilm.data.dvdId){
+  // 有可直接播放的视频（AV 预告 / R18 sample 等）→ 用 App 内视频窗口播放，不跳新页面
+  if (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)){
+    showTrailerModal();
+    return;
+  }
+  // AV 有番号但无内嵌视频 → 回退跳 missav 在线页
+  if (currentDetailFilm && (currentDetailFilm.adult || (currentDetailFilm.data && currentDetailFilm.data.adult)) && currentDetailFilm.data && currentDetailFilm.data.dvdId){
     var dvd = String(currentDetailFilm.data.dvdId).toLowerCase();
     window.open('https://missav.live/cn/' + encodeURIComponent(dvd), '_blank');
     return;
