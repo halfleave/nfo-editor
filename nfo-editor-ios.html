@@ -96,6 +96,9 @@
   border: 1px solid rgba(255,255,255,0.28);
 }
 [data-theme="dark"] .avatar-camera { border-color: rgba(255,255,255,0.32); }
+/* 暗模式：搜索历史「清空」与历史项删除按钮在深色底上对比度不足，提亮 */
+[data-theme="dark"] .search-history-clear { color: #5ac8fa; }
+[data-theme="dark"] .hist-chip-del { background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.7); }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
@@ -260,8 +263,8 @@ img { display: block; }
 .dm-date { font-size: 11px; color: rgba(255,255,255,0.5); flex: 0 0 auto; }
 .dm-hd { color: #fff; background: #e0457b; }
 .dm-sub { color: #fff; background: #2f8fd6; }
-.detail-magnet-rest { display: none; flex-direction: column; gap: 8px; }
-.detail-magnet-toggle { margin-top: 8px; padding: 10px; text-align: center; font-size: 13px; color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.08); border-radius: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.detail-magnet-toggle-row { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.detail-magnet-toggle { width: 100%; padding: 10px; text-align: center; font-size: 13px; color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.08); border-radius: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-magnet-toggle:active { background: rgba(255,255,255,0.15); }
 .trailer-mask { position: fixed; inset: 0; z-index: 700; background: rgba(0,0,0,0.6); display: none; }
 .trailer-mask.show { display: block; }
@@ -290,28 +293,73 @@ img { display: block; }
 }
 .trailer-ext-btn:active { opacity: 0.75; }
 
-/* 居中确认弹窗 */
-.confirm-mask { position: fixed; inset: 0; z-index: 720; background: rgba(0,0,0,0.45); display: none; }
-.confirm-mask.show { display: block; }
-.confirm-modal {
-  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 721;
-  width: min(80vw, 300px);
-  background: var(--card, #fff); border-radius: 16px;
-  padding: 22px 18px 16px;
-  display: none; flex-direction: column; align-items: center; gap: 18px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+/* 删除确认弹窗（iOS 26 Alert 风格，独立 ID 避免与通用确认弹窗冲突） */
+.delete-confirm-mask { position: fixed; inset: 0; z-index: 722; background: rgba(0,0,0,0.42); display: none; transition: opacity .2s; }
+.delete-confirm-mask.show { display: block; }
+.delete-confirm-modal {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1); z-index: 723;
+  width: min(82vw, 320px); max-width: 320px;
+  background: var(--card, #fff); border-radius: 22px;
+  padding: 26px 20px 0;
+  display: none; flex-direction: column; align-items: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.28);
+  text-align: center;
+  overflow: hidden;
 }
-.confirm-modal.show { display: flex; }
-.confirm-title { font-size: 17px; font-weight: 600; color: var(--label, #1C1C1E); text-align: center; line-height: 1.35; }
-.confirm-actions { display: flex; width: 100%; gap: 12px; }
-.confirm-btn {
-  flex: 1; padding: 11px 0; font-size: 16px; font-weight: 600;
-  border: none; border-radius: 10px;
-  background: rgba(120,120,128,0.12); color: var(--label, #1C1C1E);
-  -webkit-tap-highlight-color: transparent;
+.delete-confirm-modal.show { display: flex; animation: dc-pop .22s cubic-bezier(.2,.8,.2,1); }
+@keyframes dc-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.88); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
-.confirm-btn.danger { background: var(--danger, #FF3B30); color: #fff; }
-.confirm-btn:active { opacity: 0.8; }
+.delete-confirm-title { font-size: 18px; font-weight: 700; color: var(--label, #1C1C1E); line-height: 1.35; margin-bottom: 10px; }
+.delete-confirm-body { font-size: 14px; line-height: 1.45; color: var(--label-2, #8E8E93); margin-bottom: 22px; padding: 0 4px; }
+.delete-confirm-actions { display: flex; width: calc(100% + 40px); margin: 0 -20px; border-top: 0.5px solid var(--sep, rgba(120,120,128,0.2)); }
+.delete-confirm-btn {
+  flex: 1; padding: 14px 12px; font-size: 17px; font-weight: 400;
+  background: none; border: none; color: var(--accent-fg);
+  -webkit-tap-highlight-color: transparent; cursor: pointer;
+  border-right: 0.5px solid var(--sep, rgba(120,120,128,0.2));
+}
+.delete-confirm-btn:last-child { border-right: none; }
+.delete-confirm-btn:active { background: var(--gray-fill, rgba(120,120,128,0.12)); }
+.delete-confirm-btn.danger { color: var(--danger, #FF3B30); font-weight: 600; }
+[data-theme="dark"] .delete-confirm-modal { background: var(--card, #1C1C1E); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+[data-theme="dark"] .delete-confirm-title { color: var(--label, #fff); }
+[data-theme="dark"] .delete-confirm-body { color: var(--label-2, #98989F); }
+
+/* 恢复确认弹窗（与删除弹窗同款的 iOS 26 Alert 风格） */
+.restore-confirm-mask { position: fixed; inset: 0; z-index: 724; background: rgba(0,0,0,0.42); display: none; transition: opacity .2s; }
+.restore-confirm-mask.show { display: block; }
+.restore-confirm-modal {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(1); z-index: 725;
+  width: min(82vw, 320px); max-width: 320px;
+  background: var(--card, #fff); border-radius: 22px;
+  padding: 26px 20px 0;
+  display: none; flex-direction: column; align-items: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.28);
+  text-align: center;
+  overflow: hidden;
+}
+.restore-confirm-modal.show { display: flex; animation: rc-pop .22s cubic-bezier(.2,.8,.2,1); }
+@keyframes rc-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.88); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.restore-confirm-title { font-size: 18px; font-weight: 700; color: var(--label, #1C1C1E); line-height: 1.35; margin-bottom: 10px; }
+.restore-confirm-body { font-size: 14px; line-height: 1.45; color: var(--label-2, #8E8E93); margin-bottom: 22px; padding: 0 4px; }
+.restore-confirm-actions { display: flex; width: calc(100% + 40px); margin: 0 -20px; border-top: 0.5px solid var(--sep, rgba(120,120,128,0.2)); }
+.restore-confirm-btn {
+  flex: 1; padding: 14px 12px; font-size: 17px; font-weight: 400;
+  background: none; border: none; color: var(--accent-fg);
+  -webkit-tap-highlight-color: transparent; cursor: pointer;
+  border-right: 0.5px solid var(--sep, rgba(120,120,128,0.2));
+}
+.restore-confirm-btn:last-child { border-right: none; }
+.restore-confirm-btn:active { background: var(--gray-fill, rgba(120,120,128,0.12)); }
+.restore-confirm-btn.danger { color: var(--danger, #FF3B30); font-weight: 600; }
+[data-theme="dark"] .restore-confirm-modal { background: var(--card, #1C1C1E); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+[data-theme="dark"] .restore-confirm-title { color: var(--label, #fff); }
+[data-theme="dark"] .restore-confirm-body { color: var(--label-2, #98989F); }
 
 /* 顶部大标题栏（fixed 固定顶部，避免 sticky 在 iOS 滚动子容器内失效） */
 .page-bar, .home-header {
@@ -1223,10 +1271,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #searchPanel .tmdb-result:first-child { padding-top: 4px; }
 /* 详情页字幕按钮：5 个图标按钮时收紧间距 */
 .detail-actions { gap: 14px; }
-.sub-lang-row { display: flex; gap: 8px; padding: 10px 4px 6px; flex-wrap: wrap; }
-.sub-lang-chip { font-size: 13px; font-weight: 500; color: var(--label-2); background: var(--gray-fill); border: none; border-radius: 999px; padding: 6px 14px; -webkit-tap-highlight-color: transparent; }
-.sub-lang-chip.active { color: #fff; background: var(--accent); }
-.sub-lang-chip:active { opacity: 0.6; }
 .sub-results { padding: 6px 4px 16px; max-height: 56vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .sub-item { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 0.5px solid var(--sep); }
 .sub-item:active { background: var(--gray-fill); }
@@ -1242,18 +1286,35 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .sub-seg-chip { flex: 1; font-size: 13px; font-weight: 500; color: var(--label-2); background: var(--gray-fill); border: none; border-radius: 9px; padding: 8px 0; -webkit-tap-highlight-color: transparent; }
 .sub-seg-chip.active { color: #fff; background: var(--accent); }
 .sub-seg-chip:active { opacity: 0.6; }
-.sub-src-row { display: flex; gap: 18px; padding: 10px 4px 2px; align-items: center; }
-.sub-src-item { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: var(--label); -webkit-tap-highlight-color: transparent; }
-.sub-src-item input { width: 18px; height: 18px; accent-color: var(--accent); }
-.sub-src-item.disabled { opacity: 0.4; }
-.sub-src-item.disabled input { opacity: 0.5; }
+/* 字幕搜索：与外部搜索框一致，浅灰底 + 圆角，右侧源切换 */
 .sub-search-row { display: flex; gap: 10px; align-items: center; padding: 4px 4px 2px; }
-.sub-input-wrap { flex: 1; min-width: 0; }
+.sub-input-combined {
+  position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px;
+  background: var(--card-fill); border-radius: 22px; padding: 3px 4px 3px 3px;
+}
+.sub-query-input {
+  flex: 1; min-width: 0; border: none; background: transparent;
+  border-radius: 22px; padding: 9px 76px 9px 12px; font-size: 16px; color: var(--label);
+}
+.sub-query-input:focus { outline: none; }
+.sub-query-input::placeholder { color: var(--label-3); }
+.sub-input-combined .api-clear { right: 58px; color: var(--label-3); }
+.sub-src-text {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  width: 48px; height: 26px; border: none; background: transparent; color: var(--label-2);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  -webkit-appearance: none; appearance: none; overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.sub-src-text:active { opacity: .55; }
 .sub-search-btn { flex: 0 0 auto; background: var(--accent); color: var(--accent-text); border: none; border-radius: 12px; padding: 0 22px; height: 42px; font-size: 15px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
 .sub-search-btn:active { opacity: 0.6; }
 .sub-ctrl-row { display: flex; gap: 10px; align-items: center; padding: 12px 4px 2px; }
 .sub-ctrl-row .sub-seg-chip { flex: 0 0 auto; padding: 7px 16px; }
-.sub-ctrl-row .sub-src-item:first-of-type { margin-left: auto; }
+/* 语言选择：与设置页外观选择弹窗同款原生 select */
+.sub-lang-select-row { padding: 12px 0; margin: 0 4px; border-bottom: 0.5px solid var(--sep); }
+.sub-lang-select-row .vr-label { font-weight: 500; }
+.sub-lang-select-row .vr-value { min-width: 44px; text-align: right; }
 </style>
 </head>
 <body>
@@ -1295,14 +1356,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <button class="about-done" onclick="closeAllSheets()">完成</button>
   </div>
 
-  <!-- 确认弹窗（居中 iOS Alert 风格） -->
-  <div class="about-mask" id="confirmMask" onclick="closeConfirm()"></div>
-  <div class="about-modal confirm-modal" id="confirmModal">
-    <div class="about-title" id="confirmTitle">恢复初始状态</div>
-    <div class="about-body" id="confirmBody">将清空所有配置和缓存，恢复到初始状态。此操作不可撤销。</div>
-    <div class="confirm-actions">
-      <button class="confirm-btn" onclick="closeConfirm()">取消</button>
-      <button class="confirm-btn confirm-danger" id="confirmOk" onclick="confirmOk()">恢复</button>
+  <!-- 恢复确认弹窗（与删除弹窗同款的 iOS 26 Alert 风格） -->
+  <div class="restore-confirm-mask" id="restoreConfirmMask" onclick="closeRestoreConfirm()"></div>
+  <div class="restore-confirm-modal" id="restoreConfirmModal">
+    <div class="restore-confirm-title" id="restoreConfirmTitle">恢复初始状态</div>
+    <div class="restore-confirm-body" id="restoreConfirmBody">将清空所有配置和缓存，恢复到初始状态。此操作不可撤销。</div>
+    <div class="restore-confirm-actions">
+      <button class="restore-confirm-btn" onclick="closeRestoreConfirm()">取消</button>
+      <button class="restore-confirm-btn danger" onclick="confirmRestore()">恢复</button>
     </div>
   </div>
 
@@ -1421,7 +1482,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="field field-stacked no-border">
       <label for="magnetWorkerInput">Worker 代理地址</label>
       <div class="api-input-wrap">
-        <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app（粘贴你的代理地址）" oninput="toggleMagnetWorkerClear()" onblur="persistApiSettings()">
+        <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app" oninput="toggleMagnetWorkerClear()" onblur="persistApiSettings()">
         <button class="api-clear" id="magnetClearBtn" onclick="clearMagnetInput()" aria-label="清除" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
@@ -1932,13 +1993,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
   </div>
 
-  <!-- 居中确认弹窗（删除等二次确认） -->
-  <div class="confirm-mask" id="confirmMask" onclick="closeDeleteConfirm()"></div>
-  <div class="confirm-modal" id="confirmModal">
-    <div class="confirm-title" id="confirmTitle">确认删除该影片？</div>
-    <div class="confirm-actions">
-      <button class="confirm-btn" onclick="closeDeleteConfirm()">取消</button>
-      <button class="confirm-btn danger" onclick="confirmDelete()">删除</button>
+  <!-- 删除确认弹窗（iOS 26 Alert 风格，独立 ID） -->
+  <div class="delete-confirm-mask" id="deleteConfirmMask" onclick="closeDeleteConfirm()"></div>
+  <div class="delete-confirm-modal" id="deleteConfirmModal">
+    <div class="delete-confirm-title" id="deleteConfirmTitle">确认删除该影片？</div>
+    <div class="delete-confirm-body" id="deleteConfirmBody">此操作不可撤销。</div>
+    <div class="delete-confirm-actions">
+      <button class="delete-confirm-btn" onclick="closeDeleteConfirm()">取消</button>
+      <button class="delete-confirm-btn danger" onclick="confirmDelete()">删除</button>
     </div>
   </div>
 
@@ -1952,10 +2014,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <span class="sb-spacer"></span>
     </div>
     <div class="sub-search-row">
-      <div class="api-input-wrap sub-input-wrap">
-        <input class="ios-input" type="text" id="subQueryInput" placeholder="影片名" oninput="onSubQueryChange()">
+      <div class="sub-input-combined">
+        <input class="ios-input sub-query-input" type="text" id="subQueryInput" placeholder="影片名" oninput="onSubQueryChange()">
         <button class="api-clear" id="subQueryClear" onclick="clearSubQuery()" aria-label="清除" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+        <button type="button" class="tpdb-type-text sub-src-text" id="subSrcBtn" onclick="cycleSubSrc()">
+          <span class="tpdb-type-layer is-current">伪射手</span>
+          <span class="tpdb-type-layer is-incoming">Sub</span>
         </button>
       </div>
       <button class="sub-search-btn" onclick="searchSubtitles()">搜索</button>
@@ -1963,14 +2029,19 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="sub-ctrl-row" id="subCtrlRow">
       <button class="sub-seg-chip active" data-mode="title" onclick="selectSubTitleMode('title')">影片名</button>
       <button class="sub-seg-chip" data-mode="original" onclick="selectSubTitleMode('original')">原始标题</button>
-      <label class="sub-src-item" id="subSrcAssrtWrap"><input type="radio" name="subsrc" id="subSrcAssrt" checked><span>伪射手</span></label>
-      <label class="sub-src-item" id="subSrcOsWrap"><input type="radio" name="subsrc" id="subSrcOs"><span>Sub</span></label>
     </div>
-    <div class="sub-lang-row" id="subLangRow">
-      <button class="sub-lang-chip active" data-lang="all" onclick="selectSubLang('all')">全部</button>
-      <button class="sub-lang-chip" data-lang="zh" onclick="selectSubLang('zh')">简中</button>
-      <button class="sub-lang-chip" data-lang="zht" onclick="selectSubLang('zht')">繁中</button>
-      <button class="sub-lang-chip" data-lang="en" onclick="selectSubLang('en')">英文</button>
+    <div class="value-row select-row sub-lang-select-row" onclick="document.getElementById('subLangSelect').click()">
+      <span class="vr-label">语言</span>
+      <span class="vr-right">
+        <span class="vr-value" id="subLangValue">全部</span>
+        <span class="chevron"></span>
+      </span>
+      <select class="select-overlay" id="subLangSelect" onchange="onSubLangSelect(this)">
+        <option value="all">全部</option>
+        <option value="zh">简中</option>
+        <option value="zht">繁中</option>
+        <option value="en">英文</option>
+      </select>
     </div>
     <div class="sub-results" id="subResults"><div class="tmdb-msg">正在搜索…</div></div>
   </div>
@@ -2215,31 +2286,18 @@ function showAboutSheet(){
   if (aboutModal) aboutModal.classList.add('show');
 }
 function showRestoreConfirm(){
-  openConfirm('恢复初始状态', '将清空所有配置和缓存，恢复到初始状态。此操作不可撤销。', restoreApp);
+  document.getElementById('restoreConfirmTitle').textContent = '恢复初始状态';
+  document.getElementById('restoreConfirmBody').textContent = '将清空所有配置和缓存，恢复到初始状态。此操作不可撤销。';
+  document.getElementById('restoreConfirmMask').classList.add('show');
+  document.getElementById('restoreConfirmModal').classList.add('show');
 }
-var confirmCallback = null;
-function openConfirm(title, msg, onOk){
-  var t = document.getElementById('confirmTitle');
-  var b = document.getElementById('confirmBody');
-  if (t) t.textContent = title;
-  if (b) b.textContent = msg;
-  confirmCallback = onOk || null;
-  var mask = document.getElementById('confirmMask');
-  var modal = document.getElementById('confirmModal');
-  if (mask) mask.classList.add('show');
-  if (modal) modal.classList.add('show');
+function closeRestoreConfirm(){
+  document.getElementById('restoreConfirmMask').classList.remove('show');
+  document.getElementById('restoreConfirmModal').classList.remove('show');
 }
-function closeConfirm(){
-  var mask = document.getElementById('confirmMask');
-  var modal = document.getElementById('confirmModal');
-  if (mask) mask.classList.remove('show');
-  if (modal) modal.classList.remove('show');
-  confirmCallback = null;
-}
-function confirmOk(){
-  var cb = confirmCallback;
-  closeConfirm();
-  if (cb) cb();
+function confirmRestore(){
+  closeRestoreConfirm();
+  restoreApp();
 }
 function restoreApp(){
   closeAllSheets();
@@ -3006,7 +3064,7 @@ function clearMagnetInput(){
 }
 function updateSubtitleBtn(){
   var btn = document.getElementById('dtActSub');
-  if (btn) btn.style.display = (state.subtitleAssrt || state.subtitleOs) ? '' : 'none';
+  if (btn) btn.style.display = (getAssrtToken() || state.subtitleOs) ? '' : 'none';
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(){
@@ -3175,6 +3233,9 @@ function copyMagnet(el){
 
 /* ============ 字幕搜索 / 下载 ============ */
 var subCurrentLang = 'all';
+var subCurrentSrc = 'assrt';   // 'assrt' 伪射手 | 'os' OpenSubtitles
+var SUB_LANG_LABELS = { all: '全部', zh: '简中', zht: '繁中', en: '英文' };
+function getAssrtToken(){ return (state.subtitleAssrt || '').trim(); }
 var subCtrl = null;
 var subResultsCache = [];
 var subTitleMode = 'title';
@@ -3183,20 +3244,13 @@ var subOrigVal = '';
 var subYear = '';
 var subUserEdited = false;
 function openSubtitleSheet(){
-  if (!(state.subtitleAssrt || state.subtitleOs)){ showToast('请先到「设置 → API 配置」填写字幕源 Token', 'error'); return; }
+  if (!(getAssrtToken() || state.subtitleOs)){ showToast('请先到「设置 → API 配置」填写字幕源 Token', 'error'); return; }
   if (!state.magnetWorker){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
   openSheet('subtitleSheet');
   document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">正在准备…</div>';
-  subCurrentLang = 'all'; syncSubLangChips();
+  subCurrentLang = 'all'; syncSubLangSelect();
+  subCurrentSrc = 'assrt'; syncSubSrcBtn();
   subTitleMode = 'title'; syncSubTitleSeg();
-  // 配置字幕源复选框：优先伪射手（默认选中）；未配置 Token 的源禁用
-  var aWrap = document.getElementById('subSrcAssrtWrap'), aChk = document.getElementById('subSrcAssrt');
-  var oWrap = document.getElementById('subSrcOsWrap'), oChk = document.getElementById('subSrcOs');
-  aChk.disabled = !state.subtitleAssrt; oChk.disabled = !state.subtitleOs;
-  aWrap.classList.toggle('disabled', !state.subtitleAssrt);
-  oWrap.classList.toggle('disabled', !state.subtitleOs);
-  aChk.checked = !!state.subtitleAssrt;
-  oChk.checked = !state.subtitleAssrt && !!state.subtitleOs;
   var fillAndSearch = function(t, orig, year){
     subTitleVal = t || ''; subOrigVal = orig || ''; subYear = '';
     subUserEdited = false;
@@ -3239,23 +3293,52 @@ function clearSubQuery(){
   if (input){ input.value = ''; onSubQueryChange(); input.focus(); }
 }
 function selectSubLang(lang){
-  subCurrentLang = lang; syncSubLangChips();
+  subCurrentLang = lang;
+  syncSubLangSelect();
   // 仅切换语言筛选，不自动搜索（由「搜索」按钮触发）
 }
-function syncSubLangChips(){
-  var chips = document.querySelectorAll('#subLangRow .sub-lang-chip');
-  chips.forEach(function(c){ c.classList.toggle('active', c.getAttribute('data-lang') === subCurrentLang); });
+function syncSubLangSelect(){
+  var sel = document.getElementById('subLangSelect');
+  var val = document.getElementById('subLangValue');
+  if (sel) sel.value = subCurrentLang;
+  if (val) val.textContent = SUB_LANG_LABELS[subCurrentLang] || '全部';
 }
+function onSubLangSelect(sel){ selectSubLang(sel.value); }
+function cycleSubSrc(){
+  var next = subCurrentSrc === 'os' ? 'assrt' : 'os';
+  var btn = document.getElementById('subSrcBtn');
+  if (!btn) return;
+  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
+  var inEl = btn.querySelector('.tpdb-type-layer.is-incoming');
+  if (!curEl || !inEl) return;
+  inEl.textContent = subSrcLabel(next);
+  requestAnimationFrame(function(){ btn.classList.add('animating'); });
+  setTimeout(function(){
+    subCurrentSrc = next;
+    btn.classList.add('no-transition');
+    curEl.textContent = subSrcLabel(next);
+    btn.classList.remove('animating');
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ btn.classList.remove('no-transition'); }); });
+  }, 260);
+}
+function syncSubSrcBtn(){
+  var btn = document.getElementById('subSrcBtn');
+  if (!btn) return;
+  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
+  btn.classList.remove('animating');
+  if (curEl) curEl.textContent = subSrcLabel(subCurrentSrc);
+}
+function subSrcLabel(src){ return src === 'os' ? 'Sub' : '伪射手'; }
 function searchSubtitles(){
   var rawQ = (document.getElementById('subQueryInput').value || '').trim();
   var box = document.getElementById('subResults');
   if (!rawQ){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!(state.subtitleAssrt || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">未配置字幕源 Token</div>'; return; }
+  if (!(getAssrtToken() || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">未配置字幕源 Token</div>'; return; }
   if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未填写磁力 Worker 地址（设置 → API 配置）</div>'; return; }
-  // 仅搜索已勾选且已配置 Token 的源；默认仅伪射手（优先、省 OpenSubtitles 配额）
-  var useAssrt = document.getElementById('subSrcAssrt').checked && !!state.subtitleAssrt;
-  var useOs = document.getElementById('subSrcOs').checked && !!state.subtitleOs;
-  if (!useAssrt && !useOs){ box.innerHTML = '<div class="tmdb-msg">请至少选择一个字幕源</div>'; return; }
+  // 仅搜索当前选中的源；伪射手优先、省 OpenSubtitles 配额
+  var useAssrt = subCurrentSrc === 'assrt' && !!getAssrtToken();
+  var useOs = subCurrentSrc === 'os' && !!state.subtitleOs;
+  if (!useAssrt && !useOs){ box.innerHTML = '<div class="tmdb-msg">请至少配置一个字幕源 Token</div>'; return; }
   box.innerHTML = '<div class="tmdb-msg">搜索中…</div>';
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
@@ -3268,7 +3351,7 @@ function searchSubtitles(){
     + '&q=' + encodeURIComponent(q)
     + '&year=' + encodeURIComponent(year)
     + '&lang=' + encodeURIComponent(subCurrentLang)
-    + (useAssrt ? '&assrt=' + encodeURIComponent(state.subtitleAssrt) : '')
+    + (useAssrt ? '&assrt=' + encodeURIComponent(getAssrtToken()) : '')
     + (useOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '');
   var to = setTimeout(function(){ subCtrl.abort(); }, 35000);
   fetch(url, { signal: subCtrl.signal, cache: 'no-store' })
@@ -3336,7 +3419,7 @@ function downloadSubtitle(idx){
     + '&id=' + encodeURIComponent(it.id)
     + '&name=' + encodeURIComponent(name)
     + '&ext=' + encodeURIComponent(it.ext || 'srt')
-    + '&assrt=' + encodeURIComponent(state.subtitleAssrt || '')
+    + '&assrt=' + encodeURIComponent(getAssrtToken() || '')
     + '&os=' + encodeURIComponent(state.subtitleOs || '');
   showToast('下载中…', 'success');
   fetch(url, { cache: 'no-store' })
@@ -4266,7 +4349,7 @@ function setMetaSource(src, btn){
   renderSearchHistory(); // 切源后按当前源刷新历史（输入框已清空→显示历史）
 }
 function updateJavPlaceholder(){
-  document.getElementById('tmdbQuery').placeholder = '番号/关键词（如 IPX-011 / 女优名）';
+  document.getElementById('tmdbQuery').placeholder = '番号/关键词';
 }
 function updateSearchPlaceholder(){
   var el = document.getElementById('tmdbQuery');
@@ -5981,39 +6064,23 @@ function renderFilmDetail(film){
   // 磁力（JavBus 抓取）：在演职人员下方展示
   var magEl = document.getElementById('detailMagnets');
   if (magEl){
-    var mags = (d.javbusMagnets || []).filter(function(m){ return m && m.link; });
-    if (mags.length){
-      var MAX_VISIBLE = 3;
-      var total = mags.length;
-      var stripMagnetTitle = function(t){
-        if (!t) return t;
-        // 去除与 HD/字幕 标签重复的中文标记，避免标题出现 "RKI-481 高清 字幕"
-        return t.replace(/(?:^|\s)(高清|字幕)(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
-      };
-      var renderMagnetItem = function(m){
-        var tags = [];
-        if (m.isHD) tags.push('<span class="dm-tag dm-hd">HD</span>');
-        if (m.hasSubtitle) tags.push('<span class="dm-tag dm-sub">字幕</span>');
-        var tagHtml = tags.length ? '<span class="dm-tags">' + tags.join('') + '</span>' : '';
-        var rawTitle = stripMagnetTitle(m.title) || '磁力链接';
-        // 省略号完全交给 CSS text-overflow:ellipsis，不再手动拼接
-        return '<div class="detail-magnet" data-link="' + escapeAttr(m.link) + '" onclick="copyText(this.dataset.link, \'磁链\')">'
-            + '<div class="dm-row"><div class="dm-title" title="' + escapeAttr(rawTitle) + '">' + escapeHtml(rawTitle) + '</div>' + tagHtml + '</div>'
-            + '<div class="dm-line"><span class="dm-size">' + (m.size ? escapeHtml(m.size) : '') + '</span><span class="dm-date">' + (m.shareDate ? escapeHtml(m.shareDate) : '') + '</span></div>'
+    detailMagnetItems = (d.javbusMagnets || []).filter(function(m){ return m && m.link; });
+    if (detailMagnetItems.length){
+      detailMagnetVisibleCount = Math.min(MAGNET_INITIAL, detailMagnetItems.length);
+      var total = detailMagnetItems.length;
+      var itemsHtml = detailMagnetItems.map(function(m, i){
+        return '<div class="detail-magnet" data-idx="' + i + '" style="display:' + (i < detailMagnetVisibleCount ? '' : 'none') + '" data-link="' + escapeAttr(m.link) + '" onclick="copyText(this.dataset.link, \'磁链\')">'
+            + renderMagnetItemInner(m)
             + '</div>';
-      };
-      var visibleHtml = mags.slice(0, MAX_VISIBLE).map(renderMagnetItem).join('');
-      var hiddenHtml = total > MAX_VISIBLE ? '<div class="detail-magnet-rest" style="display:none;">' + mags.slice(MAX_VISIBLE).map(renderMagnetItem).join('') + '</div>' : '';
-      var toggleHtml = total > MAX_VISIBLE ? '<div class="detail-magnet-toggle" onclick="toggleMagnetExpand(this)">展开（' + (total - MAX_VISIBLE) + '）</div>' : '';
-      // 展开/收起按钮放在全部磁力后方
-      var mh = '<div class="detail-cast-title">磁力链接</div><div class="detail-magnet-list">' + visibleHtml + hiddenHtml + toggleHtml + '</div>';
-      magEl.innerHTML = mh;
+      }).join('');
+      // 展开/收起按钮放在全部磁力后方；总数<=3 时不显示
+      magEl.innerHTML = '<div class="detail-cast-title">磁力链接</div><div class="detail-magnet-list">' + itemsHtml + renderMagnetToggleHtml() + '</div>';
       magEl.style.display = '';
     } else {
       magEl.innerHTML = ''; magEl.style.display = 'none';
     }
   }
-  // 剧照：1 张海报 + 最多 5 张剧照（海报恒为第一张）；兼容旧数据 fanart/fanartCandidates
+  // 剧照：1 张海报 + 剧照列表；初始显示前 6 张，上滑过 50% 增量追加（每次 +6，不写缓存，离线不加载）
   var shotEl = document.getElementById('detailShots');
   if (shotEl){
     var shots = [];
@@ -6029,25 +6096,21 @@ function renderFilmDetail(film){
     }
     shots = shots.concat(stills);
     var seen = {};
-    shots = shots.filter(function(s){ if (!s || seen[s]) return false; seen[s] = 1; return true; }).slice(0, 6);
-    currentDetailShots = shots.slice();
-    if (shots.length){
-      var left = [], right = [];
-      // 灵活补位：每次把下一张剧照放到当前数量较少的列，避免最后一列落单
-      shots.forEach(function(s, idx){
-        var item = { s: s, idx: idx };
-        if (left.length <= right.length) left.push(item); else right.push(item);
-      });
-      var colHtml = function(items){
-        return items.map(function(item){
-          return '<div class="detail-shot" onclick="openFullscreenStills(' + item.idx + ')"><img src="' + escapeAttr(item.s) + '" alt="剧照" loading="lazy"></div>';
-        }).join('');
-      };
-      var sh = '<div class="detail-shots-title">剧照</div><div class="detail-shots-row">'
-          + '<div class="detail-shots-col">' + colHtml(left) + '</div>'
-          + '<div class="detail-shots-col">' + colHtml(right) + '</div>'
-          + '</div>';
-      shotEl.innerHTML = sh;
+    var fullShots = shots.filter(function(s){ if (!s || seen[s]) return false; seen[s] = 1; return true; });
+    detailFullShots = fullShots;        // 完整列表（不再 slice 截断）
+    detailRenderedShots = 0;            // 已渲染数量
+    detailShotCols = null;
+    currentDetailShots = [];
+    if (fullShots.length){
+      shotEl.innerHTML = '<div class="detail-shots-title">剧照</div>';
+      var row = document.createElement('div');
+      row.className = 'detail-shots-row';
+      var colL = document.createElement('div'); colL.className = 'detail-shots-col';
+      var colR = document.createElement('div'); colR.className = 'detail-shots-col';
+      row.appendChild(colL); row.appendChild(colR);
+      shotEl.appendChild(row);
+      detailShotCols = { left: colL, right: colR };
+      appendMoreShots();                // 初始加载前 6 张
       shotEl.style.display = '';
     } else {
       shotEl.innerHTML = '';
@@ -6057,15 +6120,93 @@ function renderFilmDetail(film){
   // 内容初始位置距顶部 40%：每次打开从顶部开始（内容随 .detail-scroll 的 padding-top 定位）
   requestAnimationFrame(function(){
     var sc = document.getElementById('detailScroll');
-    if (sc) sc.scrollTop = 0;
+    if (sc){
+      sc.scrollTop = 0;
+      // 上滑过 50% 增量加载更多剧照（覆盖式绑定，避免详情页多次打开叠加监听）
+      sc.onscroll = function(){
+        if (!detailFullShots.length) return;
+        if (detailRenderedShots >= detailFullShots.length) return;
+        var max = sc.scrollHeight - sc.clientHeight;
+        if (max <= 0) return;
+        if (sc.scrollTop / max >= 0.5) appendMoreShots();
+      };
+    }
   });
 }
-function toggleMagnetExpand(btn){
-  var rest = btn.previousElementSibling;
-  if (!rest || !rest.classList.contains('detail-magnet-rest')) return;
-  var expanded = rest.style.display !== 'none';
-  rest.style.display = expanded ? 'none' : 'flex';
-  btn.textContent = expanded ? ('展开（' + (rest.children.length) + '）') : '收起';
+// 磁力展开/收起：详情页级全局，renderFilmDetail 每次重设
+var detailMagnetItems = [];
+var detailMagnetVisibleCount = 0;
+var MAGNET_INITIAL = 3;
+var MAGNET_BATCH = 10;
+function stripMagnetTitle(t){
+  if (!t) return t;
+  // 去除与 HD/字幕 标签重复的中文标记，避免标题出现 "RKI-481 高清 字幕"
+  return t.replace(/(?:^|\s)(高清|字幕)(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function renderMagnetItemInner(m){
+  var tags = [];
+  if (m.isHD) tags.push('<span class="dm-tag dm-hd">HD</span>');
+  if (m.hasSubtitle) tags.push('<span class="dm-tag dm-sub">字幕</span>');
+  var tagHtml = tags.length ? '<span class="dm-tags">' + tags.join('') + '</span>' : '';
+  var rawTitle = stripMagnetTitle(m.title) || '磁力链接';
+  // 省略号完全交给 CSS text-overflow:ellipsis，不再手动拼接
+  return '<div class="dm-row"><div class="dm-title" title="' + escapeAttr(rawTitle) + '">' + escapeHtml(rawTitle) + '</div>' + tagHtml + '</div>'
+      + '<div class="dm-line"><span class="dm-size">' + (m.size ? escapeHtml(m.size) : '') + '</span><span class="dm-date">' + (m.shareDate ? escapeHtml(m.shareDate) : '') + '</span></div>';
+}
+function renderMagnetToggleHtml(){
+  var total = detailMagnetItems.length;
+  if (total <= MAGNET_INITIAL) return '';
+  var remaining = total - detailMagnetVisibleCount;
+  var expandBtn = remaining > 0 ? '<div class="detail-magnet-toggle detail-magnet-expand" onclick="expandMagnets()">展开（' + remaining + '）</div>' : '';
+  var collapseBtn = detailMagnetVisibleCount > MAGNET_INITIAL ? '<div class="detail-magnet-toggle detail-magnet-collapse" onclick="collapseMagnets()">收起</div>' : '';
+  if (!expandBtn && !collapseBtn) return '';
+  return '<div class="detail-magnet-toggle-row">' + expandBtn + collapseBtn + '</div>';
+}
+function updateMagnetVisibility(){
+  var magEl = document.getElementById('detailMagnets');
+  if (!magEl) return;
+  var items = magEl.querySelectorAll('.detail-magnet');
+  for (var i = 0; i < items.length; i++){
+    var idx = parseInt(items[i].getAttribute('data-idx'), 10);
+    items[i].style.display = idx < detailMagnetVisibleCount ? '' : 'none';
+  }
+  var row = magEl.querySelector('.detail-magnet-toggle-row');
+  if (row) row.outerHTML = renderMagnetToggleHtml();
+}
+function expandMagnets(){
+  if (detailMagnetVisibleCount >= detailMagnetItems.length) return;
+  detailMagnetVisibleCount = Math.min(detailMagnetVisibleCount + MAGNET_BATCH, detailMagnetItems.length);
+  updateMagnetVisibility();
+}
+function collapseMagnets(){
+  detailMagnetVisibleCount = Math.min(MAGNET_INITIAL, detailMagnetItems.length);
+  updateMagnetVisibility();
+}
+// 剧照懒加载：完整列表 + 已渲染数量 + 两列 DOM 引用（详情页级全局，renderFilmDetail 每次重设）
+var detailFullShots = [];
+var detailRenderedShots = 0;
+var detailShotCols = null;
+function appendMoreShots(){
+  if (!detailShotCols) return;
+  if (detailRenderedShots >= detailFullShots.length) return;
+  if (!navigator.onLine) return;          // 离线不加载更多剧照
+  var batch = 6;
+  var end = Math.min(detailRenderedShots + batch, detailFullShots.length);
+  for (var i = detailRenderedShots; i < end; i++){
+    var s = detailFullShots[i];
+    var div = document.createElement('div');
+    div.className = 'detail-shot';
+    div.setAttribute('onclick', 'openFullscreenStills(' + i + ')');
+    var img = document.createElement('img');
+    img.src = s; img.alt = '剧照'; img.loading = 'lazy';
+    div.appendChild(img);
+    // 灵活补位：放到当前数量较少的列，保持左右均衡
+    if (detailShotCols.left.children.length <= detailShotCols.right.children.length) detailShotCols.left.appendChild(div);
+    else detailShotCols.right.appendChild(div);
+  }
+  detailRenderedShots = end;
+  // 全屏查看器只看已加载的剧照（与索引 i 一致）
+  currentDetailShots = detailFullShots.slice(0, detailRenderedShots);
 }
 function openTrailer(){
   // AV 影片：点击预告片按钮直接跳转 missav 在线页
@@ -6134,13 +6275,14 @@ function detailDownloadMeta(){
 }
 function showDeleteConfirm(){
   if (!currentDetailFilmId) return;
-  document.getElementById('confirmTitle').textContent = '确认删除该影片？';
-  document.getElementById('confirmMask').classList.add('show');
-  document.getElementById('confirmModal').classList.add('show');
+  document.getElementById('deleteConfirmTitle').textContent = '确认删除该影片？';
+  document.getElementById('deleteConfirmBody').textContent = '此操作不可撤销。';
+  document.getElementById('deleteConfirmMask').classList.add('show');
+  document.getElementById('deleteConfirmModal').classList.add('show');
 }
 function closeDeleteConfirm(){
-  document.getElementById('confirmMask').classList.remove('show');
-  document.getElementById('confirmModal').classList.remove('show');
+  document.getElementById('deleteConfirmMask').classList.remove('show');
+  document.getElementById('deleteConfirmModal').classList.remove('show');
 }
 function confirmDelete(){
   if (!currentDetailFilmId) return;
