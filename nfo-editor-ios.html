@@ -246,6 +246,17 @@ img { display: block; }
 .detail-person .dp-ava { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; color: rgba(255,255,255,0.85); font-size: 24px; font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-person .dp-name { font-size: 12px; color: #fff; line-height: 1.3; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-person .dp-role { font-size: 11px; color: rgba(255,255,255,0.65); line-height: 1.3; }
+.detail-magnets { margin-top: 22px; padding-top: 16px; }
+.detail-magnet-list { display: flex; flex-direction: column; gap: 8px; margin: 0 -20px; padding: 0 20px; }
+.detail-magnet { background: rgba(255,255,255,0.12); border-radius: 12px; padding: 12px 14px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.detail-magnet:active { background: rgba(255,255,255,0.2); }
+.dm-row { display: flex; align-items: center; gap: 8px; }
+.dm-title { font-size: 13px; color: #fff; line-height: 1.4; flex: 1; min-width: 0; }
+.dm-size { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+.dm-tags { display: inline-flex; gap: 4px; flex: 0 0 auto; }
+.dm-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
+.dm-hd { color: #fff; background: #e0457b; }
+.dm-sub { color: #fff; background: #2f8fd6; }
 .trailer-mask { position: fixed; inset: 0; z-index: 700; background: rgba(0,0,0,0.6); display: none; }
 .trailer-mask.show { display: block; }
 .trailer-modal {
@@ -1890,6 +1901,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         </div>
         <div class="detail-plot" id="detailPlot"></div>
         <div class="detail-cast" id="detailCast"></div>
+        <div class="detail-magnets" id="detailMagnets" style="display:none;"></div>
         <div class="detail-shots" id="detailShots"></div>
       </div>
     </div>
@@ -2334,7 +2346,7 @@ var state = {
   adult: false,
   metaSource: 'tmdb', tpdbType: 'movie', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
   source: '', tpdbId: null, tpdbTypeRef: null,
-  javbusBase: '', javbusId: null   // 自建 JavBus 抓取服务地址（经 Worker /javbus 转发）；javbusId 记录番号供刷新
+  javbusBase: '', javbusId: null, javbusMagnets: []   // 自建 JavBus 抓取服务地址（经 Worker /javbus 转发）；javbusId 记录番号供刷新；javbusMagnets 为详情页抓取的磁力列表
 };
 var personState = { mode: 'actor', index: -1 }; // 'director' | 'actor'
 var currentGenreTab = 'normal';
@@ -4795,9 +4807,13 @@ function populateFromJavbus(d){
   state.genres = genres.slice();
   renderGenreChips();
 
-  // 演员：stars[]
+  // 演员：stars[]（含女优头像 photo）
   state.actors = (d.stars || []).slice(0, 5).map(function(s){
-    return { name: (s && s.name) || '', role: '', photo: null };
+    return { name: (s && s.name) || '', role: '', photo: (s && s.photo) || null };
+  });
+  // 女优头像：经 Worker /img 代理抓 JavBus 图床，转 dataURL 写回 actor.photo
+  state.actors.forEach(function(a, i){
+    if (a.photo) loadJavbusActorPhoto(a.photo, i);
   });
   // 导演：{id, name}
   state.directors = (d.director && d.director.name) ? [{ name: d.director.name, role: '', photo: null }] : [];
@@ -4806,6 +4822,7 @@ function populateFromJavbus(d){
   state.label  = (d.publisher && d.publisher.name) || '';
   state.series = (d.series && d.series.name) || '';
   state.dvdId = dvdId;
+  state.javbusMagnets = (d.magnets || []).slice();   // JavBus 详情页抓取的磁力列表
   state.trailer = '';   // JavBus 抓取未含预告片直链（R18 兜底可补全）
   renderCast();
 
@@ -5604,6 +5621,19 @@ function loadPersonPhotoFromTMDB(profilePath, mode, idx){
     }).catch(function(){});
 }
 
+/* JavBus 女优头像：经 Worker /img 代理抓图床，转 dataURL 写回 actors[idx].photo 并刷新 */
+function loadJavbusActorPhoto(photoUrl, idx){
+  var url = javbusImgUrl(photoUrl);
+  fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
+    .then(function(blob){
+      var reader = new FileReader();
+      reader.onload = function(evt){
+        var arr = state.actors;
+        if (arr[idx]){ arr[idx].photo = evt.target.result; renderCast(); }
+      };
+      reader.readAsDataURL(blob);
+    }).catch(function(){});
+}
 /* —— 图片裁剪（居中按比例；ratio=0 不裁剪） —— */
 function cropToRatio(dataUrl, ratio){
   return new Promise(function(resolve){
@@ -5776,7 +5806,8 @@ function buildFilmFromCurrent(){
       posterCandidates: state.posterCandidates || null, fanartCandidates: state.fanartCandidates || null,
       gallery: state.gallery || [], hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null,
       tpdbId: state.tpdbId || null, tpdbType: state.tpdbTypeRef || null, tmdbMediaType: state.tmdbMediaType || 'movie',
-      javbusId: state.javbusId || null
+      javbusId: state.javbusId || null,
+      javbusMagnets: (state.javbusMagnets || []).slice()
     },
     updatedAt: Date.now()
   };
@@ -5809,6 +5840,7 @@ function applyFilmData(film){
   state.source = film.source || '';   // 还原来源，编辑后保存保持原来源
   state.tpdbId = d.tpdbId || null; state.tpdbTypeRef = d.tpdbType || null;
   state.javbusId = d.javbusId || null;
+  state.javbusMagnets = (d.javbusMagnets || []).slice();   // 还原 JavBus 磁力列表
   state.tmdbMediaType = d.tmdbMediaType || 'movie';   // 还原 TMDB 媒体类型（电影/剧集），旧数据无此字段默认电影
   setFieldVal('title', d.title);
   setFieldVal('originaltitle', d.originaltitle);
@@ -6315,6 +6347,29 @@ function renderFilmDetail(film){
     castEl.innerHTML = ch;
   } else {
     castEl.innerHTML = '';
+  }
+  // 磁力（JavBus 抓取）：在演职人员下方展示
+  var magEl = document.getElementById('detailMagnets');
+  if (magEl){
+    var mags = (d.javbusMagnets || []).filter(function(m){ return m && m.link; });
+    if (mags.length){
+      var mh = '<div class="detail-cast-title">磁力（JavBus）</div><div class="detail-magnet-list">';
+      mags.forEach(function(m){
+        var tags = [];
+        if (m.isHD) tags.push('<span class="dm-tag dm-hd">HD</span>');
+        if (m.hasSubtitle) tags.push('<span class="dm-tag dm-sub">字幕</span>');
+        var tagHtml = tags.length ? '<span class="dm-tags">' + tags.join('') + '</span>' : '';
+        mh += '<div class="detail-magnet" data-link="' + escapeAttr(m.link) + '" onclick="copyText(this.dataset.link, \'磁链\')">'
+            + '<div class="dm-row"><div class="dm-title">' + escapeHtml(m.title || '磁力链接') + tagHtml + '</div></div>'
+            + (m.size ? '<div class="dm-size">' + escapeHtml(m.size) + '</div>' : '')
+            + '</div>';
+      });
+      mh += '</div>';
+      magEl.innerHTML = mh;
+      magEl.style.display = '';
+    } else {
+      magEl.innerHTML = ''; magEl.style.display = 'none';
+    }
   }
   // 剧照：1 张海报 + 最多 5 张剧照（海报恒为第一张）；兼容旧数据 fanart/fanartCandidates
   var shotEl = document.getElementById('detailShots');
