@@ -1406,7 +1406,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <div class="about-title">关于</div>
     <div class="about-body">
       <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-      <p>@Halfleave · v1.0.0</p>
+      <p>@Halfleave · v2.0.0</p>
     </div>
     <button class="about-done" onclick="closeAllSheets()">完成</button>
   </div>
@@ -1813,7 +1813,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           <div class="card" id="avFieldsCard">
             <div class="field" id="dvdidField">
               <label for="dvdid">番号</label>
-              <input class="ios-input" type="text" id="dvdid" placeholder="如 IPX-011" oninput="onDvdidInput(this)">
+              <input class="ios-input" type="text" id="dvdid" placeholder="请输入" oninput="onDvdidInput(this)">
             </div>
             <div class="field">
               <label for="studio">制作商</label>
@@ -4124,12 +4124,28 @@ var HEALING_PHRASES = [
   '星星为你闪烁','雨后会见彩虹','云朵知道答案','风也为你停留','花会沿路盛开',
   '未来闪闪发光','想要的都会来','被幸福追着跑','今天比昨天好','明天又是新生'
 ];
+var ADULT_PHRASES = [
+  '风吹过的骚穴','雨打湿的媚肉','夜色里的浪喘','月光下的软腰','晨露沾的粉乳',
+  '微风撩的耻毛','烛影摇的蜜缝','星光下的颤臀','细雨吻的乳尖','暗香浮动的穴',
+  '薄雾笼的浪体','清风过的湿痕','月色染的媚骨','晨曦照的软乳','夜露滴的骚水',
+  '微光里的扭腰','轻烟绕的香穴','细浪拍的臀瓣','暮色里的娇喘','晨风掀的裙底',
+  '月光舔的乳沟','雨丝滑过蜜唇','夜色吞没浪叫','清风撩起耻毛','烛火映的红痕',
+  '星辉落在软腰','薄雾裹的湿穴','晨露挂在乳尖','暗夜流的骚水','微风吻过媚肉',
+  '月光下的发浪','雨打湿的腿根','夜色里的软叫','清风过的蜜缝','烛影摇的颤乳',
+  '星光下的扭臀','薄雾笼的浪穴','晨曦照的湿痕','夜露滴落骚唇','微光里的媚喘',
+  '轻烟绕的软腰','细浪拍的粉穴','暮色吞的娇吟','晨风掀起裙摆','月光舔过乳尖',
+  '雨丝滑入蜜缝','夜色里的浪体','清风撩的骚水','烛火映的红唇','星辉落在颤臀'
+];
 var lastPhraseSlot = -1;
 var lastPhraseText = '';
+function currentPhrasePool(){
+  return state.themeHidden ? ADULT_PHRASES : HEALING_PHRASES;
+}
 function pickRandomPhrase(){
-  if (HEALING_PHRASES.length <= 1) return HEALING_PHRASES[0];
+  var pool = currentPhrasePool();
+  if (pool.length <= 1) return pool[0] || '';
   var p;
-  do { p = HEALING_PHRASES[Math.floor(Math.random() * HEALING_PHRASES.length)]; }
+  do { p = pool[Math.floor(Math.random() * pool.length)]; }
   while (p === lastPhraseText);
   lastPhraseText = p;
   return p;
@@ -4452,16 +4468,16 @@ function javName(v){
    未命中的英文原样保留，绝不丢数据。新增类别只需在此表补充即可。 */
 var GENRE_EN2ZH = {
   'IDOL': '偶像', 'SF': '科幻', 'VR': 'VR', 'VRSION': 'VR', '4HR+': '4小时以上',
-  'Acme': '阿酷', 'Amateur': '素人', 'Anal': '肛交', 'Anal Play': '肛交', 'Anime': '动画',
-  'Ass Lover': '美臀', 'Bakunyu': '爆乳', 'BDSM': '调教', 'Beautiful Girl': '美少女',
-  'Big Breasts': '巨乳', 'Big Pennis': '巨根', 'Big Tits': '巨乳', 'Black': '黑人',
+  'Acme': '高潮', 'Amateur': '素人', 'Anal': '肛交', 'Anal Play': '肛交', 'Anime': '动画',
+  'Ass Lover': '美臀', 'Bakunyu': '爆乳', 'BDSM': 'BDSM', 'Beautiful Girl': '美少女',
+  'Big Breasts': '巨乳', 'Big Pennis': '大屌', 'Big Tits': '巨乳', 'Black': '黑人',
   'BL': '耽美', 'Blow': '口交', 'Bodysuit': '紧身衣', 'Bukkake': '潮吹颜射',
-  'Costume': '角色扮演', 'Creampie': '中出', 'Cuckold': '寝取', 'Dildo': '按摩棒',
+  'Costume': '角色扮演', 'Creampie': '中出', 'Cuckold': '不贞', 'Dildo': '按摩棒',
   'DocPro': '医生', 'Documentary': '纪录片', 'Drink': '饮尿', 'Dream': '梦幻',
-  'Embarrassment': '羞辱', 'Exclusive Distribution': '独占配信', 'Fetish': '恋物',
+  'Embarrassment': '羞辱', 'Exclusive Distribution': '独家', 'Fetish': '恋物',
   'Fingering': '指交', 'Foot Job': '足交', 'Ganimen': '假阳具', 'Glasses': '眼镜',
   'Golden Shower': '饮尿', 'Hand Job': '手交', 'Hi-Def': '高清', 'Huge Butt': '巨臀',
-  'Idol': '偶像', 'Incest': '近亲相奸', 'JAV': '国产', 'Lady': '人妻',
+  'Idol': '偶像', 'Incest': '乱伦', 'JAV': '国产', 'Lady': '人妻',
   'Lesbian': '女同', 'Lotion': '润滑剂', 'Married Woman': '人妻', 'Masturbation': '自慰',
   'Mature': '熟女', 'Miscellaneous': '其他', 'Nampa': '逆搭讪', 'Naughty': '恶作剧',
   'Nurse': '护士', 'OL': '女职员', 'Onanie': '自慰', 'Orgy': '乱交', 'Other': '其他',
@@ -6818,6 +6834,11 @@ function setThemeHidden(hidden){
   updateSearchPlaceholder();
   syncThemeHiddenSwitch();
   idbPut('kv', 'themeHidden', state.themeHidden).catch(function(){});
+  // 切换模式后按新模式重新随机一条问候短语
+  if (typeof setWelcome === 'function'){
+    lastPhraseSlot = -1;
+    setWelcome();
+  }
 }
 /* 设置页「里模式」开关：一键切换里模式，复用 setThemeHidden 统一收口 UI 与持久化 */
 function toggleThemeHidden(checkbox){
@@ -7205,6 +7226,11 @@ function bootApp(){
       applyEditMode();
       syncSearchSourceUI();
       updateSearchPlaceholder();
+      // 启动加载到保存的模式后，按该模式刷新问候短语
+      if (typeof setWelcome === 'function'){
+        lastPhraseSlot = -1;
+        setWelcome();
+      }
     }).catch(function(){})
   ]).then(function(){
     // ③ 加载影片列表（较重的同步渲染，放到一帧之后做，避免卡住启动页）
