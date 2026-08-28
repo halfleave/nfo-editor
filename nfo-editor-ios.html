@@ -6744,32 +6744,6 @@ function dataUrlToBytesSync(dataUrl){
     return arr;
   } catch (e) { return null; }
 }
-/* 生成 zip 并触发下载：全程同步组装，绝不能 await。
-   若在用户点击手势外（如 canvas 异步回调）才调用 a.click()，iOS Safari 会拦截下载。 */
-function exportShare(){
-  var filename = sanitizeName(getVal('filename') || getVal('title') || 'movie');
-  var zipBlob;
-  try {
-    var zipFiles = [];
-    // nfo 文本（同步）
-    zipFiles.push({ name: filename + '.nfo', data: new TextEncoder().encode(generateNFOMovie()) });
-    // 海报 / 剧照 / logo（state 中已是 data URL 字符串，同步解码；非字符串则跳过）
-    if (typeof state.poster === 'string'){ var pb = dataUrlToBytesSync(state.poster); if (pb) zipFiles.push({ name: filename + '-poster.jpg', data: pb }); }
-    if (typeof state.fanart === 'string'){ var fb = dataUrlToBytesSync(state.fanart); if (fb) zipFiles.push({ name: filename + '-fanart.jpg', data: fb }); }
-    if (typeof state.logo === 'string'){ var lb = dataUrlToBytesSync(state.logo); if (lb) zipFiles.push({ name: filename + '-clearlogo.png', data: lb }); }
-    // 导演 / 演员头像
-    state.directors.forEach(function(d, i){ if (typeof d.photo === 'string'){ var b = dataUrlToBytesSync(d.photo); if (b) zipFiles.push({ name: sanitizeName(d.name || ('director' + i)) + '-director.jpg', data: b }); } });
-    state.actors.forEach(function(a, i){ if (typeof a.photo === 'string'){ var b = dataUrlToBytesSync(a.photo); if (b) zipFiles.push({ name: sanitizeName(a.name || ('actor' + i)) + '-actor.jpg', data: b }); } });
-    if (!zipFiles.length) throw new Error('没有可导出的内容');
-    zipBlob = new Blob([makeZip(zipFiles)], { type: 'application/zip' });
-  } catch (buildErr) {
-    showToast('生成导出文件失败：' + ((buildErr && buildErr.message) || buildErr), 'error');
-    return;
-  }
-
-  // —— 直接下载模式（移动端落入「文件」App 下载项目，桌面落入下载文件夹）——
-  directDownload(zipBlob, filename + '.zip');
-}
 
 /* 直接下载：创建 blob 链接并触发浏览器下载（iOS 落入 文件App→下载项目） */
 function directDownload(blob, name){
@@ -7013,19 +6987,6 @@ function clearExpiredFilms(){
   }).catch(function(err){
     // 自动清理失败不打扰用户
     console && console.error && console.error('自动清除缓存失败', err);
-  });
-}
-/* 保留手动全清入口，供后续扩展使用 */
-function clearAllFilmData(){
-  listFilms().then(function(films){
-    return Promise.all(films.map(function(f){ return deleteFilm(f.id); }));
-  }).then(function(){
-    currentFilmId = null;
-    newFilm();
-    renderOverview();
-    showToast('已清除所有影片数据', 'success');
-  }).catch(function(err){
-    showToast('清除失败：' + ((err && err.message) || err), 'error');
   });
 }
 
