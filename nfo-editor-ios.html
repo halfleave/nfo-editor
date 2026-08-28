@@ -7331,7 +7331,7 @@ function enableRubberBand(el){
   if (!el || el._rubberBound) return;
   el._rubberBound = true;
   var startY = 0, dragging = false, axis = 0, active = false;
-  function k(){ return el.clientHeight * 0.4; }           // 指数衰减常数（同时是最大位移上限）
+  function k(){ return el.clientHeight * 0.15; }          // 指数衰减常数（同时是最大位移上限）
   function needRubber(dy){
     var canScroll = el.scrollHeight > el.clientHeight + 1;
     if (!canScroll) return true;                          // 内容不足一屏：任意方向都回弹
