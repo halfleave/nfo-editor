@@ -3149,7 +3149,7 @@ function clearMagnetInput(){
 }
 function updateSubtitleBtn(){
   var btn = document.getElementById('dtActSub');
-  if (btn) btn.style.display = (getAssrtToken() || state.subtitleOs) ? '' : 'none';
+  if (btn) btn.style.display = (!state.adult && (getAssrtToken() || state.subtitleOs)) ? '' : 'none';
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(){
