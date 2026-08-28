@@ -426,7 +426,7 @@ img { display: block; }
 .home-tab.active { background: #fff; color: #2F2F2F; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
 
 /* 滚动区 */
-.page-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 var(--pad) calc(var(--sab) + 92px); }
+.page-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 var(--pad) calc(var(--sab) + 92px); overscroll-behavior: contain; will-change: transform; }
 #page-settings .page-scroll { padding-top: calc(var(--sat) + 64px); }
 #page-home .page-scroll { padding-top: calc(var(--sat) + 118px); }
 #page-search .page-scroll { padding-top: calc(var(--sat) + 84px); }
@@ -7326,6 +7326,61 @@ function hideSplash(){
   s.classList.add('hide');
   setTimeout(function(){ if (s && s.parentNode) s.parentNode.removeChild(s); }, 420);
 }
+// —— 页面 rubber-band 回弹：内容不满屏也能拖，指数阻尼（越拖越慢），松手弹性复位 ——
+function enableRubberBand(el){
+  if (!el || el._rubberBound) return;
+  el._rubberBound = true;
+  var startY = 0, dragging = false, axis = 0, active = false;
+  function k(){ return el.clientHeight * 0.4; }           // 指数衰减常数（同时是最大位移上限）
+  function needRubber(dy){
+    var canScroll = el.scrollHeight > el.clientHeight + 1;
+    if (!canScroll) return true;                          // 内容不足一屏：任意方向都回弹
+    var atTop = el.scrollTop <= 0;
+    var atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    if (dy > 0 && atTop) return true;                     // 已到顶仍下拉
+    if (dy < 0 && atBottom) return true;                  // 已到底仍上拉
+    return false;
+  }
+  el.addEventListener('touchstart', function(e){
+    if (e.touches.length !== 1){ dragging = false; return; }
+    startY = e.touches[0].clientY;
+    dragging = true; axis = 0; active = false;
+  }, { passive: true });
+  el.addEventListener('touchmove', function(e){
+    if (!dragging) return;
+    var dy = e.touches[0].clientY - startY;
+    if (axis === 0){
+      if (Math.abs(dy) < 6) return;                       // 阈值，避开点击/误触
+      axis = 1;                                           // 仅处理纵向
+    }
+    if (!needRubber(dy)) return;                          // 正常滚动区间交给原生
+    if (e.cancelable) e.preventDefault();                 // 接管手势，阻止原生回弹
+    active = true;
+    var kk = k();
+    var o = kk * (1 - Math.exp(-Math.abs(dy) / kk));       // 指数阻尼：位移随距离递增但增速递减
+    var off = (dy > 0 ? 1 : -1) * o;
+    el.style.transition = 'none';
+    el.style.transform = 'translate3d(0,' + off.toFixed(2) + 'px,0)';
+  }, { passive: false });
+  function release(){
+    if (!dragging) return;
+    dragging = false;
+    if (!active) return;
+    active = false;
+    el.style.transition = 'transform .55s cubic-bezier(0.34,1.4,0.64,1)';   // 带轻微回弹的弹性复位
+    el.style.transform = 'translate3d(0,0,0)';
+    setTimeout(function(){ el.style.transition = ''; }, 620);               // 仅清过渡，transform 留原位
+  }
+  el.addEventListener('touchend', release, { passive: true });
+  el.addEventListener('touchcancel', release, { passive: true });
+}
+function initRubberBand(){
+  ['page-home','page-search','page-settings'].forEach(function(pid){
+    var sc = document.querySelector('#' + pid + ' .page-scroll');
+    if (sc) enableRubberBand(sc);
+  });
+}
+
 function bootApp(){
   // ① 轻量 UI 装配（同步，先把界面骨架画出来）
   startSplashProgress();
@@ -7382,6 +7437,7 @@ function bootApp(){
     updateOverviewTabVisibility();
     checkFilmCap(700);
     enterHome();
+    initRubberBand();
   }).catch(function(){ enterHome(); });
 }
 
