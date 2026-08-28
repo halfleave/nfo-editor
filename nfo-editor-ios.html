@@ -1113,6 +1113,13 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 /* 标签管理弹窗固定 85% 高度 */
 .sheet.sheet-tall { min-height: 85vh; min-height: 85dvh; max-height: 85vh; max-height: 85dvh; }
 .sheet.sheet-tall .sheet-list { max-height: 68vh; max-height: 68dvh; }
+#adultPhraseSheet .ap-body { padding: 14px 16px 20px; box-sizing: border-box; }
+#adultPhraseSheet .ap-textarea { width: 100%; height: 45vh; height: 45dvh; box-sizing: border-box; border: none; border-radius: 12px; background: var(--card-fill); color: var(--text); font-size: 18px; line-height: 1.6; padding: 10px 12px; resize: none; -webkit-appearance: none; }
+#adultPhraseSheet .ap-textarea::placeholder { font-size: 18px; }
+#adultPhraseSheet .ap-tools { display: flex; justify-content: center; gap: 10px; margin: 12px 0 4px; }
+#adultPhraseSheet .ap-btn { flex: 0 0 50%; border: none; background: var(--accent); color: var(--accent-text); border-radius: 22px; padding: 9px 22px; font-size: 14px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
+#adultPhraseSheet .ap-btn:active { opacity: 0.86; }
+#adultPhraseSheet .ap-count { font-size: 12px; color: var(--label-2); margin-top: 8px; text-align: center; }
 /* 标签选择弹窗固定 70% 高度 */
 .sheet.sheet-select { min-height: 70vh; min-height: 70dvh; max-height: 70vh; max-height: 70dvh; }
 .sheet.sheet-select .sheet-list { max-height: 53vh; max-height: 53dvh; }
@@ -1563,6 +1570,25 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
   </div>
 
+  <!-- 加载配置（里模式专用） -->
+  <div class="sheet sheet-tall" id="adultPhraseSheet">
+    <div class="sheet-bar sheet-bar-center">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="sb-title">加载配置</span>
+      <button class="sb-pill" onclick="saveAdultPhrases()">保存</button>
+    </div>
+    <div class="ap-body">
+      <textarea class="ap-textarea" id="adultPhraseInput" oninput="updateAdultPhraseCount()" placeholder="请输入"></textarea>
+      <div class="ap-tools">
+        <button class="ap-btn" onclick="document.getElementById('adultPhraseFile').click()">导入</button>
+      </div>
+      <div class="ap-count" id="adultPhraseCount">共 0 条</div>
+      <input type="file" id="adultPhraseFile" accept=".txt,.json,application/json,text/plain" style="display:none" onchange="onAdultPhraseFile(this)">
+    </div>
+  </div>
+
   <!-- API 说明页 -->
   <div class="sheet sheet-tall" id="apiHelpSheet">
     <div class="sheet-bar sheet-bar-center">
@@ -1968,6 +1994,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <button class="settings-row" onclick="openGenreManage()">
           <span class="sr-icon" style="background:#5856D6;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M21.4 12.5l-8.6 8.6a2 2 0 0 1-2.8 0L2 12.9V3h9.9l8.5 8.5a2 2 0 0 1 0 2.8zM7 8a1 1 0 1 0-1 1 1 1 0 0 0 1-1z"/></svg></span>
           <span class="sr-label">类型配置</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <button class="settings-row" id="adultPhraseRow" onclick="openAdultPhraseSheet()" style="display:none;">
+          <span class="sr-icon" style="background:#FF2D55;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M5 4h14a1 1 0 0 1 1 1v15l-2.4-2-2.2 2-2-2-2 2-2.2-2L6 18l-2 1.6V5a1 1 0 0 1 1-1z"/></svg></span>
+          <span class="sr-label">加载配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
       </div>
@@ -3088,6 +3119,60 @@ function openApiKeySheet(){
   toggleMagnetWorkerClear();
   openSheet('apiSheet');
 }
+
+/* —— 加载配置（里模式专用，IndexedDB 持久化） —— */
+function syncAdultPhraseRow(){
+  var row = document.getElementById('adultPhraseRow');
+  if (row) row.style.display = state.themeHidden ? '' : 'none';
+}
+function openAdultPhraseSheet(){
+  document.getElementById('adultPhraseInput').value = currentAdultPhrases.join('\n');
+  updateAdultPhraseCount();
+  openSheet('adultPhraseSheet');
+}
+function updateAdultPhraseCount(){
+  var ta = document.getElementById('adultPhraseInput');
+  var n = ta ? ta.value.split('\n').map(function(s){ return s.trim(); }).filter(function(s){ return s.length; }).length : 0;
+  var el = document.getElementById('adultPhraseCount');
+  if (el) el.textContent = '共 ' + n + ' 条';
+}
+function saveAdultPhrases(){
+  var ta = document.getElementById('adultPhraseInput');
+  var list = ta.value.split('\n').map(function(s){ return s.trim(); }).filter(function(s){ return s.length; });
+  currentAdultPhrases = list;
+  setAdultLoadingPhrases(currentAdultPhrases);
+  closeAllSheets();
+  showToast('已保存', 'success');
+}
+function onAdultPhraseFile(input){
+  if (input.files && input.files[0]) importAdultPhrases(input.files[0]);
+  input.value = '';
+}
+function parsePhraseText(text){
+  text = (text || '').trim();
+  // 支持 JSON 数组 或 {"phrases":[...]}
+  try {
+    var j = JSON.parse(text);
+    if (Array.isArray(j)) return j.map(function(x){ return ('' + x).trim(); }).filter(function(x){ return x.length; });
+    if (j && Array.isArray(j.phrases)) return j.phrases.map(function(x){ return ('' + x).trim(); }).filter(function(x){ return x.length; });
+  } catch (err) {}
+  // 纯文本：按行拆分
+  return text.split(/\r?\n/).map(function(s){ return s.trim(); }).filter(function(s){ return s.length; });
+}
+function importAdultPhrases(file){
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var list = parsePhraseText(e.target.result);
+    if (!list.length){ showToast('文件里没有可识别的短语', 'error'); return; }
+    var ta = document.getElementById('adultPhraseInput');
+    ta.value = list.join('\n');
+    updateAdultPhraseCount();
+    showToast('已导入', 'success');
+  };
+  reader.onerror = function(){ showToast('读取文件失败', 'error'); };
+  reader.readAsText(file);
+}
 function toggleApiClear(){
   var btn = document.getElementById('apiClearBtn');
   var input = document.getElementById('apiKeyInput');
@@ -3277,7 +3362,7 @@ function searchMagnet(){
   var box = document.getElementById('magnetResults');
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → API 配置」填写磁力 Worker 地址。</div>'; return; }
-  box.innerHTML = '<div class="tmdb-msg"><span class="flower-spin">🌸</span>搜索中</div>';
+  box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   // 番号（如 IPX-011）不限制 category（bt4g 的 cat 过滤对番号不可靠，常返回 0 结果）；
   // 普通关键词用 cat=movie 更精准。
   var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
@@ -3300,7 +3385,7 @@ function searchMagnet(){
       if (err && err.name === 'AbortError'){ box.innerHTML = '<div class="tmdb-msg">搜索超时（&gt;35s）：服务无响应，请稍后重试或检查服务地址。</div>'; }
       else { box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'网络错误') + '，请确认服务地址正确且可访问。</div>'; }
     })
-    .finally(function(){ clearTimeout(to); });
+    .finally(function(){ clearTimeout(to); stopLoadingRotator(); });
 }
 function renderMagnetResults(items){
   var box = document.getElementById('magnetResults');
@@ -3442,7 +3527,7 @@ function searchSubtitles(){
   var useAssrt = subCurrentSrc === 'assrt' && !!getAssrtToken();
   var useOs = subCurrentSrc === 'os' && !!state.subtitleOs;
   if (!useAssrt && !useOs){ box.innerHTML = '<div class="tmdb-msg">请至少配置一个字幕源 Token</div>'; return; }
-  box.innerHTML = '<div class="tmdb-msg"><span class="flower-spin">🌸</span>搜索中</div>';
+  box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
   // 年份从词中剥离，单独走 year 参数；代理再拼成「名称.年份」（点）。移除年份后清掉尾部多余的 . 和空格
@@ -3469,7 +3554,7 @@ function searchSubtitles(){
       if (err && err.name === 'AbortError'){ box.innerHTML = '<div class="tmdb-msg">搜索超时，请重试</div>'; }
       else { box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'网络错误') + '</div>'; }
     })
-    .finally(function(){ clearTimeout(to); });
+    .finally(function(){ clearTimeout(to); stopLoadingRotator(); });
 }
 function renderSubtitleResults(items, warnings){
   subResultsCache = items || [];
@@ -4124,25 +4209,40 @@ var HEALING_PHRASES = [
   '星星为你闪烁','雨后会见彩虹','云朵知道答案','风也为你停留','花会沿路盛开',
   '未来闪闪发光','想要的都会来','被幸福追着跑','今天比昨天好','明天又是新生'
 ];
-var ADULT_PHRASES = [
-  '风吹过的骚穴','雨打湿的媚肉','夜色里的浪喘','月光下的软腰','晨露沾的粉乳',
-  '微风撩的耻毛','烛影摇的蜜缝','星光下的颤臀','细雨吻的乳尖','暗香浮动的穴',
-  '薄雾笼的浪体','清风过的湿痕','月色染的媚骨','晨曦照的软乳','夜露滴的骚水',
-  '微光里的扭腰','轻烟绕的香穴','细浪拍的臀瓣','暮色里的娇喘','晨风掀的裙底',
-  '月光舔的乳沟','雨丝滑过蜜唇','夜色吞没浪叫','清风撩起耻毛','烛火映的红痕',
-  '星辉落在软腰','薄雾裹的湿穴','晨露挂在乳尖','暗夜流的骚水','微风吻过媚肉',
-  '月光下的发浪','雨打湿的腿根','夜色里的软叫','清风过的蜜缝','烛影摇的颤乳',
-  '星光下的扭臀','薄雾笼的浪穴','晨曦照的湿痕','夜露滴落骚唇','微光里的媚喘',
-  '轻烟绕的软腰','细浪拍的粉穴','暮色吞的娇吟','晨风掀起裙摆','月光舔过乳尖',
-  '雨丝滑入蜜缝','夜色里的浪体','清风撩的骚水','烛火映的红唇','星辉落在颤臀'
-];
+function tmdbLoadingHtml(){
+  return '<div class="tmdb-msg"><span class="flower-spin">🌸</span>' + (state.themeHidden ? randomAdultLoadingPhrase() : '搜索中') + '</div>';
+}
+var _loadingRotTimer = null;
+function startLoadingRotator(el, render){
+  stopLoadingRotator();
+  if (!el) return;
+  _loadingRotTimer = setInterval(function(){
+    if (!el || !el.isConnected){ stopLoadingRotator(); return; }
+    el.innerHTML = render();
+  }, 3000);
+}
+function stopLoadingRotator(){
+  if (_loadingRotTimer){ clearInterval(_loadingRotTimer); _loadingRotTimer = null; }
+}
+function randomAdultLoadingPhrase(){
+  if (!currentAdultPhrases.length) return '';
+  return currentAdultPhrases[Math.floor(Math.random() * currentAdultPhrases.length)];
+}
+// 运行时缓存：启动时从 IndexedDB 载入用户自定义短语；应用不内置短语，未导入则为空
+var currentAdultPhrases = [];
+var ADULT_PHRASES_KEY = 'adultLoadingPhrases';
+function getAdultLoadingPhrases(){
+  return idbGet('kv', ADULT_PHRASES_KEY).then(function(v){
+    return (v && Array.isArray(v.list) && v.list.length) ? v.list : [];
+  });
+}
+function setAdultLoadingPhrases(list){
+  return idbPut('kv', ADULT_PHRASES_KEY, { list: list });
+}
 var lastPhraseSlot = -1;
 var lastPhraseText = '';
-function currentPhrasePool(){
-  return state.themeHidden ? ADULT_PHRASES : HEALING_PHRASES;
-}
 function pickRandomPhrase(){
-  var pool = currentPhrasePool();
+  var pool = HEALING_PHRASES;
   if (pool.length <= 1) return pool[0] || '';
   var p;
   do { p = pool[Math.floor(Math.random() * pool.length)]; }
@@ -4424,9 +4524,9 @@ function searchTMDB(){
   if (!q){ showToast('请输入影片名', 'error'); return; }
   addSearchHistory(q);
   var box = document.getElementById('tmdbResults');
-  box.innerHTML = '<div class="tmdb-msg"><span class="flower-spin">🌸</span>搜索中</div>';
+  box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   getTMDBKey().then(function(key){
-    if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → API 配置」填写 TMDB Key', 'error'); return; }
+    if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → API 配置」填写 TMDB Key', 'error'); stopLoadingRotator(); return; }
     // TMDB 成人内容：里模式解锁后包含，否则不包含
     var adult = state.themeHidden ? 'true' : 'false';
     var mt = state.tmdbMediaType;
@@ -4441,7 +4541,7 @@ function searchTMDB(){
         return r.json();
       })
       .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
-      .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; });
+      .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; }).finally(function(){ stopLoadingRotator(); });
   });
 }
 
@@ -4650,7 +4750,7 @@ function searchJAV(){
     return;
   }
   // 仅走 JavBus（已去掉 R18 兜底，便于单独验证 JavBus 搜索）
-  box.innerHTML = '<div class="tmdb-msg"><span class="flower-spin">🌸</span>搜索中</div>';
+  box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   fetchJavbusSearch(q, box);
 }
 /* JavBus 搜索（仅 JavBus，无 R18 兜底）：关键词/番号 → 列表 */
@@ -4672,8 +4772,8 @@ function fetchJavbusSearch(q, box){
     })
     .catch(function(e){
       var msg = (e && e.message) ? e.message : '未知错误';
-      box.innerHTML = '<div class="tmdb-msg">JavBus 搜索失败：' + escapeHtml(msg) + '（请确认 Worker 代理地址已配置且可用）</div>';
-    });
+    box.innerHTML = '<div class="tmdb-msg">JavBus 搜索失败：' + escapeHtml(msg) + '（请确认 Worker 代理地址已配置且可用）</div>';
+  }).finally(function(){ stopLoadingRotator(); });
 }
 /* 封面域名 pics.dmm.co.jp 无 CORS 头，已配 Worker 时经 /img 路由代理以绕跨域。
    搜索列表与保存导入共用同一代理 URL，浏览器即可命中缓存、避免重复拉取 */
@@ -6456,7 +6556,13 @@ function showShotLoaderNoMore(){
 function loadMoreShotsWithLoader(){
   var loader = detailShotsRow && detailShotsRow.parentNode && detailShotsRow.parentNode.querySelector('.detail-shots-loader');
   if (loader){
-    loader.innerHTML = '<span class="flower-spin">🌸</span><span class="dsl-text">加载中</span>';
+    var ltext;
+    if (state.themeHidden && currentAdultPhrases.length){   // 里模式：随机成人短语，与普通模式加载文案严格隔离
+      ltext = randomAdultLoadingPhrase();
+    } else {
+      ltext = '加载中';
+    }
+    loader.innerHTML = '<span class="flower-spin">🌸</span><span class="dsl-text">' + ltext + '</span>';
   }
   setTimeout(function(){
     appendMoreShots();
@@ -6833,12 +6939,8 @@ function setThemeHidden(hidden){
   syncSearchSourceUI();
   updateSearchPlaceholder();
   syncThemeHiddenSwitch();
+  syncAdultPhraseRow();
   idbPut('kv', 'themeHidden', state.themeHidden).catch(function(){});
-  // 切换模式后按新模式重新随机一条问候短语
-  if (typeof setWelcome === 'function'){
-    lastPhraseSlot = -1;
-    setWelcome();
-  }
 }
 /* 设置页「里模式」开关：一键切换里模式，复用 setThemeHidden 统一收口 UI 与持久化 */
 function toggleThemeHidden(checkbox){
@@ -7148,7 +7250,10 @@ function enableRubberBand(el){
   el.addEventListener('touchstart', function(e){
     if (e.touches.length !== 1){ dragging = false; return; }
     startY = e.touches[0].clientY;
-    dragging = true; axis = 0; active = false;
+    // 底部 15% 区域不触发 rubber-band：起点落在视口底部 15% 内则不进入回弹逻辑（原生滚动照常）
+    var vh = window.innerHeight || el.clientHeight;
+    dragging = !(startY > vh * 0.85);
+    axis = 0; active = false;
   }, { passive: true });
   el.addEventListener('touchmove', function(e){
     if (!dragging) return;
@@ -7214,6 +7319,7 @@ function bootApp(){
     getMagnetConfig().then(function(cfg){
       if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
     }).catch(function(){}),
+    getAdultLoadingPhrases().then(function(list){ currentAdultPhrases = list; }).catch(function(){}),
     getThemeHidden().then(function(h){
       state.themeHidden = !!h;
       if (!state.themeHidden){
@@ -7226,11 +7332,7 @@ function bootApp(){
       applyEditMode();
       syncSearchSourceUI();
       updateSearchPlaceholder();
-      // 启动加载到保存的模式后，按该模式刷新问候短语
-      if (typeof setWelcome === 'function'){
-        lastPhraseSlot = -1;
-        setWelcome();
-      }
+      syncAdultPhraseRow();
     }).catch(function(){})
   ]).then(function(){
     // ③ 加载影片列表（较重的同步渲染，放到一帧之后做，避免卡住启动页）

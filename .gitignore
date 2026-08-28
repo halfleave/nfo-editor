@@ -1,2 +1,5 @@
 # macOS
 .DS_Store
+
+# 成人短语导入文件（含敏感内容，勿推到公开仓库）
+adult-loading-phrases.json
