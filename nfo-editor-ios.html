@@ -102,9 +102,10 @@
 [data-theme="dark"] .hist-chip-del { background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.7); }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-/* 锁定文档，禁止 window 滚动：iOS 聚焦输入框/弹键盘时会滚动 body 把底部浏览器栏带出来，
-   锁死后滚动只发生在 .page-scroll / .sheet 等内部容器，standalone 模式不再露出底栏 */
-html, body { margin: 0; padding: 0; position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; }
+/* 注意：不要在此用 position:fixed/overflow:hidden 锁死 html,body —— 那会让 iOS 认为页面不可滚动，
+   导致 standalone 模式下底部浏览器栏常驻、无法隐藏。保留可滚动，底栏才能随滚动收起；
+   输入框聚焦时冒底栏的问题改由 bootApp 的全局 focusin 监听缓解（window.scrollTo(0,0)）。 */
+html, body { margin: 0; padding: 0; }
 body {
   font-family: var(--font);
   background: var(--bg);
