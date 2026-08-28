@@ -1559,15 +1559,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
           </button>
         </div>
       </div>
-      <div class="field field-stacked no-border">
-        <div class="api-input-wrap">
-          <span class="api-input-tag">Jav</span>
-          <input class="ios-input" type="text" id="javbusBaseInput" placeholder="https://.../javbus" oninput="toggleJavbusClear()" onblur="persistApiSettings()">
-          <button class="api-clear" id="javbusClearBtn" onclick="clearJavbusInput()" aria-label="清除" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -1595,11 +1586,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       </div>
       <div class="help-section" id="help-worker">
         <h4>Worker 代理地址</h4>
-        <p>部分在线功能（如搜索、获取详情）需要一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。不填则相关在线功能不可用。</p>
-      </div>
-      <div class="help-section" id="help-javbus">
-        <h4>JavBus 服务地址</h4>
-        <p>与「Worker 代理地址」指向同一个部署的 Worker，填写其 /javbus 子路径（如 https://你的worker.vercel.app/javbus）。该地址用于获取额外元数据，留空则无法使用相关功能。</p>
+        <p>部分在线功能（如搜索、获取详情、图片代理）需要一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。JavBus 等子功能会自动复用此地址（拼接 /javbus 子路径），无需单独填写。不填则相关在线功能不可用。</p>
       </div>
     </div>
   </div>
@@ -2528,7 +2515,7 @@ var state = {
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
   source: '',
-  javbusBase: '', javbusId: null, javbusMagnets: []   // 自建 JavBus 抓取服务地址（经 Worker /javbus 转发）；javbusId 记录番号供刷新；javbusMagnets 为详情页抓取的磁力列表
+  javbusId: null, javbusMagnets: []   // javbusId 记录番号供刷新；javbusMagnets 为详情页抓取的磁力列表；JavBus 基址由 Worker 代理地址自动推导（state.magnetWorker + '/javbus'）
 };
 var personState = { mode: 'actor', index: -1 }; // 'director' | 'actor'
 var currentGenreTab = 'normal';
@@ -3122,8 +3109,6 @@ function openApiKeySheet(){
   toggleSubOsClear();
   document.getElementById('magnetWorkerInput').value = state.magnetWorker || '';
   toggleMagnetWorkerClear();
-  document.getElementById('javbusBaseInput').value = state.javbusBase || '';
-  toggleJavbusClear();
   openSheet('apiSheet');
 }
 function toggleApiClear(){
@@ -3158,15 +3143,6 @@ function toggleMagnetWorkerClear(){
   var input = document.getElementById('magnetWorkerInput');
   if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
 }
-function toggleJavbusClear(){
-  var btn = document.getElementById('javbusClearBtn');
-  var input = document.getElementById('javbusBaseInput');
-  if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
-}
-function clearJavbusInput(){
-  var input = document.getElementById('javbusBaseInput');
-  if (input){ input.value = ''; toggleJavbusClear(); input.focus(); }
-}
 function clearMagnetInput(){
   var input = document.getElementById('magnetWorkerInput');
   if (input){ input.value = ''; toggleMagnetWorkerClear(); input.focus(); }
@@ -3182,13 +3158,11 @@ function persistApiSettings(){
     state.subtitleAssrt = (document.getElementById('subAssrtInput').value || '').trim();
     state.subtitleOs = (document.getElementById('subOsInput').value || '').trim();
     state.magnetWorker = (document.getElementById('magnetWorkerInput').value || '').trim();
-    state.javbusBase = (document.getElementById('javbusBaseInput').value || '').trim();
     Promise.all([
       setTMDBKey(state.apiKey),
       setSubtitleAssrt(state.subtitleAssrt),
       setSubtitleOs(state.subtitleOs),
-      setMagnetConfig({ worker: state.magnetWorker, category: 'video' }),
-      setJavbusBase(state.javbusBase)
+      setMagnetConfig({ worker: state.magnetWorker, category: 'video' })
     ]).then(function(){ updateSubtitleBtn(); }).catch(function(){});
   } catch(e) {}
 }
@@ -3219,8 +3193,7 @@ var apiGroupHelpData = {
   proxy: {
     title: '代理服务',
     sections: [
-      { h: 'Worker 代理地址', p: '部分在线功能（如搜索、获取详情）需要一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。不填则相关在线功能不可用。' },
-      { h: 'JavBus 服务地址', p: '与「Worker 代理地址」指向同一个部署的 Worker，填写其 /javbus 子路径（如 https://你的worker.vercel.app/javbus）。该地址用于获取额外元数据，留空则无法使用相关功能。' }
+      { h: 'Worker 代理地址', p: '部分在线功能（如搜索、获取详情、图片代理）需要一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。JavBus 等子功能会自动复用此地址（拼接 /javbus 子路径），无需单独填写。不填则相关在线功能不可用。' }
     ]
   }
 };
@@ -4448,8 +4421,9 @@ function getSubtitleOs(){ return idbGet('kv', 'subOs').then(function(v){ return 
 function setSubtitleOs(k){ return idbPut('kv', 'subOs', k || ''); }
 function getMagnetConfig(){ return idbGet('kv', 'magnetConfig').then(function(v){ return v || null; }); }
 function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
-function getJavbusBase(){ return idbGet('kv', 'javbusBase').then(function(v){ return v || ''; }); }
-function setJavbusBase(v){ return idbPut('kv', 'javbusBase', v || ''); }
+/* JavBus 基址：由「Worker 代理地址」自动推导（state.magnetWorker + '/javbus'），无需单独配置输入框 */
+function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') + '/javbus'; }
+function getJavbusBase(){ return Promise.resolve(javbusApiBase()); }
 
 /* —— TMDB 常量 —— */
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
@@ -4754,10 +4728,10 @@ function searchJAV(){
   if (!q){ showToast('请输入番号或关键词', 'error'); return; }
   addSearchHistory(q);
   var box = document.getElementById('tmdbResults');
-  var base = (state.javbusBase || '').replace(/\/$/, '');
+  var base = javbusApiBase();
   if (!base){
-    box.innerHTML = '<div class="tmdb-msg">未配置 JavBus 服务地址，请到「设置 → API 配置」填写。</div>';
-    showToast('请先配置 JavBus 服务地址', 'error');
+    box.innerHTML = '<div class="tmdb-msg">未配置 Worker 代理地址，请到「设置 → API 配置」填写。</div>';
+    showToast('请先配置 Worker 代理地址', 'error');
     return;
   }
   // 仅走 JavBus（已去掉 R18 兜底，便于单独验证 JavBus 搜索）
@@ -4766,7 +4740,7 @@ function searchJAV(){
 }
 /* JavBus 搜索（仅 JavBus，无 R18 兜底）：关键词/番号 → 列表 */
 function fetchJavbusSearch(q, box){
-  var base = (state.javbusBase || '').replace(/\/$/, '');
+  var base = javbusApiBase();
   var url = base + '/api/movies/search?keyword=' + encodeURIComponent(q) + '&_=' + Date.now();
   fetch(url, { cache: 'no-store' })
     .then(function(r){
@@ -4783,7 +4757,7 @@ function fetchJavbusSearch(q, box){
     })
     .catch(function(e){
       var msg = (e && e.message) ? e.message : '未知错误';
-      box.innerHTML = '<div class="tmdb-msg">JavBus 搜索失败：' + escapeHtml(msg) + '（请确认 JavBus 服务地址已配置且可用）</div>';
+      box.innerHTML = '<div class="tmdb-msg">JavBus 搜索失败：' + escapeHtml(msg) + '（请确认 Worker 代理地址已配置且可用）</div>';
     });
 }
 /* 封面域名 pics.dmm.co.jp 无 CORS 头，已配 Worker 时经 /img 路由代理以绕跨域。
@@ -4879,7 +4853,7 @@ function applyJavbusResult(i){
     quickSaveAndHome().then(function(){ return imgP0; }).then(silentRefreshCurrentFilm).catch(function(){});
     return;
   }
-  var base = (state.javbusBase || '').replace(/\/$/, '');
+  var base = javbusApiBase();
   showToast('加载详情中…');
   fetch(base + '/api/movies/' + encodeURIComponent(id))
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -5388,8 +5362,8 @@ function refreshFromJavbus(film){
   var data = film.data || {};
   var id = data.javbusId || state.javbusId || '';
   if (!id) return showToast('此影片未记录番号，无法从 JavBus 刷新', 'error');
-  var base = (state.javbusBase || '').replace(/\/$/, '');
-  if (!base) return showToast('请先到「设置 → API 配置」填写 JavBus 服务地址', 'error');
+  var base = javbusApiBase();
+  if (!base) return showToast('请先到「设置 → API 配置」填写 Worker 代理地址', 'error');
   showToast('正在从 JavBus 刷新…', 'success');
   currentFilmId = film.id;
   currentFilmLocked = !!film.locked;
@@ -7381,7 +7355,6 @@ function bootApp(){
     getMagnetConfig().then(function(cfg){
       if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
     }).catch(function(){}),
-    getJavbusBase().then(function(v){ state.javbusBase = v || ''; }).catch(function(){}),
     getThemeHidden().then(function(h){
       state.themeHidden = !!h;
       if (!state.themeHidden){
