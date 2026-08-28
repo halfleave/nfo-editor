@@ -1235,11 +1235,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
 /* 搜索页 */
 .search-box { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
-.search-box .search-input-wrap { position: relative; flex: 1; display: flex; align-items: center; }
+.search-box .search-input-wrap { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
 .search-box .ios-input,
-.search-box input[type="text"] { flex: 1; border: none; background: #fff; border-radius: 22px; padding: 11px 18px; font-size: 16px; color: var(--label); }
+.search-box input[type="text"] { flex: 1; min-width: 0; border: none; background: #fff; border-radius: 22px; padding: 11px 18px; font-size: 16px; color: var(--label); }
 .search-box .search-input-wrap .ios-input,
-.search-box .search-input-wrap input[type="text"] { padding-right: 96px; }
+.search-box .search-input-wrap input[type="text"] { padding-right: 40px; }
+.search-input-wrap.has-type-label .ios-input,
+.search-input-wrap.has-type-label input[type="text"] { padding-right: 76px; }
 .search-clear {
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   width: 22px; height: 22px; border: none; background: transparent; color: var(--label-3);
