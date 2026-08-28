@@ -3149,7 +3149,10 @@ function clearMagnetInput(){
 }
 function updateSubtitleBtn(){
   var btn = document.getElementById('dtActSub');
-  if (btn) btn.style.display = (!state.adult && (getAssrtToken() || state.subtitleOs)) ? '' : 'none';
+  // 字幕搜索仅对「TMDB 保存的影片」开放：source==='tmdb'（自定义来源 custom、AV 来源 jav/tpdb 均排除）；
+  // 旧版未记录 source 的影片（source===''）按非成人回退，保留其字幕能力不退化。
+  var tmdbOnly = (state.source === 'tmdb') || (state.source === '' && !state.adult);
+  if (btn) btn.style.display = (tmdbOnly && (getAssrtToken() || state.subtitleOs)) ? '' : 'none';
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(){
@@ -3375,6 +3378,8 @@ var subOrigVal = '';
 var subYear = '';
 var subUserEdited = false;
 function openSubtitleSheet(){
+  // 兜底守卫：字幕搜索仅适用于 TMDB 保存的影片（自定义/AV 来源均不可用）
+  if (!((state.source === 'tmdb') || (state.source === '' && !state.adult))){ showToast('字幕搜索仅适用于 TMDB 保存的影片', 'error'); return; }
   if (!(getAssrtToken() || state.subtitleOs)){ showToast('请先到「设置 → API 配置」填写字幕源 Token', 'error'); return; }
   if (!state.magnetWorker){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
   openSheet('subtitleSheet');
