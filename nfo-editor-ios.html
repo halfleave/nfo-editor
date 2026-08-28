@@ -1514,7 +1514,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <div class="field field-stacked no-border api-key-field">
         <div class="api-input-wrap">
           <span class="api-input-tag">TMDB</span>
-          <input class="ios-input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" oninput="toggleApiClear()" onblur="persistApiSettings()">
+          <input class="ios-input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" oninput="toggleApiClear()" onblur="persistApiSettings(false)">
           <button class="api-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
@@ -1529,7 +1529,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <div class="field field-stacked no-border">
         <div class="api-input-wrap">
           <span class="api-input-tag">Assrt</span>
-          <input class="ios-input" type="text" id="subAssrtInput" placeholder="粘贴 API Token" oninput="toggleSubAssrtClear()" onblur="persistApiSettings()">
+          <input class="ios-input" type="text" id="subAssrtInput" placeholder="粘贴 API Token" oninput="toggleSubAssrtClear()" onblur="persistApiSettings(false)">
           <button class="api-clear" id="subAssrtClearBtn" onclick="clearSubAssrtInput()" aria-label="清除" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
@@ -1538,7 +1538,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <div class="field field-stacked no-border">
         <div class="api-input-wrap">
           <span class="api-input-tag">Sub</span>
-          <input class="ios-input" type="text" id="subOsInput" placeholder="粘贴 API Key" oninput="toggleSubOsClear()" onblur="persistApiSettings()">
+          <input class="ios-input" type="text" id="subOsInput" placeholder="粘贴 API Key" oninput="toggleSubOsClear()" onblur="persistApiSettings(false)">
           <button class="api-clear" id="subOsClearBtn" onclick="clearSubOsInput()" aria-label="清除" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
@@ -1553,7 +1553,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <div class="field field-stacked no-border">
         <div class="api-input-wrap">
           <span class="api-input-tag">Worker</span>
-          <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app" oninput="toggleMagnetWorkerClear()" onblur="persistApiSettings()">
+          <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app" oninput="toggleMagnetWorkerClear()" onblur="persistApiSettings(false)">
           <button class="api-clear" id="magnetClearBtn" onclick="clearMagnetInput()" aria-label="清除" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
@@ -2353,7 +2353,7 @@ function ctxOutsideClose(e){
 function closeAllSheets() {
   // API 配置弹窗关闭前自动保存
   var apiSheet = document.getElementById('apiSheet');
-  if (apiSheet && apiSheet.classList.contains('show')) persistApiSettings();
+  if (apiSheet && apiSheet.classList.contains('show')) persistApiSettings(false);
   closeAllSwipes();
   cancelDrag();
   overviewSuppressClick = false;
@@ -3155,12 +3155,18 @@ function updateSubtitleBtn(){
   if (btn) btn.style.display = (tmdbOnly && (getAssrtToken() || state.subtitleOs)) ? '' : 'none';
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
-function persistApiSettings(){
+function persistApiSettings(allowClear){
   try {
-    state.apiKey = (document.getElementById('apiKeyInput').value || '').trim();
-    state.subtitleAssrt = (document.getElementById('subAssrtInput').value || '').trim();
-    state.subtitleOs = (document.getElementById('subOsInput').value || '').trim();
-    state.magnetWorker = (document.getElementById('magnetWorkerInput').value || '').trim();
+    var apiKey = (document.getElementById('apiKeyInput').value || '').trim();
+    var subAssrt = (document.getElementById('subAssrtInput').value || '').trim();
+    var subOs = (document.getElementById('subOsInput').value || '').trim();
+    var w = (document.getElementById('magnetWorkerInput').value || '').trim();
+    // 自动保存（失焦 / 关闭面板）时，空值不覆盖已保存的非空配置，避免误清空全局设置；
+    // 仅显式点「保存」(allowClear=true) 才允许用空值清空某项。
+    if (allowClear || apiKey || !state.apiKey) state.apiKey = apiKey;
+    if (allowClear || subAssrt || !state.subtitleAssrt) state.subtitleAssrt = subAssrt;
+    if (allowClear || subOs || !state.subtitleOs) state.subtitleOs = subOs;
+    if (allowClear || w || !state.magnetWorker) state.magnetWorker = w;
     Promise.all([
       setTMDBKey(state.apiKey),
       setSubtitleAssrt(state.subtitleAssrt),
@@ -3171,7 +3177,7 @@ function persistApiSettings(){
 }
 function saveApiKey(){
   try {
-    persistApiSettings();
+    persistApiSettings(true);
     closeAllSheets();
     showToast('已保存', 'success');
   } catch(e) {
@@ -7336,7 +7342,7 @@ function enableRubberBand(el){
   if (!el || el._rubberBound) return;
   el._rubberBound = true;
   var startY = 0, dragging = false, axis = 0, active = false;
-  function k(){ return el.clientHeight * 0.15; }          // 指数衰减常数（同时是最大位移上限）
+  function k(){ return el.clientHeight * 0.1; }          // 指数衰减常数（同时是最大位移上限）
   function needRubber(dy){
     var canScroll = el.scrollHeight > el.clientHeight + 1;
     if (!canScroll) return true;                          // 内容不足一屏：任意方向都回弹
