@@ -1132,10 +1132,34 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 /* API 配置弹窗：输入框浅灰底，提示语 */
 #apiSheet .ios-input,
 #apiSheet select.ios-input { background: #F2F2F7; }
-#apiSheet .sheet-note { text-align: left; color: var(--label-2); font-size: 13px; padding: 0 16px; }
-#apiSheet .api-help-note { text-align: center; cursor: pointer; }
+#apiSheet .api-group { margin-bottom: 18px; }
+#apiSheet .api-group:last-of-type { margin-bottom: 0; }
+#apiSheet .api-group-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+#apiSheet .api-group-title { font-size: 13px; font-weight: 600; color: var(--label-2); margin: 0; letter-spacing: 0.2px; }
+#apiSheet .api-help-q-sm { width: 16px; height: 16px; min-width: 16px; border-radius: 50%; border: 1px solid var(--sep); background: var(--card-fill); color: var(--label-2); font-size: 10px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#apiSheet .api-help-q-sm:active { background: rgba(0,0,0,0.08); color: var(--accent); border-color: var(--accent); }
+#apiSheet .field-stacked { padding: 0 0 10px; }
+#apiSheet .field-stacked:last-child { padding-bottom: 0; }
+#apiSheet .api-input-wrap { position: relative; display: flex; align-items: center; }
+#apiSheet .api-input-tag { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 600; color: var(--label-2); pointer-events: none; white-space: nowrap; }
+#apiSheet .api-input-wrap .ios-input { width: 100%; padding-left: 64px; padding-right: 42px; font-size: 15px; }
+#apiSheet .api-input-wrap .ios-input::placeholder { color: var(--label-3); }
+/* API 分组帮助中间弹窗 */
+.api-group-help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 1; transition: opacity .2s ease; }
+.api-group-help-overlay.api-group-help-hidden { opacity: 0; pointer-events: none; }
+.api-group-help-card { background: var(--card-fill); border-radius: 18px; width: min(86vw, 340px); max-height: 70vh; box-shadow: 0 20px 60px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; }
+.api-group-help-title { text-align: center; font-size: 17px; font-weight: 600; padding: 18px 16px 10px; color: var(--label); }
+.api-group-help-body { padding: 0 16px 16px; overflow-y: auto; font-size: 14px; line-height: 1.55; color: var(--label-2); }
+.api-group-help-body h4 { margin: 12px 0 6px; font-size: 15px; color: var(--label); }
+.api-group-help-body h4:first-child { margin-top: 0; }
+.api-group-help-body p { margin: 0 0 10px; }
+.api-group-help-body p:last-child { margin-bottom: 0; }
+.api-group-help-body a { color: var(--accent); }
+.api-group-help-btn { width: 100%; border: none; border-top: 0.5px solid var(--sep); background: transparent; color: var(--accent); font-size: 16px; font-weight: 500; padding: 14px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.api-group-help-btn:active { background: rgba(0,0,0,0.06); }
 #apiHelpSheet .help-body { padding: 16px; }
-#apiHelpSheet .help-section { margin-bottom: 20px; }
+#apiHelpSheet .help-section { margin-bottom: 16px; padding-left: 12px; border-left: 3px solid transparent; transition: border-color .2s ease, background .2s ease; }
+#apiHelpSheet .help-section.highlight { border-left-color: var(--accent); background: rgba(0,0,0,0.04); }
 #apiHelpSheet .help-section h4 { margin: 0 0 6px; font-size: 15px; color: var(--label); }
 #apiHelpSheet .help-section p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--label-2); }
 #apiHelpSheet .help-section a { color: var(--accent); }
@@ -1481,52 +1505,69 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <span class="sb-title">API 配置</span>
       <button class="sb-pill" onclick="saveApiKey()">保存</button>
     </div>
-    <div class="field field-stacked no-border api-key-field">
-      <label for="apiKeyInput">TMDB Key</label>
-      <div class="api-input-wrap">
-        <input class="ios-input" type="text" id="apiKeyInput" placeholder="粘贴 TMDB API Key" oninput="toggleApiClear()" onblur="persistApiSettings()">
-        <button class="api-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
+    <div class="api-group">
+      <div class="api-group-title-row">
+        <div class="api-group-title">元数据</div>
+        <button class="api-help-q-sm" onclick="openApiGroupHelp('metadata')" aria-label="关于元数据">?</button>
+      </div>
+      <div class="field field-stacked no-border api-key-field">
+        <div class="api-input-wrap">
+          <span class="api-input-tag">TMDB</span>
+          <input class="ios-input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" oninput="toggleApiClear()" onblur="persistApiSettings()">
+          <button class="api-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
       </div>
     </div>
-    <div class="field field-stacked no-border">
-      <label for="subAssrtInput">Assrt Token</label>
-      <div class="api-input-wrap">
-        <input class="ios-input" type="text" id="subAssrtInput" placeholder="粘贴 assrt.net API Token" oninput="toggleSubAssrtClear()" onblur="persistApiSettings()">
-        <button class="api-clear" id="subAssrtClearBtn" onclick="clearSubAssrtInput()" aria-label="清除" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
+    <div class="api-group">
+      <div class="api-group-title-row">
+        <div class="api-group-title">字幕</div>
+        <button class="api-help-q-sm" onclick="openApiGroupHelp('subtitles')" aria-label="关于字幕">?</button>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <span class="api-input-tag">Assrt</span>
+          <input class="ios-input" type="text" id="subAssrtInput" placeholder="粘贴 API Token" oninput="toggleSubAssrtClear()" onblur="persistApiSettings()">
+          <button class="api-clear" id="subAssrtClearBtn" onclick="clearSubAssrtInput()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <span class="api-input-tag">Sub</span>
+          <input class="ios-input" type="text" id="subOsInput" placeholder="粘贴 API Key" oninput="toggleSubOsClear()" onblur="persistApiSettings()">
+          <button class="api-clear" id="subOsClearBtn" onclick="clearSubOsInput()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
       </div>
     </div>
-    <div class="field field-stacked no-border">
-      <label for="subOsInput">OpenSubtitles Key</label>
-      <div class="api-input-wrap">
-        <input class="ios-input" type="text" id="subOsInput" placeholder="粘贴 OpenSubtitles API Key" oninput="toggleSubOsClear()" onblur="persistApiSettings()">
-        <button class="api-clear" id="subOsClearBtn" onclick="clearSubOsInput()" aria-label="清除" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
+    <div class="api-group">
+      <div class="api-group-title-row">
+        <div class="api-group-title">代理服务</div>
+        <button class="api-help-q-sm" onclick="openApiGroupHelp('proxy')" aria-label="关于代理服务">?</button>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <span class="api-input-tag">Worker</span>
+          <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app" oninput="toggleMagnetWorkerClear()" onblur="persistApiSettings()">
+          <button class="api-clear" id="magnetClearBtn" onclick="clearMagnetInput()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <span class="api-input-tag">Jav</span>
+          <input class="ios-input" type="text" id="javbusBaseInput" placeholder="https://.../javbus" oninput="toggleJavbusClear()" onblur="persistApiSettings()">
+          <button class="api-clear" id="javbusClearBtn" onclick="clearJavbusInput()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
       </div>
     </div>
-    <div class="field field-stacked no-border">
-      <label for="magnetWorkerInput">Worker 代理地址</label>
-      <div class="api-input-wrap">
-        <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app" oninput="toggleMagnetWorkerClear()" onblur="persistApiSettings()">
-        <button class="api-clear" id="magnetClearBtn" onclick="clearMagnetInput()" aria-label="清除" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="field field-stacked no-border">
-      <label for="javbusBaseInput">JavBus 服务地址</label>
-      <div class="api-input-wrap">
-        <input class="ios-input" type="text" id="javbusBaseInput" placeholder="https://你的worker.vercel.app/javbus" oninput="toggleJavbusClear()" onblur="persistApiSettings()">
-        <button class="api-clear" id="javbusClearBtn" onclick="clearJavbusInput()" aria-label="清除" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-    </div>
-    <p class="sheet-note api-help-note" onclick="openApiHelpSheet()">如何获取这些 API？</p>
   </div>
 
   <!-- API 说明页 -->
@@ -1539,22 +1580,35 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       <span class="sb-spacer"></span>
     </div>
     <div class="help-body">
-      <div class="help-section">
+      <div class="help-section" id="help-tmdb">
         <h4>TMDB Key</h4>
         <p>访问 <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a>，注册并登录后创建 API Key，复制后粘贴到「TMDB Key」。</p>
       </div>
-      <div class="help-section">
+      <div class="help-section" id="help-assrt">
         <h4>Assrt Token</h4>
         <p>访问 <a href="https://assrt.net/usercp.php" target="_blank">assrt.net/usercp.php</a> 登录，在用户中心找到 API Token 并粘贴到「Assrt Token」。</p>
       </div>
-      <div class="help-section">
+      <div class="help-section" id="help-os">
         <h4>OpenSubtitles Key</h4>
         <p>访问 <a href="https://www.opensubtitles.com/en/consumers" target="_blank">opensubtitles.com/consumers</a>，注册应用后获取 API Key，粘贴到「OpenSubtitles Key」。</p>
       </div>
-      <div class="help-section">
-        <h4>磁力代理地址</h4>
-        <p>磁力搜索需一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。它与上方 AV 元数据共用同一个 Worker。不填则无法使用「搜磁力」与「搜 AV」。</p>
+      <div class="help-section" id="help-worker">
+        <h4>Worker 代理地址</h4>
+        <p>部分在线功能（如搜索、获取详情）需要一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。不填则相关在线功能不可用。</p>
       </div>
+      <div class="help-section" id="help-javbus">
+        <h4>JavBus 服务地址</h4>
+        <p>与「Worker 代理地址」指向同一个部署的 Worker，填写其 /javbus 子路径（如 https://你的worker.vercel.app/javbus）。该地址用于获取额外元数据，留空则无法使用相关功能。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- API 分组帮助（中间弹窗） -->
+  <div class="api-group-help-overlay api-group-help-hidden" id="apiGroupHelpOverlay" onclick="closeApiGroupHelp()">
+    <div class="api-group-help-card" onclick="event.stopPropagation()">
+      <div class="api-group-help-title" id="apiGroupHelpTitle"></div>
+      <div class="api-group-help-body" id="apiGroupHelpBody"></div>
+      <button class="api-group-help-btn" onclick="closeApiGroupHelp()">知道了</button>
     </div>
   </div>
 
@@ -3146,7 +3200,56 @@ function saveApiKey(){
     showToast('保存失败', 'error');
   }
 }
-function openApiHelpSheet(){ openSheet('apiHelpSheet'); }
+/* API 分组帮助数据（中间弹窗） */
+var apiGroupHelpData = {
+  metadata: {
+    title: '元数据',
+    sections: [
+      { h: 'TMDB Key', p: '访问 <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a>，注册并登录后创建 API Key，复制后粘贴到「TMDB Key」。' }
+    ]
+  },
+  subtitles: {
+    title: '字幕',
+    sections: [
+      { h: 'Assrt Token', p: '访问 <a href="https://assrt.net/usercp.php" target="_blank">assrt.net/usercp.php</a> 登录，在用户中心找到 API Token 并粘贴到「Assrt Token」。' },
+      { h: 'OpenSubtitles Key', p: '访问 <a href="https://www.opensubtitles.com/en/consumers" target="_blank">opensubtitles.com/consumers</a>，注册应用后获取 API Key，粘贴到「OpenSubtitles Key」。' }
+    ]
+  },
+  proxy: {
+    title: '代理服务',
+    sections: [
+      { h: 'Worker 代理地址', p: '部分在线功能（如搜索、获取详情）需要一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。不填则相关在线功能不可用。' },
+      { h: 'JavBus 服务地址', p: '与「Worker 代理地址」指向同一个部署的 Worker，填写其 /javbus 子路径（如 https://你的worker.vercel.app/javbus）。该地址用于获取额外元数据，留空则无法使用相关功能。' }
+    ]
+  }
+};
+function openApiGroupHelp(key){
+  var data = apiGroupHelpData[key];
+  if (!data) return;
+  var title = document.getElementById('apiGroupHelpTitle');
+  var body = document.getElementById('apiGroupHelpBody');
+  var overlay = document.getElementById('apiGroupHelpOverlay');
+  if (title) title.textContent = data.title;
+  if (body) body.innerHTML = data.sections.map(function(s){ return '<h4>' + escapeHtml(s.h) + '</h4><p>' + s.p + '</p>'; }).join('');
+  if (overlay) overlay.classList.remove('api-group-help-hidden');
+}
+function closeApiGroupHelp(){
+  var overlay = document.getElementById('apiGroupHelpOverlay');
+  if (overlay) overlay.classList.add('api-group-help-hidden');
+}
+function openApiHelpSheet(key){
+  openSheet('apiHelpSheet');
+  if (key){
+    setTimeout(function(){
+      var el = document.getElementById('help-' + key);
+      if (el){
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('highlight');
+        setTimeout(function(){ el.classList.remove('highlight'); }, 1600);
+      }
+    }, 260);
+  }
+}
 function closeApiHelp(){
   // API 说明关闭后回到 API 配置弹窗（不关闭整个弹窗栈）
   var help = document.getElementById('apiHelpSheet');
