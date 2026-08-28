@@ -665,9 +665,9 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .preview-dots .page-num { font-size: 13px; font-weight: 600; color: #fff; background: rgba(0,0,0,0.42); padding: 4px 12px; border-radius: 12px; letter-spacing: 0.5px; }
 /* 全屏图片操作按钮：恢复 + 下载，线性图标，位于屏幕 85% 高度；下载按钮常驻 */
 .image-preview-actions { position: absolute; left: 0; right: 0; top: 85vh; display: flex; justify-content: center; align-items: center; gap: 28px; z-index: 5; pointer-events: none; }
-.ipa-btn { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.85); background: rgba(0,0,0,0.38); color: #fff; display: flex; align-items: center; justify-content: center; pointer-events: auto; -webkit-tap-highlight-color: transparent; }
+.ipa-btn { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.85); background: rgba(0,0,0,0.38); color: #fff; opacity: 0.6; display: flex; align-items: center; justify-content: center; pointer-events: auto; -webkit-tap-highlight-color: transparent; }
 .ipa-btn svg { width: 22px; height: 22px; }
-.ipa-btn:active { background: rgba(255,255,255,0.15); }
+.ipa-btn:active { background: rgba(255,255,255,0.15); opacity: 1; }
 .ipa-btn.hidden { display: none; }
 
 /* ===== 启动页（避免进入时白屏） ===== */
@@ -2090,7 +2090,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     <button class="image-preview-close" onclick="closeImagePreview()" aria-label="关闭">×</button>
     <div class="image-preview-actions" id="imagePreviewActions">
       <button class="ipa-btn hidden" id="resetZoomBtn" onclick="resetPreviewZoom()" aria-label="恢复原始大小">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4V9M15 4H20V9M9 20H4V15M15 20H20V15"/></svg>
       </button>
       <button class="ipa-btn" onclick="downloadCurrentPreview()" aria-label="下载当前图片">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 12l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
@@ -3606,6 +3606,8 @@ function getCurrentPreviewImg(){
   return slide ? slide.querySelector('img') : null;
 }
 function resetPreviewZoom(){
+  var img = getCurrentPreviewImg();
+  if (img) img.style.transition = '';
   previewZoom = { scale: 1, tx: 0, ty: 0 };
   applyPreviewZoom();
 }
@@ -3613,7 +3615,7 @@ function applyPreviewZoom(){
   var img = getCurrentPreviewImg();
   var resetBtn = document.getElementById('resetZoomBtn');
   if (img){
-    img.style.transform = 'translate(' + previewZoom.tx + 'px,' + previewZoom.ty + 'px) scale(' + previewZoom.scale + ')';
+    img.style.transform = 'translate3d(' + previewZoom.tx + 'px,' + previewZoom.ty + 'px,0) scale(' + previewZoom.scale + ')';
   }
   // 恢复按钮仅在放大时显示；下载按钮常驻（不在 actions 层控制显隐）
   if (resetBtn){
@@ -3636,30 +3638,47 @@ function getPinchDist(touches){
   var dy = touches[0].clientY - touches[1].clientY;
   return Math.sqrt(dx*dx + dy*dy);
 }
+function getPinchMid(touches){
+  return { x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 };
+}
+var zoomRAF = false;
+function scheduleApplyZoom(){
+  if (zoomRAF) return;
+  zoomRAF = true;
+  requestAnimationFrame(function(){ zoomRAF = false; applyPreviewZoom(); });
+}
 function setupImagePreviewZoom(){
   var track = document.getElementById('imagePreviewTrack');
   if (!track || track.zoomBound) return;
   track.zoomBound = true;
-  var startTouches = [];
   var startDist = 0, startScale = 1;
-  var startTx = 0, startTy = 0, startX = 0, startY = 0;
+  var startMid = { x: 0, y: 0 }, trackCenter = { x: 0, y: 0 };
+  var startX = 0, startY = 0, startTx = 0, startTy = 0;
   var panning = false;
   var lastTap = 0;
+  function setZoomTransition(on){
+    var img = getCurrentPreviewImg();
+    if (img) img.style.transition = on ? '' : 'none';
+  }
   track.addEventListener('touchstart', function(e){
     var img = getCurrentPreviewImg();
     if (!img) return;
-    startTouches = Array.from(e.touches);
     if (e.touches.length === 2){
       e.preventDefault();
+      var rect = track.getBoundingClientRect();
+      trackCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
       startDist = getPinchDist(e.touches);
       startScale = previewZoom.scale;
+      startMid = getPinchMid(e.touches);
       panning = false;
+      setZoomTransition(false); // 手势过程中关掉过渡，跟手不拖尾
     } else if (e.touches.length === 1){
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       startTx = previewZoom.tx;
       startTy = previewZoom.ty;
       panning = previewZoom.scale > 1.05;
+      if (panning) setZoomTransition(false);
     }
   }, { passive: false });
   track.addEventListener('touchmove', function(e){
@@ -3667,9 +3686,15 @@ function setupImagePreviewZoom(){
       e.preventDefault();
       var dist = getPinchDist(e.touches);
       if (startDist > 0){
-        previewZoom.scale = Math.max(1, Math.min(5, startScale * (dist / startDist)));
+        // 以双指中点为焦点缩放：图片不脱离手指，手感自然
+        var newScale = Math.max(1, Math.min(5, startScale * (dist / startDist)));
+        var f = newScale / startScale;
+        var mid = getPinchMid(e.touches);
+        previewZoom.scale = newScale;
+        previewZoom.tx = (mid.x - trackCenter.x) - (startMid.x - trackCenter.x) * f;
+        previewZoom.ty = (mid.y - trackCenter.y) - (startMid.y - trackCenter.y) * f;
         clampPreviewPan();
-        applyPreviewZoom();
+        scheduleApplyZoom();
       }
     } else if (e.touches.length === 1 && panning){
       e.preventDefault();
@@ -3678,14 +3703,13 @@ function setupImagePreviewZoom(){
       previewZoom.tx = startTx + dx;
       previewZoom.ty = startTy + dy;
       clampPreviewPan();
-      applyPreviewZoom();
+      scheduleApplyZoom();
     }
   }, { passive: false });
   track.addEventListener('touchend', function(e){
     if (e.touches.length === 0){
       clampPreviewPan();
       applyPreviewZoom();
-      startTouches = [];
       panning = false;
     } else if (e.touches.length === 1){
       // 双指松一指后切换为单指平移
@@ -3696,10 +3720,11 @@ function setupImagePreviewZoom(){
       panning = previewZoom.scale > 1.05;
     }
   });
-  // 双击放大/恢复
+  // 双击放大/恢复（带动画过渡）
   track.addEventListener('click', function(e){
     var now = Date.now();
     if (now - lastTap < 300){
+      setZoomTransition(true);
       if (previewZoom.scale > 1.05) resetPreviewZoom();
       else {
         previewZoom.scale = 2.5;
@@ -3718,19 +3743,36 @@ function downloadCurrentPreview(){
   // 尝试从 URL 取真实后缀
   var extMatch = (url.split('?')[0] || '').match(/\.(jpe?g|png|gif|webp|bmp)$/i);
   if (extMatch) filename = 'nfo-image-' + (previewIndex + 1) + '.' + extMatch[1].toLowerCase();
-  if (url.indexOf('data:') === 0){
+  function doAnchor(blobOrDataUrl){
+    if (typeof blobOrDataUrl === 'string'){
+      var a = document.createElement('a');
+      a.href = blobOrDataUrl; a.download = filename; a.click();
+      return;
+    }
+    var objUrl = URL.createObjectURL(blobOrDataUrl);
     var a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
+    a.href = objUrl; a.download = filename; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(objUrl); }, 5000);
+  }
+  // iOS 用 Web Share（files）可直接在系统分享面板里「存储到照片」；其余环境回退下载
+  function shareOrDownload(blob){
+    try {
+      if (navigator.canShare && typeof File !== 'undefined' &&
+          navigator.canShare({ files: [ new File([blob], filename, { type: blob.type || 'image/jpeg' }) ] })){
+        navigator.share({ files: [ new File([blob], filename, { type: blob.type || 'image/jpeg' }) ] })
+          .catch(function(){ doAnchor(blob); });
+        return;
+      }
+    } catch (_) {}
+    doAnchor(blob);
+  }
+  if (url.indexOf('data:') === 0){
+    fetch(url).then(function(r){ return r.blob(); }).then(function(b){ shareOrDownload(b); }).catch(function(){ doAnchor(url); });
     return;
   }
   fetch(stillDisplayUrl(url))
     .then(function(r){ return r.blob(); })
-    .then(function(blob){
-      var objUrl = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = objUrl; a.download = filename; a.click();
-      setTimeout(function(){ URL.revokeObjectURL(objUrl); }, 5000);
-    })
+    .then(function(blob){ shareOrDownload(blob); })
     .catch(function(err){
       showToast('下载失败：' + (err && err.message ? err.message : '网络错误'));
     });
