@@ -188,7 +188,7 @@ img { display: block; }
   margin-top: 0; /* 内容初始位置距顶部 40%（由 .detail-scroll 的 padding-top 控制） */
   transition: transform .5s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.detail-title { text-align: center; font-size: 28px; font-weight: 700; margin: 0 0 12px; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.detail-title { text-align: center; font-size: 28px; font-weight: 700; margin: 0 0 12px; text-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-title-av { font-family: 'Chalkduster', fantasy; font-weight: 400; letter-spacing: 0.04em; }
 .detail-logo-img { max-width: 78%; max-height: 88px; object-fit: contain; margin: 0 auto; display: block; filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5)); }
 .detail-info1 { text-align: center; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.95); line-height: 1.6; margin: 0 0 4px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
@@ -2220,7 +2220,7 @@ function initEdgeSwipeBack(){
   page.addEventListener('touchcancel', function(){ if (dragging) finish(moved > threshold()); });
 }
 initEdgeSwipeBack();
-/* 详情页长按标题复制：长按 ~500ms 复制影片标题；与边缘右滑返回手势互不干扰（长按不动不产生横向位移，松手仅 finish(false) 无视觉变化）；桌面鼠标长按同样可复制 */
+/* 详情页标题点击复制：点击（轻点）即复制影片标题；与边缘右滑返回手势互不干扰（产生横向位移即视为滑动、不复制）；桌面鼠标点击同样可复制 */
 function initDetailTitleLongPress(){
   var t = document.getElementById('detailTitle');
   if (!t || t._lpBound) return;
@@ -2229,13 +2229,13 @@ function initDetailTitleLongPress(){
   function onStart(x, y){ sx = x; sy = y; st = Date.now(); moved = false; }
   function onMove(x, y){ if (st && (Math.abs(x - sx) > 14 || Math.abs(y - sy) > 14)) moved = true; }
   function doCopy(){ var txt = (currentDetailTitle || t.textContent || '').trim(); if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制标题' : '复制失败', ok ? 'success' : 'error'); }); } }
-  // 在「松手」的用户手势内判定长按并复制（iOS 的 clipboard API / execCommand 必须处于用户手势上下文才生效，定时器异步回调会被拒绝）
-  function onEnd(){ if (st && !moved && (Date.now() - st) >= 500){ doCopy(); } st = 0; moved = false; }
+  // 在「松手」的用户手势内判定点击并复制（iOS 的 clipboard API / execCommand 必须处于用户手势上下文才生效）
+  function onEnd(){ if (st && !moved){ doCopy(); } st = 0; moved = false; }
   t.addEventListener('touchstart', function(e){ var p = e.touches && e.touches[0]; onStart(p ? p.clientX : 0, p ? p.clientY : 0); }, { passive: true });
   t.addEventListener('touchmove', function(e){ var p = e.touches && e.touches[0]; if (p) onMove(p.clientX, p.clientY); }, { passive: true });
   t.addEventListener('touchend', onEnd, { passive: true });
   t.addEventListener('touchcancel', function(){ st = 0; moved = false; });
-  /* 桌面：鼠标长按同样可复制 */
+  /* 桌面：鼠标点击复制 */
   t.addEventListener('mousedown', function(e){ onStart(e.clientX, e.clientY); });
   t.addEventListener('mousemove', function(e){ onMove(e.clientX, e.clientY); });
   t.addEventListener('mouseup', onEnd);
