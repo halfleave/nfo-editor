@@ -2403,30 +2403,6 @@ function restoreApp(){
   Promise.all([clearIDB, clearCaches]).then(function(){ location.reload(); }).catch(function(){ location.reload(); });
   setTimeout(function(){ location.reload(); }, 1200);
 }
-function showActionSheet(title, items) {
-  document.getElementById('actionSheetTitle').textContent = title || '操作';
-  var inner = document.getElementById('actionSheetInner');
-  inner.innerHTML = '';
-  (items || []).forEach(function(it){
-    var b = document.createElement('button');
-    b.className = 'settings-row';
-    if (it.danger) b.style.color = 'var(--danger)';
-    var label = document.createElement('span');
-    label.className = 'sr-label';
-    label.textContent = it.label;
-    b.appendChild(label);
-    if (it.checked){
-      var check = document.createElement('span');
-      check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:block"><path d="M20 6 9 17l-5-5"/></svg>';
-      check.style.marginLeft = 'auto';
-      check.style.color = 'var(--accent)';
-      b.appendChild(check);
-    }
-    b.onclick = function(){ closeAllSheets(); it.onClick && it.onClick(); };
-    inner.appendChild(b);
-  });
-  openSheet('actionSheet');
-}
 
 /* 居中列表选择器（类似截图的 iOS 单选弹窗） */
 var CTX_ICONS = {
@@ -3221,19 +3197,6 @@ function closeApiGroupHelp(){
   var overlay = document.getElementById('apiGroupHelpOverlay');
   if (overlay) overlay.classList.add('api-group-help-hidden');
 }
-function openApiHelpSheet(key){
-  openSheet('apiHelpSheet');
-  if (key){
-    setTimeout(function(){
-      var el = document.getElementById('help-' + key);
-      if (el){
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        el.classList.add('highlight');
-        setTimeout(function(){ el.classList.remove('highlight'); }, 1600);
-      }
-    }, 260);
-  }
-}
 function closeApiHelp(){
   // API 说明关闭后回到 API 配置弹窗（不关闭整个弹窗栈）
   var help = document.getElementById('apiHelpSheet');
@@ -3375,7 +3338,6 @@ function copyMagnet(el){
 /* ============ 字幕搜索 / 下载 ============ */
 var subCurrentLang = 'all';
 var subCurrentSrc = 'assrt';   // 'assrt' 伪射手 | 'os' OpenSubtitles
-var SUB_LANG_LABELS = { all: '全部', zh: '简中', zht: '繁中', en: '英文' };
 function getAssrtToken(){ return (state.subtitleAssrt || '').trim(); }
 var subCtrl = null;
 var subResultsCache = [];
@@ -3634,7 +3596,7 @@ function onMediaColClick(type){
   else triggerUpload(type);
 }
 var previewType = '', previewList = [], previewIndex = 0;
-var previewSwiping = false, previewStartX = 0, previewStartY = 0, previewDX = 0, previewMoved = false, previewBound = false;
+var previewBound = false;
 function buildPreviewTrack(){
   var track = document.getElementById('imagePreviewTrack');
   if (!track) return;
@@ -3672,19 +3634,6 @@ function renderPreviewDots(){
   if (previewList.length <= 1){ box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = 'flex';
   box.innerHTML = '<span class="page-num">' + (previewIndex + 1) + ' / ' + previewList.length + '</span>';
-}
-function selectPreviewImage(i){
-  if (i < 0 || i >= previewList.length) return;
-  previewIndex = i;
-  resetPreviewZoom();
-  scrollPreviewTo(i, true);
-  renderPreviewDots();
-  if (previewType){
-    var durl = previewList[i];
-    cropOriginals[previewType] = durl;
-    state[previewType] = durl;
-    renderMediaThumb(previewType, durl);
-  }
 }
 /* 全屏图片缩放/平移状态与手势 */
 var previewZoom = { scale: 1, tx: 0, ty: 0 };
@@ -3963,13 +3912,6 @@ function handleImageUpload(e, type){
   };
   reader.readAsDataURL(file);
   e.target.value = '';
-}
-function reuseFanartForPoster(){
-  if (!state.fanart) return showToast('请先上传剧照');
-  cropOriginals.poster = state.fanart; // 原图 = 当前剧照
-  cropToRatio(state.fanart, 2/3).then(function(cropped){
-    state.poster = cropped; renderMediaThumb('poster', cropped); updateState();
-  });
 }
 function handleNfoImport(e){
   var file = e.target.files && e.target.files[0];
@@ -4435,7 +4377,6 @@ function getMagnetConfig(){ return idbGet('kv', 'magnetConfig').then(function(v)
 function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
 /* JavBus 基址：由「Worker 代理地址」自动推导（state.magnetWorker + '/javbus'），无需单独配置输入框 */
 function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') + '/javbus'; }
-function getJavbusBase(){ return Promise.resolve(javbusApiBase()); }
 
 /* —— TMDB 常量 —— */
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
@@ -4489,15 +4430,6 @@ function searchTMDB(){
 }
 
 /* ===== R18.dev 元数据搜索（AV 元数据来源，经 Worker 代理） ===== */
-var javRichCache = {}; // 按 dvd_id 缓存 /r18rich 结果，避免列表页和详情页重复请求
-function javPick(obj, keys){
-  if (!obj) return '';
-  for (var i = 0; i < keys.length; i++){
-    var v = obj[keys[i]];
-    if (v !== undefined && v !== null && v !== '') return v;
-  }
-  return '';
-}
 /* R18 字段形态混杂（maker={name}、director=字符串、actresses[].name 可能是 name_kanji/name），
    统一安全转字符串，避免 [object Object]。优先取日文（name_ja/name_kanji），回退英文/原始。 */
 function javStr(v){
@@ -4516,11 +4448,6 @@ function javName(v){
 }
 /* 从任意字符串中提取 AV 番号（如 IPX-011 / RKI-481 / MIDE-123），用于刷新时兜底定位番号。
    匹配「2-6 位字母 + 可选连字符 + 2-5 位数字」，返回统一大写形式；无匹配返回空串 */
-function extractDvdId(s){
-  if (!s) return '';
-  var m = String(s).match(/[A-Za-z]{2,6}-?\d{2,5}/);
-  return m ? m[0].toUpperCase() : '';
-}
 /* R18 / DMM 类型「英文 → 中文」通用映射。键为 r18.dev 返回的英文类别名（categories[].name）。
    未命中的英文原样保留，绝不丢数据。新增类别只需在此表补充即可。 */
 var GENRE_EN2ZH = {
@@ -4612,46 +4539,6 @@ function normalizeTextField(v){
     if (s) return s;
   }
   return String(v);
-}
-/* AV 元数据仅来自 Turso 富数据源 /r18rich（番号/标题/剧情/女优/剧照/封面等）。
-   不再调用 r18.dev 线上 /r18 旧源——富源已完全覆盖所需字段。 */
-function javRequestMerged(dvdId){
-  var base = (state.magnetWorker || '').replace(/\/$/, '');
-  if (!base) return Promise.reject(new Error('NO_WORKER'));
-  var q = encodeURIComponent(dvdId);
-  // 8 秒超时：精确搜索若长时间无响应则中止，避免前端一直转圈
-  var controller = ('AbortController' in window) ? new AbortController() : null;
-  var timer = setTimeout(function(){ if (controller) controller.abort(); }, 8000);
-  return fetch(base + '/r18rich?dvd_id=' + q, controller ? { signal: controller.signal } : undefined)
-    .then(function(r){
-      if (r.status === 404) throw new Error('未找到该番号');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    }, function(err){
-      if (err && err.name === 'AbortError') throw new Error('TIMEOUT');
-      throw err;
-    })
-    .then(function(rich){
-      if (!rich || rich.error) throw new Error((rich && rich.error) || '未找到该番号');
-      var m = Object.assign({}, rich);
-      // 保持与 populateFromJAV / refreshFromR18 一致的取值键
-      m.title = rich.title_ja || rich.title_en || rich.title || '';
-      m.title_ja = rich.title_ja || '';
-      m.title_en = rich.title_en || rich.title || '';
-      m.plot = rich.plot_ja || rich.plot_en || rich.comment_ja || rich.comment_en || '';
-      m.categories = (rich.categories && rich.categories.length) ? rich.categories : [];
-      m.actresses = (rich.actresses && rich.actresses.length) ? rich.actresses : [];
-      m.directors = (rich.directors && rich.directors.length) ? rich.directors : (rich.director || []);
-      m.maker  = rich.maker  || null;
-      m.label  = rich.label  || null;
-      m.series = rich.series || null;
-      // 兼容多种来源：gallery 可能是数组，也可能误为单个字符串/对象
-      var galleryArr = Array.isArray(rich.gallery) ? rich.gallery : (rich.gallery ? [rich.gallery] : []);
-      m.gallery = galleryArr.map(function(g){ return g && (g.image_full || g.image || g.url || String(g)) || ''; }).filter(Boolean);
-      m._dvdId = dvdId;
-      return m;
-    })
-    .finally(function(){ clearTimeout(timer); });
 }
 function setMetaSource(src, btn){
   state.metaSource = src;
@@ -4797,41 +4684,6 @@ function stillDisplayUrl(url){
   if (!state.magnetWorker) return url;
   if (url.indexOf('/img?url=') > -1 || (state.magnetWorker && url.indexOf(state.magnetWorker) > -1)) return url;
   return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(url);
-}
-function fetchJAVRichCached(dvdId){
-  var key = String(dvdId).toUpperCase();
-  if (javRichCache[key]) return javRichCache[key];
-  var p = javRequestMerged(dvdId)
-    .then(function(d){ javRichCache[key] = Promise.resolve(d); return d; })
-    .catch(function(err){ delete javRichCache[key]; throw err; }); // 超时/失败不缓存，允许重试
-  javRichCache[key] = p;
-  return p;
-}
-var lastSingleJAV = null;
-function renderSingleJAV(d, box){
-  lastSingleJAV = d;
-  var dvdId = javStr(d.dvd_id || d._dvdId || d.content_id || d.id) || '';
-  var title = javStr(d.title_ja || d.title_en || d.title || d.name) || dvdId || '未命名';
-  var date = javStr(d.release_date || d.releaseDate || d.date) || '';
-  var coverRaw = javStr(d.jacket_full_url || d.jacket_thumb_url);
-  if (!coverRaw && d.images && d.images.jacket_image) coverRaw = d.images.jacket_image.large2 || d.images.jacket_image.large || '';
-  var cover = javCoverUrl(coverRaw);
-  var metaParts = [];
-  if (date) metaParts.push(date);
-  if (dvdId) metaParts.push(dvdId);
-  var meta = metaParts.join(' · ');
-  box.innerHTML = '<div class="tmdb-result" onclick="applySingleJAV()">' +
-    (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>') +
-    '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + '</div>' +
-    (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '') +
-    '</div></div>';
-}
-function applySingleJAV(){
-  var d = lastSingleJAV;
-  if (!d) return;
-  var imgP = populateFromJAV(d);
-  // 必须先完成保存（设置好 currentFilmId），再等图片加载完补存；二者串行，避免补存用错 id 覆盖上一部影片
-  quickSaveAndHome().then(function(){ return imgP; }).then(silentRefreshCurrentFilm).catch(function(){});
 }
 /* JavBus 搜索结果列表渲染 + 点选拉详情 */
 var lastJavbusResults = [];
@@ -5785,50 +5637,8 @@ function generateNFOMovie(){
 }
 
 /* —— 字幕角标绘制（导出图用） —— */
-function drawSubtitleBadge(ctx, w, h){
-  ctx.save();
-  var r = Math.max(6, Math.round(h * 0.035));
-  var pad = r * 0.9;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  var text = '中字';
-  ctx.font = 'bold ' + Math.round(h * 0.055) + 'px sans-serif';
-  var tw = ctx.measureText(text).width;
-  var bh = Math.round(h * 0.1), bw = tw + pad * 2;
-  var bx = w - bw - pad, by = h - bh - pad;
-  roundRect(ctx, bx, by, bw, bh, r * 0.5);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, bx + pad, by + bh / 2 + 1);
-  ctx.restore();
-}
-function roundRect(ctx, x, y, w, h, r){
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
 
 /* —— 图片导出为 blob（带字幕角标） —— */
-function imageToBlob(dataUrl, mime, withBadge){
-  return new Promise(function(resolve){
-    var img = new Image();
-    img.onload = function(){
-      var canvas = document.createElement('canvas');
-      canvas.width = img.width; canvas.height = img.height;
-      var ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
-      if (withBadge) drawSubtitleBadge(ctx, canvas.width, canvas.height);
-      canvas.toBlob(function(b){ resolve(b); }, mime || 'image/jpeg', 0.95);
-    };
-    img.onerror = function(){ resolve(null); };
-    img.src = dataUrl;
-  });
-}
 /* —— 当前影片 ↔ 记录 互转 —— */
 function buildFilmFromCurrent(){
   var id = sanitizeName(getVal('filename') || getVal('title') || ('film-' + Date.now()));
