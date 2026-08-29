@@ -1268,6 +1268,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #magnetSheet .magnet-title-mode .mtm-option span { display: block; padding: 5px 12px; font-size: 13px; font-weight: 600; color: var(--label-2); background: var(--card-fill); border-radius: 15px; border: 1px solid var(--sep); transition: background .15s, color .15s, border-color .15s; -webkit-tap-highlight-color: transparent; cursor: pointer; }
 #magnetSheet .magnet-title-mode .mtm-option input:checked + span { color: #fff; background: var(--accent); border-color: var(--accent); }
 #magnetSheet .magnet-title-mode .mtm-option input:disabled + span { opacity: 0.45; cursor: not-allowed; }
+/* 磁力快速填充：番号/影片名/原始标题 胶囊按钮（点击只填充，不自动搜索） */
+#magnetSheet .magnet-quick { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 12px; }
+#magnetSheet .magnet-quick .mq-btn { padding: 6px 14px; font-size: 13px; font-weight: 600; color: var(--label-2); background: var(--card-fill); border: 1px solid var(--sep); border-radius: 15px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background .15s, color .15s, border-color .15s; }
+#magnetSheet .magnet-quick .mq-btn:active { opacity: 0.6; }
+#magnetSheet .magnet-quick .mq-btn.active { color: #fff; background: var(--accent); border-color: var(--accent); }
 
 /* 搜索页 */
 .search-box { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
@@ -1646,10 +1651,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
       </div>
       <button onclick="searchMagnet()">搜索</button>
     </div>
-    <div class="magnet-title-mode" id="magnetTitleMode">
-      <label class="mtm-option"><input type="radio" name="magnetTitleMode" value="title" checked onchange="onMagnetTitleModeChange()"><span>影片名</span></label>
-      <label class="mtm-option"><input type="radio" name="magnetTitleMode" value="original" onchange="onMagnetTitleModeChange()"><span>原始标题</span></label>
-    </div>
+    <div class="magnet-quick" id="magnetQuick"></div>
     <div class="sheet-list" id="magnetResults"></div>
   </div>
 
@@ -3297,60 +3299,63 @@ function closeApiHelp(){
 }
 
 /* —— 磁力搜索结果 —— */
-var magnetTitleMode = 'title';
 var magnetCurrentFilm = null;
 function openMagnetSheet(){
-  document.getElementById('magnetResults').innerHTML = '';
+  document.getElementById('magnetResults').innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
   openSheet('magnetSheet');
-  var modeBox = document.getElementById('magnetTitleMode');
-  var radioTitle = document.querySelector('input[name="magnetTitleMode"][value="title"]');
-  var radioOriginal = document.querySelector('input[name="magnetTitleMode"][value="original"]');
+  var input = document.getElementById('magnetQueryInput');
   if (currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
       magnetCurrentFilm = film;
       var f = (film && film.data) || {};
-      // AV 影片（里模式或含番号）：直接用番号搜索，命中率最高；不显示影片名/标题名切换
-      var isAv = !!(state.adult || f.dvdId);
-      if (modeBox) modeBox.classList.toggle('show', !isAv);
-      if (radioTitle) radioTitle.checked = true;
-      if (radioOriginal) radioOriginal.checked = false;
-      if (isAv){
-        document.getElementById('magnetQueryInput').value = f.dvdId || '';
-      } else {
-        // 普通影片：显示「影片名 / 标题名」切换；无原始标题时禁用「标题名」
-        var hasOriginal = !!(f.originaltitle && f.originaltitle !== f.title);
-        if (radioOriginal) radioOriginal.disabled = !hasOriginal;
-        var mode = (hasOriginal && magnetTitleMode === 'original') ? 'original' : 'title';
-        if (radioTitle) radioTitle.checked = (mode === 'title');
-        if (radioOriginal) radioOriginal.checked = (mode === 'original');
-        document.getElementById('magnetQueryInput').value = (mode === 'original' ? (f.originaltitle || f.title || '') : (f.title || ''));
-      }
+      var dvdId = f.dvdId || '';
+      var title = f.title || '';
+      var original = f.originaltitle || '';
+      // 快速填充按钮：番号(有则显示) / 影片名 / 原始标题(有则显示)
+      var fields = [];
+      if (dvdId) fields.push({ key: 'dvd', label: '番号', val: dvdId });
+      if (title) fields.push({ key: 'title', label: '影片名', val: title });
+      if (original && original !== title) fields.push({ key: 'original', label: '原始标题', val: original });
+      renderMagnetQuick(fields);
+      // 默认填充：有番号优先番号（命中率最高），否则影片名；仅填充不自动搜索
+      var def = dvdId ? fields[0] : (fields.filter(function(x){ return x.key === 'title'; })[0] || fields[0]);
+      if (def){ input.value = def.val; setMagnetQuickActive(def.key); }
+      else { input.value = ''; setMagnetQuickActive(null); }
       toggleMagnetClear();
-      var q = document.getElementById('magnetQueryInput').value;
-      if (q) searchMagnet();
-    }).catch(function(){ magnetCurrentFilm = null; document.getElementById('magnetQueryInput').value = ''; toggleMagnetClear(); if (modeBox) modeBox.classList.remove('show'); });
+    }).catch(function(){ magnetCurrentFilm = null; input.value = ''; renderMagnetQuick([]); setMagnetQuickActive(null); toggleMagnetClear(); });
   } else {
     magnetCurrentFilm = null;
-    if (modeBox) modeBox.classList.remove('show');
-    if (radioTitle) radioTitle.checked = true;
-    if (radioOriginal) radioOriginal.checked = false;
-    document.getElementById('magnetQueryInput').value = '';
+    input.value = '';
+    renderMagnetQuick([]);
+    setMagnetQuickActive(null);
     toggleMagnetClear();
   }
 }
-function onMagnetTitleModeChange(){
-  if (!magnetCurrentFilm) return;
-  var f = magnetCurrentFilm.data || {};
-  var isAv = !!(state.adult || f.dvdId);
-  if (isAv) return; // AV 影片不走切换逻辑，避免互相影响
-  var chk = document.querySelector('input[name="magnetTitleMode"]:checked');
-  var mode = chk ? chk.value : 'title';
-  magnetTitleMode = mode;
-  var q = (mode === 'original' ? (f.originaltitle || f.title || '') : (f.title || ''));
+function renderMagnetQuick(fields){
+  var quick = document.getElementById('magnetQuick');
+  if (!quick) return;
+  quick._fields = fields || [];
+  quick.innerHTML = quick._fields.map(function(x){
+    return '<button type="button" class="mq-btn" data-key="' + x.key + '" onclick="fillMagnetByKey(\'' + x.key + '\')">' + escapeHtml(x.label) + '</button>';
+  }).join('');
+}
+function fillMagnetByKey(key){
+  var quick = document.getElementById('magnetQuick');
+  var fields = (quick && quick._fields) || [];
+  var hit = null;
+  for (var i = 0; i < fields.length; i++){ if (fields[i].key === key){ hit = fields[i]; break; } }
+  if (!hit) return;
   var inp = document.getElementById('magnetQueryInput');
-  if (inp) inp.value = q;
+  if (inp) inp.value = hit.val;
+  setMagnetQuickActive(key);
   toggleMagnetClear();
-  if (q) searchMagnet();
+  // 仅填充输入框，不自动搜索（由「搜索」按钮触发）
+}
+function setMagnetQuickActive(key){
+  var quick = document.getElementById('magnetQuick');
+  if (!quick) return;
+  var btns = quick.querySelectorAll('.mq-btn');
+  btns.forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-key') === key); });
 }
 function toggleMagnetClear(){
   var inp = document.getElementById('magnetQueryInput');
@@ -3445,7 +3450,7 @@ function openSubtitleSheet(){
   if (!(getAssrtToken() || state.subtitleOs)){ showToast('请先到「设置 → API 配置」填写字幕源 Token', 'error'); return; }
   if (!state.magnetWorker){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
   openSheet('subtitleSheet');
-  document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">正在准备…</div>';
+  document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">输入后点击「搜索」</div>';
   subCurrentLang = 'all'; syncSubLangSelect();
   subCurrentSrc = 'assrt'; syncSubSrcBtn();
   subTitleMode = 'title'; syncSubTitleSeg();
@@ -3456,7 +3461,7 @@ function openSubtitleSheet(){
     document.getElementById('subQueryInput').value = init + (subYear ? ('.' + subYear) : '');
     onSubQueryChange();
     subUserEdited = false;
-    if (init) searchSubtitles();
+    // 仅填充输入框，不自动搜索（由「搜索」按钮触发）
   };
   if (currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
@@ -4816,7 +4821,7 @@ function fetchJavbusSearch(q, box){
     })
     .catch(function(e){
       var msg = (e && e.message) ? e.message : '未知错误';
-    box.innerHTML = '<div class="tmdb-msg">JavBus 搜索失败：' + escapeHtml(msg) + '（请确认 Worker 代理地址已配置且可用）</div>';
+    box.innerHTML = '<div class="tmdb-msg">试试其他神秘代码吧～</div>';
   }).finally(function(){ stopLoadingRotator(); });
 }
 /* 封面域名 pics.dmm.co.jp 无 CORS 头，已配 Worker 时经 /img 路由代理以绕跨域。
