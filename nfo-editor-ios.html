@@ -6162,7 +6162,8 @@ function openFilm(encId){
   var id = decodeURIComponent(encId);
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
-    applyFilmData(film);
+    newFilm();            // 进编辑页先清空表单所有项，消除上一次影片的残留字段（setFieldVal 对空值会跳过）
+    applyFilmData(film);  // 再填充当前影片数据
     currentFilmId = film.id;
     switchPage('edit');
   });
