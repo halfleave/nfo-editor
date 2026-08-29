@@ -1755,6 +1755,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
             <span class="tpdb-type-layer is-current">电影</span>
             <span class="tpdb-type-layer is-incoming">剧集</span>
           </button>
+          <button type="button" class="tpdb-type-text" id="javCensorBtn" onclick="cycleJavCensor()" style="display:none;" aria-label="有码/无码切换">
+            <span class="tpdb-type-layer is-current">有码</span>
+            <span class="tpdb-type-layer is-incoming">无码</span>
+          </button>
         </div>
         <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
       </div>
@@ -2525,6 +2529,7 @@ var state = {
   overviewTab: 'movie',
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
+  javCensor: 'masked', // javCensor: 'masked'(有码) | 'uncensored'(无码)，仅 metaSource==='jav' 时生效，切换 JavBus 搜索路由
   source: '',
   javbusId: null, javbusMagnets: []   // javbusId 记录番号供刷新；javbusMagnets 为详情页抓取的磁力列表；JavBus 基址由 Worker 代理地址自动推导（state.magnetWorker + '/javbus'）
 };
@@ -4666,7 +4671,7 @@ function setMetaSource(src, btn){
   } else {
     syncSearchSourceUI();
   }
-  syncTmdbTypeBtn();
+  syncRightSideControls();
   // 切换源时清空输入框（不同源搜索词不通用），并回到历史视图
   var qEl = document.getElementById('tmdbQuery');
   if (qEl) qEl.value = '';
@@ -4711,21 +4716,55 @@ function cycleTmdbType(){
     renderSearchHistory();
   }, 260);
 }
+function javCensorLabel(c){ return c === 'uncensored' ? '无码' : '有码'; }
+function cycleJavCensor(){
+  var next = state.javCensor === 'uncensored' ? 'masked' : 'uncensored';
+  var btn = document.getElementById('javCensorBtn');
+  if (!btn) return;
+  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
+  var inEl = btn.querySelector('.tpdb-type-layer.is-incoming');
+  if (!curEl || !inEl) return;
+  inEl.textContent = javCensorLabel(next);
+  requestAnimationFrame(function(){ btn.classList.add('animating'); });
+  setTimeout(function(){
+    state.javCensor = next;
+    btn.classList.add('no-transition');
+    curEl.textContent = javCensorLabel(next);
+    btn.classList.remove('animating');
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ btn.classList.remove('no-transition'); }); });
+  }, 260);
+}
 function syncTmdbTypeBtn(){
   var btn = document.getElementById('tmdbTypeBtn');
-  var input = document.getElementById('tmdbQuery');
-  var wrap = input ? input.parentNode : null;
   if (!btn) return;
   var curEl = btn.querySelector('.tpdb-type-layer.is-current');
   if (state.metaSource === 'tmdb'){
     btn.style.display = '';
     btn.classList.remove('animating');
     if (curEl) curEl.textContent = tmdbTypeLabel(state.tmdbMediaType);
-    if (wrap) wrap.classList.add('has-type-label');
   } else {
     btn.style.display = 'none';
-    if (wrap) wrap.classList.remove('has-type-label');
   }
+}
+function syncJavCensorBtn(){
+  var btn = document.getElementById('javCensorBtn');
+  if (!btn) return;
+  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
+  if (state.metaSource === 'jav'){
+    btn.style.display = '';
+    btn.classList.remove('animating');
+    if (curEl) curEl.textContent = javCensorLabel(state.javCensor);
+  } else {
+    btn.style.display = 'none';
+  }
+}
+/* 统一同步搜索框右侧控件：TMDB 电影/剧集 与 JAV 有码/无码 互斥显示，并维护 has-type-label（让清除×与药丸不重叠） */
+function syncRightSideControls(){
+  syncTmdbTypeBtn();
+  syncJavCensorBtn();
+  var input = document.getElementById('tmdbQuery');
+  var wrap = input ? input.parentNode : null;
+  if (wrap) wrap.classList.toggle('has-type-label', state.metaSource === 'tmdb' || state.metaSource === 'jav');
 }
 function syncSearchSourceUI(){
   var seg = document.querySelector('#searchMetaSeg .seg');
@@ -4734,7 +4773,7 @@ function syncSearchSourceUI(){
       b.classList.toggle('active', b.dataset.source === state.metaSource);
     });
   }
-  syncTmdbTypeBtn();
+  syncRightSideControls();
 }
 function searchMeta(){
   if (!state.themeHidden) state.metaSource = 'tmdb';
@@ -4759,7 +4798,9 @@ function searchJAV(){
 /* JavBus 搜索（仅 JavBus，无 R18 兜底）：关键词/番号 → 列表 */
 function fetchJavbusSearch(q, box){
   var base = javbusApiBase();
-  var url = base + '/api/movies/search?keyword=' + encodeURIComponent(q) + '&_=' + Date.now();
+  // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
+  var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
+  var url = base + path + '?keyword=' + encodeURIComponent(q) + '&_=' + Date.now();
   fetch(url, { cache: 'no-store' })
     .then(function(r){
       if (!r.ok) throw new Error('HTTP ' + r.status);
