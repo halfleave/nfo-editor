@@ -7,7 +7,7 @@
  * 改版时递增下方 CACHE 版本号，旧缓存会在 activate 阶段被清理。
  * 逐版本变更记录见 git log，此处不再罗列。
  */
-const CACHE = 'nfo-ios-v117';
+const CACHE = 'nfo-ios-v118';
 const APP_SHELL = ['./nfo-editor-ios.html', './manifest.json'];
 const WORKER_RE = /workers\.dev$/i;
 

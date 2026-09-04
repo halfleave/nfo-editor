@@ -1343,18 +1343,20 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .sub-results { padding: 6px 4px 16px; max-height: 56vh; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
 .sub-item { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 0.5px solid var(--sep); }
 .sub-item:active { background: var(--gray-fill); }
-.sub-badge { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; height: 18px; padding: 0 7px; font-size: 11px; font-weight: 700; border-radius: 5px; color: #fff; }
+.sub-badge { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; height: 18px; padding: 0 8px; font-size: 11px; font-weight: 700; border-radius: 999px; color: #fff; }
 .sub-badge-assrt { background: #FF7A00; }
 .sub-badge-os { background: #2D7FF9; }
-/* 字幕影片标记（影片级 hasSubtitle）蓝胶囊，与 assrt/os 区分 */
-.sub-badge-sub { background: #2D7FF9; }
+/* 字幕影片标记（影片级 hasSubtitle）绿胶囊，与 assrt/os 区分 */
+.sub-badge-sub { background: #34C759; }
 .sub-badge-hd { background: #16A34A; }
 .sub-badge-new { background: #F59E0B; }
 .sub-badge-other { background: #6B7280; }
 /* 图片左上角字幕角标（海报/剧照 overlay，不污染原图 dataURL） */
-.img-sub-badge { position: absolute; top: 6px; left: 6px; z-index: 4; display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 8px; font-size: 12px; font-weight: 700; line-height: 1; border-radius: 6px; color: #fff; background: rgba(45,127,249,0.92); box-shadow: 0 1px 4px rgba(0,0,0,0.3); pointer-events: none; }
+.img-sub-badge { position: absolute; top: 6px; left: 6px; z-index: 4; display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 9px; font-size: 12px; font-weight: 700; line-height: 1; border-radius: 999px; color: #fff; background: rgba(52,199,89,0.92); box-shadow: 0 1px 4px rgba(0,0,0,0.3); pointer-events: none; }
 /* 角标容器需相对定位，让 .img-sub-badge 左上角吸附 */
 .media-upload-col { position: relative; }
+/* 搜索结果标签独立一行（标题下方） */
+.tr-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .mc-poster { position: relative; }
 .tmdb-result { position: relative; }
 .sub-info { flex: 1; min-width: 0; }
@@ -3743,9 +3745,9 @@ function drawSubtitleBadge(dataUrl){
           var pad = Math.max(8, Math.round(base * 0.03));
           var bw = Math.max(48, Math.round(base * 0.24));
           var bh = Math.max(22, Math.round(base * 0.095));
-          var r = Math.min(10, bh / 2);
+          var r = bh / 2;
           ctx.save();
-          ctx.fillStyle = 'rgba(45,127,249,0.92)';
+          ctx.fillStyle = 'rgba(52,199,89,0.92)';
           roundRectPath(ctx, pad, pad, bw, bh, r);
           ctx.fill();
           var fs = Math.round(bh * 0.62);
@@ -4391,7 +4393,7 @@ function renderOverview(){
       var badges = badgeHtml ? '<div class="mc-badges">' + badgeHtml + '</div>' : '';
       var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
       var cardTitle = (f.adult && f.data && f.data.dvdId) ? (f.data.dvdId || '').toUpperCase() : (f.title || f.id);
-      var title = '<div class="mc-title">' + escapeHtml(cardTitle) + (subOn ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '') + '</div>';
+      var title = '<div class="mc-title">' + escapeHtml(cardTitle) + '</div>';
       // 注意：点击走 addEventListener 绑定（见 bindOverviewLongPress），不在此内联 onclick 嵌入 id，
       // 避免片名含单引号时 escapeAttr 转义破坏 JS 字符串导致点击失效。
       return '<div class="movie-card-wrap" data-id="' + enc + '">'
@@ -4937,10 +4939,9 @@ function renderJavbusResults(items, box){
     var id = it.id || '';
     var date = it.date || '';
     var cover = javbusImgUrl(it.img);
-    // 搜索接口 tags 数组含「高清/字幕/新种」三类，标题后缀全量显示为胶囊
+    // 搜索接口 tags 数组含「高清/字幕/新种」三类；海报不加角标，标签放到标题下方独立一行
     var tags = (it.tags && it.tags.indexOf) ? it.tags.slice() : [];
-    var subTag = tags.indexOf('字幕') >= 0;
-    var tagBadges = tags.length ? ' ' + tags.map(function(t){
+    var tagBadges = tags.length ? tags.map(function(t){
       var cls = t === '字幕' ? 'sub-badge-sub' : (t === '高清' ? 'sub-badge-hd' : (t === '新种' ? 'sub-badge-new' : 'sub-badge-other'));
       return '<span class="sub-badge ' + cls + '">' + escapeHtml(t) + '</span>';
     }).join('') : '';
@@ -4948,9 +4949,10 @@ function renderJavbusResults(items, box){
     if (date) metaParts.push(date);
     if (id) metaParts.push(id);
     var meta = metaParts.join(' · ');
-    return '<div class="tmdb-result' + (subTag ? ' has-sub' : '') + '" onclick="applyJavbusResult(' + i + ')">'
-      + (cover ? '<img class="tr-cover" src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' + (subTag ? '<span class="img-sub-badge">字幕</span>' : '') : '<div class="tr-ph"></div>')
-      + '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + tagBadges + '</div>'
+    return '<div class="tmdb-result" onclick="applyJavbusResult(' + i + ')">'
+      + (cover ? '<img class="tr-cover" src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>')
+      + '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + '</div>'
+      + (tagBadges ? '<div class="tr-tags">' + tagBadges + '</div>' : '')
       + (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '')
       + '</div></div>';
   }).join('');
