@@ -12,7 +12,7 @@
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzAwN0FGRiIvPjxwYXRoIGQ9Ik0xMiAxMGwxMCA2LTEwIDZ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+">
 <title>NFO 编辑器</title>
-  <link rel="stylesheet" href="./styles/pc.css?v=33">
+  <link rel="stylesheet" href="./styles/pc.css?v=34">
   <script>
   /* 首屏同步应用主题色，避免刷新瞬间默认蓝 → 主题色的闪烁 (FOUC)。
      主题色权威值存于 IndexedDB（异步），这里仅用 localStorage 镜像做首屏兜底。 */
@@ -726,37 +726,6 @@
       </div>
     </div>
 
-    <div class="section-title">字幕</div>
-    <div class="field mb-12">
-      <div class="input-wrap has-title">
-        <span class="input-title">Assrt</span>
-        <input class="input" type="text" id="subAssrtInput" placeholder="粘贴 API Token" style="padding-left: 58px;" oninput="toggleSubAssrtClear()">
-        <button class="input-clear" id="subAssrtClearBtn" onclick="clearSubAssrtInput()" aria-label="清除">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="field mb-12">
-      <div class="input-wrap has-title">
-        <span class="input-title">Sub</span>
-        <input class="input" type="text" id="subOsInput" placeholder="粘贴 API Key" style="padding-left: 58px;" oninput="toggleSubOsClear()">
-        <button class="input-clear" id="subOsClearBtn" onclick="clearSubOsInput()" aria-label="清除">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <div class="section-title">代理服务</div>
-    <div class="field">
-      <div class="input-wrap has-title">
-        <span class="input-title">Worker</span>
-        <input class="input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app" style="padding-left: 58px;" oninput="toggleMagnetWorkerClear()">
-        <button class="input-clear" id="magnetClearBtn" onclick="clearMagnetInput()" aria-label="清除">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-    </div>
-
     <div class="section-title">激活码</div>
     <div class="field mb-12">
       <div class="input-wrap has-title">
@@ -1079,8 +1048,8 @@
 
 <!-- ==================== Toast ==================== -->
 <div class="toasts" id="toasts"></div>
-  <script src="./src/core.js?v=33"></script>
-  <script src="./src/ui.js?v=33"></script>
-  <script src="./src/main.js?v=33"></script>
+  <script src="./src/core.js?v=34"></script>
+  <script src="./src/ui.js?v=34"></script>
+  <script src="./src/main.js?v=34"></script>
 </body>
 </html>

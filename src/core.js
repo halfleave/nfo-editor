@@ -34,7 +34,7 @@ var state = {
   actors: [],
   studio: '', label: '', series: '', dvdId: '',
   personPhoto: null,
-  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null, subtitleAssrt: '', subtitleOs: '',
+  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null,
   posterCandidates: [], fanartCandidates: [], gallery: [], galleryLinks: [],
   autoClear: 'never',
   appearance: 'auto',
@@ -63,7 +63,7 @@ var subCurrentSrc = 'assrt';
 
 // 内置默认 Worker 地址：部署者把自己的 Vercel 公共服务地址填到这里，使用者即开箱即用，无需自己填 Worker。
 // 留空则回落到用户在「设置 → API 配置」手动填写的 Worker 地址。注意：这是公开服务端点，不是密钥，可安全进仓库。
-var DEFAULT_WORKER = '';
+var DEFAULT_WORKER = 'https://nfo-magnet-proxy-vercel.vercel.app';
 
 var subResultsCache = [];
 
@@ -314,19 +314,11 @@ function updateClearButtonState(){
 function persistApiSettings(allowClear){
   try {
     var apiKey = (document.getElementById('apiKeyInput').value || '').trim();
-    var subAssrt = (document.getElementById('subAssrtInput').value || '').trim();
-    var subOs = (document.getElementById('subOsInput').value || '').trim();
-    var w = (document.getElementById('magnetWorkerInput').value || '').trim();
     // 自动保存（失焦 / 关闭面板）时，空值不覆盖已保存的非空配置，避免误清空全局设置；
     // 仅显式点「保存」(allowClear=true) 才允许用空值清空某项。
     if (allowClear || apiKey || !state.apiKey) state.apiKey = apiKey;
-    if (allowClear || subAssrt || !state.subtitleAssrt) state.subtitleAssrt = subAssrt;
-    if (allowClear || subOs || !state.subtitleOs) state.subtitleOs = subOs;
-    if (allowClear || w || !state.magnetWorker) state.magnetWorker = w;
     return Promise.all([
       setTMDBKey(state.apiKey),
-      setSubtitleAssrt(state.subtitleAssrt),
-      setSubtitleOs(state.subtitleOs),
       setMagnetConfig({ worker: state.magnetWorker, category: 'video' })
     ]).then(function(){ updateSubtitleBtn(); });
   } catch(e) { return Promise.reject(e); }
@@ -1329,10 +1321,10 @@ function searchSubtitles(){
   var rawQ = (document.getElementById('subQueryInput').value || '').trim();
   var box = document.getElementById('subResults');
   if (!rawQ){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!(state.activationCode || state.subtitleAssrt || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
+  if (!state.activationCode){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
   if (!w){ box.innerHTML = '<div class="tmdb-msg">未填写磁力 Worker 地址（设置 → API 配置）</div>'; return; }
-  // 服务端内置字幕 key，客户端无需配置（仍可传 &assrt;/&os= 覆盖）；仅搜索当前选中的源
+  // 字幕 key 由服务端持有，前端无需配置
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
@@ -1346,8 +1338,6 @@ function searchSubtitles(){
     + '&year=' + encodeURIComponent(year)
     + '&lang=' + encodeURIComponent(subCurrentLang)
     + '&src=' + encodeURIComponent(subCurrentSrc)
-    + (state.subtitleAssrt ? '&assrt=' + encodeURIComponent(state.subtitleAssrt) : '')
-    + (state.subtitleOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '')
     + '&code=' + encodeURIComponent(state.activationCode);
   var to = setTimeout(function(){ subCtrl.abort(); }, 35000);
   fetch(url, { signal: subCtrl.signal, cache: 'no-store' })
@@ -1676,14 +1666,6 @@ function getTMDBKey(){ return idbGet('kv', 'apiKey').then(function(v){ return v 
 
 function setTMDBKey(k){ return idbPut('kv', 'apiKey', k || ''); }
 
-function getSubtitleAssrt(){ return idbGet('kv', 'subAssrt').then(function(v){ return v || ''; }); }
-
-function setSubtitleAssrt(k){ return idbPut('kv', 'subAssrt', k || ''); }
-
-function getSubtitleOs(){ return idbGet('kv', 'subOs').then(function(v){ return v || ''; }); }
-
-function setSubtitleOs(k){ return idbPut('kv', 'subOs', k || ''); }
-
 // 激活层级与激活码持久化（刷新不丢，依赖已修复的 idbPut 事务提交）
 function getTier(){ return idbGet('kv', 'tier').then(function(v){ return v || ''; }); }
 function setTier(t){ return idbPut('kv', 'tier', t || ''); }
@@ -1986,8 +1968,6 @@ function copyMagnet(el){
   });
 }
 
-function getAssrtToken(){ return (state.subtitleAssrt || '').trim(); }
-
 function downloadSubtitle(idx){
   var it = subResultsCache[idx];
   if (!it) return;
@@ -2000,8 +1980,6 @@ function downloadSubtitle(idx){
     + '&id=' + encodeURIComponent(it.id)
     + '&name=' + encodeURIComponent(name)
     + '&ext=' + encodeURIComponent(it.ext || 'srt')
-    + (state.subtitleAssrt ? '&assrt=' + encodeURIComponent(state.subtitleAssrt) : '')
-    + (state.subtitleOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '')
     + '&code=' + encodeURIComponent(state.activationCode || '');
   showToast('下载中…', 'success');
   fetch(url, { cache: 'no-store' })

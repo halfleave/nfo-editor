@@ -1545,45 +1545,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
     </div>
     <div class="api-group">
       <div class="api-group-title-row">
-        <div class="api-group-title">字幕</div>
-        <button class="api-help-q-sm" onclick="openApiGroupHelp('subtitles')" aria-label="关于字幕">?</button>
-      </div>
-      <div class="field field-stacked no-border">
-        <div class="api-input-wrap">
-          <span class="api-input-tag">Assrt</span>
-          <input class="ios-input" type="text" id="subAssrtInput" placeholder="粘贴 API Token" oninput="toggleSubAssrtClear()" onblur="persistApiSettings(false)">
-          <button class="api-clear" id="subAssrtClearBtn" onclick="clearSubAssrtInput()" aria-label="清除" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="field field-stacked no-border">
-        <div class="api-input-wrap">
-          <span class="api-input-tag">Sub</span>
-          <input class="ios-input" type="text" id="subOsInput" placeholder="粘贴 API Key" oninput="toggleSubOsClear()" onblur="persistApiSettings(false)">
-          <button class="api-clear" id="subOsClearBtn" onclick="clearSubOsInput()" aria-label="清除" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="api-group">
-      <div class="api-group-title-row">
-        <div class="api-group-title">代理服务</div>
-        <button class="api-help-q-sm" onclick="openApiGroupHelp('proxy')" aria-label="关于代理服务">?</button>
-      </div>
-      <div class="field field-stacked no-border">
-        <div class="api-input-wrap">
-          <span class="api-input-tag">Worker</span>
-          <input class="ios-input" type="text" id="magnetWorkerInput" placeholder="https://xxx.vercel.app" oninput="toggleMagnetWorkerClear()" onblur="persistApiSettings(false)">
-          <button class="api-clear" id="magnetClearBtn" onclick="clearMagnetInput()" aria-label="清除" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="api-group">
-      <div class="api-group-title-row">
         <div class="api-group-title">激活码</div>
       </div>
       <div class="field field-stacked no-border">
@@ -2546,7 +2507,7 @@ var state = {
   actors: [],
   studio: '', label: '', series: '', dvdId: '',
   personPhoto: null,
-  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null, subtitleAssrt: '', subtitleOs: '',
+  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null,
   posterCandidates: [], fanartCandidates: [], gallery: [], galleryLinks: [],
   autoClear: '3d',
   appearance: 'auto',
@@ -3145,12 +3106,6 @@ function clearReorderAnim(list, excludeRow){
 function openApiKeySheet(){
   document.getElementById('apiKeyInput').value = state.apiKey || '';
   toggleApiClear();
-  document.getElementById('subAssrtInput').value = state.subtitleAssrt || '';
-  toggleSubAssrtClear();
-  document.getElementById('subOsInput').value = state.subtitleOs || '';
-  toggleSubOsClear();
-  document.getElementById('magnetWorkerInput').value = state.magnetWorker || '';
-  toggleMagnetWorkerClear();
   document.getElementById('activationCodeInput').value = state.activationCode || '';
   toggleActivationClear();
   updateActivationStatus();
@@ -3219,61 +3174,24 @@ function clearApiInput(){
   var input = document.getElementById('apiKeyInput');
   if (input){ input.value = ''; toggleApiClear(); input.focus(); }
 }
-function toggleSubAssrtClear(){
-  var btn = document.getElementById('subAssrtClearBtn');
-  var input = document.getElementById('subAssrtInput');
-  if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
-}
-function clearSubAssrtInput(){
-  var input = document.getElementById('subAssrtInput');
-  if (input){ input.value = ''; toggleSubAssrtClear(); input.focus(); }
-}
-function toggleSubOsClear(){
-  var btn = document.getElementById('subOsClearBtn');
-  var input = document.getElementById('subOsInput');
-  if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
-}
-function clearSubOsInput(){
-  var input = document.getElementById('subOsInput');
-  if (input){ input.value = ''; toggleSubOsClear(); input.focus(); }
-}
-function toggleMagnetWorkerClear(){
-  var btn = document.getElementById('magnetClearBtn');
-  var input = document.getElementById('magnetWorkerInput');
-  if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
-}
-function clearMagnetInput(){
-  var input = document.getElementById('magnetWorkerInput');
-  if (input){ input.value = ''; toggleMagnetWorkerClear(); input.focus(); }
-}
 function updateSubtitleBtn(){
   var btn = document.getElementById('dtActSub');
-  // 字幕按钮：激活码有效（中等/满级）或用户自备字幕源 Token 时显示；已放开「仅无番号」限制
-  var enabled = !!(state.activationCode || getAssrtToken() || state.subtitleOs);
-  if (btn) btn.style.display = enabled ? '' : 'none';
+  if (btn) btn.style.display = state.activationCode ? '' : 'none';
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(allowClear){
   try {
     var apiKey = (document.getElementById('apiKeyInput').value || '').trim();
-    var subAssrt = (document.getElementById('subAssrtInput').value || '').trim();
-    var subOs = (document.getElementById('subOsInput').value || '').trim();
-    var w = (document.getElementById('magnetWorkerInput').value || '').trim();
     var code = (document.getElementById('activationCodeInput').value || '').trim();
     // 自动保存（失焦 / 关闭面板）时，空值不覆盖已保存的非空配置，避免误清空全局设置；
     // 仅显式点「保存」(allowClear=true) 才允许用空值清空某项。
     if (allowClear || apiKey || !state.apiKey) state.apiKey = apiKey;
-    if (allowClear || subAssrt || !state.subtitleAssrt) state.subtitleAssrt = subAssrt;
-    if (allowClear || subOs || !state.subtitleOs) state.subtitleOs = subOs;
-    if (allowClear || w || !state.magnetWorker) state.magnetWorker = w;
     var prevCode = state.activationCode;
     if (allowClear || code || !state.activationCode) state.activationCode = code;
     // 激活码清空或变更（未点验证）时，档位需重验证：清空则降级，变更则待验证后再生效
     if (!code || code !== prevCode) state.tier = '';
     Promise.all([
       setTMDBKey(state.apiKey),
-      setSubtitleAssrt(state.subtitleAssrt),
-      setSubtitleOs(state.subtitleOs),
       setMagnetConfig({ worker: state.magnetWorker, category: 'video' }),
       setActivationCode(state.activationCode)
     ]).then(function(){ updateSubtitleBtn(); updateActivationStatus(); }).catch(function(){});
@@ -3518,7 +3436,6 @@ function copyMagnet(el){
 /* ============ 字幕搜索 / 下载 ============ */
 var subCurrentLang = 'all';
 var subCurrentSrc = 'assrt';   // 'assrt' 伪射手 | 'os' OpenSubtitles
-function getAssrtToken(){ return (state.subtitleAssrt || '').trim(); }
 var subCtrl = null;
 var subResultsCache = [];
 var subTitleMode = 'title';
@@ -3528,8 +3445,8 @@ var subYear = '';
 var subUserEdited = false;
 function openSubtitleSheet(){
   var w = state.magnetWorker || DEFAULT_WORKER;
-  // 字幕搜索需激活码（中等 / 满级）或用户自备字幕源 Token；未满足时统一提示暂不可用，不暴露档位
-  if (!(state.activationCode || getAssrtToken() || state.subtitleOs)){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
+  // 字幕搜索需激活码（中等 / 满级）；未满足时统一提示暂不可用，不暴露档位
+  if (!state.activationCode){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
   if (!w){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
   openSheet('subtitleSheet');
   document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">输入后点击「搜索」</div>';
@@ -3616,13 +3533,9 @@ function searchSubtitles(){
   var rawQ = (document.getElementById('subQueryInput').value || '').trim();
   var box = document.getElementById('subResults');
   if (!rawQ){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!(state.activationCode || getAssrtToken() || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
+  if (!state.activationCode){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
   if (!w){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
-  // 仅搜索当前选中的源；伪射手优先、省 OpenSubtitles 配额
-  var useAssrt = subCurrentSrc === 'assrt' && !!getAssrtToken();
-  var useOs = subCurrentSrc === 'os' && !!state.subtitleOs;
-  if (!useAssrt && !useOs && !state.activationCode){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
@@ -3635,9 +3548,7 @@ function searchSubtitles(){
     + '&q=' + encodeURIComponent(q)
     + '&year=' + encodeURIComponent(year)
     + '&lang=' + encodeURIComponent(subCurrentLang)
-    + (state.activationCode ? '&code=' + encodeURIComponent(state.activationCode) : '')
-    + (useAssrt ? '&assrt=' + encodeURIComponent(getAssrtToken()) : '')
-    + (useOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '');
+    + '&code=' + encodeURIComponent(state.activationCode);
   var to = setTimeout(function(){ subCtrl.abort(); }, 35000);
   fetch(url, { signal: subCtrl.signal, cache: 'no-store' })
     .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d || null }; }).catch(function(){ return { ok: r.ok, d: null }; }); })
@@ -3705,9 +3616,7 @@ function downloadSubtitle(idx){
     + '&id=' + encodeURIComponent(it.id)
     + '&name=' + encodeURIComponent(name)
     + '&ext=' + encodeURIComponent(it.ext || 'srt')
-    + (state.activationCode ? '&code=' + encodeURIComponent(state.activationCode) : '')
-    + '&assrt=' + encodeURIComponent(getAssrtToken() || '')
-    + '&os=' + encodeURIComponent(state.subtitleOs || '');
+    + '&code=' + encodeURIComponent(state.activationCode);
   showToast('下载中…', 'success');
   fetch(url, { cache: 'no-store' })
     .then(function(r){
@@ -4584,10 +4493,6 @@ function saveFilmWithMerge(film){
 /* —— API Key（kv store） —— */
 function getTMDBKey(){ return idbGet('kv', 'apiKey').then(function(v){ return v || ''; }); }
 function setTMDBKey(k){ return idbPut('kv', 'apiKey', k || ''); }
-function getSubtitleAssrt(){ return idbGet('kv', 'subAssrt').then(function(v){ return v || ''; }); }
-function setSubtitleAssrt(k){ return idbPut('kv', 'subAssrt', k || ''); }
-function getSubtitleOs(){ return idbGet('kv', 'subOs').then(function(v){ return v || ''; }); }
-function setSubtitleOs(k){ return idbPut('kv', 'subOs', k || ''); }
 function getMagnetConfig(){ return idbGet('kv', 'magnetConfig').then(function(v){ return v || null; }); }
 function getActivationCode(){ return idbGet('kv', 'activationCode').then(function(v){ return v || ''; }); }
 function setActivationCode(v){ return idbPut('kv', 'activationCode', v || ''); }
@@ -4605,7 +4510,7 @@ var TMDB_IMG_BASE = 'https://image.tmdb.org/t/p';
 /* 部署者填写的公共 Worker 地址（磁力 / 字幕 / JavBus / 图片代理通用）。
    留空则回落到用户在「设置 → API 配置 → 代理服务」自行填写的 Worker；
    填了之后普通用户无需配置即可使用受限功能。手机端与 PC 端共用同一地址。 */
-var DEFAULT_WORKER = '';
+var DEFAULT_WORKER = 'https://nfo-magnet-proxy-vercel.vercel.app';
 /* 拼 TMDB 图片地址。image.tmdb.org 自带 Access-Control-Allow-Origin:*，
    浏览器可直接 fetch+blob+canvas 转 dataURL 存 IndexedDB（省 Worker 流量，免费档刷剧照不占额度）。始终直连。 */
 function tmdbImgUrl(path, size){
@@ -6442,10 +6347,10 @@ function renderFilmDetail(film){
     }
     tb.style.display = 'flex';
   }
-  // 磁力按钮：未配置 Worker 时隐藏
+  // 磁力按钮：需有激活码且 Worker 可用
   var mb = document.getElementById('dtActMagnet');
-  if (mb) mb.style.display = state.magnetWorker ? '' : 'none';
-  // 字幕按钮：未配置任一字幕源 Token 时隐藏
+  if (mb) mb.style.display = (state.activationCode && (state.magnetWorker || DEFAULT_WORKER)) ? '' : 'none';
+  // 字幕按钮：需有激活码
   updateSubtitleBtn();
   // 剧情：最前方增加 [番号 标题]；无番号则显示 [标题]
   var plotTitle = (d.title || film.id);
@@ -7468,8 +7373,6 @@ function bootApp(){
   setSplashStep('正在加载配置…');
   Promise.all([
     getTMDBKey().then(function(k){ state.apiKey = k || ''; }).catch(function(){}),
-    getSubtitleAssrt().then(function(k){ state.subtitleAssrt = k || ''; updateSubtitleBtn(); }).catch(function(){}),
-    getSubtitleOs().then(function(k){ state.subtitleOs = k || ''; updateSubtitleBtn(); }).catch(function(){}),
     getThemeColor().then(function(c){
       if (c) applyThemeColor(c, false);
     }).catch(function(){}),

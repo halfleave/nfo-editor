@@ -1830,7 +1830,7 @@ function handleNfoImport(ev){
 /* ---------- 其它同步 ---------- */
 function updateSubtitleBtn(){
   var b = document.getElementById('dtActSub');
-  if (b) b.style.display = (state.subtitleAssrt || state.subtitleOs) ? '' : 'none';
+  if (b) b.style.display = state.activationCode ? '' : 'none';
 }
 function updateAdultPhraseCount(){
   var ta = document.getElementById('adultPhraseInput');
@@ -1957,7 +1957,7 @@ function renderFilmDetail(film){
     else { tb.setAttribute('disabled', 'disabled'); if (tbt) tbt.textContent = '暂无预告片'; }
   }
   var mb = document.getElementById('dtActMagnet');
-  if (mb) mb.style.display = state.magnetWorker ? '' : 'none';
+  if (mb) mb.style.display = (state.activationCode && (state.magnetWorker || DEFAULT_WORKER)) ? '' : 'none';
   updateSubtitleBtn();
 
   /* 剧情 */
@@ -2690,11 +2690,8 @@ function initFormDirty(){
 function openApiKeySheet(){
   var set = function(id, v){ var el = document.getElementById(id); if (el) el.value = v || ''; };
   set('apiKeyInput', state.apiKey);
-  set('subAssrtInput', state.subtitleAssrt);
-  set('subOsInput', state.subtitleOs);
-  set('magnetWorkerInput', state.magnetWorker);
   set('activationCodeInput', state.activationCode);
-  toggleApiClear(); toggleSubAssrtClear(); toggleSubOsClear(); toggleMagnetWorkerClear(); toggleActivationClear();
+  toggleApiClear(); toggleActivationClear();
   updateActivationStatus();
   openSheet('apiSheet');
 }
@@ -2705,12 +2702,6 @@ function _toggleClear(inputId, btnId){
 }
 function toggleApiClear(){ _toggleClear('apiKeyInput', 'apiClearBtn'); }
 function clearApiInput(){ var i = document.getElementById('apiKeyInput'); if (i) i.value = ''; toggleApiClear(); }
-function toggleSubAssrtClear(){ _toggleClear('subAssrtInput', 'subAssrtClearBtn'); }
-function clearSubAssrtInput(){ var i = document.getElementById('subAssrtInput'); if (i) i.value = ''; toggleSubAssrtClear(); }
-function toggleSubOsClear(){ _toggleClear('subOsInput', 'subOsClearBtn'); }
-function clearSubOsInput(){ var i = document.getElementById('subOsInput'); if (i) i.value = ''; toggleSubOsClear(); }
-function toggleMagnetWorkerClear(){ _toggleClear('magnetWorkerInput', 'magnetClearBtn'); }
-function clearMagnetInput(){ var i = document.getElementById('magnetWorkerInput'); if (i) i.value = ''; toggleMagnetWorkerClear(); }
 
 function toggleActivationClear(){ _toggleClear('activationCodeInput', 'activationClearBtn'); }
 function clearActivationInput(){ var i = document.getElementById('activationCodeInput'); if (i) i.value = ''; toggleActivationClear(); }
@@ -2888,8 +2879,6 @@ function bootApp(){
 
   Promise.all([
     getTMDBKey().then(function(k){ state.apiKey = k || ''; }).catch(function(){}),
-    getSubtitleAssrt().then(function(k){ state.subtitleAssrt = k || ''; }).catch(function(){}),
-    getSubtitleOs().then(function(k){ state.subtitleOs = k || ''; }).catch(function(){}),
     getThemeColor().then(function(c){ if (c) applyThemeColor(c, false); }).catch(function(){}),
     getAutoClearMode().then(function(m){
       state.autoClear = m || 'never';
