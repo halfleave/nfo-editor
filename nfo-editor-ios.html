@@ -6451,8 +6451,8 @@ function renderFilmDetail(film){
   var el2 = document.getElementById('detailInfo2');
   el2.textContent = tags.length ? tags.join(', ') : '';
   el2.style.display = tags.length ? '' : 'none';
-  // 播放预告按钮：AV 且有番号 → 用 DMM 免费预览 mp4（应用内播放）；否则回退其它预告片（YouTube/R18 sample）；都没有则禁用
-  currentDetailTrailer = d.trailer || (adult && d.dvdId ? buildDmmTrailerUrl(d.dvdId) : '') || '';
+  // 播放预告按钮：后端 /meta 已带回真实 DMM 预览 mp4（d.trailer）则应用内播放；没有则禁用，绝不回退外跳 missav
+  currentDetailTrailer = d.trailer || '';
   var isAvTrailer = adult && d.dvdId;
   var extBtn = document.getElementById('trailerExtBtn');
   if (extBtn) extBtn.textContent = (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)) ? '在浏览器打开' : '在 YouTube 打开';
@@ -6785,19 +6785,13 @@ function bindShotPullUpLoader(sc){
   };
 }
 function openTrailer(){
-  // 有可直接播放的视频（AV 预告 / R18 sample 等）→ 用 App 内视频窗口播放，不跳新页面
+  // 有可直接播放的视频（AV 真实 DMM 预览 / R18 sample 等）→ 用 App 内视频窗口播放，不跳新页面
   if (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)){
     showTrailerModal();
     return;
   }
-  // AV 有番号但无内嵌视频 → 回退跳 missav 在线页
-  if (currentDetailFilm && (currentDetailFilm.adult || (currentDetailFilm.data && currentDetailFilm.data.adult)) && currentDetailFilm.data && currentDetailFilm.data.dvdId){
-    var dvd = String(currentDetailFilm.data.dvdId).toLowerCase();
-    window.open('https://missav.live/cn/' + encodeURIComponent(dvd), '_blank');
-    return;
-  }
   if (!currentDetailTrailer) return;
-  // 优先弹窗内嵌播放；若内嵌被 YouTube 登录墙拦截，可点「在 YouTube 打开」按钮外跳
+  // YouTube 视频 ID：隐私增强模式（nocookie）内嵌播放，不跳新页面
   showTrailerModal();
 }
 function buildDmmTrailerUrl(dvdId){
