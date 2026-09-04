@@ -1346,6 +1346,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .sub-badge { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; height: 18px; padding: 0 7px; font-size: 11px; font-weight: 700; border-radius: 5px; color: #fff; }
 .sub-badge-assrt { background: #FF7A00; }
 .sub-badge-os { background: #2D7FF9; }
+/* 字幕影片标记（影片级 hasSubtitle）蓝胶囊，与 assrt/os 区分 */
+.sub-badge-sub { background: #2D7FF9; }
+/* 图片左上角字幕角标（海报/剧照 overlay，不污染原图 dataURL） */
+.img-sub-badge { position: absolute; top: 6px; left: 6px; z-index: 4; display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 8px; font-size: 12px; font-weight: 700; line-height: 1; border-radius: 6px; color: #fff; background: rgba(45,127,249,0.92); box-shadow: 0 1px 4px rgba(0,0,0,0.3); pointer-events: none; }
+/* 角标容器需相对定位，让 .img-sub-badge 左上角吸附 */
+.media-upload-col { position: relative; }
+.mc-poster { position: relative; }
+.tmdb-result { position: relative; }
 .sub-info { flex: 1; min-width: 0; }
 .sub-title { font-size: 14px; color: var(--label); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sub-meta { font-size: 12px; color: var(--label-2); margin-top: 3px; display: flex; gap: 8px; min-width: 0; overflow: hidden; }
@@ -3681,7 +3689,77 @@ function validateRating(el){
   if (v < 0) el.value = '0';
   if (v > 10) el.value = '10';
 }
-function toggleSubtitle(){ state.hasSubtitle = document.getElementById('hasSubtitle').checked; updateState(); }
+/* ===== 字幕角标（影片级 hasSubtitle）：显示用 DOM overlay，导出用 canvas 烘焙，均不污染原图 ===== */
+// 判断某条磁力是否带中文字幕（结构化 hasSubtitle 或标题含关键词兜底）
+function isSubtitledMagnet(m){ return !!(m && (m.hasSubtitle || /字幕|中字|中文|双语|CC字幕/i.test(m.title || ''))); }
+// 当前影片是否带字幕
+function currentFilmHasSubtitle(){ return !!state.hasSubtitle; }
+// 在容器（poster/fanart col 或卡片图）左上角加/移除字幕角标
+function ensureSubtitleOverlay(container, on){
+  if (!container) return;
+  var old = container.querySelector(':scope > .img-sub-badge');
+  if (on){
+    if (!old){
+      var b = document.createElement('div');
+      b.className = 'img-sub-badge';
+      b.textContent = '字幕';
+      container.appendChild(b);
+    }
+  } else if (old){ old.remove(); }
+}
+// 刷新编辑页海报+剧照角标（关开关立即恢复，原图不动）
+function refreshSubtitleBadges(){
+  var on = currentFilmHasSubtitle();
+  ensureSubtitleOverlay(document.getElementById('posterUpload'), on);
+  ensureSubtitleOverlay(document.getElementById('fanartUpload'), on);
+}
+// 圆角胶囊路径
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+// 在图片 dataURL 左上角烘焙字幕角标，返回新 dataURL（失败/非 dataURL 则原样返回）
+function drawSubtitleBadge(dataUrl){
+  return new Promise(function(resolve){
+    try {
+      if (typeof dataUrl !== 'string' || dataUrl.indexOf('data:') !== 0){ resolve(dataUrl); return; }
+      var img = new Image();
+      img.onload = function(){
+        try {
+          var w = img.naturalWidth, h = img.naturalHeight;
+          if (!w || !h){ resolve(dataUrl); return; }
+          var c = document.createElement('canvas'); c.width = w; c.height = h;
+          var ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          var base = Math.min(w, h);
+          var pad = Math.max(8, Math.round(base * 0.03));
+          var bw = Math.max(48, Math.round(base * 0.24));
+          var bh = Math.max(22, Math.round(base * 0.095));
+          var r = Math.min(10, bh / 2);
+          ctx.save();
+          ctx.fillStyle = 'rgba(45,127,249,0.92)';
+          roundRectPath(ctx, pad, pad, bw, bh, r);
+          ctx.fill();
+          var fs = Math.round(bh * 0.62);
+          ctx.font = '700 ' + fs + 'px -apple-system, "PingFang SC", "Helvetica Neue", sans-serif';
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('字幕', pad + bw / 2, pad + bh / 2 + 1);
+          ctx.restore();
+          resolve(c.toDataURL('image/jpeg', 0.92));
+        } catch (e){ resolve(dataUrl); }
+      };
+      img.onerror = function(){ resolve(dataUrl); };
+      img.src = dataUrl;
+    } catch (e){ resolve(dataUrl); }
+  });
+}
+function toggleSubtitle(){ state.hasSubtitle = document.getElementById('hasSubtitle').checked; updateState(); refreshSubtitleBadges(); }
 function triggerUpload(type){ document.getElementById(type + 'Input').click(); }
 function replaceMedia(type){ triggerUpload(type); }
 function onMediaColClick(type){
@@ -3972,6 +4050,7 @@ function renderMediaThumb(type, url){
   if (close) close.style.display = 'flex';
   var bar = document.getElementById(type + 'Bar');
   if (bar) bar.style.display = 'flex';
+  refreshSubtitleBadges();   // 渲染图片后按 hasSubtitle 叠加/移除角标
 }
 function deleteMedia(type){
   if (!state[type]) return;
@@ -4297,9 +4376,10 @@ function renderOverview(){
     empty.style.display = 'none';
     grid.innerHTML = films.map(function(f){
       var enc = escapeAttr(encodeURIComponent(f.id));
+      var subOn = !!(f.data && f.data.hasSubtitle);   // 持久化字幕标记
       var posterCls = (f.adult && f.posterDataUrl) ? 'mc-poster av-poster' : 'mc-poster';
       var poster = f.posterDataUrl
-        ? '<div class="' + posterCls + '" style="background-image:url(' + escapeAttr(f.posterDataUrl) + ')"></div>'
+        ? '<div class="' + posterCls + '" style="background-image:url(' + escapeAttr(f.posterDataUrl) + ')">' + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
         : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>';
       var hasTrailer = !!(f.data && f.data.trailer);
       var badgeHtml = '';
@@ -4308,7 +4388,7 @@ function renderOverview(){
       var badges = badgeHtml ? '<div class="mc-badges">' + badgeHtml + '</div>' : '';
       var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
       var cardTitle = (f.adult && f.data && f.data.dvdId) ? (f.data.dvdId || '').toUpperCase() : (f.title || f.id);
-      var title = '<div class="mc-title">' + escapeHtml(cardTitle) + '</div>';
+      var title = '<div class="mc-title">' + escapeHtml(cardTitle) + (subOn ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '') + '</div>';
       // 注意：点击走 addEventListener 绑定（见 bindOverviewLongPress），不在此内联 onclick 嵌入 id，
       // 避免片名含单引号时 escapeAttr 转义破坏 JS 字符串导致点击失效。
       return '<div class="movie-card-wrap" data-id="' + enc + '">'
@@ -4854,13 +4934,15 @@ function renderJavbusResults(items, box){
     var id = it.id || '';
     var date = it.date || '';
     var cover = javbusImgUrl(it.img);
+    // 字幕标记：JavBus 搜索接口 tags 数组含「字幕」（高清/字幕/新种）
+    var subTag = !!(it.tags && it.tags.indexOf && it.tags.indexOf('字幕') >= 0);
     var metaParts = [];
     if (date) metaParts.push(date);
     if (id) metaParts.push(id);
     var meta = metaParts.join(' · ');
-    return '<div class="tmdb-result" onclick="applyJavbusResult(' + i + ')">'
-      + (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>')
-      + '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + '</div>'
+    return '<div class="tmdb-result' + (subTag ? ' has-sub' : '') + '" onclick="applyJavbusResult(' + i + ')">'
+      + (cover ? '<img class="tr-cover" src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' + (subTag ? '<span class="img-sub-badge">字幕</span>' : '') : '<div class="tr-ph"></div>')
+      + '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + (subTag ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '') + '</div>'
       + (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '')
       + '</div></div>';
   }).join('');
@@ -5067,6 +5149,11 @@ function populateFromJavbus(d){
   state.series = (d.series && d.series.name) || '';
   state.dvdId = dvdId;
   state.javbusMagnets = (d.magnets || []).slice();   // JavBus 详情页抓取的磁力列表
+  // 字幕自动判定：任一磁力带中文字幕标记（hasSubtitle 或标题关键词）→ 影片标记字幕
+  if (state.javbusMagnets.some(isSubtitledMagnet)){
+    state.hasSubtitle = true;
+    var _hs = document.getElementById('hasSubtitle'); if (_hs) _hs.checked = true;
+  }
   state.trailer = '';   // JavBus 抓取未含预告片直链
   renderCast();
 
@@ -5918,6 +6005,7 @@ function applyFilmData(film){
   if (state.logo) renderMediaThumb('logo', state.logo); else clearMediaThumb('logo');
   state.hasSubtitle = !!d.hasSubtitle;
   document.getElementById('hasSubtitle').checked = state.hasSubtitle;
+  refreshSubtitleBadges();   // 载入影片后按 hasSubtitle 叠加/移除海报+剧照角标
   applyEditMode();
   updateState();
 }
@@ -6248,14 +6336,26 @@ function downloadMetadata(id){
     var zipFiles = [];
     zipFiles.push({ name: filename + '.nfo', data: new TextEncoder().encode(buildNFOMovieXml(d)) });
     // 图片：仅处理已存为 data URL 的字符串；远程 URL 无法离线打包，跳过（与导出页行为一致）
-    if (typeof d.poster === 'string'){ var pb = dataUrlToBytesSync(d.poster); if (pb) zipFiles.push({ name: filename + '-poster.jpg', data: pb }); }
-    if (typeof d.fanart === 'string'){ var fb = dataUrlToBytesSync(d.fanart); if (fb) zipFiles.push({ name: filename + '-fanart.jpg', data: fb }); }
+    var bakeJobs = [];
+    // poster / fanart：带字幕时先烘焙角标再入包；原 d.poster/d.fanart 不改变
+    if (typeof d.poster === 'string'){
+      var pj = Promise.resolve(d.poster);
+      if (d.hasSubtitle) pj = pj.then(drawSubtitleBadge);
+      bakeJobs.push(pj.then(function(u){ var b = dataUrlToBytesSync(u); if (b) zipFiles.push({ name: filename + '-poster.jpg', data: b }); }));
+    }
+    if (typeof d.fanart === 'string'){
+      var fj = Promise.resolve(d.fanart);
+      if (d.hasSubtitle) fj = fj.then(drawSubtitleBadge);
+      bakeJobs.push(fj.then(function(u){ var b = dataUrlToBytesSync(u); if (b) zipFiles.push({ name: filename + '-fanart.jpg', data: b }); }));
+    }
     if (typeof d.logo === 'string'){ var lb = dataUrlToBytesSync(d.logo); if (lb) zipFiles.push({ name: filename + '-clearlogo.png', data: lb }); }
-    if (!zipFiles.length) return showToast('没有可导出的元数据', 'error');
-    var zipBlob;
-    try { zipBlob = new Blob([makeZip(zipFiles)], { type: 'application/zip' }); }
-    catch (e) { return showToast('生成下载文件失败：' + ((e && e.message) || e), 'error'); }
-    directDownload(zipBlob, filename + '.zip');
+    Promise.all(bakeJobs).then(function(){
+      if (!zipFiles.length) return showToast('没有可导出的元数据', 'error');
+      var zipBlob;
+      try { zipBlob = new Blob([makeZip(zipFiles)], { type: 'application/zip' }); }
+      catch (e) { return showToast('生成下载文件失败：' + ((e && e.message) || e), 'error'); }
+      directDownload(zipBlob, filename + '.zip');
+    });
   }).catch(function(){ showToast('读取影片失败', 'error'); });
 }
 var currentDetailTrailer = '';
