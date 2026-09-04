@@ -39,6 +39,8 @@ var state = {
   autoClear: 'never',
   appearance: 'auto',
   themeHidden: false,
+  tier: '',            // 激活层级：''=免费, 'medium'=中等, 'full'=满级（由 /verify 解析后写入）
+  activationCode: '',  // 用户填入的激活码（持久化，后续 Worker 请求拼 ?code= 供服务端识别个人配额桶）
   overviewTab: 'movie',
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
@@ -58,6 +60,10 @@ var magnetCurrentFilm = null;
 var subCurrentLang = 'all';
 
 var subCurrentSrc = 'assrt';
+
+// 内置默认 Worker 地址：部署者把自己的 Vercel 公共服务地址填到这里，使用者即开箱即用，无需自己填 Worker。
+// 留空则回落到用户在「设置 → API 配置」手动填写的 Worker 地址。注意：这是公开服务端点，不是密钥，可安全进仓库。
+var DEFAULT_WORKER = '';
 
 var subResultsCache = [];
 
@@ -209,6 +215,14 @@ var MAGNET_BATCH = 10;
 var SHOTS_INITIAL = 12;
 var SHOTS_BATCH = 12;
 
+// 剧照初始显示上限随激活层级变化：免费 1 张、中等 5 张、满级 12 张。
+function getShotCap(){
+  var t = (state.tier || '').trim();
+  if (t === 'full') return 12;
+  if (t === 'medium') return 5;
+  return 1;
+}
+
 var detailFullShots = [];
 
 var detailRenderedShots = 0;
@@ -309,23 +323,23 @@ function persistApiSettings(allowClear){
     if (allowClear || subAssrt || !state.subtitleAssrt) state.subtitleAssrt = subAssrt;
     if (allowClear || subOs || !state.subtitleOs) state.subtitleOs = subOs;
     if (allowClear || w || !state.magnetWorker) state.magnetWorker = w;
-    Promise.all([
+    return Promise.all([
       setTMDBKey(state.apiKey),
       setSubtitleAssrt(state.subtitleAssrt),
       setSubtitleOs(state.subtitleOs),
       setMagnetConfig({ worker: state.magnetWorker, category: 'video' })
-    ]).then(function(){ updateSubtitleBtn(); }).catch(function(){});
-  } catch(e) {}
+    ]).then(function(){ updateSubtitleBtn(); });
+  } catch(e) { return Promise.reject(e); }
 }
 
 function saveApiKey(){
-  try {
-    persistApiSettings(true);
+  // 等待 IndexedDB 事务真正提交后再关闭弹窗与提示，避免「配完即刷新」时未落盘
+  persistApiSettings(true).then(function(){
     closeAllSheets();
     showToast('已保存', 'success');
-  } catch(e) {
-    showToast('保存失败', 'error');
-  }
+  }).catch(function(){
+    showToast('保存失败，请重试', 'error');
+  });
 }
 
 function cropRightHalfAuto(dataUrl){
@@ -482,9 +496,9 @@ function populateFromJavbus(d){
   state.actors = (d.stars || []).slice(0, 11).map(function(s){
     return { name: (s && s.name) || '', role: '', photo: (s && s.photo) || null };
   });
-  // 女优头像：经 Worker /img 代理抓 JavBus 图床，转 dataURL 写回 actor.photo
+  // 女优头像：经 Worker /img 代理抓 JavBus 图床，转 dataURL 写回 actor.photo（仅满级加载）
   state.actors.forEach(function(a, i){
-    if (a.photo) loadJavbusActorPhoto(a.photo, i);
+    if ((state.tier || '') === 'full' && a.photo) loadJavbusActorPhoto(a.photo, i);
   });
   // 导演：{id, name}
   state.directors = (d.director && d.director.name) ? [{ name: d.director.name, role: '', photo: null }] : [];
@@ -632,8 +646,7 @@ function populateFromTMDB(d){
   var tEl = document.getElementById('trailer');
   if (tEl){ tEl.value = trailerKey || ''; var th = document.getElementById('trailerHint'); if (th){ th.textContent = trailerKey ? ('已识别预告片 ID：' + trailerKey) : ''; th.className = 'trailer-hint' + (trailerKey ? ' ok' : ''); } }
 
-  state.directors.forEach(function(dir, i){ if (dir._profile){ loadPersonPhotoFromTMDB(dir._profile, 'director', i); dir._profile = null; } });
-  state.actors.forEach(function(a, i){ if (a._profile){ loadPersonPhotoFromTMDB(a._profile, 'actor', i); a._profile = null; } });
+  loadCurrentCastPhotos();
 
   // 记录 TMDB id，供「刷新」功能重新拉取元数据
   if (d.id != null) state.tmdbId = d.id;
@@ -1069,6 +1082,8 @@ function loadMediaCandidates(paths, type, size){
 }
 
 function loadPersonPhotoFromTMDB(profilePath, mode, idx){
+  // 头像仅满级激活码加载（免费/中等只显示名字，不消耗 TMDB 头像请求）
+  if ((state.tier || '') !== 'full') return;
   var url = tmdbImgUrl(profilePath, 'w185');
   fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
     .then(function(blob){
@@ -1084,6 +1099,15 @@ function loadPersonPhotoFromTMDB(profilePath, mode, idx){
       };
       reader.readAsDataURL(blob);
     }).catch(function(){});
+}
+
+// 统一入口：按当前 tier 加载演职人员头像（满级才加载；非满级直接跳过，保留 _profile 以便验证后补载）
+function loadCurrentCastPhotos(){
+  if ((state.tier || '') !== 'full') return;
+  state.directors.forEach(function(dir, i){ if (dir._profile){ loadPersonPhotoFromTMDB(dir._profile, 'director', i); } });
+  state.actors.forEach(function(a, i){ if (a._profile){ loadPersonPhotoFromTMDB(a._profile, 'actor', i); } });
+  // JavBus 女优头像（a.photo 为远程图，走 Worker /img 代理）；同样仅满级
+  state.actors.forEach(function(a, i){ if (a.photo && a.photo.indexOf('http') === 0){ loadJavbusActorPhoto(a.photo, i); } });
 }
 
 function clearMediaThumb(type){
@@ -1272,14 +1296,16 @@ function searchMagnet(){
   var q = (document.getElementById('magnetQueryInput').value || '').trim();
   var box = document.getElementById('magnetResults');
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → API 配置」填写磁力 Worker 地址。</div>'; return; }
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  if (!w){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → API 配置」填写磁力 Worker 地址（或等部署者内置默认地址）。</div>'; return; }
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   // 番号（如 IPX-011）不限制 category（bt4g 的 cat 过滤对番号不可靠，常返回 0 结果）；
   // 普通关键词用 cat=movie 更精准。
   var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
-  var url = state.magnetWorker.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
+  var url = w.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
     + (isDvd ? '' : '&cat=movie')
-    + '&source=bt4g&order=seeders';
+    + '&source=bt4g&order=seeders'
+    + (state.activationCode ? '&code=' + encodeURIComponent(state.activationCode) : '');
   var ctrl = new AbortController();
   var to = setTimeout(function(){ ctrl.abort(); }, 35000);
   fetch(url, { signal: ctrl.signal, cache: 'no-store' })
@@ -1303,12 +1329,10 @@ function searchSubtitles(){
   var rawQ = (document.getElementById('subQueryInput').value || '').trim();
   var box = document.getElementById('subResults');
   if (!rawQ){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!(getAssrtToken() || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">未配置字幕源 Token</div>'; return; }
-  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未填写磁力 Worker 地址（设置 → API 配置）</div>'; return; }
-  // 仅搜索当前选中的源；伪射手优先、省 OpenSubtitles 配额
-  var useAssrt = subCurrentSrc === 'assrt' && !!getAssrtToken();
-  var useOs = subCurrentSrc === 'os' && !!state.subtitleOs;
-  if (!useAssrt && !useOs){ box.innerHTML = '<div class="tmdb-msg">请至少配置一个字幕源 Token</div>'; return; }
+  if (!(state.activationCode || state.subtitleAssrt || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  if (!w){ box.innerHTML = '<div class="tmdb-msg">未填写磁力 Worker 地址（设置 → API 配置）</div>'; return; }
+  // 服务端内置字幕 key，客户端无需配置（仍可传 &assrt;/&os= 覆盖）；仅搜索当前选中的源
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
@@ -1317,12 +1341,14 @@ function searchSubtitles(){
   var year = yearMatch ? yearMatch[1] : '';
   var q = rawQ.replace(/\b(19|20)\d{2}\b/g, '').replace(/[.\s]+$/g, '').replace(/\s+/g, ' ').trim();
   if (!q) q = rawQ.replace(/\b(19|20)\d{2}\b/g, '').trim(); // 极端情况：整个词就是年份时退回原值
-  var url = state.magnetWorker.replace(/\/$/, '') + '/subtitles?action=search'
+  var url = w.replace(/\/$/, '') + '/subtitles?action=search'
     + '&q=' + encodeURIComponent(q)
     + '&year=' + encodeURIComponent(year)
     + '&lang=' + encodeURIComponent(subCurrentLang)
-    + (useAssrt ? '&assrt=' + encodeURIComponent(getAssrtToken()) : '')
-    + (useOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '');
+    + '&src=' + encodeURIComponent(subCurrentSrc)
+    + (state.subtitleAssrt ? '&assrt=' + encodeURIComponent(state.subtitleAssrt) : '')
+    + (state.subtitleOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '')
+    + '&code=' + encodeURIComponent(state.activationCode);
   var to = setTimeout(function(){ subCtrl.abort(); }, 35000);
   fetch(url, { signal: subCtrl.signal, cache: 'no-store' })
     .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d || null }; }).catch(function(){ return { ok: r.ok, d: null }; }); })
@@ -1520,9 +1546,10 @@ function idbPut(store, key, val){
     return new Promise(function(res, rej){
       var tx = db.transaction(store, 'readwrite');
       var req = tx.objectStore(store).put(val, key);
-      req.onsuccess = function(){ res(); };
       req.onerror = function(){ rej(req.error || tx.error); };
       tx.onerror = function(){ rej(tx.error); };
+      // 必须在事务 oncomplete 时才算真正落盘；否则页面卸载可能中断未提交事务，导致数据丢失
+      tx.oncomplete = function(){ res(); };
     });
   });
 }
@@ -1657,6 +1684,12 @@ function getSubtitleOs(){ return idbGet('kv', 'subOs').then(function(v){ return 
 
 function setSubtitleOs(k){ return idbPut('kv', 'subOs', k || ''); }
 
+// 激活层级与激活码持久化（刷新不丢，依赖已修复的 idbPut 事务提交）
+function getTier(){ return idbGet('kv', 'tier').then(function(v){ return v || ''; }); }
+function setTier(t){ return idbPut('kv', 'tier', t || ''); }
+function getActivationCode(){ return idbGet('kv', 'activationCode').then(function(v){ return v || ''; }); }
+function setActivationCode(c){ return idbPut('kv', 'activationCode', c || ''); }
+
 function getMagnetConfig(){ return idbGet('kv', 'magnetConfig').then(function(v){ return v || null; }); }
 
 function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
@@ -1760,11 +1793,9 @@ function randomAdultLoadingPhrase(){
 function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') + '/javbus'; }
 
 function tmdbImgUrl(path, size){
-  var direct = TMDB_IMG_BASE + '/' + size + (path || '');
-  if (state && state.magnetWorker){
-    return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(direct);
-  }
-  return direct;
+  // 直连 TMDB 图片 CDN（image.tmdb.org 支持跨域 <img> 与 fetch），不绕 Worker，
+  // 避免免费档刷剧照就把 Worker 流量打满；普通海报图零成本。
+  return TMDB_IMG_BASE + '/' + size + (path || '');
 }
 
 function javStr(v){
@@ -1960,16 +1991,18 @@ function getAssrtToken(){ return (state.subtitleAssrt || '').trim(); }
 function downloadSubtitle(idx){
   var it = subResultsCache[idx];
   if (!it) return;
-  var base = state.magnetWorker.replace(/\/$/, '');
-  if (!base){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
+  if ((state.tier || '') !== 'full'){ showToast('字幕下载暂不可用', 'error'); return; }
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  if (!w){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
   var name = (it.title || 'subtitle').replace(/[\\/:*?"<>|]/g, '_');
-  var url = base + '/subtitles?action=download'
+  var url = w.replace(/\/$/, '') + '/subtitles?action=download'
     + '&source=' + encodeURIComponent(it.source)
     + '&id=' + encodeURIComponent(it.id)
     + '&name=' + encodeURIComponent(name)
     + '&ext=' + encodeURIComponent(it.ext || 'srt')
-    + '&assrt=' + encodeURIComponent(getAssrtToken() || '')
-    + '&os=' + encodeURIComponent(state.subtitleOs || '');
+    + (state.subtitleAssrt ? '&assrt=' + encodeURIComponent(state.subtitleAssrt) : '')
+    + (state.subtitleOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '')
+    + '&code=' + encodeURIComponent(state.activationCode || '');
   showToast('下载中…', 'success');
   fetch(url, { cache: 'no-store' })
     .then(function(r){

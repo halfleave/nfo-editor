@@ -1156,6 +1156,11 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #apiSheet .api-input-tag { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 600; color: var(--label-2); pointer-events: none; white-space: nowrap; }
 #apiSheet .api-input-wrap .ios-input { width: 100%; padding-left: 64px; padding-right: 42px; font-size: 15px; }
 #apiSheet .api-input-wrap .ios-input::placeholder { color: var(--label-3); }
+#apiSheet #activationCodeInput { padding-left: 12px; }
+#apiSheet .activation-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding: 0 2px; }
+#apiSheet .activation-status { font-size: 13px; color: var(--label-2); }
+#apiSheet .activation-status.ok { color: var(--accent); font-weight: 600; }
+#apiSheet .sb-pill-ghost { background: var(--card-fill); color: var(--accent); border: 1px solid var(--accent); font-size: 13px; padding: 4px 14px; border-radius: 980px; }
 /* API 分组帮助中间弹窗 */
 .api-group-help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 1; transition: opacity .2s ease; }
 .api-group-help-overlay.api-group-help-hidden { opacity: 0; pointer-events: none; }
@@ -1292,7 +1297,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 }
 .search-clear.show { display: flex; }
 .search-input-wrap.has-type-label .search-clear { right: 58px; }
-.tpdb-type-text {
+.flip-type {
   position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
   height: 26px; width: 44px; border: none; background: transparent; color: var(--label-2);
   font-size: 13px; font-weight: 500; cursor: pointer;
@@ -1300,8 +1305,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
-.tpdb-type-text:active { opacity: .55; }
-.tpdb-type-layer {
+.flip-type:active { opacity: .55; }
+.flip-type-layer {
   position: absolute; left: 0; right: 0; top: 0;
   height: 26px; line-height: 26px; text-align: right;
   white-space: nowrap;
@@ -1310,11 +1315,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
 }
-.tpdb-type-layer.is-current { transform: translateY(0); opacity: 1; }
-.tpdb-type-layer.is-incoming { transform: translateY(100%); opacity: 0; }
-.tpdb-type-text.animating .tpdb-type-layer.is-current { transform: translateY(-100%); opacity: 0; }
-.tpdb-type-text.animating .tpdb-type-layer.is-incoming { transform: translateY(0); opacity: 1; }
-.tpdb-type-text.no-transition .tpdb-type-layer { transition: none; }
+.flip-type-layer.is-current { transform: translateY(0); opacity: 1; }
+.flip-type-layer.is-incoming { transform: translateY(100%); opacity: 0; }
+.flip-type.animating .flip-type-layer.is-current { transform: translateY(-100%); opacity: 0; }
+.flip-type.animating .flip-type-layer.is-incoming { transform: translateY(0); opacity: 1; }
+.flip-type.no-transition .flip-type-layer { transition: none; }
 .search-box .ios-input::placeholder,
 .search-box input[type="text"]::placeholder { color: var(--label-3); }
 .search-box .ios-input:focus,
@@ -1577,6 +1582,23 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         </div>
       </div>
     </div>
+    <div class="api-group">
+      <div class="api-group-title-row">
+        <div class="api-group-title">激活码</div>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <input class="ios-input" type="text" id="activationCodeInput" placeholder="输入激活码" oninput="toggleActivationClear()" onblur="persistApiSettings(false)">
+          <button class="api-clear" id="activationClearBtn" onclick="clearActivationInput()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="activation-row">
+        <span id="activationStatus" class="activation-status">未激活</span>
+        <button class="sb-pill sb-pill-ghost" onclick="verifyActivationCode()">验证</button>
+      </div>
+    </div>
   </div>
 
   <!-- 加载配置（里模式专用） -->
@@ -1754,13 +1776,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <div class="search-input-wrap">
           <input class="ios-input" type="text" id="tmdbQuery" placeholder="泰坦尼克号" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
           <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
-          <button type="button" class="tpdb-type-text" id="tmdbTypeBtn" onclick="cycleTmdbType()" style="display:none;">
-            <span class="tpdb-type-layer is-current">电影</span>
-            <span class="tpdb-type-layer is-incoming">剧集</span>
+          <button type="button" class="flip-type" id="tmdbTypeBtn" onclick="cycleTmdbType()" style="display:none;">
+            <span class="flip-type-layer is-current">电影</span>
+            <span class="flip-type-layer is-incoming">剧集</span>
           </button>
-          <button type="button" class="tpdb-type-text" id="javCensorBtn" onclick="cycleJavCensor()" style="display:none;" aria-label="有码/无码切换">
-            <span class="tpdb-type-layer is-current">有码</span>
-            <span class="tpdb-type-layer is-incoming">无码</span>
+          <button type="button" class="flip-type" id="javCensorBtn" onclick="cycleJavCensor()" style="display:none;" aria-label="有码/无码切换">
+            <span class="flip-type-layer is-current">有码</span>
+            <span class="flip-type-layer is-incoming">无码</span>
           </button>
         </div>
         <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
@@ -2143,9 +2165,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
         <button class="api-clear" id="subQueryClear" onclick="clearSubQuery()" aria-label="清除" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
-        <button type="button" class="tpdb-type-text sub-src-text" id="subSrcBtn" onclick="cycleSubSrc()">
-          <span class="tpdb-type-layer is-current">伪射手</span>
-          <span class="tpdb-type-layer is-incoming">Sub</span>
+        <button type="button" class="flip-type sub-src-text" id="subSrcBtn" onclick="cycleSubSrc()">
+          <span class="flip-type-layer is-current">伪射手</span>
+          <span class="flip-type-layer is-incoming">Sub</span>
         </button>
       </div>
       <button class="sub-search-btn" onclick="searchSubtitles()">搜索</button>
@@ -2529,6 +2551,7 @@ var state = {
   autoClear: '3d',
   appearance: 'auto',
   themeHidden: false,
+  tier: '', activationCode: '',
   overviewTab: 'movie',
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
@@ -3128,6 +3151,9 @@ function openApiKeySheet(){
   toggleSubOsClear();
   document.getElementById('magnetWorkerInput').value = state.magnetWorker || '';
   toggleMagnetWorkerClear();
+  document.getElementById('activationCodeInput').value = state.activationCode || '';
+  toggleActivationClear();
+  updateActivationStatus();
   openSheet('apiSheet');
 }
 
@@ -3222,10 +3248,9 @@ function clearMagnetInput(){
 }
 function updateSubtitleBtn(){
   var btn = document.getElementById('dtActSub');
-  // 字幕搜索仅对「无番号」的非 AV 影片开放（如 TMDB / 自定义）；含番号的 AV 一律不显示。
-  // 用当前详情页影片的 dvdId 判定，比 source 标记更直接可靠（AV 一定有番号，TMDB/自定义没有）。
-  var hasCode = !!(currentDetailFilm && currentDetailFilm.data && currentDetailFilm.data.dvdId);
-  if (btn) btn.style.display = (!hasCode && (getAssrtToken() || state.subtitleOs)) ? '' : 'none';
+  // 字幕按钮：激活码有效（中等/满级）或用户自备字幕源 Token 时显示；已放开「仅无番号」限制
+  var enabled = !!(state.activationCode || getAssrtToken() || state.subtitleOs);
+  if (btn) btn.style.display = enabled ? '' : 'none';
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(allowClear){
@@ -3234,18 +3259,24 @@ function persistApiSettings(allowClear){
     var subAssrt = (document.getElementById('subAssrtInput').value || '').trim();
     var subOs = (document.getElementById('subOsInput').value || '').trim();
     var w = (document.getElementById('magnetWorkerInput').value || '').trim();
+    var code = (document.getElementById('activationCodeInput').value || '').trim();
     // 自动保存（失焦 / 关闭面板）时，空值不覆盖已保存的非空配置，避免误清空全局设置；
     // 仅显式点「保存」(allowClear=true) 才允许用空值清空某项。
     if (allowClear || apiKey || !state.apiKey) state.apiKey = apiKey;
     if (allowClear || subAssrt || !state.subtitleAssrt) state.subtitleAssrt = subAssrt;
     if (allowClear || subOs || !state.subtitleOs) state.subtitleOs = subOs;
     if (allowClear || w || !state.magnetWorker) state.magnetWorker = w;
+    var prevCode = state.activationCode;
+    if (allowClear || code || !state.activationCode) state.activationCode = code;
+    // 激活码清空或变更（未点验证）时，档位需重验证：清空则降级，变更则待验证后再生效
+    if (!code || code !== prevCode) state.tier = '';
     Promise.all([
       setTMDBKey(state.apiKey),
       setSubtitleAssrt(state.subtitleAssrt),
       setSubtitleOs(state.subtitleOs),
-      setMagnetConfig({ worker: state.magnetWorker, category: 'video' })
-    ]).then(function(){ updateSubtitleBtn(); }).catch(function(){});
+      setMagnetConfig({ worker: state.magnetWorker, category: 'video' }),
+      setActivationCode(state.activationCode)
+    ]).then(function(){ updateSubtitleBtn(); updateActivationStatus(); }).catch(function(){});
   } catch(e) {}
 }
 function saveApiKey(){
@@ -3256,6 +3287,54 @@ function saveApiKey(){
   } catch(e) {
     showToast('保存失败', 'error');
   }
+}
+function toggleActivationClear(){
+  var btn = document.getElementById('activationClearBtn');
+  var input = document.getElementById('activationCodeInput');
+  if (btn && input) btn.style.display = input.value ? 'flex' : 'none';
+}
+function clearActivationInput(){
+  var input = document.getElementById('activationCodeInput');
+  if (input){ input.value = ''; toggleActivationClear(); input.focus(); }
+}
+function updateActivationStatus(){
+  var el = document.getElementById('activationStatus');
+  if (!el) return;
+  if ((state.tier || '') === 'full' || (state.tier || '') === 'medium' || state.activationCode){
+    el.textContent = '已激活'; el.className = 'activation-status ok';
+  } else {
+    el.textContent = '未激活'; el.className = 'activation-status';
+  }
+}
+function verifyActivationCode(){
+  var code = (document.getElementById('activationCodeInput').value || '').trim();
+  if (!code){ showToast('请输入激活码', 'error'); return; }
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  if (!w){ showToast('请先填写代理服务地址（设置 → API 配置）', 'error'); return; }
+  showToast('验证中…', 'success');
+  fetch(w.replace(/\/$/, '') + '/verify?code=' + encodeURIComponent(code), { cache: 'no-store' })
+    .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d || null }; }).catch(function(){ return { ok: r.ok, d: null }; }); })
+    .then(function(res){
+      var d = res.d;
+      if (d && d.ok && d.tier){
+        state.tier = d.tier; state.activationCode = code;
+        Promise.all([ setActivationCode(code), setTier(d.tier) ]).then(function(){
+          updateActivationStatus();
+          showToast('已激活', 'success');
+          // 满级解锁后补载演职人员头像（TMDB _profile + JavBus 图床）；当前详情页若打开则刷新
+          if ((state.tier || '') === 'full'){
+            loadCurrentCastPhotos();
+            if (state.actors && state.actors.length){ state.actors.forEach(function(a, i){ if (a.photo) loadJavbusActorPhoto(a.photo, i); }); }
+          }
+        }).catch(function(){ showToast('保存失败', 'error'); });
+      } else {
+        state.tier = ''; state.activationCode = '';
+        setTier('').catch(function(){}); setActivationCode('').catch(function(){});
+        updateActivationStatus();
+        showToast('激活码无效', 'error');
+      }
+    })
+    .catch(function(){ showToast('验证失败，请稍后重试', 'error'); });
 }
 /* API 分组帮助数据（中间弹窗） */
 var apiGroupHelpData = {
@@ -3375,14 +3454,16 @@ function searchMagnet(){
   var q = (document.getElementById('magnetQueryInput').value || '').trim();
   var box = document.getElementById('magnetResults');
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → API 配置」填写磁力 Worker 地址。</div>'; return; }
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  if (!w){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → API 配置」填写代理服务地址。</div>'; return; }
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   // 番号（如 IPX-011）不限制 category（bt4g 的 cat 过滤对番号不可靠，常返回 0 结果）；
   // 普通关键词用 cat=movie 更精准。
   var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
-  var url = state.magnetWorker.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
+  var url = w.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
     + (isDvd ? '' : '&cat=movie')
-    + '&source=bt4g&order=seeders';
+    + '&source=bt4g&order=seeders'
+    + (state.activationCode ? '&code=' + encodeURIComponent(state.activationCode) : '');
   var ctrl = new AbortController();
   var to = setTimeout(function(){ ctrl.abort(); }, 35000);
   fetch(url, { signal: ctrl.signal, cache: 'no-store' })
@@ -3446,10 +3527,10 @@ var subOrigVal = '';
 var subYear = '';
 var subUserEdited = false;
 function openSubtitleSheet(){
-  // 兜底守卫：字幕搜索仅适用于无番号的普通影片（含番号的 AV 不可用）
-  if (currentDetailFilm && currentDetailFilm.data && currentDetailFilm.data.dvdId){ showToast('字幕搜索仅适用于普通影片（无番号）', 'error'); return; }
-  if (!(getAssrtToken() || state.subtitleOs)){ showToast('请先到「设置 → API 配置」填写字幕源 Token', 'error'); return; }
-  if (!state.magnetWorker){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  // 字幕搜索需激活码（中等 / 满级）或用户自备字幕源 Token；未满足时统一提示暂不可用，不暴露档位
+  if (!(state.activationCode || getAssrtToken() || state.subtitleOs)){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
+  if (!w){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
   openSheet('subtitleSheet');
   document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">输入后点击「搜索」</div>';
   subCurrentLang = 'all'; syncSubLangSelect();
@@ -3510,8 +3591,8 @@ function cycleSubSrc(){
   var next = subCurrentSrc === 'os' ? 'assrt' : 'os';
   var btn = document.getElementById('subSrcBtn');
   if (!btn) return;
-  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
-  var inEl = btn.querySelector('.tpdb-type-layer.is-incoming');
+  var curEl = btn.querySelector('.flip-type-layer.is-current');
+  var inEl = btn.querySelector('.flip-type-layer.is-incoming');
   if (!curEl || !inEl) return;
   inEl.textContent = subSrcLabel(next);
   requestAnimationFrame(function(){ btn.classList.add('animating'); });
@@ -3526,7 +3607,7 @@ function cycleSubSrc(){
 function syncSubSrcBtn(){
   var btn = document.getElementById('subSrcBtn');
   if (!btn) return;
-  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
+  var curEl = btn.querySelector('.flip-type-layer.is-current');
   btn.classList.remove('animating');
   if (curEl) curEl.textContent = subSrcLabel(subCurrentSrc);
 }
@@ -3535,12 +3616,13 @@ function searchSubtitles(){
   var rawQ = (document.getElementById('subQueryInput').value || '').trim();
   var box = document.getElementById('subResults');
   if (!rawQ){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
-  if (!(getAssrtToken() || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">未配置字幕源 Token</div>'; return; }
-  if (!state.magnetWorker){ box.innerHTML = '<div class="tmdb-msg">未填写磁力 Worker 地址（设置 → API 配置）</div>'; return; }
+  if (!(state.activationCode || getAssrtToken() || state.subtitleOs)){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  if (!w){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
   // 仅搜索当前选中的源；伪射手优先、省 OpenSubtitles 配额
   var useAssrt = subCurrentSrc === 'assrt' && !!getAssrtToken();
   var useOs = subCurrentSrc === 'os' && !!state.subtitleOs;
-  if (!useAssrt && !useOs){ box.innerHTML = '<div class="tmdb-msg">请至少配置一个字幕源 Token</div>'; return; }
+  if (!useAssrt && !useOs && !state.activationCode){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   if (subCtrl) subCtrl.abort();
   subCtrl = new AbortController();
@@ -3549,10 +3631,11 @@ function searchSubtitles(){
   var year = yearMatch ? yearMatch[1] : '';
   var q = rawQ.replace(/\b(19|20)\d{2}\b/g, '').replace(/[.\s]+$/g, '').replace(/\s+/g, ' ').trim();
   if (!q) q = rawQ.replace(/\b(19|20)\d{2}\b/g, '').trim(); // 极端情况：整个词就是年份时退回原值
-  var url = state.magnetWorker.replace(/\/$/, '') + '/subtitles?action=search'
+  var url = w.replace(/\/$/, '') + '/subtitles?action=search'
     + '&q=' + encodeURIComponent(q)
     + '&year=' + encodeURIComponent(year)
     + '&lang=' + encodeURIComponent(subCurrentLang)
+    + (state.activationCode ? '&code=' + encodeURIComponent(state.activationCode) : '')
     + (useAssrt ? '&assrt=' + encodeURIComponent(getAssrtToken()) : '')
     + (useOs ? '&os=' + encodeURIComponent(state.subtitleOs) : '');
   var to = setTimeout(function(){ subCtrl.abort(); }, 35000);
@@ -3613,14 +3696,16 @@ function renderSubtitleResults(items, warnings){
 function downloadSubtitle(idx){
   var it = subResultsCache[idx];
   if (!it) return;
-  var base = state.magnetWorker.replace(/\/$/, '');
-  if (!base){ showToast('请先填写磁力 Worker 地址（设置 → API 配置）', 'error'); return; }
+  if ((state.tier || '') !== 'full'){ showToast('字幕下载暂不可用', 'error'); return; }
+  var base = (state.magnetWorker || DEFAULT_WORKER).replace(/\/$/, '');
+  if (!base){ showToast('字幕下载暂不可用', 'error'); return; }
   var name = (it.title || 'subtitle').replace(/[\\/:*?"<>|]/g, '_');
   var url = base + '/subtitles?action=download'
     + '&source=' + encodeURIComponent(it.source)
     + '&id=' + encodeURIComponent(it.id)
     + '&name=' + encodeURIComponent(name)
     + '&ext=' + encodeURIComponent(it.ext || 'srt')
+    + (state.activationCode ? '&code=' + encodeURIComponent(state.activationCode) : '')
     + '&assrt=' + encodeURIComponent(getAssrtToken() || '')
     + '&os=' + encodeURIComponent(state.subtitleOs || '');
   showToast('下载中…', 'success');
@@ -4504,6 +4589,12 @@ function setSubtitleAssrt(k){ return idbPut('kv', 'subAssrt', k || ''); }
 function getSubtitleOs(){ return idbGet('kv', 'subOs').then(function(v){ return v || ''; }); }
 function setSubtitleOs(k){ return idbPut('kv', 'subOs', k || ''); }
 function getMagnetConfig(){ return idbGet('kv', 'magnetConfig').then(function(v){ return v || null; }); }
+function getActivationCode(){ return idbGet('kv', 'activationCode').then(function(v){ return v || ''; }); }
+function setActivationCode(v){ return idbPut('kv', 'activationCode', v || ''); }
+function getTier(){ return idbGet('kv', 'tier').then(function(v){ return v || ''; }); }
+function setTier(v){ return idbPut('kv', 'tier', v || ''); }
+/* 剧照档位上限：免费 1 张、中等 5 张、满级 12 张（满级不卡上限，可看全部） */
+function getShotCap(){ var t = state.tier || ''; if (t === 'full') return 12; if (t === 'medium') return 5; return 1; }
 function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
 /* JavBus 基址：由「Worker 代理地址」自动推导（state.magnetWorker + '/javbus'），无需单独配置输入框 */
 function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') + '/javbus'; }
@@ -4511,16 +4602,14 @@ function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') 
 /* —— TMDB 常量 —— */
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
 var TMDB_IMG_BASE = 'https://image.tmdb.org/t/p';
-/* 拼 TMDB 图片地址。若已配置 Worker（磁力 / JavBus 代理通用），则统一走 Worker 的 /img 代理：
-   - 绕过部分网络/地区对 image.tmdb.org 的拦截（Worker 在服务端拉取，浏览器只连 Worker 域）；
-   - Worker 回包带 Access-Control-Allow-Origin:*，保证 fetch+blob+canvas 转 dataURL 不被污染，海报/剧照才能存进 IndexedDB。
-   未配置 Worker 时回退直连（原行为）。 */
+/* 部署者填写的公共 Worker 地址（磁力 / 字幕 / JavBus / 图片代理通用）。
+   留空则回落到用户在「设置 → API 配置 → 代理服务」自行填写的 Worker；
+   填了之后普通用户无需配置即可使用受限功能。手机端与 PC 端共用同一地址。 */
+var DEFAULT_WORKER = '';
+/* 拼 TMDB 图片地址。image.tmdb.org 自带 Access-Control-Allow-Origin:*，
+   浏览器可直接 fetch+blob+canvas 转 dataURL 存 IndexedDB（省 Worker 流量，免费档刷剧照不占额度）。始终直连。 */
 function tmdbImgUrl(path, size){
-  var direct = TMDB_IMG_BASE + '/' + size + (path || '');
-  if (state && state.magnetWorker){
-    return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(direct);
-  }
-  return direct;
+  return TMDB_IMG_BASE + '/' + size + (path || '');
 }
 var CC_MAP = {
   US:'美国', GB:'英国', CN:'中国大陆', HK:'香港', TW:'台湾', JP:'日本', KR:'韩国',
@@ -4697,14 +4786,14 @@ function updateSearchPlaceholder(){
   if (state.metaSource === 'jav') updateJavPlaceholder();
   else el.placeholder = '泰坦尼克号';
 }
-/* TMDB 搜索的电影/剧集切换：复用 tpdb-type-text 翻转动画样式，仅在 metaSource==='tmdb' 时显示 */
+/* TMDB 搜索的电影/剧集切换：复用 flip-type 翻转动画样式，仅在 metaSource==='tmdb' 时显示 */
 function tmdbTypeLabel(mt){ return mt === 'tv' ? '剧集' : '电影'; }
 function cycleTmdbType(){
   var next = state.tmdbMediaType === 'tv' ? 'movie' : 'tv';
   var btn = document.getElementById('tmdbTypeBtn');
   if (!btn) return;
-  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
-  var inEl = btn.querySelector('.tpdb-type-layer.is-incoming');
+  var curEl = btn.querySelector('.flip-type-layer.is-current');
+  var inEl = btn.querySelector('.flip-type-layer.is-incoming');
   if (!curEl || !inEl) return;
   inEl.textContent = tmdbTypeLabel(next);
   requestAnimationFrame(function(){ btn.classList.add('animating'); });
@@ -4727,8 +4816,8 @@ function cycleJavCensor(){
   var next = state.javCensor === 'uncensored' ? 'masked' : 'uncensored';
   var btn = document.getElementById('javCensorBtn');
   if (!btn) return;
-  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
-  var inEl = btn.querySelector('.tpdb-type-layer.is-incoming');
+  var curEl = btn.querySelector('.flip-type-layer.is-current');
+  var inEl = btn.querySelector('.flip-type-layer.is-incoming');
   if (!curEl || !inEl) return;
   inEl.textContent = javCensorLabel(next);
   requestAnimationFrame(function(){ btn.classList.add('animating'); });
@@ -4743,7 +4832,7 @@ function cycleJavCensor(){
 function syncTmdbTypeBtn(){
   var btn = document.getElementById('tmdbTypeBtn');
   if (!btn) return;
-  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
+  var curEl = btn.querySelector('.flip-type-layer.is-current');
   if (state.metaSource === 'tmdb'){
     btn.style.display = '';
     btn.classList.remove('animating');
@@ -4755,7 +4844,7 @@ function syncTmdbTypeBtn(){
 function syncJavCensorBtn(){
   var btn = document.getElementById('javCensorBtn');
   if (!btn) return;
-  var curEl = btn.querySelector('.tpdb-type-layer.is-current');
+  var curEl = btn.querySelector('.flip-type-layer.is-current');
   if (state.metaSource === 'jav'){
     btn.style.display = '';
     btn.classList.remove('animating');
@@ -5063,7 +5152,7 @@ function populateFromJavbus(d){
   });
   // 女优头像：经 Worker /img 代理抓 JavBus 图床，转 dataURL 写回 actor.photo
   state.actors.forEach(function(a, i){
-    if (a.photo) loadJavbusActorPhoto(a.photo, i);
+    if ((state.tier || '') === 'full' && a.photo) loadJavbusActorPhoto(a.photo, i);
   });
   // 导演：{id, name}
   state.directors = (d.director && d.director.name) ? [{ name: d.director.name, role: '', photo: null }] : [];
@@ -5582,8 +5671,7 @@ function populateFromTMDB(d){
   var tEl = document.getElementById('trailer');
   if (tEl){ tEl.value = trailerKey || ''; var th = document.getElementById('trailerHint'); if (th){ th.textContent = trailerKey ? ('已识别预告片 ID：' + trailerKey) : ''; th.className = 'trailer-hint' + (trailerKey ? ' ok' : ''); } }
 
-  state.directors.forEach(function(dir, i){ if (dir._profile){ loadPersonPhotoFromTMDB(dir._profile, 'director', i); dir._profile = null; } });
-  state.actors.forEach(function(a, i){ if (a._profile){ loadPersonPhotoFromTMDB(a._profile, 'actor', i); a._profile = null; } });
+  loadCurrentCastPhotos();
 
   // 记录 TMDB id，供「刷新」功能重新拉取元数据
   if (d.id != null) state.tmdbId = d.id;
@@ -5670,6 +5758,7 @@ function loadMediaCandidates(paths, type, size){
   return promises;
 }
 function loadPersonPhotoFromTMDB(profilePath, mode, idx){
+  if ((state.tier || '') !== 'full') return;  // 演职人员头像仅满级加载
   var url = tmdbImgUrl(profilePath, 'w185');
   fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
     .then(function(blob){
@@ -5689,6 +5778,7 @@ function loadPersonPhotoFromTMDB(profilePath, mode, idx){
 
 /* JavBus 女优头像：经 Worker /img 代理抓图床，转 dataURL 写回 actors[idx].photo 并刷新 */
 function loadJavbusActorPhoto(photoUrl, idx){
+  if ((state.tier || '') !== 'full') return;  // 女优头像仅满级加载
   var url = javbusImgUrl(photoUrl);
   fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
     .then(function(blob){
@@ -5699,6 +5789,13 @@ function loadJavbusActorPhoto(photoUrl, idx){
       };
       reader.readAsDataURL(blob);
     }).catch(function(){});
+}
+/* 统一补载当前影片演职人员头像（仅满级生效）：TMDB _profile（导演/演员）+ JavBus 图床（女优）。
+   非满级时跳过，并保留 _profile 供激活满级后再补；JavBus 头像来源 a.photo 同样受控。 */
+function loadCurrentCastPhotos(){
+  if ((state.tier || '') !== 'full') return;
+  state.directors.forEach(function(dir, i){ if (dir._profile){ loadPersonPhotoFromTMDB(dir._profile, 'director', i); dir._profile = null; } });
+  state.actors.forEach(function(a, i){ if (a._profile){ loadPersonPhotoFromTMDB(a._profile, 'actor', i); a._profile = null; } });
 }
 /* —— 图片裁剪（居中按比例；ratio=0 不裁剪） —— */
 function cropToRatio(dataUrl, ratio){
@@ -6441,7 +6538,7 @@ function renderFilmDetail(film){
       row.innerHTML = '<div class="detail-shots-col" id="detailShotsCol0"></div><div class="detail-shots-col" id="detailShotsCol1"></div>';
       shotEl.appendChild(row);
       detailShotsRow = row;
-      appendMoreShots();                // 初始加载前 6 张
+      appendMoreShots(getShotCap());                // 初始加载按档位数量（免费 1 / 中等 5 / 满级 12）
       shotEl.style.display = '';
     } else {
       shotEl.innerHTML = '';
@@ -6516,6 +6613,8 @@ function appendMoreShots(batch){
   if (_appendingShots) return;
   if (!detailShotsRow) return;
   if (detailRenderedShots >= detailFullShots.length) return;
+  // 非满级按档位限制剧照显示数量（免费 1 / 中等 5）；满级不卡上限，可看全部
+  if ((state.tier || '') !== 'full' && detailRenderedShots >= getShotCap()){ _appendingShots = false; updateShotLoader(); return; }
   if (!navigator.onLine) return;          // 离线不加载更多剧照
   _appendingShots = true;
   var target = Math.min(detailRenderedShots + (batch || 6), detailFullShots.length);
@@ -7376,6 +7475,8 @@ function bootApp(){
     }).catch(function(){}),
     getAutoClearMode().then(function(m){ state.autoClear = m || '3d'; updateAutoClearDisplay(); setSelectValue('autoClearSelect', state.autoClear); clearExpiredFilms(); }).catch(function(){}),
     getAppearance().then(function(m){ state.appearance = (m === 'dark' || m === 'light' || m === 'auto') ? m : 'auto'; updateAppearanceDisplay(); setSelectValue('appearanceSelect', state.appearance); applyAppearance(state.appearance); }).catch(function(){}),
+    getActivationCode().then(function(c){ state.activationCode = c || ''; updateActivationStatus(); }).catch(function(){}),
+    getTier().then(function(t){ state.tier = t || ''; updateActivationStatus(); }).catch(function(){}),
     getMagnetConfig().then(function(cfg){
       if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
     }).catch(function(){}),

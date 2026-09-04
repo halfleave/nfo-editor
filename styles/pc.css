@@ -301,6 +301,16 @@ a:hover { text-decoration: underline; }
   margin: 0 0 8px; padding-left: 2px;
 }
 
+/* 激活码区 */
+.activation-row {
+  display: flex; align-items: center; gap: 10px; margin-top: 4px;
+}
+.activation-status {
+  flex: 1; font-size: 12px; color: var(--text-3); line-height: 1.4;
+}
+.activation-status.ok { color: #2faa6a; font-weight: 600; }
+.activation-status.warn { color: #d9912b; font-weight: 600; }
+
 /* 空状态 */
 .empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;

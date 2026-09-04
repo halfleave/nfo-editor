@@ -2044,7 +2044,7 @@ function renderFilmDetail(film){
       detailShotRevealing = false;
       detailVisibleShots = [];
       var html = '<div class="detail-shots-title">剧照</div><div class="detail-shots-cols"><div class="detail-shot-col"></div><div class="detail-shot-col"></div><div class="detail-shot-col"></div></div>';
-      if (fullShots.length > SHOTS_INITIAL){
+      if (fullShots.length > getShotCap()){
         html += '<button class="detail-shots-more" onclick="loadMoreShots()">加载更多</button>';
       }
       shotEl.innerHTML = html;
@@ -2054,7 +2054,7 @@ function renderFilmDetail(film){
       requestAnimationFrame(function(){
         var colsWrap = shotEl.querySelector('.detail-shots-cols');
         detailShotColW = colsWrap ? Math.max(1, (colsWrap.clientWidth - 24) / 3) : 200;
-        var initN = Math.min(SHOTS_INITIAL, fullShots.length);
+        var initN = Math.min(getShotCap(), fullShots.length);
         for (var q = 0; q < initN; q++) queueShot(q, stillDisplayUrl(fullShots[q]));
       });
     } else {
@@ -2084,7 +2084,7 @@ var SHOT_REVEAL_MS = 150;
 function loadMoreShots(){
   if (!detailShotCols.length) return;
   // 续入队下一批，走同一 queueShot/placeShot，前面已放置的图零重排
-  var end = Math.min(detailShotQueueIndex + SHOTS_BATCH, detailFullShots.length);
+  var end = Math.min(detailShotQueueIndex + SHOTS_BATCH, detailFullShots.length, getShotCap());
   for (; detailShotQueueIndex < end; detailShotQueueIndex++){
     queueShot(detailShotQueueIndex, stillDisplayUrl(detailFullShots[detailShotQueueIndex]));
   }
@@ -2184,7 +2184,7 @@ function stopDetailBgSlideshow(){
 /* 离开详情页时把「加载更多」加载的多余剧照从 DOM 中卸掉，只保留初始 SHOTS_INITIAL 张，释放内存解码资源。
    下次进入会由 renderFilmDetail 重新渲染前 SHOTS_INITIAL 张，互不干扰。 */
 function trimShotsToInitial(){
-  var init = SHOTS_INITIAL;
+  var init = getShotCap();
   var nodes = document.querySelectorAll('.detail-shot');
   for (var i = 0; i < nodes.length; i++){
     var seq = parseInt(nodes[i].getAttribute('data-idx'), 10);
@@ -2441,6 +2441,9 @@ function renderSubtitleResults(items, warnings){
          +   '</div>'
          + '</div>';
   }).join('');
+  if ((state.tier || '') !== 'full'){
+    html = '<div class="sub-warn">字幕下载暂不可用</div>' + html;
+  }
   box.innerHTML = html;
 }
 
@@ -2690,7 +2693,9 @@ function openApiKeySheet(){
   set('subAssrtInput', state.subtitleAssrt);
   set('subOsInput', state.subtitleOs);
   set('magnetWorkerInput', state.magnetWorker);
-  toggleApiClear(); toggleSubAssrtClear(); toggleSubOsClear(); toggleMagnetWorkerClear();
+  set('activationCodeInput', state.activationCode);
+  toggleApiClear(); toggleSubAssrtClear(); toggleSubOsClear(); toggleMagnetWorkerClear(); toggleActivationClear();
+  updateActivationStatus();
   openSheet('apiSheet');
 }
 function _toggleClear(inputId, btnId){
@@ -2706,6 +2711,42 @@ function toggleSubOsClear(){ _toggleClear('subOsInput', 'subOsClearBtn'); }
 function clearSubOsInput(){ var i = document.getElementById('subOsInput'); if (i) i.value = ''; toggleSubOsClear(); }
 function toggleMagnetWorkerClear(){ _toggleClear('magnetWorkerInput', 'magnetClearBtn'); }
 function clearMagnetInput(){ var i = document.getElementById('magnetWorkerInput'); if (i) i.value = ''; toggleMagnetWorkerClear(); }
+
+function toggleActivationClear(){ _toggleClear('activationCodeInput', 'activationClearBtn'); }
+function clearActivationInput(){ var i = document.getElementById('activationCodeInput'); if (i) i.value = ''; toggleActivationClear(); }
+
+function updateActivationStatus(){
+  var el = document.getElementById('activationStatus');
+  if (!el) return;
+  var t = (state.tier || '').trim();
+  if (t === 'full' || t === 'medium'){ el.textContent = '已激活'; el.className = 'activation-status ok'; }
+  else { el.textContent = '未激活'; el.className = 'activation-status'; }
+}
+
+function verifyActivationCode(){
+  var code = ((document.getElementById('activationCodeInput') || {}).value || '').trim();
+  if (!code){ showToast('请输入激活码', 'error'); return; }
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  if (!w){ showToast('请先填写 Worker 地址', 'error'); return; }
+  var url = w.replace(/\/$/, '') + '/verify?code=' + encodeURIComponent(code);
+  fetch(url, { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d && d.ok){
+        state.activationCode = code;
+        state.tier = d.tier || '';
+        Promise.all([ setActivationCode(code), setTier(state.tier) ]).then(function(){
+          updateActivationStatus();
+          showToast('已激活', 'success');
+          // 验证后按新权限补载头像 / 剧照（若正在看详情页）
+          if (typeof currentDetailFilm !== 'undefined' && currentDetailFilm){ loadCurrentCastPhotos(); renderFilmDetail(currentDetailFilm); }
+        });
+      } else {
+        showToast('激活码无效', 'error');
+      }
+    })
+    .catch(function(){ showToast('验证失败，请检查 Worker 地址', 'error'); });
+}
 
 /* ===================================================================
    恢复初始状态
@@ -2861,6 +2902,8 @@ function bootApp(){
       applyAppearance(state.appearance);
     }).catch(function(){}),
     getMagnetConfig().then(function(cfg){ if (cfg && cfg.worker) state.magnetWorker = cfg.worker; }).catch(function(){}),
+    getTier().then(function(t){ state.tier = t || ''; }).catch(function(){}),
+    getActivationCode().then(function(c){ state.activationCode = c || ''; updateActivationStatus(); }).catch(function(){}),
     getAdultLoadingPhrases().then(function(list){ currentAdultPhrases = list || []; }).catch(function(){}),
     idbGet('kv', 'libView').then(function(v){ if (v === 'grid' || v === 'list') state._libView = v; }).catch(function(){}),
     getThemeHidden().then(function(h){

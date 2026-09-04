@@ -12,7 +12,7 @@
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzAwN0FGRiIvPjxwYXRoIGQ9Ik0xMiAxMGwxMCA2LTEwIDZ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+">
 <title>NFO 编辑器</title>
-  <link rel="stylesheet" href="./styles/pc.css?v=30">
+  <link rel="stylesheet" href="./styles/pc.css?v=33">
   <script>
   /* 首屏同步应用主题色，避免刷新瞬间默认蓝 → 主题色的闪烁 (FOUC)。
      主题色权威值存于 IndexedDB（异步），这里仅用 localStorage 镜像做首屏兜底。 */
@@ -756,6 +756,21 @@
         </button>
       </div>
     </div>
+
+    <div class="section-title">激活码</div>
+    <div class="field mb-12">
+      <div class="input-wrap has-title">
+        <span class="input-title">激活码</span>
+        <input class="input" type="text" id="activationCodeInput" placeholder="输入激活码" style="padding-left: 58px;" oninput="toggleActivationClear()">
+        <button class="input-clear" id="activationClearBtn" onclick="clearActivationInput()" aria-label="清除">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="activation-row">
+      <span id="activationStatus" class="activation-status">未激活</span>
+      <button class="btn btn-default btn-sm" onclick="verifyActivationCode()">验证</button>
+    </div>
   </div>
   <div class="modal-foot">
     <button class="btn btn-ghost" onclick="openApiHelp()">说明</button>
@@ -1064,8 +1079,8 @@
 
 <!-- ==================== Toast ==================== -->
 <div class="toasts" id="toasts"></div>
-  <script src="./src/core.js?v=30"></script>
-  <script src="./src/ui.js?v=30"></script>
-  <script src="./src/main.js?v=30"></script>
+  <script src="./src/core.js?v=33"></script>
+  <script src="./src/ui.js?v=33"></script>
+  <script src="./src/main.js?v=33"></script>
 </body>
 </html>
