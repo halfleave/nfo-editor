@@ -2621,6 +2621,8 @@ var state = {
   tier: '', activationCode: '',
   translateBaseUrl: '', translateApiKey: '', translateModel: '', // 翻译 AI 配置（OpenAI 兼容，客户端直连）
   translatingIds: new Set(), // 正在后台翻译的影片 id 集合（仅运行时，用于首页加载图标）
+  translatingInFlight: new Set(), // 正在发翻译请求的 id（防重入，与 UI 图标分离）
+  pendingTranslateIds: new Set(), // 已保存、待「数据加载完」后再翻译的 id
   overviewTab: 'movie',
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
@@ -3401,11 +3403,12 @@ function computeTranslateNeed(film){
 /* 后台翻译并覆盖更新影片记录；完成后移除首页加载图标。
    一次请求翻译 title + summary，按当前数据逐字段判定是否需要覆盖（简介可能晚于保存到达，故可重复调用）。 */
 function startFilmTranslation(id){
-  if (!translateConfigReady() || state.translatingIds.has(id)) return; // 防重入
+  if (!translateConfigReady() || state.translatingInFlight.has(id)) return; // 防重入（与 UI 图标分离）
   loadFilm(id).then(function(f){
     if (!f) return;
     var need = computeTranslateNeed(f);
-    if (!need.title && !need.plot) return; // 无需翻译（已是中文/英文/番号）
+    if (!need.title && !need.plot){ return; } // 无需翻译（已是中文/英文/番号）
+    state.translatingInFlight.add(id);
     state.translatingIds.add(id);
     renderOverview(); // 显示加载图标
     var title = (f.data && f.data.title) || f.title || '';
@@ -3436,7 +3439,25 @@ function startFilmTranslation(id){
 }
 function finishTranslation(id){
   state.translatingIds.delete(id);
+  state.translatingInFlight.delete(id);
   renderOverview();
+}
+/* 标记影片「已保存、待数据加载完后翻译」：立即显示首页刷新图标（translatingIds），
+   并把 id 放入 pending；由 flushPendingTranslate 在 silentRefresh 后（数据全）触发翻译。
+   saveToDisk（手动保存、无后续异步）可直接在调用后 flush；quickSaveAndHome 等 silentRefresh 触发。
+   6s 兜底确保即使 silentRefresh 未跑（无图/加载失败）也不卡图标。 */
+function markPendingTranslate(id){
+  if (!translateConfigReady()) return;
+  state.translatingIds.add(id);
+  renderOverview();
+  state.pendingTranslateIds.add(id);
+  setTimeout(function(){ flushPendingTranslate(id); }, 6000);
+}
+function flushPendingTranslate(id){
+  if (state.pendingTranslateIds.has(id)){
+    state.pendingTranslateIds.delete(id);
+    startFilmTranslation(id); // 此时数据已加载完（silentRefresh 已补存），再翻译标题/简介
+  }
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(allowClear){
@@ -4494,9 +4515,9 @@ function saveToDisk(){
     showToast('已保存', 'success');
     // 保存后检查影片数量，达到上限附近时提醒（延迟以免覆盖保存提示）
     checkFilmCap(1500);
-    // 先存原文，后台异步翻译标题/简介，翻完覆盖更新（首页剧照右上角显示加载图标）；
-    // 自加载、简介补齐后再由 silentRefresh 补翻 plot
-    startFilmTranslation(film.id);
+    // 先存原文；保存时即显示首页剧照刷新图标，等数据加载完再翻译（手动编辑无后续异步，立即 flush）
+    markPendingTranslate(film.id);
+    flushPendingTranslate(film.id);
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
@@ -4517,9 +4538,8 @@ function quickSaveAndHome(){
     switchPage('home');
     showToast(result.merged ? '已合并更新并保存' : '已保存，返回首页', 'success');
     checkFilmCap(1500);
-    // 先存原文，后台异步翻译标题/简介，翻完覆盖更新（首页剧照右上角显示加载图标）；
-    // 简介补齐后由 silentRefresh 再补翻 plot
-    startFilmTranslation(saved.id);
+    // 先存原文；保存时即显示首页剧照刷新图标，等 silentRefresh（图片/简介加载完）后由 flushPendingTranslate 翻译
+    markPendingTranslate(saved.id);
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
@@ -4531,8 +4551,8 @@ function silentRefreshCurrentFilm(){
   film.id = currentFilmId;
   saveFilm(film).then(function(){
     renderOverview();
-    // 元数据（含简介）刷新完成后，再检查并翻译尚未翻译的字段（如简介晚于保存到达）
-    startFilmTranslation(currentFilmId);
+    // 图片/元数据刷新完成后，再翻译标题/简介（此时数据已全，避免保存到一半就翻、简介还没到）
+    flushPendingTranslate(currentFilmId);
   }).catch(function(){});
 }
 
