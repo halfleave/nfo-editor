@@ -1348,6 +1348,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .sub-badge-os { background: #2D7FF9; }
 /* 字幕影片标记（影片级 hasSubtitle）蓝胶囊，与 assrt/os 区分 */
 .sub-badge-sub { background: #2D7FF9; }
+.sub-badge-hd { background: #16A34A; }
+.sub-badge-new { background: #F59E0B; }
+.sub-badge-other { background: #6B7280; }
 /* 图片左上角字幕角标（海报/剧照 overlay，不污染原图 dataURL） */
 .img-sub-badge { position: absolute; top: 6px; left: 6px; z-index: 4; display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 8px; font-size: 12px; font-weight: 700; line-height: 1; border-radius: 6px; color: #fff; background: rgba(45,127,249,0.92); box-shadow: 0 1px 4px rgba(0,0,0,0.3); pointer-events: none; }
 /* 角标容器需相对定位，让 .img-sub-badge 左上角吸附 */
@@ -4934,15 +4937,20 @@ function renderJavbusResults(items, box){
     var id = it.id || '';
     var date = it.date || '';
     var cover = javbusImgUrl(it.img);
-    // 字幕标记：JavBus 搜索接口 tags 数组含「字幕」（高清/字幕/新种）
-    var subTag = !!(it.tags && it.tags.indexOf && it.tags.indexOf('字幕') >= 0);
+    // 搜索接口 tags 数组含「高清/字幕/新种」三类，标题后缀全量显示为胶囊
+    var tags = (it.tags && it.tags.indexOf) ? it.tags.slice() : [];
+    var subTag = tags.indexOf('字幕') >= 0;
+    var tagBadges = tags.length ? ' ' + tags.map(function(t){
+      var cls = t === '字幕' ? 'sub-badge-sub' : (t === '高清' ? 'sub-badge-hd' : (t === '新种' ? 'sub-badge-new' : 'sub-badge-other'));
+      return '<span class="sub-badge ' + cls + '">' + escapeHtml(t) + '</span>';
+    }).join('') : '';
     var metaParts = [];
     if (date) metaParts.push(date);
     if (id) metaParts.push(id);
     var meta = metaParts.join(' · ');
     return '<div class="tmdb-result' + (subTag ? ' has-sub' : '') + '" onclick="applyJavbusResult(' + i + ')">'
       + (cover ? '<img class="tr-cover" src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' + (subTag ? '<span class="img-sub-badge">字幕</span>' : '') : '<div class="tr-ph"></div>')
-      + '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + (subTag ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '') + '</div>'
+      + '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + tagBadges + '</div>'
       + (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '')
       + '</div></div>';
   }).join('');
