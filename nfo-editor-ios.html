@@ -2621,7 +2621,6 @@ var state = {
   tier: '', activationCode: '',
   translateBaseUrl: '', translateApiKey: '', translateModel: '', // 翻译 AI 配置（OpenAI 兼容，客户端直连）
   translatingIds: new Set(), // 正在后台翻译的影片 id 集合（仅运行时，用于首页加载图标）
-  translatingFields: new Set(), // 正在翻译的字段 key（"id:title"/"id:plot"），按字段去重防并发重复调用
   overviewTab: 'movie',
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
@@ -3297,7 +3296,8 @@ var TRANSLATE_SYSTEM_PROMPT = [
   '4. 日文汉字按简体中文习惯转写（例：妻→人妻按需），但语义必须准确。',
   '5. 不雅化也不净化原文本措辞，保持原营销/直述风格。',
   '6. 已知源语言：日文，请勿误判。',
-  '7. 只输出译文本身：不要加任何引号（""\'\'「」『』）、不要加「译文：」「翻译：」等前缀或后缀、不要加任何解释性文字，直接给出简体中文。'
+  '7. 若某字段已是简体中文、英文或纯番号代码，则原样输出，不要改写或翻译。',
+  '8. 严格输出 JSON，不要任何多余文字、不要 markdown 代码块包裹。格式：{"title":"简体中文标题","summary":"简体中文简介"}'
 ].join('\n');
 var TRANSLATE_CFG_KEY = 'translateConfig';
 function getTranslateConfig(){
@@ -3317,19 +3317,14 @@ function needsTranslation(text){
   if (!text || !String(text).trim()) return false;
   return /[ぁ-んァ-ヶ]/.test(String(text));
 }
-/* 清理模型译文：去掉首尾空白、引号（""''「」『』）、以及「译文：/翻译：」等前缀/后缀与多余换行 */
-function stripTranslation(s){
-  s = String(s || '').replace(/\r\n/g, '\n');
-  // 去掉常见前缀
-  s = s.replace(/^(?:译文|翻译|结果|答)\s*[:：]\s*/i, '');
-  // 整段被同一种引号对称包裹才剥除（内部引号保留）：
-  // 直引号 "" '' 首尾同字符，可反向引用；CJK 书名号 「」『』 首尾是不同字符，须显式配对
-  s = s.trim();
-  s = s.replace(/^"([\s\S]*)"$/,'$1')
-       .replace(/^'([\s\S]*)'$/,'$1')
-       .replace(/^「([\s\S]*)」$/,'$1')
-       .replace(/^『([\s\S]*)』$/,'$1');
-  return s.trim();
+/* 从模型返回中解析 JSON 对象：兼容 ```json 代码块包裹 / 首尾空白 / 多余噪音文字。
+   截取首个 { 到末个 } 之间的内容再 JSON.parse；失败抛出错误（由调用方保留原文）。 */
+function extractJsonObject(s){
+  s = String(s || '').trim();
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  var a = s.indexOf('{'); var b = s.lastIndexOf('}');
+  if (a === -1 || b === -1 || b < a) throw new Error('翻译返回非 JSON');
+  return JSON.parse(s.slice(a, b + 1));
 }
 /* 打开翻译配置弹窗：回填输入框 */
 function openTranslateSheet(){
@@ -3365,29 +3360,32 @@ function saveTranslateConfig(){
   try { persistTranslateConfig(true); closeAllSheets(); showToast('已保存','success'); }
   catch(e){ showToast('保存失败','error'); }
 }
-/* 调用 OpenAI 兼容接口翻译单段文本，带 30s 超时；返回 Promise<string> */
-function translateOne(text){
+/* 调用 OpenAI 兼容接口，一次请求翻译 title + plot；返回 Promise<{title, summary}>（30s 超时） */
+function translateMeta(title, plot){
   return new Promise(function(resolve, reject){
     if (!translateConfigReady()){ reject(new Error('翻译未配置')); return; }
     var base = state.translateBaseUrl.trim().replace(/\/+$/, '');
     var endpoint = /\/chat\/completions$/i.test(base) ? base : base + '/chat/completions';
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, 30000) : null;
+    var userMsg = '【标题】\n' + (title || '') + '\n\n【简介】\n' + (plot || '');
     fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + state.translateApiKey },
       body: JSON.stringify({ model: state.translateModel, temperature: 0.3, messages: [
         { role:'system', content: TRANSLATE_SYSTEM_PROMPT },
-        { role:'user', content: String(text) }
+        { role:'user', content: userMsg }
       ] }),
       signal: ctrl ? ctrl.signal : undefined
     }).then(function(r){
       if (!r.ok) return r.text().then(function(t){ throw new Error('HTTP ' + r.status + '：' + t.slice(0,200)); });
       return r.json();
     }).then(function(d){
+      if (timer) clearTimeout(timer);
       var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
       if (!c) throw new Error('翻译返回为空');
-      resolve(stripTranslation(String(c)));
+      try { resolve(extractJsonObject(c)); }
+      catch(e){ reject(new Error('翻译结果解析失败')); }
     }).catch(function(err){
       if (timer) clearTimeout(timer);
       reject(err);
@@ -3401,51 +3399,31 @@ function computeTranslateNeed(film){
   return { title: needsTranslation(title), plot: needsTranslation(plot) };
 }
 /* 后台翻译并覆盖更新影片记录；完成后移除首页加载图标。
-   自加载影片、按当前数据判定需翻译字段（简介可能晚于保存到达，故可重复调用）；
-   按字段去重，避免与 silentRefresh 等后续调用重复翻译同一字段。 */
+   一次请求翻译 title + summary，按当前数据逐字段判定是否需要覆盖（简介可能晚于保存到达，故可重复调用）。 */
 function startFilmTranslation(id){
-  if (!translateConfigReady()) return;
+  if (!translateConfigReady() || state.translatingIds.has(id)) return; // 防重入
   loadFilm(id).then(function(f){
     if (!f) return;
     var need = computeTranslateNeed(f);
     if (!need.title && !need.plot) return; // 无需翻译（已是中文/英文/番号）
     state.translatingIds.add(id);
     renderOverview(); // 显示加载图标
-    var jobs = [];
-    if (need.title && !state.translatingFields.has(id + ':title')){
-      state.translatingFields.add(id + ':title');
-      jobs.push(translateOne((f.data && f.data.title) || f.title || '').then(function(t){
-        state.translatingFields.delete(id + ':title'); return { field:'title', val:t };
-      }).catch(function(e){ state.translatingFields.delete(id + ':title'); throw e; }));
-    }
-    if (need.plot && !state.translatingFields.has(id + ':plot')){
-      state.translatingFields.add(id + ':plot');
-      jobs.push(translateOne((f.data && f.data.plot) || '').then(function(t){
-        state.translatingFields.delete(id + ':plot'); return { field:'plot', val:t };
-      }).catch(function(e){ state.translatingFields.delete(id + ':plot'); throw e; }));
-    }
-    if (!jobs.length){ finishTranslation(id); return; }
-    Promise.all(jobs).then(function(results){
+    var title = (f.data && f.data.title) || f.title || '';
+    var plot = (f.data && f.data.plot) || '';
+    translateMeta(title, plot).then(function(res){
       loadFilm(id).then(function(ff){
         if (!ff){ finishTranslation(id); return; }
+        var newTitle = (typeof res.title === 'string') ? res.title : '';
+        var newSummary = (typeof res.summary === 'string') ? res.summary : '';
         var changed = false;
-        results.forEach(function(r){
-          if (r.field === 'title'){
-            var ct = (ff.data && ff.data.title) || ff.title || '';
-            if (r.val && r.val !== ct){ ff.title = r.val; if (ff.data) ff.data.title = r.val; changed = true; }
-          } else {
-            var cp = (ff.data && ff.data.plot) || '';
-            if (r.val && r.val !== cp){ if (ff.data) ff.data.plot = r.val; changed = true; }
-          }
-        });
+        if (need.title && newTitle && newTitle !== title){ ff.title = newTitle; if (ff.data) ff.data.title = newTitle; changed = true; }
+        if (need.plot && newSummary && newSummary !== plot){ if (ff.data) ff.data.plot = newSummary; changed = true; }
         if (!changed){ finishTranslation(id); return; }
         saveFilm(ff).then(function(){
           // 若正在查看该影片，回写编辑态，避免后续 silentRefresh 用原始日文覆盖已翻好的中文
           if (currentFilmId === id){
-            results.forEach(function(r){
-              if (r.field === 'title' && r.val && r.val !== (getVal('title')||'')) setFieldVal('title', r.val);
-              if (r.field === 'plot' && r.val && r.val !== (getVal('plot')||'')) setFieldVal('plot', r.val);
-            });
+            if (need.title && newTitle && newTitle !== (getVal('title')||'')) setFieldVal('title', newTitle);
+            if (need.plot && newSummary && newSummary !== (getVal('plot')||'')) setFieldVal('plot', newSummary);
           }
           finishTranslation(id); renderOverview(); showToast('已翻译标题/简介', 'success');
         }).catch(function(){ finishTranslation(id); });
@@ -3457,9 +3435,7 @@ function startFilmTranslation(id){
   }).catch(function(){});
 }
 function finishTranslation(id){
-  if (!state.translatingFields.has(id + ':title') && !state.translatingFields.has(id + ':plot')){
-    state.translatingIds.delete(id);
-  }
+  state.translatingIds.delete(id);
   renderOverview();
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
