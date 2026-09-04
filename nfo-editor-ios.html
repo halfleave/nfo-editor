@@ -2379,7 +2379,7 @@ function initDetailTitleCopy(){
   if (!t || t._titleBound) return;
   t._titleBound = true;
   var sx = 0, sy = 0, st = 0, moved = false;
-  var lastTapTime = 0, singleTimer = null;
+  var lastTapTime = 0, singleTimer = null, lastTouchEnd = 0;
   var DOUBLE_MS = 300, SINGLE_DELAY = 500; // 单击延迟 0.5s 再复制番号；双击窗口 300ms，确保双击时单点定时器已被取消
   function onStart(x, y){ sx = x; sy = y; st = Date.now(); moved = false; }
   function onMove(x, y){ if (st && (Math.abs(x - sx) > 14 || Math.abs(y - sy) > 14)) moved = true; }
@@ -2393,7 +2393,10 @@ function initDetailTitleCopy(){
   }
   function clearSingle(){ if (singleTimer){ clearTimeout(singleTimer); singleTimer = null; } }
   // 在「松手」的用户手势内判定单击/双击并复制（iOS 的 clipboard API 必须处于用户手势上下文才生效）
-  function onEnd(){
+  function onEnd(e){
+    // iOS 触摸后会自动合成 mouse 事件（mousedown/mouseup，约 300ms 后）。若这次 mouseup 是触摸刚触发的同批次合成事件，直接忽略，
+    // 否则一次轻点会被 touchend + 合成 mouseup 两段 onEnd 当成双击 → 误复制标题。桌面纯鼠标场景 lastTouchEnd=0，不受影响。
+    if (e && e.type === 'mouseup' && Date.now() - lastTouchEnd < 700) return;
     if (!st) return;
     var now = Date.now();
     var isDouble = (now - lastTapTime) < DOUBLE_MS && !moved;
@@ -2412,7 +2415,7 @@ function initDetailTitleCopy(){
   t._resetCopy = function(){ clearSingle(); lastTapTime = 0; t.style.opacity = ''; };
   t.addEventListener('touchstart', function(e){ var p = e.touches && e.touches[0]; onStart(p ? p.clientX : 0, p ? p.clientY : 0); }, { passive: true });
   t.addEventListener('touchmove', function(e){ var p = e.touches && e.touches[0]; if (p) onMove(p.clientX, p.clientY); }, { passive: true });
-  t.addEventListener('touchend', onEnd, { passive: true });
+  t.addEventListener('touchend', function(e){ lastTouchEnd = Date.now(); onEnd(e); }, { passive: true });
   t.addEventListener('touchcancel', function(){ st = 0; moved = false; clearSingle(); });
   /* 桌面：鼠标单击/双击同样支持 */
   t.addEventListener('mousedown', function(e){ onStart(e.clientX, e.clientY); });
