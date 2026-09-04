@@ -5172,8 +5172,10 @@ function fetchJavbusSearch(q, box){
     .then(function(res){
       var movies = (res && res.movies) || [];
       if (!movies.length){
-        // 无码源直查回退：FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内，按番号直查 /meta 合成单条结果
-        if (/^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q)) {
+        // 无结果回退：FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内；放宽到「任意像番号的输入」也直查 /api/meta，
+        // 以补全 JavBus 无但 DMM 有的数据（DMM 按番号搜，关键词搜不了，故片名仍走 JavBus/未找到）
+        var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
+        if (looksLikeId) {
           fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + '&_=' + Date.now(), { cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
