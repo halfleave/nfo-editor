@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="NFO 编辑">
-<meta name="theme-color" content="#3D8CF0">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAYAAAB/HSuDAAAduElEQVR42u3dy3EcVxBFwTMvZEzDf2PQ3oArhrTkJ0ROVWd6IGC0uAf1hq+A33Zd15efAgDA/+u+75efAvw6/wOBUQ8AkFgAAgAY+AAAJBCAAACGPgAACQMgAICxDwBAogAIAGDsAwCQKAACABj8AAAkCIAAgMEPAAAJAiAAYPADAECCAAgAGP0AACAGIACA0Q8AAGIAAgAY/QAAIAYgAGD0G/0AACAGIABg9AMAAGIAAgBGPwAAIAYgAGD4AwCAEAACAEY/AACIASAAYPgDAIAQgAAARj8AAIgBCAAY/gAAgBCAAIDhDwAACAEIABj+AACAEIAAgOEPAAAIAQgAGP4AAIAQgACA4Q8AAAgBCACGPwAAgBAgAGD4AwAACAECAIY/AAAgBCAAYPgDAABCAAIAhj8AACAE8FcdPwLjHwAAwP7IBQD+xwMAAMg1gACA4Q8AAAgB5AkAxj8AAGCnkAsA/A8FAADkGgABwPAHAAAQAsgTAOMfAADAniEXAP5HAQAAyDUALgCMfwAAADsnFwD4HwIAACDXALkAwPgHAACwfwQAfPgBAADsoDwB8IEHAADIkwByAWD8AwAA2EcIAD7cAAAAdhJ5AuADDQAAkCcB5ALA+AcAALCfBAB8eAEAAOyoPAHABxYAACBPAnIBYPwDAABgXwkAPpwAAADYWQKADyUAAAD2Vr4DwAcRAAAg3wtALgCMfwAAADsMAcCHDgAAwB4TAPBhAwAAsMsEAB8yAAAA7DMBwIcLAAAAO00A8KECAADAXss/A+iDBAAAQP6ZwFwAGP8AAADYcQKADw0AAIA9hwDgwwIAAGDXCQA+JD4kAAAA9p0A4MMBAACAnScA+FAAAABg7wkAPgwAAADYfQKADwEAAAD2nwDglw8AAIAdKAD4pQMAAGAPCgB+2QAAADx3Fx6/ZAAAAEQAAcAvFwAAADtRAAAAAAAEgFQdAAAA7EUBwC8TAAAAu1EA8EsEAADAfhQAjH8AAADsyKcHAOMfAAAAe3J5ADD+AQAAsCuXBwDjHwAAAPvywf8MIAAAADzZUWcAAABg/848fikAAACwf28evwwAAADYvzuPXwIAAADs35++BBAAAADyJYCpLwAAADB/hx4/dAAAANi/R48fNgAAAOzfpb4DAAAAAPIdAKksAAAAMH+fHj9cAAAA2L9Tjx8qAAAA7N+rvgMAAAAA8h0AqSkAAAAwf7ceP0QAAADYv1+PHx4AAADs37G+AwAAAADyHQCpJgAAADB/zx4/LAAAANi/az0BAAAAgDwBSCUBAACA+fv2+OEAAADA/p3rCQAAAADkCUD++g8AAADz964LAAAAAMgFQP76DwAAAPN37/FDAAAAgP371xMAAAAAyBOA/PUfAAAA5u9gFwAAAACQC4D89R8AAADm7+Fj/AMAAMD+XewJAAAAAOQJQP76DwAAAPP3sQsAAAAAyAVA/voPAAAA83eyCwAAAADIBUD++g8AAADz97ILAAAAAMgFQP76DwAAAPN3swsAAAAAyAVA/voPAAAAjb8CcAEAAAAAuQDIX/8BAACg8VcALgAAAAAgFwD56z8AAAA0/grABQAAAADkAiB//QcAAIDGXwG4AAAAAIBcAOSv/wAAAND4KwAXAAAAAJALgPz1HwAAABp/BeACAAAAAHIBkL/+AwAAQOOvAFwAAAAAQC4AAAAAAAEg5/8AAADQ+z8DcAEAAAAAuQDIX/8BAACg8VcALgAAAAAgFwAAAADA0wOA838AAABoxDMAFwAAAACQC4D89R8AAAAafwXgAgAAAAByAQAAAAA8NQA4/wcAAIBGPQNwAQAAAAC5AAAAAACeGACc/wMAAEDjngG4AAAAAIBcAAAAAABPCwDO/wEAAKCRzwBcAAAAAEAuAAAAAIAnBQDn/wAAANDYZwAuAAAAACAXAAAAAMBTAoDzfwAAAGj0MwAXAAAAAJALAAAAAOAJAcD5PwAAADT+GYALAAAAAMgFAAAAACAAAAAAAOMDgPf/AAAA0IrvAXABAAAAAHkCAAAAAAgAAAAAwOgA4P0/AAAAtOZ7AFwAAAAAQJ4AAAAAAAIAAAAAMDYAeP8PAAAArfoeABcAAAAAkCcAAAAAgAAAAAAACAAAAADAewYAXwAIAAAArfsiQBcAAAAAkCcAAAAAgAAAAAAACAAAAADA+wUAXwAIAAAArfwiQBcAAAAAkCcAAAAAgAAAAAAACAAAAACAAAAAAAD84QDgXwAAAACA1v5LAC4AAAAAIE8AAAAAAAEAAAAAEAAAAAAAAQAAAAAQAAAAAAABAAAAAPhRr/r33wQEAAAAcgEAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAAAgAAAAAgAAAAAAACAAAAAPD+AeC6ri8/BgAAAHABAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAACAAAAAAAAIAAPzX5+enHwIAgAAAwFMigBAAACAAAOAaAAAAAQAA1wAAAAgAAAgBAAAIAAB4FgAAgAAAgGsAAAABAACEAAAAAQAAPAsAABAAAMA1AACAAAAAQgAAgAAAAJ4FAAAIAAC4BgAAQAAAQAgAAEAAAMCzAAAABAAAXAMAAAgAACAEAAAIAADgWQAAgAAAAK4BAAAEAAAQAgAABAAA8CwAAEAAAADXAAAAAgAACAEAAAIAAJ4FAAAIAADgGgAAQAAAACEAAEAAAADPAgAABAAAcA0AACAAAIAQAAAgAACAZwEAAAIAALgGAAAQAABACAAABAAAwLMAAEAAAADXAAAAAgAACAEAAAIAAHgWAAAgAACAawAAAAEAAIQAAAABAAA8CwAAEAAAwDUAAIAAAABCAAAgAAAAngUAAAIAAOAaAAAQAAAAIQAAEAAAwLMAAAABAABcAwAACAAAIAQAAAgAAOBZAACAAAAArgEAAAEAABACAAABAADwLAAAEAAAANcAAIAAAAAIAQCAAAAAeBYAAAgAAOAaQAgAAAQAABACAAAEAADwLAAAEAAAANcAAIAAAAAIAQCAAAAAeBYAAAgAAIBrAABAAAAAhAAAQAAAADwLAAAEAADANQAAIAAAAEIAAAgAfgQA4FkAACAAAACuAQAAAQAAEAIAAAEAAPAsAAAQAAAA1wAAgAAAAAgBAIAAAAB4FgAACAAAgGsAAEAAAACEAAAQAAAAPAsAAAEAAMA1AAAIAACAEAAACAAAgGcBAIAAAAC4BgAABAAAQAgAAAQAAMCzAABAAAAAXAMAgAAAACAEAIAAAADgWQAACAAAAK4BAEAAAAAQAgBAAAAAPAsAAAQAAMA1AAAgAAAAQgAAIAAAAJ4FAIAAAADgGgAABAAAACEAAAQAAADPAgBAAAAAcA0AAAIAAIAQAAACAACAZwEAIAAAALgGAAABAAAQAgAAAQAA8CwAAAQAAADXAAAgAAAACAEAIAAAAHgWAAACAACAawAAEAAAAIQAABAAAAA8CwAAAQAAwDUAAAgAAABCAAACAACAECACACAAAAC4BgAAAQAAQAgAAAEAAMCzAAAQAAAAXAMAgAAAACAEAIAAAADgWQAACAAAAK4BABAAAAAQAgAQAAAA8CwAAAEAAADXAAAIAAAAQgAACAAAAJ4FAIAAAADgGgAABAAAACEAAAQAAADPAgBAAAAAcA0AgAAAAIAQAIAAAACAZwEACAAAALgGAEAAAABACABAAAAAwLMAAAQAAADXAAAgAAAACAEAIAAAAHgWAIAAAACAawAABAAAAIQAAAQAAAA8CwBAAAAAwDUAAAIAAABCAAACAAAAngUAIAAAAOAaAAABAABACABAAAAAwLMAAAQAAABcAwAgAAAAIAQAIAAAAOBZAAACAAAArgEAEAAAABACABAAAADwLAAAAQAAANcAAAgAAAAIAQACAAAAeBYAIAAAAOAaAAABAAAAIQAAAQAAAM8CABAAAABwDQCAAAAAgBAAgAAAAIBnAQAIAAAAuAYAEAAAAEAIABAAAADA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">
+<html lang="zh-CN" data-page-node-id="Acj8woS785a7T4PEvpgH00">
+<head data-page-node-id="KfYCmNjWphaBCVU6xVs5c4">
+<meta charset="UTF-8" data-page-node-id="pEpAla84pCArdSzcGe0xlA">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" data-page-node-id="c6jMzGiZBnWQ7w0SFm36yn">
+<meta name="apple-mobile-web-app-capable" content="yes" data-page-node-id="bglrHuunZXYYUWcc5xujq1">
+<meta name="mobile-web-app-capable" content="yes" data-page-node-id="DYso5k0WRwBAYMn0BIxkUR">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" data-page-node-id="p6CtTpm2KMEQyLLewWNeeN">
+<meta name="apple-mobile-web-app-title" content="NFO 编辑" data-page-node-id="hnhndntaoPOm66F9xgCi2g">
+<meta name="theme-color" content="#3D8CF0" data-page-node-id="tAW3rAg7PfDYUPgfl6rpCh">
+<link rel="manifest" href="manifest.json" data-page-node-id="3Rw6PBVbacM3iHAfOVTD4S">
+<link rel="apple-touch-icon" href="data:image/png;base64,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AAgAAAAAgAAAAAAAAgAAAAAgAAAAAAACAAAAAPD+AeC6ri8/BgAAAHABAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAACAAAAACAAAAAAAAIAAAAAIAAAAAAAAgAAAAAgAAAAAAACAAAAACAAAAAAAAIAAAAACAAAAAAAAIAAPzX5+enHwIAgAAAwFMigBAAACAAAOAaAAAAAQAA1wAAAAgAAAgBAAAIAAB4FgAAgAAAgGsAAAABAACEAAAAAQAAPAsAABAAAMA1AACAAAAAQgAAgAAAAJ4FAAAIAAC4BgAAQAAAQAgAAEAAAMCzAAAABAAAXAMAAAgAACAEAAAIAADgWQAAgAAAAK4BAAAEAAAQAgAABAAA8CwAAEAAAADXAAAAAgAACAEAAAIAAJ4FAAAIAADgGgAAQAAAACEAAEAAAADPAgAABAAAcA0AACAAAIAQAAAgAACAZwEAAAIAALgGAAAQAABACAAABAAAwLMAAEAAAADXAAAAAgAACAEAAAIAAHgWAAAgAACAawAAAAEAAIQAAAABAAA8CwAAEAAAwDUAAIAAAABCAAAgAAAAngUAAAIAAOAaAAAQAAAAIQAAEAAAwLMAAAABAABcAwAACAAAIAQAAAgAAOBZAACAAAAArgEAAAEAABACAAABAADwLAAAEAAAANcAAIAAAAAIAQCAAAAAeBYAAAgAAOAaQAgAAAQAABACAAAEAADwLAAAEAAAANcAAIAAAAAIAQCAAAAAeBYAAAgAAIBrAABAAAAAhAAAQAAAADwLAAAEAADANQAAIAAAAEIAAAgAfgQA4FkAACAAAACuAQAAAQAAEAIAAAEAAPAsAAAQAAAA1wAAgAAAAAgBAIAAAAB4FgAACAAAgGsAAEAAAACEAAAQAAAAPAsAAAEAAMA1AAAIAACAEAAACAAAgGcBAIAAAAC4BgAABAAAQAgAAAQAAMCzAABAAAAAXAMAgAAAACAEAIAAAADgWQAACAAAAK4BAEAAAAAQAgBAAAAAPAsAAAQAAMA1AAAgAAAAQgAAIAAAAJ4FAIAAAADgGgAABAAAACEAAAQAAADPAgBAAAAAcA0AAAIAAIAQAAACAACAZwEAIAAAALgGAAABAAAQAgAAAQAA8CwAAAQAAADXAAAgAAAACAEAIAAAAHgWAAACAACAawAAEAAAAIQAABAAAAA8CwAAAQAAwDUAAAgAAABCAAACAACAECACACAAAAC4BgAAAQAAQAgAAAEAAMCzAAAQAAAAXAMAgAAAACAEAIAAAADgWQAACAAAAK4BABAAAAAQAgAQAAAA8CwAAAEAAADXAAAIAAAAQgAACAAAAJ4FAIAAAADgGgAABAAAACEAAAQAAADPAgBAAAAAcA0AgAAAAIAQAIAAAACAZwEACAAAALgGAEAAAABACABAAAAAwLMAAAQAAADXAAAgAAAACAEAIAAAAHgWAIAAAACAawAABAAAAIQAAAQAAAA8CwBAAAAAwDUAAAIAAABCAAACAAAAngUAIAAAAOAaAAABAABACABAAAAAwLMAAAQAAABcAwAgAAAAIAQAIAAAAOBZAAACAAAArgEAEAAAABACABAAAADwLAAAAQAAANcAAAgAAAAIAQACAAAAeBYAIAAAAOAaAAABAAAAIQAAAQAAAM8CABAAAABwDQCAAAAAgBAAgAAAAIBnAQAIAAAAuAYAEAAAAEAIABAAAADA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" data-page-node-id="9dQRZdi1mUzGJNNeczW8qY">
 <title>NFO 编辑器</title>
 <style>
 /* ===== iOS 26 Liquid Glass 视觉系统（M2） ===== */
@@ -932,6 +932,19 @@ textarea.ios-input { resize: none; line-height: 1.45; }
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
 .movie-card .mc-lock svg { width: 13px; height: 13px; display: block; }
+.movie-card .mc-translating {
+  position: absolute; top: 6px; right: 6px; z-index: 3;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(0,0,0,0.55); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.movie-card .mc-translating .tr-spin {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+  animation: tr-spin 0.8s linear infinite;
+}
+@keyframes tr-spin { to { transform: rotate(360deg); } }
 .movie-card-wrap .mc-title { font-size: 15px; font-weight: 500; padding: 6px 2px 0; line-height: 1.3; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .empty-hint { text-align: center; color: var(--label-2); font-size: 14px; padding: 40px 20px; }
 
@@ -1152,6 +1165,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #apiSheet .api-help-q-sm:active { background: rgba(0,0,0,0.08); color: var(--accent); border-color: var(--accent); }
 #apiSheet .field-stacked { padding: 0 0 10px; }
 #apiSheet .field-stacked:last-child { padding-bottom: 0; }
+#apiSheet .api-help-note { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--label-2); background: var(--card-fill); border-radius: 10px; padding: 10px 12px; }
 #apiSheet .api-input-wrap { position: relative; display: flex; align-items: center; }
 #apiSheet .api-input-tag { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 600; color: var(--label-2); pointer-events: none; white-space: nowrap; }
 #apiSheet .api-input-wrap .ios-input { width: 100%; padding-left: 64px; padding-right: 42px; font-size: 15px; }
@@ -1406,558 +1420,609 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .sub-lang-arrow { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 10px; height: 10px; display: block; pointer-events: none; color: var(--label-2); }
 </style>
 </head>
-<body>
+<body data-page-node-id="T5mhi6eu7xPIVMdGExDnFc">
 <!-- 启动页：默认可见，先于 JS 渲染，避免进入页面白屏 -->
-<div id="splash" class="splash">
-  <div class="splash-inner">
-    <div class="splash-logo">
-      <svg viewBox="0 0 32 32" width="38" height="38" aria-hidden="true"><path d="M22.5 14 l-13 -7.5 l0 15 z" fill="#fff"/></svg>
+<div id="splash" class="splash" data-page-node-id="y9ln9pyU9wsL5rBA7Y22YP">
+  <div class="splash-inner" data-page-node-id="mdcAMbONDTTd3Y2qrB3wdP">
+    <div class="splash-logo" data-page-node-id="8LcdiglmbVvMvxgoMtHr8i">
+      <svg viewBox="0 0 32 32" width="38" height="38" aria-hidden="true" data-page-node-id="EUbxorZ5Jp3OPWlw12wrTa"><path d="M22.5 14 l-13 -7.5 l0 15 z" fill="#fff" data-page-node-id="wYzdINplCw9zHpHdDHb67y"/></svg>
     </div>
-    <div class="splash-title">NFO</div>
-    <div class="splash-bar-track"><div class="splash-bar" id="splashBar"></div></div>
+    <div class="splash-title" data-page-node-id="vjXHlB7LAh2r90feD1jlwp">NFO</div>
+    <div class="splash-bar-track" data-page-node-id="DvOoURH2tR3q0aJa4D36Ym"><div class="splash-bar" id="splashBar" data-page-node-id="k3jywyecxKjbx1cHD9E1st"></div></div>
   </div>
 </div>
-<div class="ios-app">
+<div class="ios-app" data-page-node-id="ZwRVKnbE2Xn0qTlbGXSJbB">
 
   <!-- 共享遮罩 -->
-  <div class="sheet-mask" id="sheetMask" onclick="closeAllSheets()"></div>
+  <div class="sheet-mask" id="sheetMask" onclick="closeAllSheets()" data-page-node-id="PmOw90Y6V2u852tEKh2ykp"></div>
 
   <!-- 动作表 -->
-  <div class="sheet" id="actionSheet">
-    <div class="sheet-bar">
-      <span class="sb-spacer"></span>
-      <span class="sb-title" id="actionSheetTitle">操作</span>
-      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="sheet" id="actionSheet" data-page-node-id="Q7yUBWNCOuHorB4dAacLYz">
+    <div class="sheet-bar" data-page-node-id="UTiZYCJNZ6ytAoE4f0MTPW">
+      <span class="sb-spacer" data-page-node-id="PWq3GZM8HBGttLYXApokEu"></span>
+      <span class="sb-title" id="actionSheetTitle" data-page-node-id="xIOaNCewH0BUrDKIupRByI">操作</span>
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="XsfNT33xbK1tPZaRMt3Fot">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="vfbbp6XUhFB7HjAICULbDy"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="vdXLFcdLJDr6ANIpXQO0M4"/></svg>
       </button>
     </div>
-    <div id="actionSheetInner"></div>
+    <div id="actionSheetInner" data-page-node-id="oOSfnpQbegd72y8VxYZCrb"></div>
   </div>
 
   <!-- 关于弹窗（居中卡片） -->
-  <div class="about-mask" id="aboutMask" onclick="closeAllSheets()"></div>
-  <div class="about-modal" id="aboutModal">
-    <div class="about-title">关于</div>
-    <div class="about-body">
-      <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-      <p>@Halfleave · v2.0.0</p>
+  <div class="about-mask" id="aboutMask" onclick="closeAllSheets()" data-page-node-id="jkJxwNKWgCJFCSH2YGA5bz"></div>
+  <div class="about-modal" id="aboutModal" data-page-node-id="97HJEaOM0JQ4KIITjX29VS">
+    <div class="about-title" data-page-node-id="2mk3QxHmQ25zheTyL1jeCL">关于</div>
+    <div class="about-body" data-page-node-id="UDuDPvuiSOf8k8FIpfmU8U">
+      <p data-page-node-id="LmbAfxlxuZReJSPUqNcYuB">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+      <p data-page-node-id="m3N3CiBJJa1Q0EPf6AAMwr">@Halfleave · v2.0.0</p>
     </div>
-    <button class="about-done" onclick="closeAllSheets()">完成</button>
+    <button class="about-done" onclick="closeAllSheets()" data-page-node-id="KnNqBwsFiLFeshOApUODcS">完成</button>
   </div>
 
   <!-- 恢复确认弹窗（与删除弹窗同款的 iOS 26 Alert 风格） -->
-  <div class="restore-confirm-mask" id="restoreConfirmMask" onclick="closeRestoreConfirm()"></div>
-  <div class="restore-confirm-modal" id="restoreConfirmModal">
-    <div class="restore-confirm-title" id="restoreConfirmTitle">恢复初始状态</div>
-    <div class="restore-confirm-body" id="restoreConfirmBody">将清空所有配置和缓存，恢复到初始状态。此操作不可撤销。</div>
-    <div class="restore-confirm-actions">
-      <button class="restore-confirm-btn" onclick="closeRestoreConfirm()">取消</button>
-      <button class="restore-confirm-btn danger" onclick="confirmRestore()">恢复</button>
+  <div class="restore-confirm-mask" id="restoreConfirmMask" onclick="closeRestoreConfirm()" data-page-node-id="nHBEg9orS7WzAIC0BEaSxj"></div>
+  <div class="restore-confirm-modal" id="restoreConfirmModal" data-page-node-id="3mivRmcJJNl97u6xC86fZy">
+    <div class="restore-confirm-title" id="restoreConfirmTitle" data-page-node-id="3BapIxOb10NtAaqyLqxeoO">恢复初始状态</div>
+    <div class="restore-confirm-body" id="restoreConfirmBody" data-page-node-id="6xJs3GzFLnsVdfPUB764CH">将清空所有配置和缓存，恢复到初始状态。此操作不可撤销。</div>
+    <div class="restore-confirm-actions" data-page-node-id="rvxsggHrGrGRI3t0fhy4ql">
+      <button class="restore-confirm-btn" onclick="closeRestoreConfirm()" data-page-node-id="7OFkOiQGystZiLJr7sz37t">取消</button>
+      <button class="restore-confirm-btn danger" onclick="confirmRestore()" data-page-node-id="SpncJaSVkgElQi3aPWGzDm">恢复</button>
     </div>
   </div>
 
   <!-- 主题色选择 -->
-  <div class="sheet" id="themeSheet">
-    <div class="sheet-bar sheet-bar-center">
-      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="sheet" id="themeSheet" data-page-node-id="OcbiJJM0xgNr8tBh34UOnU">
+    <div class="sheet-bar sheet-bar-center" data-page-node-id="5FI7WbVPd0CAPrMVVpf1TL">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="ErgxCMyNOMtur31Hqq8DQy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="JS8KTbVxTdtN2SVvdQYb1w"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="AD10aODXJCfrHIFS4XRbHP"/></svg>
       </button>
-      <span class="sb-title">主题</span>
-      <span class="sb-spacer"></span>
+      <span class="sb-title" data-page-node-id="LbhP5GEYINJLPeW1dGhBGv">主题</span>
+      <span class="sb-spacer" data-page-node-id="atUKaGGFSKM7aMTybjx0Kk"></span>
     </div>
-    <div class="theme-grid" id="themeGrid"></div>
+    <div class="theme-grid" id="themeGrid" data-page-node-id="fCFm3GnXardyzNhQygPzxT"></div>
   </div>
 
   <!-- 长按海报：在长按位置附近弹出的 iOS 风格上下文菜单 -->
-  <div class="sheet sheet-context" id="contextSheet">
-    <div class="action-sheet-group">
-      <div class="action-sheet-title" id="contextSheetTitle">操作</div>
-      <div class="action-sheet-list" id="contextSheetInner"></div>
+  <div class="sheet sheet-context" id="contextSheet" data-page-node-id="LBXoEvKlitJYhgt9uU5arQ">
+    <div class="action-sheet-group" data-page-node-id="8EI2AyseQcFAmubaAHtLaw">
+      <div class="action-sheet-title" id="contextSheetTitle" data-page-node-id="ZesUxHAuWe7ZZDR16MuIA5">操作</div>
+      <div class="action-sheet-list" id="contextSheetInner" data-page-node-id="CUcMrwZ3Fon0XskGkgM0Cr"></div>
     </div>
   </div>
-  <div class="ctx-mask" id="ctxMask"></div>
+  <div class="ctx-mask" id="ctxMask" data-page-node-id="djHDf9pTzqJp73i1ve1JLb"></div>
 
   <!-- 图片裁剪弹窗 -->
-  <div class="crop-mask" id="cropMask" onclick="closeCrop()"></div>
-  <div class="crop-modal" id="cropModal">
-    <div class="crop-head">
-      <button class="ch-close" onclick="closeCrop()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-      <span>裁剪图片</span>
-      <button class="ch-done" onclick="applyCrop()">完成</button>
+  <div class="crop-mask" id="cropMask" onclick="closeCrop()" data-page-node-id="j10L33QHYvB7yijzngR5de"></div>
+  <div class="crop-modal" id="cropModal" data-page-node-id="5JwPyFNIlA6VHaH4wb0fHB">
+    <div class="crop-head" data-page-node-id="9Su1391u5v0uxjeUZCGUj8">
+      <button class="ch-close" onclick="closeCrop()" aria-label="关闭" data-page-node-id="8345uuQidDof7w3OVZbzjd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="PuktYU31y7dpDBDrIrCurR"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="xueBPBMIjdUAIPRtVHDTbr"/></svg></button>
+      <span data-page-node-id="KAo6uxhHiRfuFuyFQraenN">裁剪图片</span>
+      <button class="ch-done" onclick="applyCrop()" data-page-node-id="0YFLysh09A1oTtv3tLHnkq">完成</button>
     </div>
-    <div class="crop-ratios" id="cropRatios" style="display:none;">
-      <span class="seg">
-        <button type="button" data-ratio="16:9" class="active" onclick="setFanartRatio('16:9', this)">16:9</button>
-        <button type="button" data-ratio="3:2" onclick="setFanartRatio('3:2', this)">3:2</button>
-        <button type="button" data-ratio="4:3" onclick="setFanartRatio('4:3', this)">4:3</button>
+    <div class="crop-ratios" id="cropRatios" style="display:none;" data-page-node-id="GmRUnLK4DGgYOCBiNUFUkF">
+      <span class="seg" data-page-node-id="jdeB8MDSE5UohkFc1pJqjT">
+        <button type="button" data-ratio="16:9" class="active" onclick="setFanartRatio('16:9', this)" data-page-node-id="KtYmyzbn0B9XogKCW8apW3">16:9</button>
+        <button type="button" data-ratio="3:2" onclick="setFanartRatio('3:2', this)" data-page-node-id="5adO5BABML1PDNBDlHgq4d">3:2</button>
+        <button type="button" data-ratio="4:3" onclick="setFanartRatio('4:3', this)" data-page-node-id="oNAgYuAf9YytDIRixVwCU9">4:3</button>
       </span>
     </div>
-    <div class="crop-stage" id="cropStage">
-      <div class="crop-viewport" id="cropViewport">
-        <img id="cropImg" alt="">
-        <div class="crop-box" id="cropBox"><span class="crop-handle" id="cropHandle"></span></div>
+    <div class="crop-stage" id="cropStage" data-page-node-id="4qWGMFv2juv7KEXo855f9W">
+      <div class="crop-viewport" id="cropViewport" data-page-node-id="JJJRGivIrZc38gxql1ptQv">
+        <img id="cropImg" alt="" data-page-node-id="WFGvI1IcGjqBGpsG6BfRAI">
+        <div class="crop-box" id="cropBox" data-page-node-id="BDY6sa6Dm5dK1Utk3ffeO5"><span class="crop-handle" id="cropHandle" data-page-node-id="LCChm8L2Dpx4L2GIHQBnog"></span></div>
       </div>
     </div>
   </div>
 
   <!-- 列表 / 多选 / 管理 -->
-  <div class="sheet" id="listSheet">
-    <div class="list-sheet-header">
-      <div class="sheet-bar" id="listSheetBar">
-        <span id="listLeftSlot"><span class="sb-spacer"></span></span>
-        <span class="sb-title" id="listTitle">选择</span>
-        <span id="listRightSlot">
-          <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="sheet" id="listSheet" data-page-node-id="DP9osyyO40BjjA7nfdWu9B">
+    <div class="list-sheet-header" data-page-node-id="Wv01JSAZf2ICx0bJcrNjhx">
+      <div class="sheet-bar" id="listSheetBar" data-page-node-id="I2OjfsyEZKJ5amphS1fTvN">
+        <span id="listLeftSlot" data-page-node-id="dLmZ6TCKf4vGftexVZFC1n"><span class="sb-spacer" data-page-node-id="cfygkE1shEI60sykWIhDp1"></span></span>
+        <span class="sb-title" id="listTitle" data-page-node-id="aZlBtxss9qkD3x7MdGoByZ">选择</span>
+        <span id="listRightSlot" data-page-node-id="1bIDODErwBRjVx8FBaC8Qx">
+          <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="P3U1wqvApehaQxtaDOoDYa">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="2VDquVED0h56BnoCw2AiJL"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="Fw8HZcThe00BrlDDtY28Q2"/></svg>
           </button>
         </span>
       </div>
-      <div class="sheet-seg" id="listGenreSeg" style="display:none;">
-        <span class="seg">
-          <button id="genreSegNormal" class="active" onclick="switchGenreTab('normal')">普通</button>
-          <button id="genreSegAdult" onclick="switchGenreTab('adult')">成人</button>
+      <div class="sheet-seg" id="listGenreSeg" style="display:none;" data-page-node-id="9FOHQtNhHWgxCVrfZvMEaI">
+        <span class="seg" data-page-node-id="vRIZ6ujqjP4FBJoA6p8YH1">
+          <button id="genreSegNormal" class="active" onclick="switchGenreTab('normal')" data-page-node-id="xlFrFKhH9F4jYJCYInZO14">普通</button>
+          <button id="genreSegAdult" onclick="switchGenreTab('adult')" data-page-node-id="uRBuRpgB0tBet2yqL2cMeW">成人</button>
         </span>
       </div>
-      <div id="listAddWrap" class="sheet-add" style="display:none;">
-        <input type="text" id="listAddInput" placeholder="请输入" onkeydown="if(event.key==='Enter'){listSheetAdd();}">
-        <button onclick="listSheetAdd()">添加</button>
+      <div id="listAddWrap" class="sheet-add" style="display:none;" data-page-node-id="bGY6vynfEdJF0BSxyYed90">
+        <input type="text" id="listAddInput" placeholder="请输入" onkeydown="if(event.key==='Enter'){listSheetAdd();}" data-page-node-id="j8F5cDtcyE6pC1NP54V1JN">
+        <button onclick="listSheetAdd()" data-page-node-id="x2vkx0vz6UCiuLWLc3yyMd">添加</button>
       </div>
     </div>
-    <div class="list-sheet-body">
-      <div class="sheet-list" id="listBody"></div>
-      <div class="sheet-footer" id="listFooter" style="display:none;">
-        <span class="footer-hint">没有合适的？</span>
-        <span class="footer-action" onclick="addCustomMultiTag()">手动添加</span>
+    <div class="list-sheet-body" data-page-node-id="AwYvq7A1mNY01ZZDQHZaP2">
+      <div class="sheet-list" id="listBody" data-page-node-id="6dpGtVFjm59q2tHGUwXxRf"></div>
+      <div class="sheet-footer" id="listFooter" style="display:none;" data-page-node-id="MVBMyXE2vTyJvHHEmyELRK">
+        <span class="footer-hint" data-page-node-id="PUaHfpIXt6XfVezHjRD84H">没有合适的？</span>
+        <span class="footer-action" onclick="addCustomMultiTag()" data-page-node-id="XFaS3laSq3aDAR1XNHMO9W">手动添加</span>
       </div>
     </div>
   </div>
 
   <!-- API 配置 -->
-  <div class="sheet" id="apiSheet">
+  <div class="sheet" id="apiSheet" data-page-node-id="3n8roZL61PeOZC683D5Jza">
+    <div class="sheet-bar sheet-bar-center" data-page-node-id="yV4O9RHJe2kAjsyTsrgegA">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="q6ujHybEeMCtJFxh1VtGgt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="PTqrzS7aEB1Hm7yzb4ecX4"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="DzKw583xCt4q4HUYOMrrj3"/></svg>
+      </button>
+      <span class="sb-title" data-page-node-id="yCUGqtalVOpMkxZhNzbIkH">API 配置</span>
+      <button class="sb-pill" onclick="saveApiKey()" data-page-node-id="XYXvrgoDeF9BPsPogspuTA">保存</button>
+    </div>
+    <div class="api-group" data-page-node-id="HUbF1xGcRFqTQoGnSUQHgJ">
+      <div class="api-group-title-row" data-page-node-id="Y0cDNRcTDGC72C8sJwsiDN">
+        <div class="api-group-title" data-page-node-id="vOIsNE4xNwGcUHNHc4SFIv">元数据</div>
+        <button class="api-help-q-sm" onclick="openApiGroupHelp('metadata')" aria-label="关于元数据" data-page-node-id="JFXDuol86zPGQgGOdPHELM">?</button>
+      </div>
+      <div class="field field-stacked no-border api-key-field" data-page-node-id="YfRY3XdsMnAkEQUzMlD4bW">
+        <div class="api-input-wrap" data-page-node-id="RWLQLuCfoBX5evs36vx2NZ">
+          <span class="api-input-tag" data-page-node-id="vYeGl6A0qVTvN2oAC8sexr">TMDB</span>
+          <input class="ios-input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" oninput="toggleApiClear()" onblur="persistApiSettings(false)" data-page-node-id="yQNaHJAOGBsPQ3Noq3H8B0">
+          <button class="api-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" style="display:none;" data-page-node-id="mvB3SpG8Z4REhohPaajM7G">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="hEGBtNnsGV4LpJgzwnUzWV"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="XIsqH1XLGPC3W587SqNhmX"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="api-group" data-page-node-id="rOPCHl0sIdA9ZnpyD0x4WH">
+      <div class="api-group-title-row" data-page-node-id="sHQRLmOgGnG7RgiYdWyVL6">
+        <div class="api-group-title" data-page-node-id="y19Rg6yv5Y5dk4c71Hl1Pf">激活码</div>
+      </div>
+      <div class="field field-stacked no-border" data-page-node-id="iWfLXTVu7yJtWBpRJOwJht">
+        <div class="api-input-wrap" data-page-node-id="M2eiRfLXXIATHDnUOprd9A">
+          <input class="ios-input" type="text" id="activationCodeInput" placeholder="输入激活码" oninput="toggleActivationClear()" onblur="persistApiSettings(false)" data-page-node-id="sb9J5JIaxXR0tO7RBj5qNP">
+          <button class="api-clear" id="activationClearBtn" onclick="clearActivationInput()" aria-label="清除" style="display:none;" data-page-node-id="6eM0IG4IYUKKhRQfUlP2PS">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="xSZeqycGrHgivj7mia5jmG"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="vqO5t7770tXi4EBWro4Djv"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="activation-row" data-page-node-id="If1DS0B2yWgb9Hn4ScQMoV">
+        <span id="activationStatus" class="activation-status" data-page-node-id="I4Gjr5MXra8c3X4Jxe60Tn">未激活</span>
+        <button class="sb-pill sb-pill-ghost" onclick="verifyActivationCode()" data-page-node-id="NHJByu2FyU4npSCtAPXiOM">验证</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 翻译配置 -->
+  <div class="sheet" id="translateSheet">
     <div class="sheet-bar sheet-bar-center">
       <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
-      <span class="sb-title">API 配置</span>
-      <button class="sb-pill" onclick="saveApiKey()">保存</button>
+      <span class="sb-title">翻译配置</span>
+      <button class="sb-pill" onclick="saveTranslateConfig()">保存</button>
     </div>
     <div class="api-group">
       <div class="api-group-title-row">
-        <div class="api-group-title">元数据</div>
-        <button class="api-help-q-sm" onclick="openApiGroupHelp('metadata')" aria-label="关于元数据">?</button>
-      </div>
-      <div class="field field-stacked no-border api-key-field">
-        <div class="api-input-wrap">
-          <span class="api-input-tag">TMDB</span>
-          <input class="ios-input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" oninput="toggleApiClear()" onblur="persistApiSettings(false)">
-          <button class="api-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="api-group">
-      <div class="api-group-title-row">
-        <div class="api-group-title">激活码</div>
+        <div class="api-group-title">接口地址</div>
       </div>
       <div class="field field-stacked no-border">
         <div class="api-input-wrap">
-          <input class="ios-input" type="text" id="activationCodeInput" placeholder="输入激活码" oninput="toggleActivationClear()" onblur="persistApiSettings(false)">
-          <button class="api-clear" id="activationClearBtn" onclick="clearActivationInput()" aria-label="清除" style="display:none;">
+          <input class="ios-input" type="text" id="translateBaseUrl" placeholder="https://api.deepseek.com/v1" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+          <button class="api-clear" id="translateBaseClear" onclick="clearTranslateBase()" aria-label="清除" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
       </div>
-      <div class="activation-row">
-        <span id="activationStatus" class="activation-status">未激活</span>
-        <button class="sb-pill sb-pill-ghost" onclick="verifyActivationCode()">验证</button>
+    </div>
+    <div class="api-group">
+      <div class="api-group-title-row">
+        <div class="api-group-title">API Key</div>
       </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <input class="ios-input" type="password" id="translateApiKey" placeholder="粘贴 API Key" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+          <button class="api-clear" id="translateKeyClear" onclick="clearTranslateKey()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="api-group">
+      <div class="api-group-title-row">
+        <div class="api-group-title">模型名称</div>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <input class="ios-input" type="text" id="translateModel" placeholder="deepseek-chat" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+          <button class="api-clear" id="translateModelClear" onclick="clearTranslateModel()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="api-help-note">保存影片时，标题与简介若非中文将自动翻译为简体中文；翻译中会在首页剧照右上角显示加载图标，完成后自动覆盖更新。</div>
     </div>
   </div>
 
   <!-- 加载配置（里模式专用） -->
-  <div class="sheet sheet-tall" id="adultPhraseSheet">
-    <div class="sheet-bar sheet-bar-center">
-      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="sheet sheet-tall" id="adultPhraseSheet" data-page-node-id="CWkribom2yP7FOOX3snRkS">
+    <div class="sheet-bar sheet-bar-center" data-page-node-id="5jxCp5MWEbNHItmqirVAV5">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="OMBOLAZPMbNasq55m1JbKs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="XVOdUUQ7vwfvf93QubtCgD"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="VAaQli6fsx8P1vqo20rLCT"/></svg>
       </button>
-      <span class="sb-title">加载配置</span>
-      <button class="sb-pill" onclick="saveAdultPhrases()">保存</button>
+      <span class="sb-title" data-page-node-id="vA0Mzx0uFtVrfLfZSVdjhq">加载配置</span>
+      <button class="sb-pill" onclick="saveAdultPhrases()" data-page-node-id="KNaWw0U8gsPqhmZUdBtAiH">保存</button>
     </div>
-    <div class="ap-body">
+    <div class="ap-body" data-page-node-id="Y7PLzQqvgesj8o09dTE4DE">
       <textarea class="ap-textarea" id="adultPhraseInput" oninput="updateAdultPhraseCount()" placeholder="请输入"></textarea>
-      <div class="ap-tools">
-        <button class="ap-btn" onclick="document.getElementById('adultPhraseFile').click()">导入</button>
+      <div class="ap-tools" data-page-node-id="TteAJrKw2G0c1qGeZaGDMx">
+        <button class="ap-btn" onclick="document.getElementById('adultPhraseFile').click()" data-page-node-id="xCvLzFXJE9U4PA3Zxs8viC">导入</button>
       </div>
-      <div class="ap-count" id="adultPhraseCount">共 0 条</div>
-      <input type="file" id="adultPhraseFile" accept=".txt,.json,application/json,text/plain" style="display:none" onchange="onAdultPhraseFile(this)">
+      <div class="ap-count" id="adultPhraseCount" data-page-node-id="qHtcSJLVAR0ReTPBNesyQG">共 0 条</div>
+      <input type="file" id="adultPhraseFile" accept=".txt,.json,application/json,text/plain" style="display:none" onchange="onAdultPhraseFile(this)" data-page-node-id="i0YSOEtfHdQT9Il88F9kIW">
     </div>
   </div>
 
   <!-- API 说明页 -->
-  <div class="sheet sheet-tall" id="apiHelpSheet">
-    <div class="sheet-bar sheet-bar-center">
-      <button class="sb-icon" onclick="closeApiHelp()" aria-label="返回">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  <div class="sheet sheet-tall" id="apiHelpSheet" data-page-node-id="Bvxgm5ZJ5ULW2dG8jg6wc4">
+    <div class="sheet-bar sheet-bar-center" data-page-node-id="Wxpk3vfd3dU5YJ3j0BziP5">
+      <button class="sb-icon" onclick="closeApiHelp()" aria-label="返回" data-page-node-id="RAxqvyFaWnnuB4AXbS0E4W">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="mEuJ34F7vDneXm7eYBzxfC"><path d="M15 18l-6-6 6-6" data-page-node-id="vGr4kq8GcYp1vZPDNchihC"/></svg>
       </button>
-      <span class="sb-title">API 说明</span>
-      <span class="sb-spacer"></span>
+      <span class="sb-title" data-page-node-id="syB3S5xcbtEyo8Evy8v3XB">API 说明</span>
+      <span class="sb-spacer" data-page-node-id="Hftbw50svlPGOEFVuagcFc"></span>
     </div>
-    <div class="help-body">
-      <div class="help-section" id="help-tmdb">
-        <h4>TMDB Key</h4>
-        <p>访问 <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a>，注册并登录后创建 API Key，复制后粘贴到「TMDB Key」。</p>
+    <div class="help-body" data-page-node-id="gbZOxc8qZQ6FEBIuACSGMG">
+      <div class="help-section" id="help-tmdb" data-page-node-id="WNVAzODlXeUj6CaRu2bgQj">
+        <h4 data-page-node-id="Q2NiZWntj5sUpisATFvmC0">TMDB Key</h4>
+        <p data-page-node-id="GE8stLdTQfLuFJfE4dFtdr">访问 <a href="https://www.themoviedb.org/settings/api" target="_blank" data-page-node-id="1iTdA3HYnl5tEYS1QQSWp2">themoviedb.org/settings/api</a>，注册并登录后创建 API Key，复制后粘贴到「TMDB Key」。</p>
       </div>
-      <div class="help-section" id="help-assrt">
-        <h4>Assrt Token</h4>
-        <p>访问 <a href="https://assrt.net/usercp.php" target="_blank">assrt.net/usercp.php</a> 登录，在用户中心找到 API Token 并粘贴到「Assrt Token」。</p>
+      <div class="help-section" id="help-assrt" data-page-node-id="4FfWJXht7wbJkQaKBhqo43">
+        <h4 data-page-node-id="dZ1gdLwVOEVr2LfoBdfz1Y">Assrt Token</h4>
+        <p data-page-node-id="gCtGsBOEyHqBfODZkdLxp1">访问 <a href="https://assrt.net/usercp.php" target="_blank" data-page-node-id="FwA1KZMkNqzWIf2AaCYFJc">assrt.net/usercp.php</a> 登录，在用户中心找到 API Token 并粘贴到「Assrt Token」。</p>
       </div>
-      <div class="help-section" id="help-os">
-        <h4>OpenSubtitles Key</h4>
-        <p>访问 <a href="https://www.opensubtitles.com/en/consumers" target="_blank">opensubtitles.com/consumers</a>，注册应用后获取 API Key，粘贴到「OpenSubtitles Key」。</p>
+      <div class="help-section" id="help-os" data-page-node-id="DltLMjks10mZhRg1qP4thx">
+        <h4 data-page-node-id="DJ7BJPwdaFqks8WTNxvDjs">OpenSubtitles Key</h4>
+        <p data-page-node-id="Qm71EHKAMQvYfirjHjVBtq">访问 <a href="https://www.opensubtitles.com/en/consumers" target="_blank" data-page-node-id="XtD9I650rm4cAJ8b1wjVfM">opensubtitles.com/consumers</a>，注册应用后获取 API Key，粘贴到「OpenSubtitles Key」。</p>
       </div>
-      <div class="help-section" id="help-worker">
-        <h4>Worker 代理地址</h4>
-        <p>部分在线功能（如搜索、获取详情、图片代理）需要一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。JavBus 等子功能会自动复用此地址（拼接 /javbus 子路径），无需单独填写。不填则相关在线功能不可用。</p>
+      <div class="help-section" id="help-worker" data-page-node-id="Bs6P6AlG6P20ADSoWoTrIQ">
+        <h4 data-page-node-id="97FI1bwzSpWz5lDbTGXnQf">Worker 代理地址</h4>
+        <p data-page-node-id="p2MllDdBvYPrTJwYPQX5Br">部分在线功能（如搜索、获取详情、图片代理）需要一个代理服务转发请求（如 Cloudflare Worker）。将服务的 HTTPS 地址粘贴到「Worker 代理地址」即可。JavBus 等子功能会自动复用此地址（拼接 /javbus 子路径），无需单独填写。不填则相关在线功能不可用。</p>
       </div>
     </div>
   </div>
 
   <!-- API 分组帮助（中间弹窗） -->
-  <div class="api-group-help-overlay api-group-help-hidden" id="apiGroupHelpOverlay" onclick="closeApiGroupHelp()">
-    <div class="api-group-help-card" onclick="event.stopPropagation()">
-      <div class="api-group-help-title" id="apiGroupHelpTitle"></div>
-      <div class="api-group-help-body" id="apiGroupHelpBody"></div>
-      <button class="api-group-help-btn" onclick="closeApiGroupHelp()">知道了</button>
+  <div class="api-group-help-overlay api-group-help-hidden" id="apiGroupHelpOverlay" onclick="closeApiGroupHelp()" data-page-node-id="QMJghBXRjHwPWJwID267RB">
+    <div class="api-group-help-card" onclick="event.stopPropagation()" data-page-node-id="wse2d23aOFVu7hdPDEmMu1">
+      <div class="api-group-help-title" id="apiGroupHelpTitle" data-page-node-id="DeABpUOXtfqf98bmS8kr1n"></div>
+      <div class="api-group-help-body" id="apiGroupHelpBody" data-page-node-id="v4WaiN8q5taGMH5qb6Mlsm"></div>
+      <button class="api-group-help-btn" onclick="closeApiGroupHelp()" data-page-node-id="O2VIxE7QMQGdhm4dNVnzuK">知道了</button>
     </div>
   </div>
 
   <!-- 磁力搜索结果 -->
-  <div class="sheet sheet-tall" id="magnetSheet">
-    <div class="sheet-bar sheet-bar-center">
-      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="sheet sheet-tall" id="magnetSheet" data-page-node-id="oQEI5qU7hxL9C4nsPDWm0O">
+    <div class="sheet-bar sheet-bar-center" data-page-node-id="3kpaljMDwB7YPe7Bs5AwY4">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="CZOsp6UPsHElR7QcGwZA7p">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="MnKpFtfijSUJt0iTMApt71"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="cllSPajBWFqgDAqUUGjQ3q"/></svg>
       </button>
-      <span class="sb-title">磁力搜索</span>
-      <span class="sb-spacer"></span>
+      <span class="sb-title" data-page-node-id="SdUXCMMevEweXr26j4tLBH">磁力搜索</span>
+      <span class="sb-spacer" data-page-node-id="FQjoxQv0IeYG378JUNioH6"></span>
     </div>
-    <div class="magnet-sheet-head">
-      <div class="magnet-search-wrap">
-        <input type="text" id="magnetQueryInput" placeholder="输入关键词" oninput="toggleMagnetClear()" onkeydown="if(event.key==='Enter')searchMagnet()">
-        <button type="button" id="magnetClear" class="magnet-clear" onclick="clearMagnetQuery()" aria-label="清除">×</button>
+    <div class="magnet-sheet-head" data-page-node-id="velZBPOOdNo3t0lDo82YG9">
+      <div class="magnet-search-wrap" data-page-node-id="e4pxIXy2CmLgvrl715u0Ks">
+        <input type="text" id="magnetQueryInput" placeholder="输入关键词" oninput="toggleMagnetClear()" onkeydown="if(event.key==='Enter')searchMagnet()" data-page-node-id="pTj6C11hKw2JhGfilzzz7F">
+        <button type="button" id="magnetClear" class="magnet-clear" onclick="clearMagnetQuery()" aria-label="清除" data-page-node-id="L1Pus8sF2EKFbqbX4RCFcB">×</button>
       </div>
-      <button onclick="searchMagnet()">搜索</button>
+      <button onclick="searchMagnet()" data-page-node-id="O6rAQVBjhPTskbyVySUpLA">搜索</button>
     </div>
-    <div class="magnet-quick" id="magnetQuick"></div>
-    <div class="sheet-list" id="magnetResults"></div>
+    <div class="magnet-quick" id="magnetQuick" data-page-node-id="Ku1iuJE6jF0mKcBpVyeKix"></div>
+    <div class="sheet-list" id="magnetResults" data-page-node-id="j5NU7CI1DYGN9D2EcaIA1A"></div>
   </div>
 
   <!-- 添加 / 编辑人员 -->
-  <div class="sheet" id="personSheet">
-    <div class="sheet-bar sheet-bar-center">
-      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="sheet" id="personSheet" data-page-node-id="Hf5CZjMmyYz1xBctREUIK5">
+    <div class="sheet-bar sheet-bar-center" data-page-node-id="ifBweSs2wgnopiJi5U4HvI">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="MSSa7iN6ZrRQqoVMXMpz8p">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="bdgLoQ3ojcP4FCZl3XcwDf"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="6J8cu0GHWIjgWBIu4AzoQ6"/></svg>
       </button>
-      <span class="sb-title" id="personSheetTitle">添加演员</span>
-      <button class="sb-pill" onclick="savePerson()">保存</button>
+      <span class="sb-title" id="personSheetTitle" data-page-node-id="GWS2Cmc32iW3hreG6AzUQ1">添加演员</span>
+      <button class="sb-pill" onclick="savePerson()" data-page-node-id="ezi5Rk5pwIIxHcQpVD0qnm">保存</button>
     </div>
-    <div class="card person-avatar-card">
-      <div class="person-avatar-wrap" onclick="triggerUpload('person')">
-        <div class="person-avatar-large" id="personAvatarPreview"></div>
-        <div class="avatar-camera"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M20 6h-2.34l-1.54-2.3A1 1 0 0 0 15.27 3H8.73a1 1 0 0 0-.85.7L6.34 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Zm-8 12.5A5.5 5.5 0 1 1 12 7a5.5 5.5 0 0 1 0 12.5Z"/></svg></div>
+    <div class="card person-avatar-card" data-page-node-id="bRJwkfVZaZk0DIq2IOuzhK">
+      <div class="person-avatar-wrap" onclick="triggerUpload('person')" data-page-node-id="qBmeaeUcBSsmEmhgXINVWm">
+        <div class="person-avatar-large" id="personAvatarPreview" data-page-node-id="fYx3KBl65But2fI82bdJb3"></div>
+        <div class="avatar-camera" data-page-node-id="JnCc5wmKVBmNECRVrKmhxN"><svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="Gt0tqs0CmcnhVQYq0SaVvZ"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" data-page-node-id="9cGf8U5oK2jP0NNAiFtpOx"/><path d="M20 6h-2.34l-1.54-2.3A1 1 0 0 0 15.27 3H8.73a1 1 0 0 0-.85.7L6.34 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Zm-8 12.5A5.5 5.5 0 1 1 12 7a5.5 5.5 0 0 1 0 12.5Z" data-page-node-id="N5weuyEYeECMolvgaCbzGF"/></svg></div>
       </div>
     </div>
-    <h2 class="section-heading">人员信息</h2>
-    <div class="card person-info-card">
-      <div class="field">
-        <label for="personName">姓名</label>
-        <input class="ios-input" type="text" id="personName" placeholder="请输入">
+    <h2 class="section-heading" data-page-node-id="cprYByWVvaushD4drXcH3g">人员信息</h2>
+    <div class="card person-info-card" data-page-node-id="fjthK6Irtz0wAVUCZsKeSS">
+      <div class="field" data-page-node-id="go9g49waZKa3j3OIcekcy2">
+        <label for="personName" data-page-node-id="azDXgUEwhrwm0fajM4kFwG">姓名</label>
+        <input class="ios-input" type="text" id="personName" placeholder="请输入" data-page-node-id="ATsRsTGNd6xSI24NO6kCCl">
       </div>
-      <div class="value-row select-row no-border" id="personDeptRow">
-        <span class="vr-label">部门</span>
-        <span class="vr-value" id="personDeptVal">导演</span>
-        <select class="select-overlay" id="personDept" onchange="onPersonDeptChange(this)">
-          <option value="导演">导演</option>
-          <option value="制片">制片</option>
-          <option value="编剧">编剧</option>
-          <option value="摄影">摄影</option>
-          <option value="声音">声音</option>
-          <option value="剪辑">剪辑</option>
-          <option value="美术">美术</option>
-          <option value="服装与化妆">服装与化妆</option>
-          <option value="视效">视效</option>
-          <option value="灯光">灯光</option>
-          <option value="其他剧组">其他剧组</option>
+      <div class="value-row select-row no-border" id="personDeptRow" data-page-node-id="6G6I4Eii6XBR5pBXMLhe1q">
+        <span class="vr-label" data-page-node-id="LwKi6VFAUPkZB8KStuEgwv">部门</span>
+        <span class="vr-value" id="personDeptVal" data-page-node-id="VQopWn4WfiPJ5TfJF7GHl9">导演</span>
+        <select class="select-overlay" id="personDept" onchange="onPersonDeptChange(this)" data-page-node-id="ZRAk4I9YXG0MnLeYYu7xlj">
+          <option value="导演" data-page-node-id="cZP1GCu1ICjjNW0pu8Skex">导演</option>
+          <option value="制片" data-page-node-id="CLPi3el1TY1Y25uuixsrJF">制片</option>
+          <option value="编剧" data-page-node-id="HOEwcFDHUHtIEIrRsNhLSf">编剧</option>
+          <option value="摄影" data-page-node-id="AWQsaJ1IuJ2Xa1sjJBTaH1">摄影</option>
+          <option value="声音" data-page-node-id="fvCIrh3L73Ho3a2A8Z6yLH">声音</option>
+          <option value="剪辑" data-page-node-id="YfBaBdmSMFPjRWGKUFGeMw">剪辑</option>
+          <option value="美术" data-page-node-id="n9EcPBogVKnHWnPyAeRyqK">美术</option>
+          <option value="服装与化妆" data-page-node-id="e3cvgSAtAMtAHODzZVe04m">服装与化妆</option>
+          <option value="视效" data-page-node-id="Sz98HhWBdtVocmCatcpBd5">视效</option>
+          <option value="灯光" data-page-node-id="cQM3GRgONGhLlUl1kMaLG0">灯光</option>
+          <option value="其他剧组" data-page-node-id="qAIUWKPv71BC8dKrDZbXRX">其他剧组</option>
         </select>
       </div>
-      <div class="field" id="personRoleRow">
-        <label for="personRole">角色名</label>
-        <input class="ios-input" type="text" id="personRole" placeholder="请输入">
+      <div class="field" id="personRoleRow" data-page-node-id="88vpF553PemRcfzWmUUPeD">
+        <label for="personRole" data-page-node-id="z6cwRSlINCUAaMweEmugY3">角色名</label>
+        <input class="ios-input" type="text" id="personRole" placeholder="请输入" data-page-node-id="e8GSyDXnT6amOdF2O5IEBC">
       </div>
     </div>
-    <button class="btn btn-danger btn-block" id="personDelBtn" style="display:none; margin-top:14px; background:var(--gray-fill);" onclick="deletePerson()">删除</button>
+    <button class="btn btn-danger btn-block" id="personDelBtn" style="display:none; margin-top:14px; background:var(--gray-fill);" onclick="deletePerson()" data-page-node-id="dv2yDDPdIq70CzqYZMZCWa">删除</button>
   </div>
 
   <!-- 隐藏文件输入 -->
-  <input type="file" class="hidden-input" id="nfoImport" accept=".nfo" onchange="handleNfoImport(event)">  <input type="file" class="hidden-input" id="posterInput" accept="image/*" onchange="handleImageUpload(event,'poster')">
-  <input type="file" class="hidden-input" id="fanartInput" accept="image/*" onchange="handleImageUpload(event,'fanart')">
-  <input type="file" class="hidden-input" id="logoInput" accept="image/*" onchange="handleImageUpload(event,'logo')">
-  <input type="file" class="hidden-input" id="personInput" accept="image/*" onchange="handleImageUpload(event,'person')">
+  <input type="file" class="hidden-input" id="nfoImport" accept=".nfo" onchange="handleNfoImport(event)" data-page-node-id="46EUZMjFVYfnPEecFVr99D">  <input type="file" class="hidden-input" id="posterInput" accept="image/*" onchange="handleImageUpload(event,'poster')" data-page-node-id="yPrdHwEOkm4lAM8k9CHBjp">
+  <input type="file" class="hidden-input" id="fanartInput" accept="image/*" onchange="handleImageUpload(event,'fanart')" data-page-node-id="tCIuucRBUnKb7CEZgKiNK7">
+  <input type="file" class="hidden-input" id="logoInput" accept="image/*" onchange="handleImageUpload(event,'logo')" data-page-node-id="pwEKenBW1iG0V8GZSVRncJ">
+  <input type="file" class="hidden-input" id="personInput" accept="image/*" onchange="handleImageUpload(event,'person')" data-page-node-id="9Dhielg6WIzF7HnBbJnBsq">
 
   <!-- ====================== 首页（概览） ====================== -->
-  <section class="page active" id="page-home">
-    <div class="home-header">
-      <div class="hh-text">
-        <p class="home-sub" id="welcomeSub">下午好，</p>
-        <div class="hh-main">
-          <h1 class="home-greeting" id="welcomeTitle">慢慢变好就行 <span class="hh-star">✨</span></h1>
-          <div class="hh-right">
-            <div class="date-pill" id="datePill">8月6日 周四</div>
-            <div class="overview-tabs" id="overviewTabs" style="display:none;">
-              <span class="seg">
-                <button type="button" class="active" data-tab="movie" onclick="setOverviewTab('movie',this)">影片</button>
-                <button type="button" data-tab="xv" id="overviewTabXv" onclick="setOverviewTab('xv',this)">XV</button>
+  <section class="page active" id="page-home" data-page-node-id="KmLxzKsZGyix2gex7MXBx2">
+    <div class="home-header" data-page-node-id="g8bAmmExInAkuH1UcnfZCp">
+      <div class="hh-text" data-page-node-id="HljtlXAzZREX3vsDGrfp2R">
+        <p class="home-sub" id="welcomeSub" data-page-node-id="C54Hyp1GTUCjFUvzGE0TT2">下午好，</p>
+        <div class="hh-main" data-page-node-id="O5GzxyDu8IlNfmfgwfu9Kq">
+          <h1 class="home-greeting" id="welcomeTitle" data-page-node-id="3jyeizhSDFTKypUceCz0fx">慢慢变好就行 <span class="hh-star" data-page-node-id="wsQu55gzgMo0w8v5qoFTs7">✨</span></h1>
+          <div class="hh-right" data-page-node-id="E4hb7vAJC95fXGJJJLdnoZ">
+            <div class="date-pill" id="datePill" data-page-node-id="FUwuPiBLrLnVyEwgBVS606">8月6日 周四</div>
+            <div class="overview-tabs" id="overviewTabs" style="display:none;" data-page-node-id="v4qC5HY2CJiqXfBGwT2qz8">
+              <span class="seg" data-page-node-id="tF9T9QVivoiI5NQICnA8kh">
+                <button type="button" class="active" data-tab="movie" onclick="setOverviewTab('movie',this)" data-page-node-id="ZpyG1BbEBCPCBwymMHRUT8">影片</button>
+                <button type="button" data-tab="xv" id="overviewTabXv" onclick="setOverviewTab('xv',this)" data-page-node-id="BUa2qv3O8WwypKebr3t47J">XV</button>
               </span>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <div class="page-scroll">
-      <div class="overview-section">
-        <div class="overview-grid" id="overviewGrid"></div>
-        <div class="empty-hint" id="overviewEmpty">暂无影片~</div>
+    <div class="page-scroll" data-page-node-id="0TCuKMtCeVD736eMe021pa">
+      <div class="overview-section" data-page-node-id="GDT0POGiJUoIUP5G9EGZ2n">
+        <div class="overview-grid" id="overviewGrid" data-page-node-id="PDclXhbpH5ZB2YKCKFIn19"></div>
+        <div class="empty-hint" id="overviewEmpty" data-page-node-id="GO0otlKnZmkYPD9Q9rf8YM">暂无影片~</div>
       </div>
     </div>
   </section>
 
   <!-- ====================== 搜索（二级页） ====================== -->
-  <section class="page" id="page-search">
-    <header class="page-bar" id="searchPageBar">
-      <h1 class="page-title">搜索</h1>
-      <div class="meta-source-seg" id="searchMetaSeg" style="display:none;">
-        <span class="seg">
-          <button type="button" class="active" data-source="tmdb" onclick="setMetaSource('tmdb',this)">TMDB</button>
-          <button type="button" data-source="jav" onclick="setMetaSource('jav',this)">JAV</button>
+  <section class="page" id="page-search" data-page-node-id="sfB2mOzRbaolzSBUfpnFRf">
+    <header class="page-bar" id="searchPageBar" data-page-node-id="SerfjUGdwfa1R2O06n5wo5">
+      <h1 class="page-title" data-page-node-id="SgLmGKNppxxLWYtf3ToXWV">搜索</h1>
+      <div class="meta-source-seg" id="searchMetaSeg" style="display:none;" data-page-node-id="XyYF36FocOM9RXrmSBMQkC">
+        <span class="seg" data-page-node-id="g1tQMBefJnFs1GTKjzHDCH">
+          <button type="button" class="active" data-source="tmdb" onclick="setMetaSource('tmdb',this)" data-page-node-id="Wc6knaTS3sgMzrl4n5dPka">TMDB</button>
+          <button type="button" data-source="jav" onclick="setMetaSource('jav',this)" data-page-node-id="JvAdkZCMnoJW0l2IvlCnM3">JAV</button>
         </span>
       </div>
-      <div class="page-actions">
-        <button class="btn btn-text muted" style="font-size:13px;padding:6px 8px;" onclick="openCustomEdit()">自定义</button>
+      <div class="page-actions" data-page-node-id="dL6TybYxxIkZenyE3ezfKa">
+        <button class="btn btn-text muted" style="font-size:13px;padding:6px 8px;" onclick="openCustomEdit()" data-page-node-id="S0nWIJdwNHVqCd0S8BgvV0">自定义</button>
       </div>
     </header>
-    <div class="page-scroll">
-      <div class="search-box">
-        <div class="search-input-wrap">
-          <input class="ios-input" type="text" id="tmdbQuery" placeholder="泰坦尼克号" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()">
-          <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除">×</button>
-          <button type="button" class="flip-type" id="tmdbTypeBtn" onclick="cycleTmdbType()" style="display:none;">
-            <span class="flip-type-layer is-current">电影</span>
-            <span class="flip-type-layer is-incoming">剧集</span>
+    <div class="page-scroll" data-page-node-id="vauxPQGIDWpCM2R2R9HtWH">
+      <div class="search-box" data-page-node-id="AxkP8Qy3WhYJMIduYyFBtQ">
+        <div class="search-input-wrap" data-page-node-id="CpsombE3F130NcfdLEUbdl">
+          <input class="ios-input" type="text" id="tmdbQuery" placeholder="泰坦尼克号" oninput="toggleSearchClear()" onkeydown="if(event.key==='Enter')searchMeta()" data-page-node-id="ukFvxXOBMBeTXQTXhCDtQU">
+          <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" aria-label="清除" data-page-node-id="xCnlQE55zYMggnZ0RVHaGh">×</button>
+          <button type="button" class="flip-type" id="tmdbTypeBtn" onclick="cycleTmdbType()" style="display:none;" data-page-node-id="JObsDFd0yvyTxZKGrahlEw">
+            <span class="flip-type-layer is-current" data-page-node-id="JMUvfcfDkCbNxeMhPBZH2h">电影</span>
+            <span class="flip-type-layer is-incoming" data-page-node-id="LlQwIko5JIfElKhKs50Yeq">剧集</span>
           </button>
-          <button type="button" class="flip-type" id="javCensorBtn" onclick="cycleJavCensor()" style="display:none;" aria-label="有码/无码切换">
-            <span class="flip-type-layer is-current">有码</span>
-            <span class="flip-type-layer is-incoming">无码</span>
+          <button type="button" class="flip-type" id="javCensorBtn" onclick="cycleJavCensor()" style="display:none;" aria-label="有码/无码切换" data-page-node-id="NBHDlpQ2WdgOUtCA8JrU1O">
+            <span class="flip-type-layer is-current" data-page-node-id="ieHnVJvMjPGSFG9E3onQdA">有码</span>
+            <span class="flip-type-layer is-incoming" data-page-node-id="WG9X0NQHOFSBgq1UD1sDmy">无码</span>
           </button>
         </div>
-        <button class="btn btn-primary btn-pill" onclick="searchMeta()">搜索</button>
+        <button class="btn btn-primary btn-pill" onclick="searchMeta()" data-page-node-id="O8XQ1qFRmPNskPV54LAcdV">搜索</button>
       </div>
-      <div class="search-history" id="searchHistory" style="display:none;">
-        <div class="search-history-head">
-          <span class="search-history-title">搜索历史</span>
-          <button type="button" class="search-history-clear" id="searchHistoryClear" onclick="clearHistory()">清空</button>
+      <div class="search-history" id="searchHistory" style="display:none;" data-page-node-id="xlPWOmgkCDOIAV7wHChKFj">
+        <div class="search-history-head" data-page-node-id="DxvqgsA34tmvuOvPwEBBc7">
+          <span class="search-history-title" data-page-node-id="C5ZqG5FNcSymCNCCF1ojE3">搜索历史</span>
+          <button type="button" class="search-history-clear" id="searchHistoryClear" onclick="clearHistory()" data-page-node-id="xvcp6MOnOf68VIsA8zjrBa">清空</button>
         </div>
-        <div class="search-history-list" id="searchHistoryList"></div>
+        <div class="search-history-list" id="searchHistoryList" data-page-node-id="jQ9vBe1KXbckV8MdFrbxqj"></div>
       </div>
-      <div id="tmdbResults"></div>
+      <div id="tmdbResults" data-page-node-id="XmfY3BW7JLws50w7WsykH1"></div>
     </div>
   </section>
 
   <!-- ====================== 元数据 ====================== -->
-  <section class="page" id="page-edit">
-    <header class="page-bar" id="editPageBar">
-      <button class="btn-back" onclick="switchPage('search')" aria-label="返回">‹</button>
-      <h1 class="page-title">元数据</h1>
-      <div class="page-actions">
-        <button class="btn btn-text muted" id="btnClear" onclick="newFilm()">清空</button>
-        <button class="btn btn-primary btn-pill" id="btnSave" onclick="saveToDisk()">保存</button>
+  <section class="page" id="page-edit" data-page-node-id="PE6zBBa43aAVZoBapFpuxc">
+    <header class="page-bar" id="editPageBar" data-page-node-id="tymxruodLbCEElgd7Har5M">
+      <button class="btn-back" onclick="switchPage('search')" aria-label="返回" data-page-node-id="sfKbhPFT7gI0D8tFU6K2HZ">‹</button>
+      <h1 class="page-title" data-page-node-id="KiNyVoIXhrKbuWtllUk1R3">元数据</h1>
+      <div class="page-actions" data-page-node-id="jHBCrrJCHWGpLSEG7AMhHn">
+        <button class="btn btn-text muted" id="btnClear" onclick="newFilm()" data-page-node-id="RhgaRapx0IcxwJDcn8vesV">清空</button>
+        <button class="btn btn-primary btn-pill" id="btnSave" onclick="saveToDisk()" data-page-node-id="kQDsCxNPlfyqjibGxfUQbR">保存</button>
       </div>
     </header>
 
-    <div class="page-scroll" id="editScroll">
+    <div class="page-scroll" id="editScroll" data-page-node-id="2p4AqCbhCF4f6gGtPf5cXN">
 
-      <div class="meta-panel active" id="editPanel">
-        <h2 class="section-heading">影片信息</h2>
-        <div class="card">
-          <div class="field">
-            <label for="title"><span class="required">*</span>影片名</label>
-            <input class="ios-input" type="text" id="title" placeholder="请输入" oninput="onTitleChanged(this)">
+      <div class="meta-panel active" id="editPanel" data-page-node-id="TWczIWdPDrnYjiEfnjm2D6">
+        <h2 class="section-heading" data-page-node-id="BNRrbdDXsgR1U4xBn5bPCO">影片信息</h2>
+        <div class="card" data-page-node-id="Wkz49ocU7e1MBgtGC23C3Z">
+          <div class="field" data-page-node-id="B0TaWfDfyB1dvdb3cJjVOn">
+            <label for="title" data-page-node-id="rMeIiVrYvn1flZzhbXj8aa"><span class="required" data-page-node-id="BDB2SjjkC2ile5gy5IpmFj">*</span>影片名</label>
+            <input class="ios-input" type="text" id="title" placeholder="请输入" oninput="onTitleChanged(this)" data-page-node-id="lj1uA7oMZSeLbUoB833ErB">
           </div>
-          <div class="field">
-            <label for="filename"><span class="required">*</span>文件名</label>
-            <input class="ios-input" type="text" id="filename" placeholder="自动填充" readonly>
+          <div class="field" data-page-node-id="5b22nI1sWihDAdjjZHdzCl">
+            <label for="filename" data-page-node-id="lAC6XrOmo0UQLvHmCRRfJA"><span class="required" data-page-node-id="OsUHGFMIRxBg0DHrY7SfJd">*</span>文件名</label>
+            <input class="ios-input" type="text" id="filename" placeholder="自动填充" readonly data-page-node-id="An5rMJLn1yTiNT14mjNXmp">
           </div>
         </div>
 
-        <div class="home-tabs" id="homeTabs">
-          <button class="home-tab active" data-tab="basic" onclick="switchHomeTab('basic')">基础</button>
-          <button class="home-tab" data-tab="cast" onclick="switchHomeTab('cast')">人员</button>
-          <button class="home-tab" data-tab="media" onclick="switchHomeTab('media')">媒体</button>
+        <div class="home-tabs" id="homeTabs" data-page-node-id="vQYtaU3PCMCOhMz0zW6ch5">
+          <button class="home-tab active" data-tab="basic" onclick="switchHomeTab('basic')" data-page-node-id="QBCyDPHoSui0DLZKMGLjfG">基础</button>
+          <button class="home-tab" data-tab="cast" onclick="switchHomeTab('cast')" data-page-node-id="XFyBPxoescDJWyUOUJvXwP">人员</button>
+          <button class="home-tab" data-tab="media" onclick="switchHomeTab('media')" data-page-node-id="tPH7FFSM6HNVKft5TXnQKM">媒体</button>
         </div>
 
         <!-- 卡片2：分段内容 -->
-        <div class="home-panel active" id="tab-basic">
-          <div class="card">
-            <div class="field">
-              <label for="originaltitle">原始标题</label>
-              <input class="ios-input" type="text" id="originaltitle" placeholder="请输入" oninput="updateState()">
+        <div class="home-panel active" id="tab-basic" data-page-node-id="uDYF6JM0YixmKFpaXAKUw4">
+          <div class="card" data-page-node-id="MYP0Mz7YOaVJRdKNTbs0nI">
+            <div class="field" data-page-node-id="9bYm0K5pXVNftTjZwgHAJe">
+              <label for="originaltitle" data-page-node-id="0YH22B5ndvQUhis8QrGbEK">原始标题</label>
+              <input class="ios-input" type="text" id="originaltitle" placeholder="请输入" oninput="updateState()" data-page-node-id="1PJ2GSfBj6Y6VGk1HXX8rd">
             </div>
 
-            <div class="value-row date-row">
-              <span class="vr-label">首播日期</span>
-              <span class="vr-value empty" id="premieredVal">请选择</span>
-              <input type="date" class="date-input-overlay" id="premiered" onchange="onPremieredChange(this)">
+            <div class="value-row date-row" data-page-node-id="sgAORs4OOl3HdWbBdg65iH">
+              <span class="vr-label" data-page-node-id="yRUXbH5brKoM5sGPUrhFuu">首播日期</span>
+              <span class="vr-value empty" id="premieredVal" data-page-node-id="zaD17sS9giRuxBmQMSyakB">请选择</span>
+              <input type="date" class="date-input-overlay" id="premiered" onchange="onPremieredChange(this)" data-page-node-id="nfAqlYqGGSYRudBSNMUDXP">
             </div>
 
-            <div class="value-row select-row" id="yearRow">
-              <span class="vr-label">年份</span>
-              <span class="vr-value empty" id="yearVal">请选择</span>
-              <select class="select-overlay" id="year" onchange="onYearSelect(this)"></select>
+            <div class="value-row select-row" id="yearRow" data-page-node-id="F1NB9gFEFGZzOOCk4YVLVr">
+              <span class="vr-label" data-page-node-id="siAFiVRoOYWBDFqdEpnEyE">年份</span>
+              <span class="vr-value empty" id="yearVal" data-page-node-id="HIoLiXaO2kN8nJUHD0tDN5">请选择</span>
+              <select class="select-overlay" id="year" onchange="onYearSelect(this)" data-page-node-id="J4OxDrsY7n83V1L1H4FQN9"></select>
             </div>
 
-            <div class="field">
-              <label for="runtime">时长（分钟）</label>
-              <input class="ios-input" type="number" inputmode="numeric" id="runtime" placeholder="请输入" min="1" max="600" oninput="updateState()">
+            <div class="field" data-page-node-id="oTJJfJLBty3yD6rHihYoWn">
+              <label for="runtime" data-page-node-id="BPrKtHgblgQV4Aeof2SSBG">时长（分钟）</label>
+              <input class="ios-input" type="number" inputmode="numeric" id="runtime" placeholder="请输入" min="1" max="600" oninput="updateState()" data-page-node-id="v0wqTyZwILE1TtbEtxHXJ4">
             </div>
 
-            <div class="field">
-              <label for="rating">评分</label>
-              <input class="ios-input" type="number" inputmode="decimal" id="rating" placeholder="请输入" min="0" max="10" step="0.1" onblur="validateRating(this)" oninput="updateState()">
+            <div class="field" data-page-node-id="Tos6BpeVR8C1BNcBeq3PLB">
+              <label for="rating" data-page-node-id="AMLSjKgopqKRudnBjaVWBN">评分</label>
+              <input class="ios-input" type="number" inputmode="decimal" id="rating" placeholder="请输入" min="0" max="10" step="0.1" onblur="validateRating(this)" oninput="updateState()" data-page-node-id="wP4Kcd4JIGaONvBIOdduLW">
             </div>
 
-            <div class="value-row select-row no-border">
-              <span class="vr-label">分级</span>
-              <span class="vr-value empty" id="mpaaVal">请选择</span>
-              <select class="select-overlay" id="mpaa" onchange="onMpaaSelect(this)"></select>
+            <div class="value-row select-row no-border" data-page-node-id="TVyppAO5RTDNEedH7x005l">
+              <span class="vr-label" data-page-node-id="Q6vJKEfVbhA2TzWUluva9s">分级</span>
+              <span class="vr-value empty" id="mpaaVal" data-page-node-id="Uh3zoHGM0FmPGZJygEF1x4">请选择</span>
+              <select class="select-overlay" id="mpaa" onchange="onMpaaSelect(this)" data-page-node-id="JOxcHcoJFAVOeLp3LQrpGS"></select>
             </div>
           </div>
 
           <!-- 番号 / 制作商 / 发行商 / 系列（全类型通用字段） -->
-          <div class="card" id="avFieldsCard">
-            <div class="field" id="dvdidField">
-              <label for="dvdid">番号</label>
-              <input class="ios-input" type="text" id="dvdid" placeholder="请输入" oninput="onDvdidInput(this)">
+          <div class="card" id="avFieldsCard" data-page-node-id="bSYryFL25Htn8t8Qtc9m0L">
+            <div class="field" id="dvdidField" data-page-node-id="95cHZme82QPl7vaiEcXDiX">
+              <label for="dvdid" data-page-node-id="1eQmwGbtKGku4iMSppL2U9">番号</label>
+              <input class="ios-input" type="text" id="dvdid" placeholder="请输入" oninput="onDvdidInput(this)" data-page-node-id="sB58GexX58qt0krZZ9hOp1">
             </div>
-            <div class="field">
-              <label for="studio">制作商</label>
-              <input class="ios-input" type="text" id="studio" placeholder="请输入" oninput="updateState()">
+            <div class="field" data-page-node-id="yQpneHQrYoS4QbDdIcOCFf">
+              <label for="studio" data-page-node-id="8Uzwtk2jSSbn0zjDyGzxWM">制作商</label>
+              <input class="ios-input" type="text" id="studio" placeholder="请输入" oninput="updateState()" data-page-node-id="7At3hE8fQLEcFsD3yhFgeW">
             </div>
-            <div class="field">
-              <label for="label">发行商</label>
-              <input class="ios-input" type="text" id="label" placeholder="请输入" oninput="updateState()">
+            <div class="field" data-page-node-id="n3Oa7892Xjxg5r2B7Sq2Vy">
+              <label for="label" data-page-node-id="n1B3SxsgKybNzA7gmA9yiZ">发行商</label>
+              <input class="ios-input" type="text" id="label" placeholder="请输入" oninput="updateState()" data-page-node-id="buVXTDJagcEIPxI2lCUZ5F">
             </div>
-            <div class="field">
-              <label for="series">系列</label>
-              <input class="ios-input" type="text" id="series" placeholder="请输入" oninput="updateState()">
+            <div class="field" data-page-node-id="okd7lXAlfGccNYlPyybVwQ">
+              <label for="series" data-page-node-id="fX083SvLMyHJX8X9ytKKqk">系列</label>
+              <input class="ios-input" type="text" id="series" placeholder="请输入" oninput="updateState()" data-page-node-id="qPOCohFMnLqflQWs3vPLjX">
             </div>
           </div>
 
-          <div class="card">
-            <button class="value-row" id="countryRow" onclick="openCountrySheet()">
-              <span class="vr-label">国家/地区</span>
-              <span class="vr-value empty" id="countryVal">请选择</span>
+          <div class="card" data-page-node-id="ImwAOtX5MD4dn3bS2mcEq5">
+            <button class="value-row" id="countryRow" onclick="openCountrySheet()" data-page-node-id="4WFiRPijzSd0Q1bs7G0t8W">
+              <span class="vr-label" data-page-node-id="5N9YOtMieuAbIjCh1PTviY">国家/地区</span>
+              <span class="vr-value empty" id="countryVal" data-page-node-id="tzBb6p7evrAnF6PDfVKm64">请选择</span>
             </button>
-            <div class="tags-area" id="countryTags" style="display:none;"></div>
+            <div class="tags-area" id="countryTags" style="display:none;" data-page-node-id="DQqsWFPhTdJidGH4Yj9dHY"></div>
 
-            <button class="value-row no-border" onclick="openGenreSheet()">
-              <span class="vr-label">类型</span>
-              <span class="vr-value empty" id="genreVal">请选择</span>
+            <button class="value-row no-border" onclick="openGenreSheet()" data-page-node-id="vrTUWi0xPjzTd38MCHx8Nw">
+              <span class="vr-label" data-page-node-id="9Z1NFuOvIoDjmTPRbXpE3j">类型</span>
+              <span class="vr-value empty" id="genreVal" data-page-node-id="VcWWCjpFPDUG7FKyXrnoSD">请选择</span>
             </button>
-            <div class="tags-area" id="genreTags" style="display:none;"></div>
+            <div class="tags-area" id="genreTags" style="display:none;" data-page-node-id="vudMvWGK8Mye4U3j4UEkdl"></div>
           </div>
 
-          <div class="card">
-            <div class="card-title">剧情简介</div>
-            <div class="field field-stacked" style="padding-top:0;">
+          <div class="card" data-page-node-id="LImuYivdpByBO6xVKdLaW5">
+            <div class="card-title" data-page-node-id="bbVg0Udxi9wRL10j5gvnmR">剧情简介</div>
+            <div class="field field-stacked" style="padding-top:0;" data-page-node-id="5wnOxkVDKIApuhkfotKy1B">
               <textarea class="ios-input" id="plot" rows="4" placeholder="请输入" oninput="updateState()"></textarea>
             </div>
           </div>
         </div>
 
         <!-- 演职人员 -->
-        <div class="home-panel" id="tab-cast" style="display:none;">
-          <h2 class="section-heading">职员</h2>
-          <div class="card cast-row-card" id="directorSection">
-            <div class="cast-scroll" id="directorCard"></div>
+        <div class="home-panel" id="tab-cast" style="display:none;" data-page-node-id="000tUFsecsD6zLsaKWHZsO">
+          <h2 class="section-heading" data-page-node-id="FPGMGyIrAy4tHu3JOrkwUZ">职员</h2>
+          <div class="card cast-row-card" id="directorSection" data-page-node-id="rPdpiLC55b4PC8y6JIemdO">
+            <div class="cast-scroll" id="directorCard" data-page-node-id="6PGRz7loa8GeRj6sSC6vHr"></div>
           </div>
 
-          <h2 class="section-heading" id="actorHeading">演员</h2>
-          <div class="card cast-row-card">
-            <div class="cast-scroll" id="actorCards"></div>
+          <h2 class="section-heading" id="actorHeading" data-page-node-id="GIoNn5RfTJczWZCCdoFiNP">演员</h2>
+          <div class="card cast-row-card" data-page-node-id="p2NSR4vCYxKLNvBtzZOTUm">
+            <div class="cast-scroll" id="actorCards" data-page-node-id="rHIvx4waiPF6FzEkSJkDxy"></div>
           </div>
         </div>
 
         <!-- 媒体 -->
-        <div class="home-panel" id="tab-media" style="display:none;">
+        <div class="home-panel" id="tab-media" style="display:none;" data-page-node-id="I705Jh3R0DzMHHEeSJtByX">
           <!-- 预告：自动从 TMDB 获取，手动输入框已隐藏 -->
-          <h2 class="section-heading" style="display:none;">预告</h2>
-          <div class="card" style="display:none;">
-            <div class="field field-stacked" style="padding-bottom: 0;">
-              <input class="ios-input" type="text" id="trailer" placeholder="粘贴 YouTube 链接或视频 ID" oninput="onTrailerInput(this)">
+          <h2 class="section-heading" style="display:none;" data-page-node-id="n5enBaAJavPPKsuzc2d3tf">预告</h2>
+          <div class="card" style="display:none;" data-page-node-id="WeV6zKLUknB7cXIEEqszRU">
+            <div class="field field-stacked" style="padding-bottom: 0;" data-page-node-id="wm1BPYsCpzF4I2z4DZfNSl">
+              <input class="ios-input" type="text" id="trailer" placeholder="粘贴 YouTube 链接或视频 ID" oninput="onTrailerInput(this)" data-page-node-id="nhucEDDsjCtWqzuEISCwXB">
             </div>
-            <div class="trailer-hint" id="trailerHint"></div>
+            <div class="trailer-hint" id="trailerHint" data-page-node-id="BXHGxtIzEYiIp3B4YkrKuS"></div>
           </div>
 
-          <div class="card media-layout">
-            <div class="media-top">
-              <div class="media-cell poster-cell">
-                <div class="media-label-row">
-                  <div class="media-label">海报</div>
+          <div class="card media-layout" data-page-node-id="IVgxv6KRGkPHErczfmJw1u">
+            <div class="media-top" data-page-node-id="G6GQyJsYOwu5gOfnfOfrIj">
+              <div class="media-cell poster-cell" data-page-node-id="637GIx5Aq216FXUnO65SON">
+                <div class="media-label-row" data-page-node-id="Ac1CW2OvfzBbJXSbUMG8Pl">
+                  <div class="media-label" data-page-node-id="tUzaMK1aFCtUWkvpqABT0p">海报</div>
                 </div>
-                <div class="media-upload-col poster" id="posterUpload" onclick="onMediaColClick('poster')">
-                  <div class="media-add-box"><span>＋</span><small>添加</small></div>
-                  <button class="media-thumb-close" id="posterClose" onclick="event.stopPropagation(); deleteMedia('poster')" aria-label="删除">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                <div class="media-upload-col poster" id="posterUpload" onclick="onMediaColClick('poster')" data-page-node-id="TuNvKNMqWVeNZagnGhzGyR">
+                  <div class="media-add-box" data-page-node-id="nragYF4MDCpDHZSHt103rL"><span data-page-node-id="NTAF3vqjjS6MBdseu7bhXu">＋</span><small data-page-node-id="pGRI9frFe70BFBC5yT6pml">添加</small></div>
+                  <button class="media-thumb-close" id="posterClose" onclick="event.stopPropagation(); deleteMedia('poster')" aria-label="删除" data-page-node-id="HanvkS6GSvksXajBrMdt3n">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="pKGPblq3KMsoNrq9W3349o"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="m2pgveovXiv7KfgOlH33HD"/></svg>
                   </button>
-                  <div class="media-thumb-bar" id="posterBar" style="display:none;">
-                    <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('poster')">替换</button>
-                    <button class="media-inline-btn" onclick="event.stopPropagation(); openCrop('poster')">裁剪</button>
+                  <div class="media-thumb-bar" id="posterBar" style="display:none;" data-page-node-id="m6inujjYLc9tqqWWDlQpD7">
+                    <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('poster')" data-page-node-id="XC8g7M9AFYoCxNc7SfBEJU">替换</button>
+                    <button class="media-inline-btn" onclick="event.stopPropagation(); openCrop('poster')" data-page-node-id="c4w4kYwkpm2sUNBL85WD9J">裁剪</button>
                   </div>
                 </div>
               </div>
-              <div class="media-right-col">
-                <div class="media-cell fanart-cell">
-                  <div class="media-label-row">
-                    <div class="media-label">剧照</div>
+              <div class="media-right-col" data-page-node-id="cbLftzk4tg3JCvnKprRAcL">
+                <div class="media-cell fanart-cell" data-page-node-id="jVQBVvALjRneIWFafoVFb6">
+                  <div class="media-label-row" data-page-node-id="4ngHdtMRis0sOFw5pbNdk8">
+                    <div class="media-label" data-page-node-id="jbAutanEiHCKztqIfSBHWn">剧照</div>
                   </div>
-                  <div class="media-upload-col fanart" id="fanartUpload" onclick="onMediaColClick('fanart')">
-                    <div class="media-add-box"><span>＋</span><small>添加</small></div>
-                    <button class="media-thumb-close" id="fanartClose" onclick="event.stopPropagation(); deleteMedia('fanart')" aria-label="删除">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  <div class="media-upload-col fanart" id="fanartUpload" onclick="onMediaColClick('fanart')" data-page-node-id="7tWapLvwA4vqUAPMB637EY">
+                    <div class="media-add-box" data-page-node-id="nRdpUejaXTwyO1BX0VJQ78"><span data-page-node-id="tUMGVe1Z67vq6LElLfPlIM">＋</span><small data-page-node-id="Olw7Lvv41NbRC4pd548hAo">添加</small></div>
+                    <button class="media-thumb-close" id="fanartClose" onclick="event.stopPropagation(); deleteMedia('fanart')" aria-label="删除" data-page-node-id="cZt12F56CAkPgMsmfvjrHF">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="D2q0gK3hFzvC3JvBwddb4H"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="MBpTPzm57i6GmEaaI2ZxP0"/></svg>
                     </button>
-                    <div class="media-thumb-bar" id="fanartBar" style="display:none;">
-                      <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('fanart')">替换</button>
-                      <button class="media-inline-btn" onclick="event.stopPropagation(); openCrop('fanart')">裁剪</button>
+                    <div class="media-thumb-bar" id="fanartBar" style="display:none;" data-page-node-id="p9Ng2uc8ZaOAEVZ6WxD1JU">
+                      <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('fanart')" data-page-node-id="RJnfzVBeNJOXgr7lUHx7Rs">替换</button>
+                      <button class="media-inline-btn" onclick="event.stopPropagation(); openCrop('fanart')" data-page-node-id="u79oOpwGHZoRgPse98mpuA">裁剪</button>
                     </div>
                   </div>
                 </div>
-                <div class="media-cell logo-cell">
-                  <div class="media-label">Logo</div>
-                  <div class="media-upload-col logo" id="logoUpload" onclick="onMediaColClick('logo')">
-                    <div class="media-add-box"><span>＋</span><small>添加</small></div>
-                    <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                <div class="media-cell logo-cell" data-page-node-id="ZJz2NwK5G6oECcpVYFcfAA">
+                  <div class="media-label" data-page-node-id="sg5H618Q4wfgyHoNR9M5F2">Logo</div>
+                  <div class="media-upload-col logo" id="logoUpload" onclick="onMediaColClick('logo')" data-page-node-id="EaXrexdVktGUEcT1xcqqqX">
+                    <div class="media-add-box" data-page-node-id="DvW8tEpxuiQS8Hd0QMbQ9c"><span data-page-node-id="kAzjSXVp9C4rUmHnsNZ35i">＋</span><small data-page-node-id="CJIMAaHT0QgjXsGoE1ojNG">添加</small></div>
+                    <button class="media-thumb-close" id="logoClose" onclick="event.stopPropagation(); deleteMedia('logo')" aria-label="删除" data-page-node-id="JfX5ngEqzXDkpHNyIC51ug">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="3y22AUraE89GCWgDIUsBLp"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="PqF2IDBZZo1rt7adKFD3eU"/></svg>
                     </button>
-                    <div class="media-thumb-bar" id="logoBar" style="display:none;">
-                      <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('logo')">替换</button>
+                    <div class="media-thumb-bar" id="logoBar" style="display:none;" data-page-node-id="sl90oqYmAeUjc3IVcZ4OST">
+                      <button class="media-inline-btn" onclick="event.stopPropagation(); replaceMedia('logo')" data-page-node-id="NIruSZmUwEaw5BfJA08yXc">替换</button>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <div class="media-subtitle-row">
-              <span class="subtitle-toggle">
-                <span>字幕</span>
-                <span class="switch" onclick="document.getElementById('hasSubtitle').click(); event.stopPropagation();"><input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()"><span class="slider"></span></span>
+            <div class="media-subtitle-row" data-page-node-id="5qywiC4jUSznS0rHY1PDFy">
+              <span class="subtitle-toggle" data-page-node-id="kFH5Tnxkcj9YoV2nZ3mAmF">
+                <span data-page-node-id="PBfGBNbXEHTkzuZV73UBAK">字幕</span>
+                <span class="switch" onclick="document.getElementById('hasSubtitle').click(); event.stopPropagation();" data-page-node-id="8XTP74aTL90ctjsZ5VHs6Q"><input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()" data-page-node-id="AdoNUYqhtd4ARm1RGvTdBF"><span class="slider" data-page-node-id="OFg0MXaT6cH39FNarZ6g24"></span></span>
               </span>
             </div>
           </div>
@@ -1968,231 +2033,236 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   </section>
 
   <!-- ====================== 设置 ====================== -->
-  <section class="page" id="page-settings">
-    <header class="page-bar">
-      <h1 class="page-title" onclick="onSettingsTitleTap()">设置<span class="hidden-badge" id="hiddenBadge" style="display:none;">里模式</span></h1>
+  <section class="page" id="page-settings" data-page-node-id="nuW04K1bN1sD2VsKtmze3v">
+    <header class="page-bar" data-page-node-id="u9lDiITJOSJwbFCfCBFADD">
+      <h1 class="page-title" onclick="onSettingsTitleTap()" data-page-node-id="uZGnSnKRBKPzcrVSuhFodu">设置<span class="hidden-badge" id="hiddenBadge" style="display:none;" data-page-node-id="YDrB7D2SUXuEQIaabXu36O">里模式</span></h1>
     </header>
-    <div class="page-scroll">
+    <div class="page-scroll" data-page-node-id="0pEjjIoyGm6pXJiGXRAm6T">
       <!-- 里模式开关：一键开启/关闭里模式，仅在里模式显示 -->
-      <div class="settings-group mode-group" id="themeHiddenSettingsGroup">
-        <div class="settings-row">
-          <span class="sr-icon mode-icon">18+</span>
-          <span class="sr-label">里模式</span>
-          <span class="switch" onclick="document.getElementById('themeHiddenSwitch').click(); event.stopPropagation();">
-            <input type="checkbox" id="themeHiddenSwitch" onchange="toggleThemeHidden(this)">
-            <span class="slider"></span>
+      <div class="settings-group mode-group" id="themeHiddenSettingsGroup" data-page-node-id="VkzCSvqy8D8qUp4YrZwvSP">
+        <div class="settings-row" data-page-node-id="yZRtSMCHI3SuaouOi7dfZQ">
+          <span class="sr-icon mode-icon" data-page-node-id="kCnOuVnwiz1HynPhC2dsvU">18+</span>
+          <span class="sr-label" data-page-node-id="RyNpoAH6eaB35MSN3uwyT4">里模式</span>
+          <span class="switch" onclick="document.getElementById('themeHiddenSwitch').click(); event.stopPropagation();" data-page-node-id="VFstgsxa6iBfC2ToX1q3h1">
+            <input type="checkbox" id="themeHiddenSwitch" onchange="toggleThemeHidden(this)" data-page-node-id="sYIEDNHRCNb3hlNY5433Le">
+            <span class="slider" data-page-node-id="p1a4k1YEf9Nn2qRZv6Imw4"></span>
           </span>
         </div>
       </div>
-      <h2 class="section-heading">功能设置</h2>
+      <h2 class="section-heading" data-page-node-id="eraQFpSy28CiRjOold4iUX">功能设置</h2>
       <!-- 卡片1：API 配置 + 两个标签管理 -->
-      <div class="settings-group">
-        <button class="settings-row" onclick="openApiKeySheet()">
-          <span class="sr-icon" style="background:#FF9500;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z"/></svg></span>
-          <span class="sr-label">API 配置</span>
+      <div class="settings-group" data-page-node-id="ovSAUvXeEzrNBHoALLuM2G">
+        <button class="settings-row" onclick="openApiKeySheet()" data-page-node-id="u2tkCKmlQIHvPPseILfhFr">
+          <span class="sr-icon" style="background:#FF9500;" data-page-node-id="qy4DvHmfOl38B5Y7oLCeA7"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="KOHfSSRc1WyDg1XjEzmK75"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z" data-page-node-id="4ulN5AEXnwreK48i8lMOC9"/></svg></span>
+          <span class="sr-label" data-page-node-id="T6Mzz8MejvJovKb0R5B4OW">API 配置</span>
+          <span class="sr-chevron" data-page-node-id="VRZZ70fbtdmP3AXc5pksLY"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="00pGc0fNT2IHFujZELXIRo"><path d="M9 18l6-6-6-6" data-page-node-id="viNlOcgj4Bl14P33hD6klD"/></svg></span>
+        </button>
+        <button class="settings-row" onclick="openTranslateSheet()">
+          <span class="sr-icon" style="background:#0A84FF;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3a9 9 0 0 0-9 9 9 9 0 0 0 3.6 7.2L12 22l5.4-2.8A9 9 0 0 0 21 12a9 9 0 0 0-9-9Zm0 13.2a4.2 4.2 0 1 1 0-8.4 4.2 4.2 0 0 1 0 8.4Zm0-6.4a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg></span>
+          <span class="sr-label">翻译配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
-        <button class="settings-row" onclick="openCountryManage()">
-          <span class="sr-icon" style="background:#34C759;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1 17.93a8 8 0 0 1-6-6.93h3.2a17.8 17.8 0 0 0 1.14 4.93A9.9 9.9 0 0 0 11 19.93Zm2 0a9.9 9.9 0 0 0 1.66-2A17.8 17.8 0 0 0 15.8 13H19a8 8 0 0 1-6 6.93ZM5 11H8.45A18.3 18.3 0 0 0 9.35 6.07 8 8 0 0 0 5 11Zm7-5.85A16.6 16.6 0 0 1 14.55 11H9.45A16.6 16.6 0 0 1 12 5.15ZM16.65 6.07A18.3 18.3 0 0 1 17.55 11H19a8 8 0 0 0-2.35-4.93Z"/></svg></span>
-          <span class="sr-label">国家/地区配置</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        <button class="settings-row" onclick="openCountryManage()" data-page-node-id="dRQ0vo2QF8rdFlnaCgVEvJ">
+          <span class="sr-icon" style="background:#34C759;" data-page-node-id="G5dpMyCzkypcxaTVjFGUEh"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="YK2POaBTpJ1KHULilEMo6h"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1 17.93a8 8 0 0 1-6-6.93h3.2a17.8 17.8 0 0 0 1.14 4.93A9.9 9.9 0 0 0 11 19.93Zm2 0a9.9 9.9 0 0 0 1.66-2A17.8 17.8 0 0 0 15.8 13H19a8 8 0 0 1-6 6.93ZM5 11H8.45A18.3 18.3 0 0 0 9.35 6.07 8 8 0 0 0 5 11Zm7-5.85A16.6 16.6 0 0 1 14.55 11H9.45A16.6 16.6 0 0 1 12 5.15ZM16.65 6.07A18.3 18.3 0 0 1 17.55 11H19a8 8 0 0 0-2.35-4.93Z" data-page-node-id="kSfa8EtR2zowEvTAP6EAW9"/></svg></span>
+          <span class="sr-label" data-page-node-id="WVdKb2n9gY0myj2CCskWTr">国家/地区配置</span>
+          <span class="sr-chevron" data-page-node-id="XFeBDi2SDMPYhW4GUYPSGI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="6qBa3xWVN5h58I40dviPPg"><path d="M9 18l6-6-6-6" data-page-node-id="W2T7EAfluSVdAdnzij9i9b"/></svg></span>
         </button>
-        <button class="settings-row" onclick="openGenreManage()">
-          <span class="sr-icon" style="background:#5856D6;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M21.4 12.5l-8.6 8.6a2 2 0 0 1-2.8 0L2 12.9V3h9.9l8.5 8.5a2 2 0 0 1 0 2.8zM7 8a1 1 0 1 0-1 1 1 1 0 0 0 1-1z"/></svg></span>
-          <span class="sr-label">类型配置</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        <button class="settings-row" onclick="openGenreManage()" data-page-node-id="LgQCySR97jQ8i50kAxirtM">
+          <span class="sr-icon" style="background:#5856D6;" data-page-node-id="n0OcxDh4ReFS8zLUsZJRho"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="LhlkmHvmDBJfqAJm6ZHZwB"><path d="M21.4 12.5l-8.6 8.6a2 2 0 0 1-2.8 0L2 12.9V3h9.9l8.5 8.5a2 2 0 0 1 0 2.8zM7 8a1 1 0 1 0-1 1 1 1 0 0 0 1-1z" data-page-node-id="4ziUoAD7Ftw0x3aFNmUSR0"/></svg></span>
+          <span class="sr-label" data-page-node-id="xsee3BWKK8QXH2S9CkWuSn">类型配置</span>
+          <span class="sr-chevron" data-page-node-id="iQA63DdFcwWyEUvqmaB6xF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="euw5c7p2GCk519sEMycpAc"><path d="M9 18l6-6-6-6" data-page-node-id="IQnCugDHcBQ8xwbfaJxHbZ"/></svg></span>
         </button>
-        <button class="settings-row" id="adultPhraseRow" onclick="openAdultPhraseSheet()" style="display:none;">
-          <span class="sr-icon" style="background:#FF2D55;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M5 4h14a1 1 0 0 1 1 1v15l-2.4-2-2.2 2-2-2-2 2-2.2-2L6 18l-2 1.6V5a1 1 0 0 1 1-1z"/></svg></span>
-          <span class="sr-label">加载配置</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        <button class="settings-row" id="adultPhraseRow" onclick="openAdultPhraseSheet()" style="display:none;" data-page-node-id="QifKycSy1ZXvKQEC8b1gHx">
+          <span class="sr-icon" style="background:#FF2D55;" data-page-node-id="XWhVYxw2kEqnsclCdD3ZbB"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="0WIDzC8rTVSvEP7AMoZAkU"><path d="M5 4h14a1 1 0 0 1 1 1v15l-2.4-2-2.2 2-2-2-2 2-2.2-2L6 18l-2 1.6V5a1 1 0 0 1 1-1z" data-page-node-id="koSWTtAaM3mU4yrOnFTLfq"/></svg></span>
+          <span class="sr-label" data-page-node-id="N15zCVcwf7JRjA2EAzk9rv">加载配置</span>
+          <span class="sr-chevron" data-page-node-id="aDnAHOXA2DOIHf8tvHWtN9"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="qAtTr099Jio3BLJNNGjvCz"><path d="M9 18l6-6-6-6" data-page-node-id="pzlbZopIkonhfNWy8BIKIB"/></svg></span>
         </button>
       </div>
 
       <!-- 卡片2/3/4 合并：外观 + 主题 + NSFW + 保存配置 + 自动清除 -->
-      <div class="settings-group">
-        <div class="settings-row select-row">
-          <span class="sr-icon" style="background:#8E8E93;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 13.5 3.1C13 3 12.5 3 12 3z"/></svg></span>
-          <span class="sr-label">外观</span>
-          <span class="sr-value" id="appearanceValue">自动</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
-          <select class="select-overlay" id="appearanceSelect" onchange="onAppearanceSelect(this)"></select>
+      <div class="settings-group" data-page-node-id="Yk24qW5qp31KZ7BAMi3ue3">
+        <div class="settings-row select-row" data-page-node-id="dFI1mt4z81Aufw7sDNjy3h">
+          <span class="sr-icon" style="background:#8E8E93;" data-page-node-id="H9hjsncPtyrxRNXYNe9j9M"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="FlqEo8ZCnCIG11BfuwrbsJ"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 13.5 3.1C13 3 12.5 3 12 3z" data-page-node-id="YnGgBX3n8v4UhImlj9qBqx"/></svg></span>
+          <span class="sr-label" data-page-node-id="OU6ZU2truku4nnxuG8ztfE">外观</span>
+          <span class="sr-value" id="appearanceValue" data-page-node-id="7hczTV834TVVj3HeiRVt4i">自动</span>
+          <span class="sr-chevron" data-page-node-id="pyoy4NzwgoDqPY8bzC62NO"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="e8Ngr3F2EzIzUrrjk5gp3U"><path d="M9 18l6-6-6-6" data-page-node-id="3eV3KGnwZQw69SOBAQhIC9"/></svg></span>
+          <select class="select-overlay" id="appearanceSelect" onchange="onAppearanceSelect(this)" data-page-node-id="bzLECiUKX4Fxsi5V5oysrl"></select>
         </div>
-        <button class="settings-row" id="themeRow" onclick="openThemeSheet()">
-          <span class="sr-icon" style="background:var(--accent);"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><circle cx="12" cy="12" r="5"/></svg></span>
-          <span class="sr-label">主题</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        <button class="settings-row" id="themeRow" onclick="openThemeSheet()" data-page-node-id="WuB5cUhUVacBGRuH4kbMbh">
+          <span class="sr-icon" style="background:var(--accent);" data-page-node-id="zVHPjRh0FNEFF2UT7LD8E2"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="FkTDSDGZN4kwMJzZc52aFc"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" data-page-node-id="6beTrEKdt9gfEjRNBaIWMM"/><circle cx="12" cy="12" r="5" data-page-node-id="cFkmBg8RLtkw6wf8W7Jmrf"/></svg></span>
+          <span class="sr-label" data-page-node-id="ASfq2jwe0zMDkDP8FmuR9R">主题</span>
+          <span class="sr-chevron" data-page-node-id="lZxRvAnetikKjiOc0LsElW"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="R4MKtaaFk0zACG9ul1Svgy"><path d="M9 18l6-6-6-6" data-page-node-id="BoB2fkhtsEF1srEwZ9wom9"/></svg></span>
         </button>
-        <div class="settings-row select-row">
-          <span class="sr-icon" style="background:#AF52DE;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></span>
-          <span class="sr-label">自动清除缓存</span>
-          <span class="sr-value" id="autoClearValue">3天前</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
-          <select class="select-overlay" id="autoClearSelect" onchange="onAutoClearSelect(this)"></select>
+        <div class="settings-row select-row" data-page-node-id="CQVeu6zjpt6lQ23o8aTBkZ">
+          <span class="sr-icon" style="background:#AF52DE;" data-page-node-id="tY2XdzRp5spxekLLSZb9WS"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="gn0SzHqR83ta13wPNURYuV"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" data-page-node-id="MUMekwmr3P06198iQ67Dqo"/></svg></span>
+          <span class="sr-label" data-page-node-id="DVe6S5K2K3U9V2Td9WBhzx">自动清除缓存</span>
+          <span class="sr-value" id="autoClearValue" data-page-node-id="F2nSfY7RzsDTxZFeyarhIl">3天前</span>
+          <span class="sr-chevron" data-page-node-id="0zJPrQEvF2bBFdWv9Yu03K"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="INcGP232zH8hvwGzlClV1M"><path d="M9 18l6-6-6-6" data-page-node-id="nVHNjzSv3uQfRp5w1W7mp4"/></svg></span>
+          <select class="select-overlay" id="autoClearSelect" onchange="onAutoClearSelect(this)" data-page-node-id="sqy847vBRJHaKfG9H3ycVj"></select>
         </div>
       </div>
 
       <!-- 卡片5：恢复 + 关于（同一卡片） -->
-      <div class="settings-group">
-        <button class="settings-row" onclick="showRestoreConfirm()">
-          <span class="sr-icon" style="background:#FF3B30;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></span>
-          <span class="sr-label">恢复</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+      <div class="settings-group" data-page-node-id="Xy6DYjk0J8rIyjQcag7baQ">
+        <button class="settings-row" onclick="showRestoreConfirm()" data-page-node-id="PhjKxX6kdwyHrIg5jgoGWH">
+          <span class="sr-icon" style="background:#FF3B30;" data-page-node-id="jxRFME7of8RVPb42iqCUvn"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="22LGnElLl1ShxN62W4hGAA"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" data-page-node-id="tctki1mARR22Na1UbdQ7my"/></svg></span>
+          <span class="sr-label" data-page-node-id="HuPttoXVH99TUTydjcyxQy">恢复</span>
+          <span class="sr-chevron" data-page-node-id="E2DSFB8wDbAkmFBcFBK1nW"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="JCH8aGJqGyGrvCNAjXr7RK"><path d="M9 18l6-6-6-6" data-page-node-id="PvFnUghxt7WF6lu62bW2vj"/></svg></span>
         </button>
-        <button class="settings-row" onclick="showAboutSheet()">
-          <span class="sr-icon" style="background:#00C7BE;"><svg viewBox="0 0 24 24" fill="#fff" fill-rule="evenodd"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3.75a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5zM11 9h2v8h-2z"/></svg></span>
-          <span class="sr-label">关于</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        <button class="settings-row" onclick="showAboutSheet()" data-page-node-id="XosIeiGtWwJQ23XZKYBnrx">
+          <span class="sr-icon" style="background:#00C7BE;" data-page-node-id="oLSztE0UQEcXLFrBf1Ay7a"><svg viewBox="0 0 24 24" fill="#fff" fill-rule="evenodd" data-page-node-id="o6EusUWUe2MaSK1V0p5hyV"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3.75a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5zM11 9h2v8h-2z" data-page-node-id="E9Z3O8HnZDaKfoEHYREsff"/></svg></span>
+          <span class="sr-label" data-page-node-id="fz9QtnxYLIvQHlCNYADfv1">关于</span>
+          <span class="sr-chevron" data-page-node-id="OcOgQzD3tH6reQ7BSS04zy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="5jYBeUm2mkzEcSQkPJvV3O"><path d="M9 18l6-6-6-6" data-page-node-id="6PxMLpGQRByWHXA2amTBdk"/></svg></span>
         </button>
       </div>
     </div>
   </section>
 
   <!-- ====================== 影片详情 ====================== -->
-  <section class="page" id="page-detail">
-    <div class="detail-bg" id="detailBg"><div class="detail-poster" id="detailPoster"></div></div>
-    <div class="detail-topbar">
-      <button onclick="animateDetailBack()" aria-label="返回">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  <section class="page" id="page-detail" data-page-node-id="Rgw1IvWbQFvWlOriaFRpp6">
+    <div class="detail-bg" id="detailBg" data-page-node-id="aR7MKIts8JJUUnWSzSZFEN"><div class="detail-poster" id="detailPoster" data-page-node-id="FKuo9hSArJO80uzvLHGajG"></div></div>
+    <div class="detail-topbar" data-page-node-id="wHVqgMA02gpEdP1R0YtVtV">
+      <button onclick="animateDetailBack()" aria-label="返回" data-page-node-id="Sqz9795PmlhD4GhJ7M7QKA">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="6l9wmzcoyhnKJTHgDXjrBq"><path d="M15 18l-6-6 6-6" data-page-node-id="JnE3DKZg2CDpFf6qM8ab3m"/></svg>
       </button>
     </div>
-    <div class="detail-scroll" id="detailScroll">
-      <div class="detail-content">
-        <h1 class="detail-title" id="detailTitle"></h1>
-        <div class="detail-info1" id="detailInfo1"></div>
-        <div class="detail-info-av" id="detailInfoAv"></div>
-        <div class="detail-info2" id="detailInfo2"></div>
-        <button class="detail-trailer-btn" id="detailTrailer" onclick="openTrailer()">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          <span id="detailTrailerText">播放预告片</span>
+    <div class="detail-scroll" id="detailScroll" data-page-node-id="WsqSiq1XHzWqCh8DU3gBuW">
+      <div class="detail-content" data-page-node-id="862F8YQiVl2q5yNqjuR8TW">
+        <h1 class="detail-title" id="detailTitle" data-page-node-id="rhroknDJ0qZHszACeb5qhj"></h1>
+        <div class="detail-info1" id="detailInfo1" data-page-node-id="agkYNBFI4pB6OCi8ofqXlo"></div>
+        <div class="detail-info-av" id="detailInfoAv" data-page-node-id="UaB3iZUW5xFhILi90yoQtg"></div>
+        <div class="detail-info2" id="detailInfo2" data-page-node-id="dpws5Rxp8Bvf3G2MCqVjFQ"></div>
+        <button class="detail-trailer-btn" id="detailTrailer" onclick="openTrailer()" data-page-node-id="IuBu3uK3lQ5Tn02RNch7Xm">
+          <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="tNqMGwwRW3pBanzA5hQWfg"><path d="M8 5v14l11-7z" data-page-node-id="eaztxgH8RyZqLU2UnRVI5g"/></svg>
+          <span id="detailTrailerText" data-page-node-id="Z7DFKI1x9FgoBrYJfn2ZDb">播放预告片</span>
         </button>
-        <div class="detail-actions" id="detailActions">
-          <button class="detail-act" onclick="detailEdit()">
-            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
-            <span class="da-lb">编辑</span>
+        <div class="detail-actions" id="detailActions" data-page-node-id="a6u1Gu3ukhCFhh6B7B35jk">
+          <button class="detail-act" onclick="detailEdit()" data-page-node-id="0F0CIacM2SkxPFaHRfs47Z">
+            <span class="da-ic" data-page-node-id="WF7Y5SvSIWDpWowsypZqmY"><svg viewBox="0 0 24 24" data-page-node-id="IHaSbBEUDnEZWJUfYFABEk"><path d="M12 20h9" data-page-node-id="HX64gxSb6xxuBkcnyUQjQW"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" data-page-node-id="TwWTKnjKFpXhuF4RWftTyc"/></svg></span>
+            <span class="da-lb" data-page-node-id="Qe6XW7VhyJ6G168ZJepIQu">编辑</span>
           </button>
-          <button class="detail-act" onclick="detailDownloadMeta()">
-            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></span>
-            <span class="da-lb">下载元数据</span>
+          <button class="detail-act" onclick="detailDownloadMeta()" data-page-node-id="VdNrDB15YP8sIGrSVT3KcV">
+            <span class="da-ic" data-page-node-id="CS0wHBC40aMsBbreMOvzv2"><svg viewBox="0 0 24 24" data-page-node-id="ISisR5e8UcReAbwA5yD6zB"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="uNSffDGNK8fHz5I7c0aRbv"/><path d="M7 10l5 5 5-5" data-page-node-id="1MWh5o9io9oAuiywY6rbgk"/><path d="M12 15V3" data-page-node-id="HGmFYG7dXBp7uo5H7PAduc"/></svg></span>
+            <span class="da-lb" data-page-node-id="hZWWbtAZJAobmww5d15Je2">下载元数据</span>
           </button>
-          <button class="detail-act" id="dtActMagnet" onclick="openMagnetSheet()">
-            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>
-            <span class="da-lb">磁力</span>
+          <button class="detail-act" id="dtActMagnet" onclick="openMagnetSheet()" data-page-node-id="1BACk06WQ4SOOk6t6rM1fI">
+            <span class="da-ic" data-page-node-id="KumFeKK7ij84Gf5rwdmtwy"><svg viewBox="0 0 24 24" data-page-node-id="DvvLnlERQ2gjnrxoExjDtv"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z" data-page-node-id="ZPuK11AcYOqqjn9uWTzkk2"/></svg></span>
+            <span class="da-lb" data-page-node-id="EpjYZ4OtfulwhMrxmEmQta">磁力</span>
           </button>
-          <button class="detail-act" id="dtActSub" onclick="openSubtitleSheet()" style="display:none;">
-            <span class="da-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M7 10h4M7 13.5h6M14 10h3"/></svg></span>
-            <span class="da-lb">字幕</span>
+          <button class="detail-act" id="dtActSub" onclick="openSubtitleSheet()" style="display:none;" data-page-node-id="8Mxr2juR5iJoSJIEWrPt2G">
+            <span class="da-ic" data-page-node-id="KtGSKBjpnGaS6rDAQJizvK"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="WW0FTYKPzYxgiBeSGKTBPL"><rect x="3" y="5" width="18" height="13" rx="2" data-page-node-id="SQaOdc11NzT4R44GgekI0f"/><path d="M7 10h4M7 13.5h6M14 10h3" data-page-node-id="p6rvRwr2MgiMuJ6DOqvDfy"/></svg></span>
+            <span class="da-lb" data-page-node-id="Uq7OMNy1ij7qB6aBiGLsJo">字幕</span>
           </button>
-          <button class="detail-act" id="dtActDel" onclick="detailDelete()">
-            <span class="da-ic"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></span>
-            <span class="da-lb">删除</span>
+          <button class="detail-act" id="dtActDel" onclick="detailDelete()" data-page-node-id="vbQmFsOsKRyoUW7peODjAx">
+            <span class="da-ic" data-page-node-id="653N8oO7p4OO4XGEs3YP20"><svg viewBox="0 0 24 24" data-page-node-id="25bSxhqp9zOzbS6sW8xMDQ"><path d="M3 6h18" data-page-node-id="8KRxoN3PtPfCj1pWzaCIHw"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" data-page-node-id="eL642BwNkEbFBYyRLDxuiY"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" data-page-node-id="YJm9TQwJlVYghD4xE1QE0h"/><path d="M10 11v6M14 11v6" data-page-node-id="ffIC74zqBqG8HmTdXeMZeP"/></svg></span>
+            <span class="da-lb" data-page-node-id="d6BBBFlPwgTYOuHi8Zkm8d">删除</span>
           </button>
         </div>
-        <div class="detail-plot" id="detailPlot"></div>
-        <div class="detail-cast" id="detailCast"></div>
-        <div class="detail-magnets" id="detailMagnets" style="display:none;"></div>
-        <div class="detail-shots" id="detailShots"></div>
+        <div class="detail-plot" id="detailPlot" data-page-node-id="03kHNoFAaeLcmi4Qno694u"></div>
+        <div class="detail-cast" id="detailCast" data-page-node-id="KjVqnsWOeXfaWl4hC9lpGU"></div>
+        <div class="detail-magnets" id="detailMagnets" style="display:none;" data-page-node-id="MEw8x7Rxd5GSIHVUbcE3ZJ"></div>
+        <div class="detail-shots" id="detailShots" data-page-node-id="UeQszoOFWEhcBRBUV3x60f"></div>
       </div>
     </div>
   </section>
 
   <!-- 预告片播放弹窗 -->
-  <div class="trailer-mask" id="trailerMask" onclick="closeTrailer()"></div>
-  <div class="trailer-modal" id="trailerModal">
-    <div class="trailer-head">
-      <div class="trailer-head-left">
-        <span>播放预告片</span>
-        <button class="trailer-ext-btn" id="trailerExtBtn" onclick="openTrailerExternal()">在 YouTube 打开</button>
+  <div class="trailer-mask" id="trailerMask" onclick="closeTrailer()" data-page-node-id="GP8sRGE2ss19IBFxf9zuI3"></div>
+  <div class="trailer-modal" id="trailerModal" data-page-node-id="QRSFRa0yp2uj3CbLQf1B5c">
+    <div class="trailer-head" data-page-node-id="wYJLBXWqa1gjQJnWdC0mbi">
+      <div class="trailer-head-left" data-page-node-id="pxESwuiXddyllV8UmBHBhE">
+        <span data-page-node-id="NhrXJbRwCjC4f4GY96NMDf">播放预告片</span>
+        <button class="trailer-ext-btn" id="trailerExtBtn" onclick="openTrailerExternal()" data-page-node-id="lseYFVhfDlaZKuSbTvGGZ1">在 YouTube 打开</button>
       </div>
-      <button class="trailer-close-btn" onclick="closeTrailer()" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      <button class="trailer-close-btn" onclick="closeTrailer()" aria-label="关闭" data-page-node-id="4AayzTJopALBAaSIy9Gw1j">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" data-page-node-id="LTSkfj8tDXmEnl36G4mYMe"><path d="M6 6l12 12M18 6L6 18" data-page-node-id="RIqGJbJWoaHTWMsM6x16pH"/></svg>
       </button>
     </div>
-    <div class="trailer-frame">
-      <iframe id="trailerFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+    <div class="trailer-frame" data-page-node-id="QMM5GhZMlQTvCdQIqbZpcU">
+      <iframe id="trailerFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen data-page-node-id="lsziqnt0D1ZwY9cVceNc9g"></iframe>
     </div>
   </div>
 
   <!-- 删除确认弹窗（iOS 26 Alert 风格，独立 ID） -->
-  <div class="delete-confirm-mask" id="deleteConfirmMask" onclick="closeDeleteConfirm()"></div>
-  <div class="delete-confirm-modal" id="deleteConfirmModal">
-    <div class="delete-confirm-title" id="deleteConfirmTitle">确认删除该影片？</div>
-    <div class="delete-confirm-body" id="deleteConfirmBody">此操作不可撤销。</div>
-    <div class="delete-confirm-actions">
-      <button class="delete-confirm-btn" onclick="closeDeleteConfirm()">取消</button>
-      <button class="delete-confirm-btn danger" onclick="confirmDelete()">删除</button>
+  <div class="delete-confirm-mask" id="deleteConfirmMask" onclick="closeDeleteConfirm()" data-page-node-id="1SdR6oiDNiJLp5FwPRGxB3"></div>
+  <div class="delete-confirm-modal" id="deleteConfirmModal" data-page-node-id="UhVojwGmGWe50Enk8LEk9N">
+    <div class="delete-confirm-title" id="deleteConfirmTitle" data-page-node-id="VWSCpoN50WbYSWvFIEmYBT">确认删除该影片？</div>
+    <div class="delete-confirm-body" id="deleteConfirmBody" data-page-node-id="m9nVXGRqWU7uChtGXuPWTp">此操作不可撤销。</div>
+    <div class="delete-confirm-actions" data-page-node-id="A8EAy4Z9cfmNsonn9CnMhv">
+      <button class="delete-confirm-btn" onclick="closeDeleteConfirm()" data-page-node-id="xIxAXR3NYuhOzA5KpCHH5Z">取消</button>
+      <button class="delete-confirm-btn danger" onclick="confirmDelete()" data-page-node-id="B3iiAYb20fASBOk1sRtfdO">删除</button>
     </div>
   </div>
 
   <!-- 字幕搜索 -->
-  <div class="sheet" id="subtitleSheet">
-    <div class="sheet-bar sheet-bar-center">
-      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="sheet" id="subtitleSheet" data-page-node-id="qBhW0aCHLf0lR6USb4qQ63">
+    <div class="sheet-bar sheet-bar-center" data-page-node-id="uXR232G560ObTg9P5TyWYL">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="dqnA7JNP5xat2nGizfRFXy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="IZLz0Uw2G8Q7ryoEUMeqqE"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="CZNTBL7w69O9EsfqwvSFag"/></svg>
       </button>
-      <span class="sb-title">字幕搜索</span>
-      <span class="sb-spacer"></span>
+      <span class="sb-title" data-page-node-id="9oDvbNYHaQTf2Zu5tcgssj">字幕搜索</span>
+      <span class="sb-spacer" data-page-node-id="kBYKUi06FELf9ffGwhN94D"></span>
     </div>
-    <div class="sub-search-row">
-      <div class="sub-input-combined">
-        <input class="ios-input sub-query-input" type="text" id="subQueryInput" placeholder="影片名" oninput="onSubQueryChange()">
-        <button class="api-clear" id="subQueryClear" onclick="clearSubQuery()" aria-label="清除" style="display:none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    <div class="sub-search-row" data-page-node-id="llgfIiOc6iMuqfuAXmsdgZ">
+      <div class="sub-input-combined" data-page-node-id="w7bdVK3dyUQGHVJtWUKQBW">
+        <input class="ios-input sub-query-input" type="text" id="subQueryInput" placeholder="影片名" oninput="onSubQueryChange()" data-page-node-id="SYw7Y6avpbQW89KhFeON7H">
+        <button class="api-clear" id="subQueryClear" onclick="clearSubQuery()" aria-label="清除" style="display:none;" data-page-node-id="kRNwCbXwhasYQy28Kv2Xqu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="OHaTc9VWfpcBeOztfwriIj"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="8b4LvFkuPVTEOIad6f1L5P"/></svg>
         </button>
-        <button type="button" class="flip-type sub-src-text" id="subSrcBtn" onclick="cycleSubSrc()">
-          <span class="flip-type-layer is-current">伪射手</span>
-          <span class="flip-type-layer is-incoming">Sub</span>
+        <button type="button" class="flip-type sub-src-text" id="subSrcBtn" onclick="cycleSubSrc()" data-page-node-id="DgiepOokBchE4UCOinthrr">
+          <span class="flip-type-layer is-current" data-page-node-id="0HA7gacOu85PFmJnOA1N8V">伪射手</span>
+          <span class="flip-type-layer is-incoming" data-page-node-id="unBeWZmzHYHrwhLNMef2a5">Sub</span>
         </button>
       </div>
-      <button class="sub-search-btn" onclick="searchSubtitles()">搜索</button>
+      <button class="sub-search-btn" onclick="searchSubtitles()" data-page-node-id="RwghEaAZXJ5nGj3IEetogM">搜索</button>
     </div>
-    <div class="sub-ctrl-row" id="subCtrlRow">
-      <button class="sub-seg-chip active" data-mode="title" onclick="selectSubTitleMode('title')">影片名</button>
-      <button class="sub-seg-chip" data-mode="original" onclick="selectSubTitleMode('original')">原始标题</button>
-      <span class="sub-ctrl-spacer"></span>
-      <div class="sub-lang-wrap">
-        <select class="sub-lang-select-visible" id="subLangSelect" onchange="onSubLangSelect(this)">
-          <option value="all">全部</option>
-          <option value="zh">简中</option>
-          <option value="zht">繁中</option>
-          <option value="en">英文</option>
+    <div class="sub-ctrl-row" id="subCtrlRow" data-page-node-id="N5456EJYPFqcGETvGbBGFm">
+      <button class="sub-seg-chip active" data-mode="title" onclick="selectSubTitleMode('title')" data-page-node-id="dWCZ1KMYBgrufcEDzvwtD0">影片名</button>
+      <button class="sub-seg-chip" data-mode="original" onclick="selectSubTitleMode('original')" data-page-node-id="AH6GpEKQRJ87UFOPKGGyuC">原始标题</button>
+      <span class="sub-ctrl-spacer" data-page-node-id="5Ew90xih97nQh1D0T5a5cf"></span>
+      <div class="sub-lang-wrap" data-page-node-id="oGggGeMEvtcO109AyfQjdF">
+        <select class="sub-lang-select-visible" id="subLangSelect" onchange="onSubLangSelect(this)" data-page-node-id="3UXVlMCxNISBrbcTJvOdFh">
+          <option value="all" data-page-node-id="odMGLciwjo9GRxh9EwnVrf">全部</option>
+          <option value="zh" data-page-node-id="lzM3OEYDrvJY3qjuwvk6uI">简中</option>
+          <option value="zht" data-page-node-id="0DJ05yHg0MV8LAlxIoxLXl">繁中</option>
+          <option value="en" data-page-node-id="SpXDOjVF2hksdbwpEFFbep">英文</option>
         </select>
-        <svg class="sub-lang-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        <svg class="sub-lang-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="kakJTMKD44du4btgEk6Cfn"><path d="m6 9 6 6 6-6" data-page-node-id="U4mDwYdokI35AAdhZwEvR8"/></svg>
       </div>
     </div>
-    <div class="sub-results" id="subResults"><div class="tmdb-msg">正在搜索…</div></div>
+    <div class="sub-results" id="subResults" data-page-node-id="MI4ifHAJpjXm4Ue3bNiOMJ"><div class="tmdb-msg" data-page-node-id="O2GkGTKjRjez443mEy0Evl">正在搜索…</div></div>
   </div>
 
   <!-- 图片全屏预览 -->
-  <div class="image-preview-mask" id="imagePreviewMask" onclick="closeImagePreview()"></div>
-  <div class="image-preview-modal" id="imagePreviewModal" onclick="if(event.target===this||event.target.id==='imagePreviewTrack'||(event.target.classList&&event.target.classList.contains('ip-slide')))closeImagePreview()">
-    <div class="image-preview-track" id="imagePreviewTrack"></div>
-    <button class="image-preview-close" onclick="closeImagePreview()" aria-label="关闭">×</button>
-    <div class="image-preview-actions" id="imagePreviewActions">
-      <button class="ipa-btn hidden" id="resetZoomBtn" onclick="resetPreviewZoom()" aria-label="恢复原始大小">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4V9M15 4H20V9M9 20H4V15M15 20H20V15"/></svg>
+  <div class="image-preview-mask" id="imagePreviewMask" onclick="closeImagePreview()" data-page-node-id="abpti8VjQLGbxnEYFbqlCg"></div>
+  <div class="image-preview-modal" id="imagePreviewModal" onclick="if(event.target===this||event.target.id==='imagePreviewTrack'||(event.target.classList&&event.target.classList.contains('ip-slide')))closeImagePreview()" data-page-node-id="IC4ZD0Azn3zVQH2jAAZOm5">
+    <div class="image-preview-track" id="imagePreviewTrack" data-page-node-id="HcSZTjHjRtsZ9S8IwlMD8j"></div>
+    <button class="image-preview-close" onclick="closeImagePreview()" aria-label="关闭" data-page-node-id="qWHzPZGbGO1sy6ync7GD9z">×</button>
+    <div class="image-preview-actions" id="imagePreviewActions" data-page-node-id="v4DRiTlC7PpGpl0oiAtjGI">
+      <button class="ipa-btn hidden" id="resetZoomBtn" onclick="resetPreviewZoom()" aria-label="恢复原始大小" data-page-node-id="wMrHtXqcaNrANI4vEQ9tpt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="UZsqf3HsGvXPutsdGqzMOh"><path d="M9 4H4V9M15 4H20V9M9 20H4V15M15 20H20V15" data-page-node-id="7za4sjJFpKwOX1Xa20S5pv"/></svg>
       </button>
-      <button class="ipa-btn" onclick="downloadCurrentPreview()" aria-label="下载当前图片">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 12l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      <button class="ipa-btn" onclick="downloadCurrentPreview()" aria-label="下载当前图片" data-page-node-id="wSvWPKLyxZnvAF6Ce403f3">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="VL8LCXSCJAT7PHHNiPuGQL"><path d="M12 15V3m0 12l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" data-page-node-id="Os4rdoQcuewnubvxz4tDf4"/></svg>
       </button>
     </div>
-    <div class="preview-dots" id="previewDots"></div>
+    <div class="preview-dots" id="previewDots" data-page-node-id="0sysXBBqOjDWMCeGLVH6TQ"></div>
   </div>
 
   <!-- 底部固定 Tab 栏 -->
-  <nav class="ios-tabbar" id="tabBar">
-    <button class="tab-item active" data-page="home" onclick="switchPage('home')">
-      <span class="ti-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></span><span>首页</span>
+  <nav class="ios-tabbar" id="tabBar" data-page-node-id="dPmwNznhB0YNoClSQwJpPR">
+    <button class="tab-item active" data-page="home" onclick="switchPage('home')" data-page-node-id="HzcMETR5OsZEH2KrhSLUoU">
+      <span class="ti-icon" data-page-node-id="1thJ9MTvuaM4onEfbVpJ95"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" data-page-node-id="OwzxMpLvFEy3bmX8DCDAgm"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" data-page-node-id="p5DelIhDgXdtAcdzokWEok"/></svg></span><span data-page-node-id="MyhMED0Xmhl1fBItpDaVVw">首页</span>
     </button>
-    <button class="tab-item" data-page="search" onclick="switchPage('search')">
-      <span class="ti-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg></span><span>搜索</span>
+    <button class="tab-item" data-page="search" onclick="switchPage('search')" data-page-node-id="skddwFoGLSnm4NAgRSQcvf">
+      <span class="ti-icon" data-page-node-id="z4vCY9ZYxzOMzu42CaT5uL"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" data-page-node-id="ohfP2V0JzRARoscnuL4MvG"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z" data-page-node-id="HByoG0nHPJKrY6d4c97Jai"/></svg></span><span data-page-node-id="UL4xg1FhDes8P8IhlDCnSO">搜索</span>
     </button>
-    <button class="tab-item" data-page="settings" onclick="switchPage('settings')">
-      <span class="ti-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></span><span>设置</span>
+    <button class="tab-item" data-page="settings" onclick="switchPage('settings')" data-page-node-id="UmqyEoQTPiFytPXtrT47bR">
+      <span class="ti-icon" data-page-node-id="HSVmhtfTRq9JbKUX72eNPU"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" data-page-node-id="uzMbGGm2JqggeVHw6nnGvS"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" data-page-node-id="pXNnbpSmZW0IsPukdaTsNI"/></svg></span><span data-page-node-id="v5IymjDpFKd7KG5PnrSalD">设置</span>
     </button>
   </nav>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" data-page-node-id="kQXLVcJHmasANAWqCwvZ0s"></div>
 </div>
 
 <script>
@@ -2549,6 +2619,8 @@ var state = {
   appearance: 'auto',
   themeHidden: false,
   tier: '', activationCode: '',
+  translateBaseUrl: '', translateApiKey: '', translateModel: '', // 翻译 AI 配置（OpenAI 兼容，客户端直连）
+  translatingIds: new Set(), // 正在后台翻译的影片 id 集合（仅运行时，用于首页加载图标）
   overviewTab: 'movie',
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
@@ -3213,6 +3285,127 @@ function clearApiInput(){
 function updateSubtitleBtn(){
   var btn = document.getElementById('dtActSub');
   if (btn) btn.style.display = state.activationCode ? '' : 'none';
+}
+/* ===== 翻译配置（OpenAI 兼容，客户端直连 LLM） ===== */
+var TRANSLATE_SYSTEM_PROMPT = [
+  '你是将成人影视元数据译为简体中文的翻译专家。请把下方日文的影片标题与简介翻译为简体中文。',
+  '硬性规则：',
+  '1. 仅做等值翻译，不增删、不概括、不改写语气。',
+  '2. 专有名词保留原文并附中文：演员名、片商、系列名。',
+  '3. 番号/型号代码（如 SONE-456、ABC-123）一律原样输出，绝不翻译或改写。',
+  '4. 日文汉字按简体中文习惯转写（例：妻→人妻按需），但语义必须准确。',
+  '5. 不雅化也不净化原文本措辞，保持原营销/直述风格。',
+  '6. 已知源语言：日文，请勿误判。'
+].join('\n');
+var TRANSLATE_CFG_KEY = 'translateConfig';
+function getTranslateConfig(){
+  return idbGet('kv', TRANSLATE_CFG_KEY).then(function(v){
+    return (v && typeof v === 'object') ? { baseUrl: v.baseUrl||'', apiKey: v.apiKey||'', model: v.model||'' } : { baseUrl:'', apiKey:'', model:'' };
+  });
+}
+function setTranslateConfig(cfg){
+  return idbPut('kv', TRANSLATE_CFG_KEY, { baseUrl: cfg.baseUrl||'', apiKey: cfg.apiKey||'', model: cfg.model||'' });
+}
+function translateConfigReady(){
+  return !!(state.translateBaseUrl && state.translateApiKey && state.translateModel);
+}
+/* 是否需要翻译：仅当文本含日文假名（平/片假名）时判定为日文，需翻译为简体中文；
+   纯汉字（视为已是中文）、英文、番号代码等不翻译，避免误翻。 */
+function needsTranslation(text){
+  if (!text || !String(text).trim()) return false;
+  return /[ぁ-んァ-ヶ]/.test(String(text));
+}
+/* 打开翻译配置弹窗：回填输入框 */
+function openTranslateSheet(){
+  document.getElementById('translateBaseUrl').value = state.translateBaseUrl || '';
+  document.getElementById('translateApiKey').value = state.translateApiKey || '';
+  document.getElementById('translateModel').value = state.translateModel || '';
+  toggleTranslateClear();
+  openSheet('translateSheet');
+}
+function toggleTranslateClear(){
+  var map = [['translateBaseUrl','translateBaseClear'],['translateApiKey','translateKeyClear'],['translateModel','translateModelClear']];
+  map.forEach(function(p){
+    var inp = document.getElementById(p[0]); var btn = document.getElementById(p[1]);
+    if (inp && btn) btn.style.display = inp.value ? 'flex' : 'none';
+  });
+}
+function clearTranslateBase(){ var i=document.getElementById('translateBaseUrl'); if(i){i.value='';toggleTranslateClear();i.focus();} }
+function clearTranslateKey(){ var i=document.getElementById('translateApiKey'); if(i){i.value='';toggleTranslateClear();i.focus();} }
+function clearTranslateModel(){ var i=document.getElementById('translateModel'); if(i){i.value='';toggleTranslateClear();i.focus();} }
+/* 读取翻译配置输入并持久化（静默） */
+function persistTranslateConfig(allowClear){
+  try {
+    var base = (document.getElementById('translateBaseUrl').value||'').trim();
+    var key = (document.getElementById('translateApiKey').value||'').trim();
+    var model = (document.getElementById('translateModel').value||'').trim();
+    if (allowClear || base || !state.translateBaseUrl) state.translateBaseUrl = base;
+    if (allowClear || key || !state.translateApiKey) state.translateApiKey = key;
+    if (allowClear || model || !state.translateModel) state.translateModel = model;
+    setTranslateConfig({ baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel }).catch(function(){});
+  } catch(e){}
+}
+function saveTranslateConfig(){
+  try { persistTranslateConfig(true); closeAllSheets(); showToast('已保存','success'); }
+  catch(e){ showToast('保存失败','error'); }
+}
+/* 调用 OpenAI 兼容接口翻译单段文本，带 30s 超时；返回 Promise<string> */
+function translateOne(text){
+  return new Promise(function(resolve, reject){
+    if (!translateConfigReady()){ reject(new Error('翻译未配置')); return; }
+    var base = state.translateBaseUrl.trim().replace(/\/+$/, '');
+    var endpoint = /\/chat\/completions$/i.test(base) ? base : base + '/chat/completions';
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, 30000) : null;
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + state.translateApiKey },
+      body: JSON.stringify({ model: state.translateModel, temperature: 0.3, messages: [
+        { role:'system', content: TRANSLATE_SYSTEM_PROMPT },
+        { role:'user', content: String(text) }
+      ] }),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function(r){
+      if (!r.ok) return r.text().then(function(t){ throw new Error('HTTP ' + r.status + '：' + t.slice(0,200)); });
+      return r.json();
+    }).then(function(d){
+      var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+      if (!c) throw new Error('翻译返回为空');
+      resolve(String(c).trim());
+    }).catch(function(err){
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+/* 按字段独立判断是否需要翻译（含日文假名才翻译，已有中文/英文/番号跳过） */
+function computeTranslateNeed(film){
+  var title = (film.data && film.data.title) || film.title || '';
+  var plot = (film.data && film.data.plot) || '';
+  return { title: needsTranslation(title), plot: needsTranslation(plot) };
+}
+/* 后台翻译并覆盖更新影片记录；完成后移除首页加载图标 */
+function startFilmTranslation(id, title, plot, needTitle, needPlot){
+  var pTitle = needTitle ? translateOne(title) : Promise.resolve(null);
+  var pPlot = needPlot ? translateOne(plot) : Promise.resolve(null);
+  Promise.all([pTitle, pPlot]).then(function(res){
+    var newTitle = res[0], newPlot = res[1];
+    loadFilm(id).then(function(f){
+      if (!f){ finishTranslation(id); return; }
+      var changed = false;
+      if (newTitle && newTitle !== title){ f.title = newTitle; if (f.data) f.data.title = newTitle; changed = true; }
+      if (newPlot && newPlot !== plot){ if (f.data) f.data.plot = newPlot; changed = true; }
+      if (!changed){ finishTranslation(id); return; }
+      saveFilm(f).then(function(){ finishTranslation(id); renderOverview(); showToast('已翻译标题/简介', 'success'); }).catch(function(){ finishTranslation(id); });
+    }).catch(function(){ finishTranslation(id); });
+  }).catch(function(){
+    finishTranslation(id);
+    showToast('翻译失败，已保留原文', 'error');
+  });
+}
+function finishTranslation(id){
+  state.translatingIds.delete(id);
+  renderOverview();
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(allowClear){
@@ -4257,6 +4450,8 @@ function saveToDisk(){
   var filename = getVal('filename');
   if (!filename && !title){ showToast('请先填写影片名或文件名', 'error'); return; }
   var film = buildFilmFromCurrent();
+  var need = computeTranslateNeed(film);
+  if ((need.title || need.plot) && translateConfigReady()) state.translatingIds.add(film.id);
   saveFilm(film).then(function(){
     currentFilmId = film.id;
     // 保存后回到首页对应的 影片/XV 列表（按分级自动归属）
@@ -4270,7 +4465,10 @@ function saveToDisk(){
     showToast('已保存', 'success');
     // 保存后检查影片数量，达到上限附近时提醒（延迟以免覆盖保存提示）
     checkFilmCap(1500);
+    // 先存原文，后台异步翻译标题/简介，翻完覆盖更新（首页剧照右上角显示加载图标）
+    if (state.translatingIds.has(film.id)) startFilmTranslation(film.id, (film.data && film.data.title) || film.title || '', (film.data && film.data.plot) || '', need.title, need.plot);
   }).catch(function(err){
+    state.translatingIds.delete(film.id);
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
 }
@@ -4279,6 +4477,8 @@ function quickSaveAndHome(){
   var title = getVal('title'); var filename = getVal('filename');
   if (!filename && !title){ showToast('缺少影片名，无法保存', 'error'); return Promise.resolve(); }
   var film = buildFilmFromCurrent();
+  var need = computeTranslateNeed(film);
+  if ((need.title || need.plot) && translateConfigReady()) state.translatingIds.add(film.id);
   return saveFilmWithMerge(film).then(function(result){
     var saved = result.film;
     currentFilmId = saved.id;
@@ -4290,7 +4490,10 @@ function quickSaveAndHome(){
     switchPage('home');
     showToast(result.merged ? '已合并更新并保存' : '已保存，返回首页', 'success');
     checkFilmCap(1500);
+    // 先存原文，后台异步翻译标题/简介，翻完覆盖更新（首页剧照右上角显示加载图标）
+    if (state.translatingIds.has(film.id)) startFilmTranslation(film.id, (film.data && film.data.title) || film.title || '', (film.data && film.data.plot) || '', need.title, need.plot);
   }).catch(function(err){
+    state.translatingIds.delete(film.id);
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
 }
@@ -4415,12 +4618,13 @@ function renderOverview(){
       if (hasTrailer) badgeHtml += '<div class="mc-trailer"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>';
       var badges = badgeHtml ? '<div class="mc-badges">' + badgeHtml + '</div>' : '';
       var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
+      var trBadge = (state.translatingIds && state.translatingIds.has(f.id)) ? '<div class="mc-translating"><span class="tr-spin"></span></div>' : '';
       var cardTitle = (f.adult && f.data && f.data.dvdId) ? (f.data.dvdId || '').toUpperCase() : (f.title || f.id);
       var title = '<div class="mc-title">' + escapeHtml(cardTitle) + '</div>';
       // 注意：点击走 addEventListener 绑定（见 bindOverviewLongPress），不在此内联 onclick 嵌入 id，
       // 避免片名含单引号时 escapeAttr 转义破坏 JS 字符串导致点击失效。
       return '<div class="movie-card-wrap" data-id="' + enc + '">'
-           + '<div class="movie-card">' + poster + badges + lock + '</div>' + title + '</div>';
+           + '<div class="movie-card">' + poster + badges + lock + trBadge + '</div>' + title + '</div>';
     }).join('');
     bindOverviewLongPress();
     applyOverviewPosterCrop();
@@ -7525,6 +7729,9 @@ function bootApp(){
     getTier().then(function(t){ state.tier = t || ''; updateActivationStatus(); }).catch(function(){}),
     getMagnetConfig().then(function(cfg){
       if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
+    }).catch(function(){}),
+    getTranslateConfig().then(function(c){
+      state.translateBaseUrl = c.baseUrl || ''; state.translateApiKey = c.apiKey || ''; state.translateModel = c.model || '';
     }).catch(function(){}),
     getAdultLoadingPhrases().then(function(list){ currentAdultPhrases = list; }).catch(function(){}),
     getThemeHidden().then(function(h){
