@@ -2380,16 +2380,16 @@ function initDetailTitleCopy(){
   t._titleBound = true;
   var sx = 0, sy = 0, st = 0, moved = false;
   var lastTapTime = 0, singleTimer = null, lastTouchEnd = 0;
-  var DOUBLE_MS = 300, SINGLE_DELAY = 500; // 单击延迟 0.5s 再复制番号；双击窗口 300ms，确保双击时单点定时器已被取消
+  var DOUBLE_MS = 300, SINGLE_DELAY = 300; // 单击延迟 300ms 再复制番号（同时作双击判定窗口）；双击窗口 300ms
   function onStart(x, y){ sx = x; sy = y; st = Date.now(); moved = false; }
   function onMove(x, y){ if (st && (Math.abs(x - sx) > 14 || Math.abs(y - sy) > 14)) moved = true; }
   function copySingle(){ // 单击 → 复制番号（无番号则复制标题）
     var txt = (currentDetailDvdId || '').trim() || (currentDetailTitle || '').trim() || '';
-    if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制番号' : '复制失败', ok ? 'success' : 'error'); }); }
+    if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制' : '复制失败', ok ? 'success' : 'error'); }); }
   }
   function copyDouble(){ // 双击 → 复制【标题】（不附带番号）
     var title = (currentDetailTitleFull || '').trim();
-    if (title){ copyText(title, function(ok){ showToast(ok ? '已复制标题' : '复制失败', ok ? 'success' : 'error'); }); }
+    if (title){ copyText(title, function(ok){ showToast(ok ? '已复制' : '复制失败', ok ? 'success' : 'error'); }); }
   }
   function clearSingle(){ if (singleTimer){ clearTimeout(singleTimer); singleTimer = null; } }
   // 在「松手」的用户手势内判定单击/双击并复制（iOS 的 clipboard API 必须处于用户手势上下文才生效）
@@ -2403,16 +2403,15 @@ function initDetailTitleCopy(){
     lastTapTime = now;
     var wasMoved = moved;
     st = 0; moved = false;
-    if (wasMoved){ t.style.opacity = ''; return; } // 滑动返回，不复制
-    if (isDouble){ clearSingle(); t.style.opacity = ''; copyDouble(); }
+    if (wasMoved) return; // 滑动返回，不复制
+    if (isDouble){ clearSingle(); copyDouble(); }
     else {
       clearSingle();
-      t.style.opacity = '0.45'; // 可视化缓冲：单击后标题变灰，明确表示「正在复制番号」，0.5s 后再真正复制
-      singleTimer = setTimeout(function(){ singleTimer = null; t.style.opacity = ''; copySingle(); }, SINGLE_DELAY);
+      singleTimer = setTimeout(function(){ singleTimer = null; copySingle(); }, SINGLE_DELAY);
     }
   }
   // 每次打开新详情页时重置：清掉残留定时器、归零 lastTapTime（避免跨影片误判双击）、恢复标题透明度
-  t._resetCopy = function(){ clearSingle(); lastTapTime = 0; t.style.opacity = ''; };
+  t._resetCopy = function(){ clearSingle(); lastTapTime = 0; };
   t.addEventListener('touchstart', function(e){ var p = e.touches && e.touches[0]; onStart(p ? p.clientX : 0, p ? p.clientY : 0); }, { passive: true });
   t.addEventListener('touchmove', function(e){ var p = e.touches && e.touches[0]; if (p) onMove(p.clientX, p.clientY); }, { passive: true });
   t.addEventListener('touchend', function(e){ lastTouchEnd = Date.now(); onEnd(e); }, { passive: true });
