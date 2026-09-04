@@ -461,8 +461,8 @@ function populateFromJavbus(d){
   var date = (d.date || '').trim();
   var year = (date || '').slice(0, 4);
   var runtime = (d.videoLength ? String(d.videoLength) : '') || '';
-  var overview = '';   // JavBus 详情页不含剧情简介，留空
-  var rating = '';
+  var overview = d.plot || '';   // DMM 补充源提供简介（best-effort），否则留空
+  var rating = (d.rating != null && d.rating !== '') ? String(d.rating) : '';  // DMM 评分补充，JavBus 无评分
   var countries = ['日本'];
   // JavBus 类型/标签已是可读中文/英文，直接使用
   var genres = (d.genres || []).map(function(g){ return (g && g.name) || ''; }).filter(Boolean);
@@ -713,7 +713,7 @@ function refreshFromJavbus(film){
   showToast('正在从 JavBus 刷新…', 'success');
   currentFilmId = film.id;
   currentFilmLocked = !!film.locked;
-  return fetch(base + '/api/movies/' + encodeURIComponent(id))
+  return fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(id))
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d){
       if (!d || (!d.title && !d.id)) throw new Error('无详情数据');

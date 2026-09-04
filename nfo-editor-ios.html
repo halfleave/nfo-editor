@@ -4894,6 +4894,17 @@ function fetchJavbusSearch(q, box){
     .then(function(res){
       var movies = (res && res.movies) || [];
       if (!movies.length){
+        // 无码源直查回退：FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内，按番号直查 /meta 合成单条结果
+        if (/^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q)) {
+          fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + '&_=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+              if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
+              else box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>';
+            })
+            .catch(function () { box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>'; });
+          return;
+        }
         box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>';
         return;
       }
@@ -4971,7 +4982,7 @@ function applyJavbusResult(i){
   }
   var base = javbusApiBase();
   showToast('加载详情中…');
-  fetch(base + '/api/movies/' + encodeURIComponent(id))
+  fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(id))
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d){
       if (!d || !d.id) throw new Error('无详情数据');
@@ -5120,8 +5131,8 @@ function populateFromJavbus(d){
   var date = (d.date || '').trim();
   var year = (date || '').slice(0, 4);
   var runtime = (d.videoLength ? String(d.videoLength) : '') || '';
-  var overview = '';   // JavBus 详情页不含剧情简介，留空
-  var rating = '';
+  var overview = d.plot || '';   // DMM 补充源提供简介（best-effort），否则留空
+  var rating = (d.rating != null && d.rating !== '') ? String(d.rating) : '';  // DMM 评分补充，JavBus 无评分
   var countries = ['日本'];
   // JavBus 类型/标签已是可读中文/英文，直接使用
   var genres = (d.genres || []).map(function(g){ return (g && g.name) || ''; }).filter(Boolean);
@@ -5164,7 +5175,7 @@ function populateFromJavbus(d){
     state.hasSubtitle = true;
     var _hs = document.getElementById('hasSubtitle'); if (_hs) _hs.checked = true;
   }
-  state.trailer = '';   // JavBus 抓取未含预告片直链
+  state.trailer = d.trailer || '';   // /meta 已带回预告片（DMM 动态签名 / 无码源预览，best-effort）
   renderCast();
 
   // 封面：img
@@ -6441,7 +6452,7 @@ function renderFilmDetail(film){
   el2.textContent = tags.length ? tags.join(', ') : '';
   el2.style.display = tags.length ? '' : 'none';
   // 播放预告按钮：AV 且有番号 → 用 DMM 免费预览 mp4（应用内播放）；否则回退其它预告片（YouTube/R18 sample）；都没有则禁用
-  currentDetailTrailer = (adult && d.dvdId) ? buildDmmTrailerUrl(d.dvdId) : (d.trailer || '');
+  currentDetailTrailer = d.trailer || (adult && d.dvdId ? buildDmmTrailerUrl(d.dvdId) : '') || '';
   var isAvTrailer = adult && d.dvdId;
   var extBtn = document.getElementById('trailerExtBtn');
   if (extBtn) extBtn.textContent = (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)) ? '在浏览器打开' : '在 YouTube 打开';
