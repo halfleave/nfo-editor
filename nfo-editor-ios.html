@@ -2400,10 +2400,16 @@ function initDetailTitleCopy(){
     lastTapTime = now;
     var wasMoved = moved;
     st = 0; moved = false;
-    if (wasMoved) return; // 滑动返回，不复制
-    if (isDouble){ clearSingle(); copyDouble(); }
-    else { clearSingle(); singleTimer = setTimeout(function(){ singleTimer = null; copySingle(); }, SINGLE_DELAY); }
+    if (wasMoved){ t.style.opacity = ''; return; } // 滑动返回，不复制
+    if (isDouble){ clearSingle(); t.style.opacity = ''; copyDouble(); }
+    else {
+      clearSingle();
+      t.style.opacity = '0.45'; // 可视化缓冲：单击后标题变灰，明确表示「正在复制番号」，0.5s 后再真正复制
+      singleTimer = setTimeout(function(){ singleTimer = null; t.style.opacity = ''; copySingle(); }, SINGLE_DELAY);
+    }
   }
+  // 每次打开新详情页时重置：清掉残留定时器、归零 lastTapTime（避免跨影片误判双击）、恢复标题透明度
+  t._resetCopy = function(){ clearSingle(); lastTapTime = 0; t.style.opacity = ''; };
   t.addEventListener('touchstart', function(e){ var p = e.touches && e.touches[0]; onStart(p ? p.clientX : 0, p ? p.clientY : 0); }, { passive: true });
   t.addEventListener('touchmove', function(e){ var p = e.touches && e.touches[0]; if (p) onMove(p.clientX, p.clientY); }, { passive: true });
   t.addEventListener('touchend', onEnd, { passive: true });
@@ -6702,6 +6708,8 @@ function renderFilmDetail(film){
   applyDetailTint(bgUrl, bgEl);
   // 标题：优先级 LOGO → 番号 → 标题（没有就用下一项）
   var titleEl = document.getElementById('detailTitle');
+  initDetailTitleCopy(); // 幂等：仅首次绑定；每次打开详情页重置复制状态，避免跨影片把单击误判成双击
+  if (titleEl && titleEl._resetCopy) titleEl._resetCopy();
   // 用于显示的「番号」：直接从元数据取番号字段——d.dvdId 优先，其次 d.content_id，老数据 dvdId 为空时兜底 d.originaltitle（形如番号）；均空则详情页显示/复制标题
   var effectiveDvdId = (d.dvdId || d.content_id || (d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle) ? d.originaltitle : '')).toString().trim();
   if (d.logo){
