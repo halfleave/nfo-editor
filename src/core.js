@@ -500,6 +500,11 @@ function populateFromJavbus(d){
   state.series = (d.series && d.series.name) || '';
   state.dvdId = dvdId;
   state.javbusMagnets = (d.magnets || []).slice();   // JavBus 详情页抓取的磁力列表
+  // 字幕自动判定：任一磁力带中文字幕标记（hasSubtitle 或标题关键词）→ 影片标记字幕
+  if (state.javbusMagnets.some(isSubtitledMagnet)){
+    state.hasSubtitle = true;
+    var _hs = document.getElementById('hasSubtitle'); if (_hs) _hs.checked = true;
+  }
   state.trailer = '';   // JavBus 抓取未含预告片直链
   renderCast();
 
@@ -800,6 +805,7 @@ function applyFilmData(film){
   if (state.logo) renderMediaThumb('logo', state.logo); else clearMediaThumb('logo');
   state.hasSubtitle = !!d.hasSubtitle;
   document.getElementById('hasSubtitle').checked = state.hasSubtitle;
+  refreshSubtitleBadges();   // 载入影片后按 hasSubtitle 叠加/移除海报+剧照角标
   applyEditMode();
   updateState();
 }
@@ -1847,14 +1853,23 @@ function downloadMetadata(id){
     var zipFiles = [];
     zipFiles.push({ name: filename + '.nfo', data: new TextEncoder().encode(buildNFOMovieXml(d)) });
     // 图片：仅处理已存为 data URL 的字符串；远程 URL 无法离线打包，跳过（与导出页行为一致）
-    if (typeof d.poster === 'string'){ var pb = dataUrlToBytesSync(d.poster); if (pb) zipFiles.push({ name: filename + '-poster.jpg', data: pb }); }
-    if (typeof d.fanart === 'string'){ var fb = dataUrlToBytesSync(d.fanart); if (fb) zipFiles.push({ name: filename + '-fanart.jpg', data: fb }); }
+    var jobs = [];
+    if (typeof d.poster === 'string'){
+      if (d.hasSubtitle){ jobs.push(drawSubtitleBadge(d.poster).then(function(b){ var pb = dataUrlToBytesSync(b); if (pb) zipFiles.push({ name: filename + '-poster.jpg', data: pb }); })); }
+      else { var pb = dataUrlToBytesSync(d.poster); if (pb) zipFiles.push({ name: filename + '-poster.jpg', data: pb }); }
+    }
+    if (typeof d.fanart === 'string'){
+      if (d.hasSubtitle){ jobs.push(drawSubtitleBadge(d.fanart).then(function(b){ var fb = dataUrlToBytesSync(b); if (fb) zipFiles.push({ name: filename + '-fanart.jpg', data: fb }); })); }
+      else { var fb = dataUrlToBytesSync(d.fanart); if (fb) zipFiles.push({ name: filename + '-fanart.jpg', data: fb }); }
+    }
     if (typeof d.logo === 'string'){ var lb = dataUrlToBytesSync(d.logo); if (lb) zipFiles.push({ name: filename + '-clearlogo.png', data: lb }); }
-    if (!zipFiles.length) return showToast('没有可导出的元数据', 'error');
-    var zipBlob;
-    try { zipBlob = new Blob([makeZip(zipFiles)], { type: 'application/zip' }); }
-    catch (e) { return showToast('生成下载文件失败：' + ((e && e.message) || e), 'error'); }
-    directDownload(zipBlob, filename + '.zip');
+    Promise.all(jobs).then(function(){
+      if (!zipFiles.length) return showToast('没有可导出的元数据', 'error');
+      var zipBlob;
+      try { zipBlob = new Blob([makeZip(zipFiles)], { type: 'application/zip' }); }
+      catch (e) { return showToast('生成下载文件失败：' + ((e && e.message) || e), 'error'); }
+      directDownload(zipBlob, filename + '.zip');
+    }).catch(function(e){ showToast('生成下载文件失败：' + ((e && e.message) || e), 'error'); });
   }).catch(function(){ showToast('读取影片失败', 'error'); });
 }
 
@@ -2112,7 +2127,77 @@ function validateRating(el){
   if (v > 10) el.value = '10';
 }
 
-function toggleSubtitle(){ state.hasSubtitle = document.getElementById('hasSubtitle').checked; updateState(); }
+/* ===== 字幕角标（影片级 hasSubtitle）：显示用 DOM overlay，导出用 canvas 烘焙，均不污染原图 ===== */
+// 判断某条磁力是否带中文字幕（结构化 hasSubtitle 或标题含关键词兜底）
+function isSubtitledMagnet(m){ return !!(m && (m.hasSubtitle || /字幕|中字|中文|双语|CC字幕/i.test(m.title || ''))); }
+// 当前影片是否带字幕
+function currentFilmHasSubtitle(){ return !!state.hasSubtitle; }
+// 在容器（poster/fanart col 或卡片图）左上角加/移除字幕角标
+function ensureSubtitleOverlay(container, on){
+  if (!container) return;
+  var old = container.querySelector(':scope > .img-sub-badge');
+  if (on){
+    if (!old){
+      var b = document.createElement('div');
+      b.className = 'img-sub-badge';
+      b.textContent = '字幕';
+      container.appendChild(b);
+    }
+  } else if (old){ old.remove(); }
+}
+// 刷新编辑页海报+剧照角标（关开关立即恢复，原图不动）
+function refreshSubtitleBadges(){
+  var on = currentFilmHasSubtitle();
+  ensureSubtitleOverlay(document.getElementById('posterUpload'), on);
+  ensureSubtitleOverlay(document.getElementById('fanartUpload'), on);
+}
+// 圆角胶囊路径
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+// 在图片 dataURL 左上角烘焙字幕角标，返回新 dataURL（失败/非 dataURL 则原样返回）
+function drawSubtitleBadge(dataUrl){
+  return new Promise(function(resolve){
+    try {
+      if (typeof dataUrl !== 'string' || dataUrl.indexOf('data:') !== 0){ resolve(dataUrl); return; }
+      var img = new Image();
+      img.onload = function(){
+        try {
+          var w = img.naturalWidth, h = img.naturalHeight;
+          if (!w || !h){ resolve(dataUrl); return; }
+          var c = document.createElement('canvas'); c.width = w; c.height = h;
+          var ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          var base = Math.min(w, h);
+          var pad = Math.max(8, Math.round(base * 0.03));
+          var bw = Math.max(48, Math.round(base * 0.24));
+          var bh = Math.max(22, Math.round(base * 0.095));
+          var r = Math.min(10, bh / 2);
+          ctx.save();
+          ctx.fillStyle = 'rgba(45,127,249,0.92)';
+          roundRectPath(ctx, pad, pad, bw, bh, r);
+          ctx.fill();
+          var fs = Math.round(bh * 0.62);
+          ctx.font = '700 ' + fs + 'px -apple-system, "PingFang SC", "Helvetica Neue", sans-serif';
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('字幕', pad + bw / 2, pad + bh / 2 + 1);
+          ctx.restore();
+          resolve(c.toDataURL('image/jpeg', 0.92));
+        } catch (e){ resolve(dataUrl); }
+      };
+      img.onerror = function(){ resolve(dataUrl); };
+      img.src = dataUrl;
+    } catch (e){ resolve(dataUrl); }
+  });
+}
+function toggleSubtitle(){ state.hasSubtitle = document.getElementById('hasSubtitle').checked; updateState(); refreshSubtitleBadges(); }
 
 function getCropBoxSize(){
   var stage = document.getElementById('cropStage');

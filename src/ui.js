@@ -541,21 +541,23 @@ function posterCardHtml(f){
     ? '<img src="' + escapeAttr(f.posterDataUrl) + '" alt="" loading="lazy">'
     : '<div class="poster-ph">' + ICON.film + '</div>';
   var d = f.data || {};
+  var subOn = !!d.hasSubtitle;
   var badges = (d.rating || f.rating) ? '<div class="poster-badges"><span class="poster-rating">' + escapeHtml(String(d.rating || f.rating)) + '</span></div>' : '';
   var lock = f.locked ? '<span class="poster-lock">' + ICON.lock + '</span>' : '';
   var title = (f.adult && d.dvdId) ? String(d.dvdId).toUpperCase() : (f.title || f.id);
+  var subBadge = subOn ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '';
   var bits = [];
   if (d.year || f.year) bits.push(escapeHtml(String(d.year || f.year)));
   if (d.runtime || f.runtime) bits.push(escapeHtml(String(d.runtime || f.runtime)) + ' 分钟');
   var sub = bits.length ? '<div class="poster-sub">' + bits.join('<span class="dot">·</span>') + '</div>' : '';
-  return '<div class="poster-card" data-id="' + enc + '">'
-       +   '<div class="poster-art">' + art + badges + lock
+  return '<div class="poster-card' + (subOn ? ' has-sub' : '') + '" data-id="' + enc + '">'
+       +   '<div class="poster-art">' + art + badges + lock + (subOn ? '<span class="img-sub-badge">字幕</span>' : '')
        +     '<div class="poster-actions">'
        +       '<button class="pa-btn" data-act="edit" title="编辑">' + CTX_ICONS.pencil + '</button>'
        +       '<button class="pa-btn danger" data-act="del" title="删除">' + CTX_ICONS.trash + '</button>'
        +     '</div>'
        +   '</div>'
-       +   '<div class="poster-meta"><div class="poster-name">' + escapeHtml(title) + '</div>' + sub + '</div>'
+       +   '<div class="poster-meta"><div class="poster-name">' + escapeHtml(title) + subBadge + '</div>' + sub + '</div>'
        + '</div>';
 }
 
@@ -583,7 +585,7 @@ function listRowHtml(f){
   return '<div class="list-row" data-id="' + enc + '">'
        +   '<div class="list-thumb">' + thumb + '</div>'
        +   '<div class="list-main">'
-       +     '<div class="list-name">' + escapeHtml(title) + '</div>'
+       +     '<div class="list-name">' + escapeHtml(title) + (f.data && f.data.hasSubtitle ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '') + '</div>'
        +     '<div class="list-desc">' + (plot ? escapeHtml(plot) : '<span class="list-empty">暂无简介</span>') + '</div>'
        +     '<div class="list-meta">' + (meta.length ? meta.join('') : '<span class="list-empty">暂无评分与年份</span>') + '</div>'
        +   '</div>'
@@ -1137,10 +1139,17 @@ function renderJavbusResults(items, box){
     var bits = [];
     if (it.date) bits.push(it.date);
     if (it.id) bits.push(it.id);
-    return '<div class="result-item" onclick="applyJavbusResult(' + i + ')">'
-         +   '<div class="result-poster">' + (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" alt="">' : '') + '</div>'
+    // 搜索接口 tags 数组含「高清/字幕/新种」三类，标题后缀全量显示为胶囊
+    var tags = (it.tags && it.tags.indexOf) ? it.tags.slice() : [];
+    var subTag = tags.indexOf('字幕') >= 0;
+    var tagBadges = tags.length ? ' ' + tags.map(function(t){
+      var cls = t === '字幕' ? 'sub-badge-sub' : (t === '高清' ? 'sub-badge-hd' : (t === '新种' ? 'sub-badge-new' : 'sub-badge-other'));
+      return '<span class="sub-badge ' + cls + '">' + escapeHtml(t) + '</span>';
+    }).join('') : '';
+    return '<div class="result-item' + (subTag ? ' has-sub' : '') + '" onclick="applyJavbusResult(' + i + ')">'
+         +   '<div class="result-poster">' + (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" alt="">' + (subTag ? '<span class="img-sub-badge">字幕</span>' : '') : '') + '</div>'
          +   '<div class="result-body">'
-         +     '<div class="result-title">' + escapeHtml(title) + '<span class="badge badge-danger">18+</span></div>'
+         +     '<div class="result-title">' + escapeHtml(title) + '<span class="badge badge-danger">18+</span>' + tagBadges + '</div>'
          +     (bits.length ? '<div class="result-meta">' + escapeHtml(bits.join(' · ')) + '</div>' : '')
          +   '</div>'
          + '</div>';
@@ -1717,6 +1726,7 @@ function renderMediaThumb(type, url){
     }
     if (bar) bar.style.display = 'none';
   }
+  refreshSubtitleBadges();   // 渲染图片后按 hasSubtitle 叠加/移除角标
 }
 function triggerUpload(type){
   var map = { poster: 'posterInput', fanart: 'fanartInput', logo: 'logoInput', person: 'personInput' };
