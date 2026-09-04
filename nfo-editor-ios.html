@@ -2380,7 +2380,7 @@ function initDetailTitleCopy(){
   t._titleBound = true;
   var sx = 0, sy = 0, st = 0, moved = false;
   var lastTapTime = 0, singleTimer = null;
-  var DOUBLE_MS = 300, SINGLE_DELAY = 320; // 单点延迟略大于双击窗口，确保双击时单点定时器已被取消
+  var DOUBLE_MS = 300, SINGLE_DELAY = 500; // 单击延迟 0.5s 再复制番号；双击窗口 300ms，确保双击时单点定时器已被取消
   function onStart(x, y){ sx = x; sy = y; st = Date.now(); moved = false; }
   function onMove(x, y){ if (st && (Math.abs(x - sx) > 14 || Math.abs(y - sy) > 14)) moved = true; }
   function copySingle(){ // 单击 → 复制番号（无番号则复制标题）
@@ -6702,8 +6702,8 @@ function renderFilmDetail(film){
   applyDetailTint(bgUrl, bgEl);
   // 标题：优先级 LOGO → 番号 → 标题（没有就用下一项）
   var titleEl = document.getElementById('detailTitle');
-  // 用于显示的「番号」：d.dvdId 优先；缺失时兜底 film.id（AV 影片 id 即番号，来自文件名同步），避免老数据详情页只显示中文标题
-  var effectiveDvdId = (d.dvdId || (film.id && /^[a-z]{2,6}-?\d{2,7}$/i.test(film.id) ? film.id : '')).trim();
+  // 用于显示的「番号」：直接从元数据取番号字段——d.dvdId 优先，其次 d.content_id，老数据 dvdId 为空时兜底 d.originaltitle（形如番号）；均空则详情页显示/复制标题
+  var effectiveDvdId = (d.dvdId || d.content_id || (d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle) ? d.originaltitle : '')).toString().trim();
   if (d.logo){
     titleEl.className = 'detail-title';
     titleEl.innerHTML = '<img class="detail-logo-img" src="' + escapeAttr(d.logo) + '" alt="' + escapeAttr(d.title || film.id) + '">';
