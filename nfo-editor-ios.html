@@ -2621,6 +2621,7 @@ var state = {
   tier: '', activationCode: '',
   translateBaseUrl: '', translateApiKey: '', translateModel: '', // 翻译 AI 配置（OpenAI 兼容，客户端直连）
   translatingIds: new Set(), // 正在后台翻译的影片 id 集合（仅运行时，用于首页加载图标）
+  translatingFields: new Set(), // 正在翻译的字段 key（"id:title"/"id:plot"），按字段去重防并发重复调用
   overviewTab: 'movie',
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
@@ -3295,7 +3296,8 @@ var TRANSLATE_SYSTEM_PROMPT = [
   '3. 番号/型号代码（如 SONE-456、ABC-123）一律原样输出，绝不翻译或改写。',
   '4. 日文汉字按简体中文习惯转写（例：妻→人妻按需），但语义必须准确。',
   '5. 不雅化也不净化原文本措辞，保持原营销/直述风格。',
-  '6. 已知源语言：日文，请勿误判。'
+  '6. 已知源语言：日文，请勿误判。',
+  '7. 只输出译文本身：不要加任何引号（""\'\'「」『』）、不要加「译文：」「翻译：」等前缀或后缀、不要加任何解释性文字，直接给出简体中文。'
 ].join('\n');
 var TRANSLATE_CFG_KEY = 'translateConfig';
 function getTranslateConfig(){
@@ -3314,6 +3316,20 @@ function translateConfigReady(){
 function needsTranslation(text){
   if (!text || !String(text).trim()) return false;
   return /[ぁ-んァ-ヶ]/.test(String(text));
+}
+/* 清理模型译文：去掉首尾空白、引号（""''「」『』）、以及「译文：/翻译：」等前缀/后缀与多余换行 */
+function stripTranslation(s){
+  s = String(s || '').replace(/\r\n/g, '\n');
+  // 去掉常见前缀
+  s = s.replace(/^(?:译文|翻译|结果|答)\s*[:：]\s*/i, '');
+  // 整段被同一种引号对称包裹才剥除（内部引号保留）：
+  // 直引号 "" '' 首尾同字符，可反向引用；CJK 书名号 「」『』 首尾是不同字符，须显式配对
+  s = s.trim();
+  s = s.replace(/^"([\s\S]*)"$/,'$1')
+       .replace(/^'([\s\S]*)'$/,'$1')
+       .replace(/^「([\s\S]*)」$/,'$1')
+       .replace(/^『([\s\S]*)』$/,'$1');
+  return s.trim();
 }
 /* 打开翻译配置弹窗：回填输入框 */
 function openTranslateSheet(){
@@ -3371,7 +3387,7 @@ function translateOne(text){
     }).then(function(d){
       var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
       if (!c) throw new Error('翻译返回为空');
-      resolve(String(c).trim());
+      resolve(stripTranslation(String(c)));
     }).catch(function(err){
       if (timer) clearTimeout(timer);
       reject(err);
@@ -3384,27 +3400,66 @@ function computeTranslateNeed(film){
   var plot = (film.data && film.data.plot) || '';
   return { title: needsTranslation(title), plot: needsTranslation(plot) };
 }
-/* 后台翻译并覆盖更新影片记录；完成后移除首页加载图标 */
-function startFilmTranslation(id, title, plot, needTitle, needPlot){
-  var pTitle = needTitle ? translateOne(title) : Promise.resolve(null);
-  var pPlot = needPlot ? translateOne(plot) : Promise.resolve(null);
-  Promise.all([pTitle, pPlot]).then(function(res){
-    var newTitle = res[0], newPlot = res[1];
-    loadFilm(id).then(function(f){
-      if (!f){ finishTranslation(id); return; }
-      var changed = false;
-      if (newTitle && newTitle !== title){ f.title = newTitle; if (f.data) f.data.title = newTitle; changed = true; }
-      if (newPlot && newPlot !== plot){ if (f.data) f.data.plot = newPlot; changed = true; }
-      if (!changed){ finishTranslation(id); return; }
-      saveFilm(f).then(function(){ finishTranslation(id); renderOverview(); showToast('已翻译标题/简介', 'success'); }).catch(function(){ finishTranslation(id); });
-    }).catch(function(){ finishTranslation(id); });
-  }).catch(function(){
-    finishTranslation(id);
-    showToast('翻译失败，已保留原文', 'error');
-  });
+/* 后台翻译并覆盖更新影片记录；完成后移除首页加载图标。
+   自加载影片、按当前数据判定需翻译字段（简介可能晚于保存到达，故可重复调用）；
+   按字段去重，避免与 silentRefresh 等后续调用重复翻译同一字段。 */
+function startFilmTranslation(id){
+  if (!translateConfigReady()) return;
+  loadFilm(id).then(function(f){
+    if (!f) return;
+    var need = computeTranslateNeed(f);
+    if (!need.title && !need.plot) return; // 无需翻译（已是中文/英文/番号）
+    state.translatingIds.add(id);
+    renderOverview(); // 显示加载图标
+    var jobs = [];
+    if (need.title && !state.translatingFields.has(id + ':title')){
+      state.translatingFields.add(id + ':title');
+      jobs.push(translateOne((f.data && f.data.title) || f.title || '').then(function(t){
+        state.translatingFields.delete(id + ':title'); return { field:'title', val:t };
+      }).catch(function(e){ state.translatingFields.delete(id + ':title'); throw e; }));
+    }
+    if (need.plot && !state.translatingFields.has(id + ':plot')){
+      state.translatingFields.add(id + ':plot');
+      jobs.push(translateOne((f.data && f.data.plot) || '').then(function(t){
+        state.translatingFields.delete(id + ':plot'); return { field:'plot', val:t };
+      }).catch(function(e){ state.translatingFields.delete(id + ':plot'); throw e; }));
+    }
+    if (!jobs.length){ finishTranslation(id); return; }
+    Promise.all(jobs).then(function(results){
+      loadFilm(id).then(function(ff){
+        if (!ff){ finishTranslation(id); return; }
+        var changed = false;
+        results.forEach(function(r){
+          if (r.field === 'title'){
+            var ct = (ff.data && ff.data.title) || ff.title || '';
+            if (r.val && r.val !== ct){ ff.title = r.val; if (ff.data) ff.data.title = r.val; changed = true; }
+          } else {
+            var cp = (ff.data && ff.data.plot) || '';
+            if (r.val && r.val !== cp){ if (ff.data) ff.data.plot = r.val; changed = true; }
+          }
+        });
+        if (!changed){ finishTranslation(id); return; }
+        saveFilm(ff).then(function(){
+          // 若正在查看该影片，回写编辑态，避免后续 silentRefresh 用原始日文覆盖已翻好的中文
+          if (currentFilmId === id){
+            results.forEach(function(r){
+              if (r.field === 'title' && r.val && r.val !== (getVal('title')||'')) setFieldVal('title', r.val);
+              if (r.field === 'plot' && r.val && r.val !== (getVal('plot')||'')) setFieldVal('plot', r.val);
+            });
+          }
+          finishTranslation(id); renderOverview(); showToast('已翻译标题/简介', 'success');
+        }).catch(function(){ finishTranslation(id); });
+      }).catch(function(){ finishTranslation(id); });
+    }).catch(function(){
+      finishTranslation(id);
+      showToast('翻译失败，已保留原文', 'error');
+    });
+  }).catch(function(){});
 }
 function finishTranslation(id){
-  state.translatingIds.delete(id);
+  if (!state.translatingFields.has(id + ':title') && !state.translatingFields.has(id + ':plot')){
+    state.translatingIds.delete(id);
+  }
   renderOverview();
 }
 /* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
@@ -4450,8 +4505,6 @@ function saveToDisk(){
   var filename = getVal('filename');
   if (!filename && !title){ showToast('请先填写影片名或文件名', 'error'); return; }
   var film = buildFilmFromCurrent();
-  var need = computeTranslateNeed(film);
-  if ((need.title || need.plot) && translateConfigReady()) state.translatingIds.add(film.id);
   saveFilm(film).then(function(){
     currentFilmId = film.id;
     // 保存后回到首页对应的 影片/XV 列表（按分级自动归属）
@@ -4465,10 +4518,10 @@ function saveToDisk(){
     showToast('已保存', 'success');
     // 保存后检查影片数量，达到上限附近时提醒（延迟以免覆盖保存提示）
     checkFilmCap(1500);
-    // 先存原文，后台异步翻译标题/简介，翻完覆盖更新（首页剧照右上角显示加载图标）
-    if (state.translatingIds.has(film.id)) startFilmTranslation(film.id, (film.data && film.data.title) || film.title || '', (film.data && film.data.plot) || '', need.title, need.plot);
+    // 先存原文，后台异步翻译标题/简介，翻完覆盖更新（首页剧照右上角显示加载图标）；
+    // 自加载、简介补齐后再由 silentRefresh 补翻 plot
+    startFilmTranslation(film.id);
   }).catch(function(err){
-    state.translatingIds.delete(film.id);
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
 }
@@ -4477,8 +4530,6 @@ function quickSaveAndHome(){
   var title = getVal('title'); var filename = getVal('filename');
   if (!filename && !title){ showToast('缺少影片名，无法保存', 'error'); return Promise.resolve(); }
   var film = buildFilmFromCurrent();
-  var need = computeTranslateNeed(film);
-  if ((need.title || need.plot) && translateConfigReady()) state.translatingIds.add(film.id);
   return saveFilmWithMerge(film).then(function(result){
     var saved = result.film;
     currentFilmId = saved.id;
@@ -4490,10 +4541,10 @@ function quickSaveAndHome(){
     switchPage('home');
     showToast(result.merged ? '已合并更新并保存' : '已保存，返回首页', 'success');
     checkFilmCap(1500);
-    // 先存原文，后台异步翻译标题/简介，翻完覆盖更新（首页剧照右上角显示加载图标）
-    if (state.translatingIds.has(film.id)) startFilmTranslation(film.id, (film.data && film.data.title) || film.title || '', (film.data && film.data.plot) || '', need.title, need.plot);
+    // 先存原文，后台异步翻译标题/简介，翻完覆盖更新（首页剧照右上角显示加载图标）；
+    // 简介补齐后由 silentRefresh 再补翻 plot
+    startFilmTranslation(saved.id);
   }).catch(function(err){
-    state.translatingIds.delete(film.id);
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
 }
@@ -4502,7 +4553,11 @@ function silentRefreshCurrentFilm(){
   if (!currentFilmId) return;
   var film = buildFilmFromCurrent();
   film.id = currentFilmId;
-  saveFilm(film).then(function(){ renderOverview(); }).catch(function(){});
+  saveFilm(film).then(function(){
+    renderOverview();
+    // 元数据（含简介）刷新完成后，再检查并翻译尚未翻译的字段（如简介晚于保存到达）
+    startFilmTranslation(currentFilmId);
+  }).catch(function(){});
 }
 
 /* 列表 sheet 完成按钮 */
