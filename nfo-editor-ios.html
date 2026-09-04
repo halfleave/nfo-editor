@@ -6480,15 +6480,16 @@ function renderFilmDetail(film){
   el2.style.display = tags.length ? '' : 'none';
   // 播放预告按钮：后端 /meta 已带回真实 DMM 预览 mp4（d.trailer）则应用内播放；没有则禁用，绝不回退外跳 missav
   currentDetailTrailer = (typeof d.trailer === 'string' && d.trailer) ? d.trailer : '';   // 仅接受字符串；后端若误回非字符串（如 {}）一律当无预告片处理，杜绝 YouTube 误弹窗
-  var isAvTrailer = adult && d.dvdId;
+  // 播放预告按钮：仅当后端 /meta 真带回可播放的预告片（DMM 动态签名 mp4 或 YouTube ID）时才启用；
+  // 没有预告片则禁用并提示「暂无预告片」，绝不显示「播放预告片」却不响应（此前 isAvTrailer 误把无预告片的 AV 也启用，点击无反应）。
   var extBtn = document.getElementById('trailerExtBtn');
   if (extBtn) extBtn.textContent = (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)) ? '在浏览器打开' : '在 YouTube 打开';
   var tb = document.getElementById('detailTrailer');
   var tbt = document.getElementById('detailTrailerText');
   if (tb) {
-    if (isAvTrailer || currentDetailTrailer) {
+    if (currentDetailTrailer) {
       tb.removeAttribute('disabled');
-      if (tbt) tbt.textContent = isAvTrailer ? '播放预告片' : '播放预告片';
+      if (tbt) tbt.textContent = '播放预告片';
     } else {
       tb.setAttribute('disabled', 'disabled');
       if (tbt) tbt.textContent = '暂无预告片';
