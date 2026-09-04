@@ -2300,28 +2300,53 @@ function initEdgeSwipeBack(){
   page.addEventListener('touchcancel', function(){ if (dragging) finish(moved > threshold()); });
 }
 initEdgeSwipeBack();
-/* 详情页标题点击复制：点击（轻点）即复制影片标题；与边缘右滑返回手势互不干扰（产生横向位移即视为滑动、不复制）；桌面鼠标点击同样可复制 */
-function initDetailTitleLongPress(){
+/* 详情页标题点击复制：
+   - 单击（轻点）→ 复制【番号】（无番号时回退复制标题）
+   - 双击 → 复制【番号 标题】（番号 + 空格 + 标题）
+   与边缘右滑返回手势互不干扰（产生横向位移即视为滑动、不复制）；桌面鼠标同样支持单击/双击。 */
+function initDetailTitleCopy(){
   var t = document.getElementById('detailTitle');
-  if (!t || t._lpBound) return;
-  t._lpBound = true;
+  if (!t || t._titleBound) return;
+  t._titleBound = true;
   var sx = 0, sy = 0, st = 0, moved = false;
+  var lastTapTime = 0, singleTimer = null;
+  var DOUBLE_MS = 300, SINGLE_DELAY = 320; // 单点延迟略大于双击窗口，确保双击时单点定时器已被取消
   function onStart(x, y){ sx = x; sy = y; st = Date.now(); moved = false; }
   function onMove(x, y){ if (st && (Math.abs(x - sx) > 14 || Math.abs(y - sy) > 14)) moved = true; }
-  function doCopy(){ var txt = (currentDetailTitle || t.textContent || '').trim(); if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制标题' : '复制失败', ok ? 'success' : 'error'); }); } }
-  // 在「松手」的用户手势内判定点击并复制（iOS 的 clipboard API / execCommand 必须处于用户手势上下文才生效）
-  function onEnd(){ if (st && !moved){ doCopy(); } st = 0; moved = false; }
+  function copySingle(){ // 单击 → 复制番号（无番号则复制标题）
+    var txt = (currentDetailDvdId || '').trim() || (currentDetailTitle || '').trim() || '';
+    if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制番号' : '复制失败', ok ? 'success' : 'error'); }); }
+  }
+  function copyDouble(){ // 双击 → 复制「番号 标题」
+    var id = (currentDetailDvdId || '').trim();
+    var title = (currentDetailTitleFull || '').trim();
+    var txt = id ? (title ? (id + ' ' + title) : id) : title;
+    if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制番号+标题' : '复制失败', ok ? 'success' : 'error'); }); }
+  }
+  function clearSingle(){ if (singleTimer){ clearTimeout(singleTimer); singleTimer = null; } }
+  // 在「松手」的用户手势内判定单击/双击并复制（iOS 的 clipboard API 必须处于用户手势上下文才生效）
+  function onEnd(){
+    if (!st) return;
+    var now = Date.now();
+    var isDouble = (now - lastTapTime) < DOUBLE_MS && !moved;
+    lastTapTime = now;
+    var wasMoved = moved;
+    st = 0; moved = false;
+    if (wasMoved) return; // 滑动返回，不复制
+    if (isDouble){ clearSingle(); copyDouble(); }
+    else { clearSingle(); singleTimer = setTimeout(function(){ singleTimer = null; copySingle(); }, SINGLE_DELAY); }
+  }
   t.addEventListener('touchstart', function(e){ var p = e.touches && e.touches[0]; onStart(p ? p.clientX : 0, p ? p.clientY : 0); }, { passive: true });
   t.addEventListener('touchmove', function(e){ var p = e.touches && e.touches[0]; if (p) onMove(p.clientX, p.clientY); }, { passive: true });
   t.addEventListener('touchend', onEnd, { passive: true });
-  t.addEventListener('touchcancel', function(){ st = 0; moved = false; });
-  /* 桌面：鼠标点击复制 */
+  t.addEventListener('touchcancel', function(){ st = 0; moved = false; clearSingle(); });
+  /* 桌面：鼠标单击/双击同样支持 */
   t.addEventListener('mousedown', function(e){ onStart(e.clientX, e.clientY); });
   t.addEventListener('mousemove', function(e){ onMove(e.clientX, e.clientY); });
   t.addEventListener('mouseup', onEnd);
-  t.addEventListener('mouseleave', function(){ st = 0; moved = false; });
+  t.addEventListener('mouseleave', function(){ st = 0; moved = false; clearSingle(); });
 }
-initDetailTitleLongPress();
+initDetailTitleCopy();
 /* 顶部「返回」按钮：与边缘右滑一致的滑出退场动画（详情页从右移出、首页透出） */
 function animateDetailBack(){
   var page = document.getElementById('page-detail');
@@ -6282,6 +6307,8 @@ function openFilm(encId){
 var currentDetailFilmId = null;
 var currentDetailFilm = null;  // 当前详情页影片对象（AV 预告片跳转用）
 var currentDetailTitle = '';   // 详情页长按复制用的标题文本（即便显示 logo 也能取到 d.title）
+var currentDetailDvdId = '';   // 详情页复制用的番号（单击复制）
+var currentDetailTitleFull = '';   // 详情页复制用的真实标题（双击复制「番号 标题」时用）
 var currentDetailShots = [];   // 当前详情页剧照列表（用于全屏查看）
 function openFilmDetail(encId){
   if (overviewSuppressClick){ overviewSuppressClick = false; return; }
@@ -6430,7 +6457,9 @@ function renderFilmDetail(film){
     titleEl.className = 'detail-title';
     titleEl.textContent = (d.title || film.id);
   }
-  currentDetailTitle = d.logo ? (d.title || film.id) : (d.dvdId ? (d.dvdId || '').toUpperCase() : (d.title || film.id));   // 供长按复制使用
+  currentDetailTitle = d.logo ? (d.title || film.id) : (d.dvdId ? (d.dvdId || '').toUpperCase() : (d.title || film.id));   // 供单击复制（无番号时回退标题）
+  currentDetailDvdId = (d.dvdId || '').trim();   // AV 详情页：单击复制番号
+  currentDetailTitleFull = (d.title || film.id);   // AV 详情页：双击复制「番号 标题」
   // 第一行：⭐️评分 | 时长 | 日期 | 国家 | 分级
   var info1 = [];
   if (d.rating) info1.push('<span class="dt-star">⭐️</span> ' + escapeHtml(d.rating));
