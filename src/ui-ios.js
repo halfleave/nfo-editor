@@ -1052,11 +1052,12 @@ var c115Session = null; // { uid, time, sign }
 function c115ProxyBase(){
   return (state.magnetWorker || DEFAULT_WORKER || '').replace(/\/$/, '');
 }
-/* 统一经 /api/115/proxy 透明转发；自动带 X-Proxy-Token，返回 { ok, status, d } */
+/* 统一经 /api/115/proxy 透明转发；Token 走 URL query（非自定义 Header），
+   使请求成为「简单请求」不触发 CORS 预检 —— iOS PWA 对带自定义头的跨域预检
+   极易失败并统一报 load failed。返回 { ok, status, d }。 */
 function c115ProxyFetch(targetUrl, opts){
   opts = opts || {};
   opts.headers = opts.headers || {};
-  opts.headers['X-Proxy-Token'] = C115_PROXY_TOKEN;
   opts.cache = 'no-store';
   var base = c115ProxyBase();
   if (!base){
@@ -1064,7 +1065,8 @@ function c115ProxyFetch(targetUrl, opts){
     err.status = 0; err.body = '';
     return Promise.reject(err);
   }
-  var full = base + '/api/115/proxy?url=' + encodeURIComponent(targetUrl);
+  // Token 放 URL，避免触发预检
+  var full = base + '/api/115/proxy?url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(C115_PROXY_TOKEN);
   return fetch(full, opts).then(function(r){
     return r.text().then(function(txt){
       var d = {};
@@ -1240,8 +1242,8 @@ function exchange115Cookie(uid){
   var app = (c115Session && c115Session.app) || C115_APP;
   c115ProxyFetch('https://passportapi.115.com/app/1.0/' + app + '/1.0/login/qrcode/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ app: app, account: uid })
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'app=' + encodeURIComponent(app) + '&account=' + encodeURIComponent(uid)
   })
     .then(function(res){
       if (!res.ok || !res.d || !res.d.data || !res.d.data.cookie){
@@ -1284,7 +1286,7 @@ function verify115(){
   var cookie = (ta && ta.value) ? ta.value.trim() : (state.c115Cookie || '');
   if (!cookie){ if (vEl){ vEl.textContent = '请先填写 Cookie'; vEl.className = 'c115-verify err'; } return; }
   if (vEl){ vEl.textContent = '连通性自检中…'; vEl.className = 'c115-verify'; }
-  c115ProxyFetch('https://webapi.115.com/files?cid=0', { headers: { 'Cookie': cookie } })
+  c115ProxyFetch('https://webapi.115.com/files?cid=0', { headers: { 'X-115-Cookie': cookie } })
     .then(function(res){
       if (!res.ok || !res.d || res.d.state !== true){ throw new Error((res.d && (res.d.error || res.d.msg)) || 'Cookie 无效'); }
       var user = (res.d.data && (res.d.data.user_name || res.d.data.user)) || '';
@@ -1306,7 +1308,7 @@ function c115OfflineFromMagnet(mrEl){
   var body = 'url=' + encodeURIComponent(magnet) + '&wp_path_id=' + encodeURIComponent(cid);
   c115ProxyFetch('https://clouddownload.115.com/lixianssp/?ac=add_task_url', {
     method: 'POST',
-    headers: { 'Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { 'X-115-Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body
   })
   .then(function(res){
