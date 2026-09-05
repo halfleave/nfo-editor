@@ -1076,6 +1076,11 @@ function c115ProxyFetch(targetUrl, opts){
       }
       return { ok: r.ok, status: r.status, d: d || {} };
     });
+  }).catch(function(e){
+    if (e && e.status) throw e;
+    var err = new Error((e && e.message ? e.message : '网络错误') + ' [' + full + ']');
+    err.network = true; err.url = full; err.original = e;
+    throw err;
   });
 }
 function set115Status(text, type){
@@ -1130,6 +1135,9 @@ function start115Login(){
       var info = (e && e.message ? e.message : '网络错误');
       if (e && e.status) info += ' (HTTP ' + e.status + ')';
       if (e && e.body && e.body.length < 80) info += ' ' + e.body;
+      if (e && e.network){
+        info = '连不上代理：' + info;
+      }
       set115Status('生成二维码失败：' + info, 'err');
     });
 }
