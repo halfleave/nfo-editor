@@ -3,3 +3,7 @@
 
 # 成人短语导入文件（含敏感内容，勿推到公开仓库）
 adult-loading-phrases.json
+
+# Python 缓存（tests/ 下的校验脚本产生）
+__pycache__/
+*.pyc
