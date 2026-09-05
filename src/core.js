@@ -889,12 +889,12 @@ function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
 
 function buildFilmFromCurrent(){
   var id = sanitizeName(getVal('filename') || getVal('title') || ('film-' + Date.now()));
-  // 成人归属完全由分级决定：nc-17 或 nr（含 JAV 默认 NR）即归 18+（XV）
-  var adult = /^(nc-17|nr)$/i.test((state.mpaa || '').trim());
+  // 成人归属完全由分级决定：nc-17 或 nr（含 JAV 默认 NR）即归 18+（XV）——集中到共享核心单点真相
+  var adult = NfoCore.isAdultByRating(state.mpaa);
   // 来源：优先沿用当前编辑态（刷新时由对应 populate 重新赋值），否则按搜索源推导，自定义兜底
   var src = state.source || (state.metaSource === 'jav' ? 'jav' : 'tmdb');
   return {
-    __type: 'film', id: id, adult: adult,
+    __type: NfoCore.FILM_TYPE, id: id, adult: adult,
     source: src,
     title: getVal('title'),
     rating: getVal('rating'),
@@ -1559,13 +1559,11 @@ function loadPresets(){
   });
 }
 
-function filmKey(id){ return 'film:' + id; }
+function saveFilm(film){ return idbPut('kv', NfoCore.filmKey(film.id), film); }
 
-function saveFilm(film){ return idbPut('kv', filmKey(film.id), film); }
+function loadFilm(id){ return idbGet('kv', NfoCore.filmKey(id)); }
 
-function loadFilm(id){ return idbGet('kv', filmKey(id)); }
-
-function deleteFilm(id){ return idbDelete('kv', filmKey(id)); }
+function deleteFilm(id){ return idbDelete('kv', NfoCore.filmKey(id)); }
 
 function listFilms(){
   return idbGetAll('kv').then(function(all){

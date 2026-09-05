@@ -392,6 +392,27 @@ function normalizeJavbusFilm(d, opts){
     };
   }
 
+  /* ============ model：影片数据模型纯逻辑（单点真相） ============ */
+  // 影片类型标记（持久化对象 __type）
+  var FILM_TYPE = 'film';
+
+  // 成人归属：完全由分级决定——nc-17 或 nr（含 JAV 默认 NR）即归 18+（XV）。
+  // 这是「保存 AV 再保存影片、影片被错存成 AV」串档 bug 的根因修复点，集中为单点真相。
+  function isAdultByRating(mpaa){
+    return /^(nc-17|nr)$/i.test((mpaa || '').trim());
+  }
+
+  // 持久化键约定：IndexedDB kv 存储的 film 键（两端统一，避免 key 漂移）
+  function filmKey(id){
+    return FILM_TYPE + ':' + (id || '');
+  }
+
+  // 创建空影片骨架（newFilm 的基础）。adult 由调用方按来源/分级显式传入，不在此推断。
+  function createEmptyFilm(opts){
+    opts = opts || {};
+    return { id: '', adult: !!opts.adult, data: {} };
+  }
+
   global.NfoCore = {
     escapeXml: escapeXml,
     sanitizeName: sanitizeName,
@@ -412,6 +433,10 @@ function normalizeJavbusFilm(d, opts){
     TMDB_IMG_BASE: TMDB_IMG_BASE,
     tmdbImgUrl: tmdbImgUrl,
     CC_MAP: CC_MAP,
-    normalizeTmdbFilm: normalizeTmdbFilm
+    normalizeTmdbFilm: normalizeTmdbFilm,
+    FILM_TYPE: FILM_TYPE,
+    isAdultByRating: isAdultByRating,
+    filmKey: filmKey,
+    createEmptyFilm: createEmptyFilm
   };
 })(typeof window !== 'undefined' ? window : this);
