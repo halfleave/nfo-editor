@@ -123,66 +123,7 @@ var CC_MAP = {
   ID:'印度尼西亚', VN:'越南', EG:'埃及', AE:'阿联酋', SA:'沙特阿拉伯'
 };
 
-var GENRE_EN2ZH = {
-  'IDOL': '偶像', 'SF': '科幻', 'VR': 'VR', 'VRSION': 'VR', '4HR+': '4小时以上',
-  'Acme': '高潮', 'Amateur': '素人', 'Anal': '肛交', 'Anal Play': '肛交', 'Anime': '动画',
-  'Ass Lover': '美臀', 'Bakunyu': '爆乳', 'BDSM': 'BDSM', 'Beautiful Girl': '美少女',
-  'Big Breasts': '巨乳', 'Big Pennis': '大屌', 'Big Tits': '巨乳', 'Black': '黑人',
-  'BL': '耽美', 'Blow': '口交', 'Bodysuit': '紧身衣', 'Bukkake': '潮吹颜射',
-  'Costume': '角色扮演', 'Creampie': '中出', 'Cuckold': '不贞', 'Dildo': '按摩棒',
-  'DocPro': '医生', 'Documentary': '纪录片', 'Drink': '饮尿', 'Dream': '梦幻',
-  'Embarrassment': '羞辱', 'Exclusive Distribution': '独家', 'Fetish': '恋物',
-  'Fingering': '指交', 'Foot Job': '足交', 'Ganimen': '假阳具', 'Glasses': '眼镜',
-  'Golden Shower': '饮尿', 'Hand Job': '手交', 'Hi-Def': '高清', 'Huge Butt': '巨臀',
-  'Idol': '偶像', 'Incest': '乱伦', 'JAV': '国产', 'Lady': '人妻',
-  'Lesbian': '女同', 'Lotion': '润滑剂', 'Married Woman': '人妻', 'Masturbation': '自慰',
-  'Mature': '熟女', 'Miscellaneous': '其他', 'Nampa': '逆搭讪', 'Naughty': '恶作剧',
-  'Nurse': '护士', 'OL': '女职员', 'Onanie': '自慰', 'Orgy': '乱交', 'Other': '其他',
-  'Outdoor': '户外', 'Pantyhose': '丝袜', 'Pervert': '变态', 'Piss Drinking': '饮尿',
-  'School': '校园', 'Series': '系列', 'Slender': '苗条', 'Small Breasts': '贫乳',
-  'Sm': '调教', 'Soap': '泡泡浴', 'Sweat': '汗液', 'Swim': '泳装', 'Threesome': '3P',
-  'Titty Fuck': '乳交', 'Tokudai': '特大', 'Training': '调教', 'Variety': '综合',
-  'Virgin': '处女', 'Wife': '人妻', 'Yariman': '荡妇', 'Bishojo': '美少女',
-  'Featured': '精选', 'Best': '精选', 'Compilation': '合集', 'Solo': '单人',
-  'Couple': '情侣', 'Fetishism': '恋物', 'Girl': '少女', 'Hard': '凌辱',
-  'Humiliation': '羞辱', 'Interracial': '跨种族', 'Maid': '女仆', 'Nurse': '护士'
-};
-
-var ACTRESS_LIST = [
-  ['Yua Mikami', '三上悠亜'], ['Arina Hashimoto', '橋本有菜'], ['Miku Abeno', '阿部乃みく'],
-  ['Eimi Fukada', '深田えいみ'], ['Yui Hatano', '波多野結衣'], ['Maria Ozawa', '小澤マリア'],
-  ['Sora Aoi', '蒼井そら'], ['Akiho Yoshizawa', '吉沢明歩'], ['Rio', '柚木ティナ'],
-  ['Jessica Kizaki', '希崎ジェシカ'], ['Yu Shinoda', '篠田ゆう'], ['Minori Hatsune', '初音みのり'],
-  ['Anri Okita', '沖田杏梨'], ['Rin Aoki', '青木りん'], ['Nao Oikawa', '及川奈央'],
-  ['Hitomi Tanaka', '田中ヒトミ'], ['Bunko Kanazawa', '金沢文子'], ['Risa Kasumi', '霞リカ'],
-  ['Tsukasa Aoi', '葵つかさ'], ['JULIA', 'じゅりあ'], ['Aika', '愛珂'], ['Rion', 'りおん'],
-  ['Mana Sakura', '桜まな'], ['Chihiro Hara', '原ちひろ'], ['Nao Jinguji', '神宮寺ナオ'],
-  ['Minami Kojima', '小島みなみ'], ['Hibiki Otsuki', '大槻ひびき'], ['Aoi Tsukino', '月野あおい'],
-  ['Mei Washio', '鷲尾めい'], ['Nanami Matsumoto', '松本菜奈実'], ['Shiori Tsukada', '塚田詩織'],
-  ['Nene Tanaka', '田中ねね'], ['Hana Himesaki', '姫咲はな'], ['Moe Amatsuka', '天使もえ'],
-  ['Rara Yoshikawa', '吉川らら'], ['Sakura Kirishima', '霧島さくら'], ['Shoko Takahashi', '高橋しょう子'],
-  ['Aimi Yoshikawa', '吉川あいみ'], ['Riona Hirose', '広瀬りおな'], ['Airi Kijima', '木島愛里'],
-  ['Maria Nagai', '永井マリア'], ['Aino Kori', '越智ありな'], ['Honoka', 'ほのか'],
-  ['Ruka Kanae', '香苗るか'], ['Yuma Asami', '麻美ゆま'], ['Rola Takizawa', '竹田ろら'],
-  ['Akari Hoshino', '星野明'], ['Asahi Mizuno', '水野朝陽'], ['Ena Satsuki', '紗月えな'],
-  ['Yui Obata', '小幡ゆい'], ['Yume Nishimiya', '西山ゆめ'], ['Shizuku Hoshino', '星乃せあら'],
-  ['Ai Uehara', '上原亜衣'], ['Saki Hatsumi', '初美沙希'], ['Mao Hamasaki', '浜崎真緒'],
-  ['Maki Tomoda', '友田真希'], ['Risa Onodera', '小野瀬りさ'], ['Ayumi Shinoda', '篠田あゆみ'],
-  ['Tsubasa Hachimitsu', 'ハチミツ翼'], ['Kaho Imai', '今井かほい'], ['Shion Utsunomiya', '宇都宮しをん'],
-  ['Natsuki Iori', '伊織なつき'], ['Kaede Hondo', '楓ふうあ'], ['Rei Mizuna', '水菜麗'],
-  ['AIKA', '愛花'], ['Miki', '美希'], ['Mirai', 'みらい'], ['Choco', 'ちょこ'], ['Mako', 'まこ'],
-  ['Yuri Oshikawa', '押川ゆり'], ['Riko Honda', '本田りこ'], ['Kurea Hasumi', '蓮実クレア'],
-  ['Yui Nishikawa', '西川ゆい'], ['Hotaru Akane', '紅音ほたる'], ['Yua Aida', '愛田ゆあ'],
-  ['Ayane Asakura', '朝倉あやね'], ['Ruka', 'るか'], ['Marin', 'まりん'], ['Sana', 'さな'],
-  ['Hime', 'ひめ'], ['Nami', 'なみ'], ['Rena', 'れな'], ['Hina', 'ひな'], ['Yuki', 'ゆき'],
-  ['Nanami', 'ななみ'], ['Ria', 'りあ'], ['Erika', 'えりか'], ['Ayaka', 'あやか'],
-  ['Saki Kozina', '小篠恵奈'], ['Aoi', 'あおい'], ['Yui', 'ゆい'], ['Miku', 'みく'],
-  ['Hibiki', 'ひびき'], ['Sakura', 'さくら'], ['Mei', 'めい'], ['Rara', 'らら'], ['Moe', 'もえ'],
-  ['Nene', 'ねね'], ['Hana', 'はな'], ['Saki', 'さき'], ['Yuma', 'ゆま'], ['Nao', 'なお'],
-  ['Yua', 'ゆあ']
-];
-
-var ACTRESS_EN2ZH = {};
+/* GENRE_EN2ZH / ACTRESS_LIST / ACTRESS_EN2ZH 已迁入共享核心 src/core-shared.js（单点真相），由 NfoCore.mapGenreEnToZh / mapActressEnToZh 提供 */
 
 var lastJavbusResults = [];
 
@@ -489,95 +430,47 @@ function populateFromJAV(d){
   resetSourceState();
   state.adult = true;
   state.source = 'jav';   // 记录来源，供「刷新」按源刷新
+  var n = NfoCore.normalizeJavFilm(d, { workerBase: state.magnetWorker });
 
-  // ===== 字段兼容：同时支持 r18.dev 线上「英文简化 schema」与更丰富的「日文 schema」=====
-  // 线上 r18.dev /json 实测只返回：title / actresses[].name / categories[].name / director(字符串) /
-  //   images.jacket_image.large2 / maker.name / label.name / series.name / release_date /
-  //   runtime_minutes / sample.high / content_id。不含日文、不含 gallery 剧照、不含 dvd_id。
-  // 若将来接入返回日文的源，下列「优先日文」取法会自动生效。
-  var title = javStr(d.title_ja || d.title_en || d.title || d.name) || '';        // 日文原标题优先，回退英文
-  var dvdId = javStr(d._dvdId || d.dvd_id || d.dvdId || d.content_id || d.id) || ''; // _dvdId=搜索时输入的番号
-  var date = javStr(d.release_date || d.releaseDate || d.date) || '';
-  var year = (date || '').slice(0, 4);
-  var runtime = javStr(d.runtime_mins || d.runtime_minutes || d.runtime || d.length) || '';
-  var overview = javStr(d.plot || d.plot_ja || d.comment_ja || d.comment_en || d.comment || d.overview) || '';  // 富源（Turso /r18rich）提供日文剧情，r18.dev 线上无则空
-  var rating = ''; // R18 不提供评分
-  var countries = ['日本'];
-  // R18 categories：优先英文 name_en（再经通用映射转中文），回退日文 name_ja / name；未命中保留原文
-  var rawGenres = (d.categories || []).map(function(c){ return javStr(c && (c.name_en || c.en || c.name_ja || c.ja || c.name)); }).filter(Boolean);
-  var genres = rawGenres.map(function(g){ return mapGenreEnToZh(g); });
-  // 不再把 AV 分类写进全局「成人」可选项池（state.genreAdult）：否则每次拉取/刷新 AV 都会让该池无限膨胀，
-  // 这正是「类型里的成人标签总是自动添加」的根因。本片分类仅存入 state.genres（见下方），并在打开「类型」弹窗时
-  // 以本次会话的临时项展示，便于勾选/取消，但绝不污染全局预设。
+  setFieldVal('title', n.title);
+  setFieldVal('originaltitle', n.title);   // 原始标题 = 原标题
+  setFieldVal('dvdid', n.dvdId);           // 番号存独立字段
+  syncFilename();                          // 文件名只读：优先番号，无番号用片名
+  setFieldVal('premiered', n.date);
+  if (n.date){ onPremieredChange({ value: n.date }); } else { setYear(n.year); }
+  setFieldVal('runtime', n.runtime);
+  setFieldVal('plot', n.overview);
+  setFieldVal('rating', n.rating);
+  setMpaa('NR');   // JAV 默认 NR 分级 → 保存时自动归 18+（XV）
 
-  setFieldVal('title', title);
-  setFieldVal('originaltitle', title);   // 原始标题 = 原标题
-  setFieldVal('dvdid', dvdId);           // 番号存独立字段
-  syncFilename();                        // 文件名只读：优先番号，无番号用片名
-  setFieldVal('premiered', date);
-  if (date){ onPremieredChange({ value: date }); } else { setYear(year); }
-  setFieldVal('runtime', runtime);
-  setFieldVal('plot', overview);
-  setFieldVal('rating', rating);
-  // JAV 默认 NR 分级 → 保存时自动归 18+（XV）
-  setMpaa('NR');
-
-  state.countries = countries.slice();
+  state.countries = n.countries.slice();
   renderCountryChips();
   savePresets();
-  state.genres = genres.slice();
+  state.genres = n.genres.slice();
   renderGenreChips();
 
-  // 演员：优先日文名 name_kanji，回退 name_romaji / name（线上为英文 name）。javStr 同时兼容字符串与对象
-  // 再套 mapActressEnToZh：把英文罗马字映射成中文/日文汉字（如 "Mika Aikawa" → "藍川美夏"），未命中保留英文
-  var rawCast = (d.actresses || []).map(function(a){ return mapActressEnToZh(javStr(a)); }).filter(Boolean);
-  state.actors = (d.actresses || []).slice(0, 11).map(function(a){
-    var n = mapActressEnToZh(javStr(a)) || javStr(a);
-    var photo = (a && a.image_url) ? javCoverUrl(a.image_url) : null;  // 富源女优头像（经 /img 代理绕跨域）
-    return { name: n, role: '', photo: photo };
-  });
-  // 导演：可能是字符串（线上），也可能是 [{name_kanji…}] 数组（富 schema）
-  var dirSrc = d.directors;
-  if (!dirSrc && d.director) dirSrc = (typeof d.director === 'string') ? [d.director] : (Array.isArray(d.director) ? d.director : [d.director]);
-  var rawDirectors = (dirSrc || []).map(function(a){ return javStr(a); }).filter(Boolean);
-  state.directors = rawDirectors.slice(0, 5).map(function(n){ return { name: n, role: '', photo: null }; });
-  // 制作商 / 发行商 / 系列：优先日文扁平字段，回退嵌套 {name} 对象
-  state.studio = javName(d.maker_name_ja || d.maker_name_en || d.maker || d.studio);
-  state.label  = javName(d.label_name_ja || d.label_name_en || d.label || d.publisher || d.distributor);
-  state.series = javName(d.series_name_ja || d.series_name_en || d.series || d.seriesName);
-  state.dvdId = dvdId;
-  // 预告片：sample_url（富 schema）或 sample.high（线上）
-  state.trailer = javStr(d.sample_url || (d.sample && d.sample.high) || (typeof d.sample === 'string' ? d.sample : '') || d.trailer) || '';
+  state.actors = n.actors.slice(0, 11);    // PC 显示上限 11（与旧一致）
+  state.directors = n.directors.slice(0, 5);
+  state.studio = n.studio;
+  state.label = n.label;
+  state.series = n.series;
+  state.dvdId = n.dvdId;
+  state.trailer = n.trailer;
   renderCast();
 
-  // 封面：jacket_full_url / jacket_thumb_url（富 schema），回退 images.jacket_image.large2（线上）
-  var coverRaw = javStr(d.jacket_full_url || d.jacket_thumb_url);
-  if (!coverRaw && d.images && d.images.jacket_image) coverRaw = d.images.jacket_image.large2 || d.images.jacket_image.large || '';
-  var cover = javCoverUrl(coverRaw);   // 与搜索列表共用同一 URL，浏览器缓存命中、无需重复拉取
-  // 剧照：富源（/r18rich）返回字符串 URL 数组；富 schema 也可能为 {image_full} 对象
-  // 关键：AV 剧照必须和 TMDB 一样转成本地 dataURL 持久化，否则详情页每次都向 Worker 重新拉图
-  var rawGallery = (d.gallery || []).map(function(g){
-    if (typeof g === 'string') return javCoverUrl(g);
-    return g && (g.image_full || g.image) ? javCoverUrl(g.image_full || g.image) : '';
-  }).filter(Boolean);
-  // 构建 gallery URL 列表（去重，全量保留链接）；图片最多缓存前 6 张，其余上拉实时加载
-  var galleryUrls = [];
-  if (cover) galleryUrls.push(cover);
-  rawGallery.forEach(function(url){ if (url && galleryUrls.indexOf(url) < 0) galleryUrls.push(url); });
-  state.galleryLinks = galleryUrls.slice();          // 全量链接（体积可忽略，不占图片缓存）
-  var cachedUrls = galleryUrls.slice(0, 6);           // 仅前 6 张转 dataURL 持久化，控制缓存大小
-  // 同步先放远程 URL 作占位（导入瞬间即有图），随后批量转 dataURL 覆盖
+  var galleryUrls = n.galleryLinks.slice();
+  state.galleryLinks = galleryUrls.slice();
+  var cachedUrls = galleryUrls.slice(0, 6);
   state.gallery = cachedUrls.slice();
   state.fanart = cachedUrls[0] || '';
   state.fanartCandidates = cachedUrls.slice(1);
   var imgPromises = [];
-  if (cover) imgPromises.push(loadImageFromURL(cover, 'poster', 2/3, 'right'));   // 海报：右裁
-  // 仅缓存的 6 张批量转 dataURL：第 0 张同时作为 fanart（完整封面，不裁剪）
+  if (n.cover) imgPromises.push(loadImageFromURL(n.cover, 'poster', 2/3, 'right'));
   imgPromises.push(
     Promise.all(cachedUrls.map(function(u){ return fetchImageDataURL(u).catch(function(){ return null; }); }))
       .then(function(urls){
         var dataUrls = urls.filter(Boolean);
-        if (!dataUrls.length) dataUrls = cachedUrls.slice(); // 转换全失败时回退远程 URL，至少能显示
+        if (!dataUrls.length) dataUrls = cachedUrls.slice();
         state.gallery = dataUrls;
         state.fanart = dataUrls[0] || state.fanart || '';
         state.fanartCandidates = dataUrls.slice(1);
@@ -594,82 +487,56 @@ function populateFromJavbus(d){
   state.adult = true;   // JavBus 内容均为成人 → 编辑页显示 AV 字段
   state.source = 'javbus';   // 记录来源，供「刷新」按源刷新
   state.javbusId = (d && (d.id)) || state.dvdId || null;   // 记录番号，供刷新重新拉取
+  var n = NfoCore.normalizeJavbusFilm(d, { workerBase: state.magnetWorker });
 
-  var title = (d.title || d.id || '').trim();
-  var dvdId = (d.id || '').trim();   // JavBus 的 id 即番号
-  var date = (d.date || '').trim();
-  var year = (date || '').slice(0, 4);
-  var runtime = (d.videoLength ? String(d.videoLength) : '') || '';
-  var overview = d.plot || '';   // DMM 补充源提供简介（best-effort），否则留空
-  var rating = (d.rating != null && d.rating !== '') ? String(d.rating) : '';  // DMM 评分补充，JavBus 无评分
-  var countries = ['日本'];
-  // JavBus 类型/标签已是可读中文/英文，直接使用
-  var genres = (d.genres || []).map(function(g){ return (g && g.name) || ''; }).filter(Boolean);
-
-  setFieldVal('title', title);
-  setFieldVal('originaltitle', title);
-  setFieldVal('dvdid', dvdId);
+  setFieldVal('title', n.title);
+  setFieldVal('originaltitle', n.title);
+  setFieldVal('dvdid', n.dvdId);
   syncFilename();                        // 文件名只读：优先番号，无番号用片名
-  setFieldVal('premiered', date);
-  if (date){ onPremieredChange({ value: date }); } else { setYear(year); }
-  setFieldVal('runtime', runtime);
-  setFieldVal('plot', overview);
-  setFieldVal('rating', rating);
+  setFieldVal('premiered', n.date);
+  if (n.date){ onPremieredChange({ value: n.date }); } else { setYear(n.year); }
+  setFieldVal('runtime', n.runtime);
+  setFieldVal('plot', n.overview);
+  setFieldVal('rating', n.rating);
   setMpaa('NR');   // JavBus 内容均为成人 → 保存时自动归 18+（XV）
 
-  state.countries = countries.slice();
+  state.countries = n.countries.slice();
   renderCountryChips();
   savePresets();
-  state.genres = genres.slice();
+  state.genres = n.genres.slice();
   renderGenreChips();
 
-  // 演员：stars[]（含女优头像 photo）
-  state.actors = (d.stars || []).slice(0, 11).map(function(s){
-    return { name: (s && s.name) || '', role: '', photo: (s && s.photo) || null };
-  });
-  // 女优头像：经 Worker /img 代理抓 JavBus 图床，转 dataURL 写回 actor.photo（仅满级加载）
+  state.actors = n.actors.slice(0, 11);    // PC 显示上限 11（与旧一致）
   state.actors.forEach(function(a, i){
     if ((state.tier || '') === 'full' && a.photo) loadJavbusActorPhoto(a.photo, i);
   });
-  // 导演：{id, name}
-  state.directors = (d.director && d.director.name) ? [{ name: d.director.name, role: '', photo: null }] : [];
-  // 制作商 / 发行商 / 系列：{id, name}
-  state.studio = (d.producer && d.producer.name) || '';
-  state.label  = (d.publisher && d.publisher.name) || '';
-  state.series = (d.series && d.series.name) || '';
-  state.dvdId = dvdId;
+  state.directors = n.directors.slice(0, 5);
+  state.studio = n.studio;
+  state.label = n.label;
+  state.series = n.series;
+  state.dvdId = n.dvdId;
   state.javbusMagnets = (d.magnets || []).slice();   // JavBus 详情页抓取的磁力列表
   // 字幕自动判定：任一磁力带中文字幕标记（hasSubtitle 或标题关键词）→ 影片标记字幕
   if (state.javbusMagnets.some(isSubtitledMagnet)){
     state.hasSubtitle = true;
     var _hs = document.getElementById('hasSubtitle'); if (_hs) _hs.checked = true;
   }
-  state.trailer = '';   // JavBus 抓取未含预告片直链
+  state.trailer = '';   // JavBus 抓取未含预告片直链（PC）
   renderCast();
 
-  // 封面：img
-  var coverRaw = d.img || '';
-  var cover = javbusImgUrl(coverRaw);   // 经 Worker /img 代理绕跨域
-  // 剧照：优先用 samples[].src（DMM 原图，清晰）；缺则回退 thumbnail（javbus 小图）
-  var rawGallery = (d.samples || []).map(function(s){ return s && (s.src || s.thumbnail); }).filter(Boolean).map(javbusImgUrl);
-  // 构建 gallery URL 列表（去重，全量保留链接）；图片最多缓存前 6 张，其余上拉实时加载
-  var galleryUrls = [];
-  if (cover) galleryUrls.push(cover);
-  rawGallery.forEach(function(url){ if (url && galleryUrls.indexOf(url) < 0) galleryUrls.push(url); });
-  state.galleryLinks = galleryUrls.slice();          // 全量链接（体积可忽略，不占图片缓存）
-  var cachedUrls = galleryUrls.slice(0, 6);           // 仅前 6 张转 dataURL 持久化，控制缓存大小
-  // 同步先放远程 URL 作占位（导入瞬间即有图），随后批量转 dataURL 覆盖
+  var galleryUrls = n.galleryLinks.slice();
+  state.galleryLinks = galleryUrls.slice();
+  var cachedUrls = galleryUrls.slice(0, 6);
   state.gallery = cachedUrls.slice();
   state.fanart = cachedUrls[0] || '';
   state.fanartCandidates = cachedUrls.slice(1);
   var imgPromises = [];
-  if (cover) imgPromises.push(loadImageFromURL(cover, 'poster', 2/3, 'right'));   // 海报：右裁
-  // 仅缓存的 6 张批量转 dataURL：第 0 张同时作为 fanart（完整封面，不裁剪）
+  if (n.cover) imgPromises.push(loadImageFromURL(n.cover, 'poster', 2/3, 'right'));
   imgPromises.push(
     Promise.all(cachedUrls.map(function(u){ return fetchImageDataURL(u).catch(function(){ return null; }); }))
       .then(function(urls){
         var dataUrls = urls.filter(Boolean);
-        if (!dataUrls.length) dataUrls = cachedUrls.slice(); // 转换全失败时回退远程 URL，至少能显示
+        if (!dataUrls.length) dataUrls = cachedUrls.slice();
         state.gallery = dataUrls;
         state.fanart = dataUrls[0] || state.fanart || '';
         state.fanartCandidates = dataUrls.slice(1);
@@ -949,20 +816,8 @@ function applyFilmData(film){
   updateState();
 }
 
-function javCoverUrl(raw){
-  if (raw && state.magnetWorker && raw.indexOf('pics.dmm.co.jp') > -1){
-    return (state.magnetWorker.replace(/\/$/, '')) + '/img?url=' + encodeURIComponent(raw);
-  }
-  return raw;
-}
-
-function javbusImgUrl(raw){
-  if (!raw) return raw;
-  if (raw.startsWith('data:')) return raw;   // 已转 dataURL 无需再代理
-  var w = state.magnetWorker || DEFAULT_WORKER;
-  return w.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(raw);
-}
-
+function javCoverUrl(raw){ return NfoCore.javCoverUrl(raw, state.magnetWorker); }
+function javbusImgUrl(raw){ return NfoCore.proxyImgUrl(raw, state.magnetWorker || DEFAULT_WORKER); }
 function normalizeTextField(v){
   if (v == null || v === '') return '';
   if (typeof v === 'string') return v;
@@ -1940,34 +1795,11 @@ function tmdbImgUrl(path, size){
   return TMDB_IMG_BASE + '/' + size + (path || '');
 }
 
-function javStr(v){
-  if (v == null || v === '') return '';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number') return String(v);
-  if (Array.isArray(v)) return v.map(javStr).filter(Boolean).join(', ');
-  if (typeof v === 'object') return javStr(v.name_ja || v.name_kanji || v.name_en || v.name_romaji || v.name || v.title || v.text || '');
-  return String(v);
-}
-
-function javName(v){
-  if (!v) return '';
-  if (typeof v === 'string') return v;
-  return javStr(v.name_ja || v.name_en || v.name || v);
-}
-
-function mapGenreEnToZh(en){
-  if (!en) return en;
-  if (GENRE_EN2ZH[en]) return GENRE_EN2ZH[en];
-  var lower = String(en).toLowerCase();
-  for (var k in GENRE_EN2ZH){ if (k.toLowerCase() === lower) return GENRE_EN2ZH[k]; }
-  return en; // 未命中保留英文
-}
-
-function mapActressEnToZh(en){
-  if (!en) return '';
-  var key = String(en).toLowerCase().replace(/\s+/g, ' ').trim();
-  return ACTRESS_EN2ZH[key] || en; // 未命中原样返回英文
-}
+/* JAV 解析 helper 已转发至共享核心 src/core-shared.js（单点真相） */
+function javStr(v){ return NfoCore.javStr(v); }
+function javName(v){ return NfoCore.javName(v); }
+function mapGenreEnToZh(en){ return NfoCore.mapGenreEnToZh(en); }
+function mapActressEnToZh(en){ return NfoCore.mapActressEnToZh(en); }
 
 var buildNFOMovieXml = NfoCore.buildMovieXml;
 

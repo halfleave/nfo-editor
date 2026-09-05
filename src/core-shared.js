@@ -131,6 +131,179 @@
     });
   }
 
+  // ===== JAV 解析（纯逻辑，不碰 DOM/state；两端逐字一致的映射表合并为单点真相）=====
+function javStr(v){
+  if (v == null || v === '') return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return String(v);
+  if (Array.isArray(v)) return v.map(javStr).filter(Boolean).join(', ');
+  if (typeof v === 'object') return javStr(v.name_ja || v.name_kanji || v.name_en || v.name_romaji || v.name || v.title || v.text || '');
+  return String(v);
+}
+function javName(v){
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  return javStr(v.name_ja || v.name_en || v.name || v);
+}
+var GENRE_EN2ZH = {
+  'IDOL': '偶像', 'SF': '科幻', 'VR': 'VR', 'VRSION': 'VR', '4HR+': '4小时以上',
+  'Acme': '高潮', 'Amateur': '素人', 'Anal': '肛交', 'Anal Play': '肛交', 'Anime': '动画',
+  'Ass Lover': '美臀', 'Bakunyu': '爆乳', 'BDSM': 'BDSM', 'Beautiful Girl': '美少女',
+  'Big Breasts': '巨乳', 'Big Pennis': '大屌', 'Big Tits': '巨乳', 'Black': '黑人',
+  'BL': '耽美', 'Blow': '口交', 'Bodysuit': '紧身衣', 'Bukkake': '潮吹颜射',
+  'Costume': '角色扮演', 'Creampie': '中出', 'Cuckold': '不贞', 'Dildo': '按摩棒',
+  'DocPro': '医生', 'Documentary': '纪录片', 'Drink': '饮尿', 'Dream': '梦幻',
+  'Embarrassment': '羞辱', 'Exclusive Distribution': '独家', 'Fetish': '恋物',
+  'Fingering': '指交', 'Foot Job': '足交', 'Ganimen': '假阳具', 'Glasses': '眼镜',
+  'Golden Shower': '饮尿', 'Hand Job': '手交', 'Hi-Def': '高清', 'Huge Butt': '巨臀',
+  'Idol': '偶像', 'Incest': '乱伦', 'JAV': '国产', 'Lady': '人妻',
+  'Lesbian': '女同', 'Lotion': '润滑剂', 'Married Woman': '人妻', 'Masturbation': '自慰',
+  'Mature': '熟女', 'Miscellaneous': '其他', 'Nampa': '逆搭讪', 'Naughty': '恶作剧',
+  'Nurse': '护士', 'OL': '女职员', 'Onanie': '自慰', 'Orgy': '乱交', 'Other': '其他',
+  'Outdoor': '户外', 'Pantyhose': '丝袜', 'Pervert': '变态', 'Piss Drinking': '饮尿',
+  'School': '校园', 'Series': '系列', 'Slender': '苗条', 'Small Breasts': '贫乳',
+  'Sm': '调教', 'Soap': '泡泡浴', 'Sweat': '汗液', 'Swim': '泳装', 'Threesome': '3P',
+  'Titty Fuck': '乳交', 'Tokudai': '特大', 'Training': '调教', 'Variety': '综合',
+  'Virgin': '处女', 'Wife': '人妻', 'Yariman': '荡妇', 'Bishojo': '美少女',
+  'Featured': '精选', 'Best': '精选', 'Compilation': '合集', 'Solo': '单人',
+  'Couple': '情侣', 'Fetishism': '恋物', 'Girl': '少女', 'Hard': '凌辱',
+  'Humiliation': '羞辱', 'Interracial': '跨种族', 'Maid': '女仆', 'Nurse': '护士'
+};
+function mapGenreEnToZh(en){
+  if (!en) return en;
+  if (GENRE_EN2ZH[en]) return GENRE_EN2ZH[en];
+  var lower = String(en).toLowerCase();
+  for (var k in GENRE_EN2ZH){ if (k.toLowerCase() === lower) return GENRE_EN2ZH[k]; }
+  return en; // 未命中保留英文
+}
+var ACTRESS_LIST = [
+  ['Yua Mikami', '三上悠亜'], ['Arina Hashimoto', '橋本有菜'], ['Miku Abeno', '阿部乃みく'],
+  ['Eimi Fukada', '深田えいみ'], ['Yui Hatano', '波多野結衣'], ['Maria Ozawa', '小澤マリア'],
+  ['Sora Aoi', '蒼井そら'], ['Akiho Yoshizawa', '吉沢明歩'], ['Rio', '柚木ティナ'],
+  ['Jessica Kizaki', '希崎ジェシカ'], ['Yu Shinoda', '篠田ゆう'], ['Minori Hatsune', '初音みのり'],
+  ['Anri Okita', '沖田杏梨'], ['Rin Aoki', '青木りん'], ['Nao Oikawa', '及川奈央'],
+  ['Hitomi Tanaka', '田中ヒトミ'], ['Bunko Kanazawa', '金沢文子'], ['Risa Kasumi', '霞リカ'],
+  ['Tsukasa Aoi', '葵つかさ'], ['JULIA', 'じゅりあ'], ['Aika', '愛珂'], ['Rion', 'りおん'],
+  ['Mana Sakura', '桜まな'], ['Chihiro Hara', '原ちひろ'], ['Nao Jinguji', '神宮寺ナオ'],
+  ['Minami Kojima', '小島みなみ'], ['Hibiki Otsuki', '大槻ひびき'], ['Aoi Tsukino', '月野あおい'],
+  ['Mei Washio', '鷲尾めい'], ['Nanami Matsumoto', '松本菜奈実'], ['Shiori Tsukada', '塚田詩織'],
+  ['Nene Tanaka', '田中ねね'], ['Hana Himesaki', '姫咲はな'], ['Moe Amatsuka', '天使もえ'],
+  ['Rara Yoshikawa', '吉川らら'], ['Sakura Kirishima', '霧島さくら'], ['Shoko Takahashi', '高橋しょう子'],
+  ['Aimi Yoshikawa', '吉川あいみ'], ['Riona Hirose', '広瀬りおな'], ['Airi Kijima', '木島愛里'],
+  ['Maria Nagai', '永井マリア'], ['Aino Kori', '越智ありな'], ['Honoka', 'ほのか'],
+  ['Ruka Kanae', '香苗るか'], ['Yuma Asami', '麻美ゆま'], ['Rola Takizawa', '竹田ろら'],
+  ['Akari Hoshino', '星野明'], ['Asahi Mizuno', '水野朝陽'], ['Ena Satsuki', '紗月えな'],
+  ['Yui Obata', '小幡ゆい'], ['Yume Nishimiya', '西山ゆめ'], ['Shizuku Hoshino', '星乃せあら'],
+  ['Ai Uehara', '上原亜衣'], ['Saki Hatsumi', '初美沙希'], ['Mao Hamasaki', '浜崎真緒'],
+  ['Maki Tomoda', '友田真希'], ['Risa Onodera', '小野瀬りさ'], ['Ayumi Shinoda', '篠田あゆみ'],
+  ['Tsubasa Hachimitsu', 'ハチミツ翼'], ['Kaho Imai', '今井かほい'], ['Shion Utsunomiya', '宇都宮しをん'],
+  ['Natsuki Iori', '伊織なつき'], ['Kaede Hondo', '楓ふうあ'], ['Rei Mizuna', '水菜麗'],
+  ['AIKA', '愛花'], ['Miki', '美希'], ['Mirai', 'みらい'], ['Choco', 'ちょこ'], ['Mako', 'まこ'],
+  ['Yuri Oshikawa', '押川ゆり'], ['Riko Honda', '本田りこ'], ['Kurea Hasumi', '蓮実クレア'],
+  ['Yui Nishikawa', '西川ゆい'], ['Hotaru Akane', '紅音ほたる'], ['Yua Aida', '愛田ゆあ'],
+  ['Ayane Asakura', '朝倉あやね'], ['Ruka', 'るか'], ['Marin', 'まりん'], ['Sana', 'さな'],
+  ['Hime', 'ひめ'], ['Nami', 'なみ'], ['Rena', 'れな'], ['Hina', 'ひな'], ['Yuki', 'ゆき'],
+  ['Nanami', 'ななみ'], ['Ria', 'りあ'], ['Erika', 'えりか'], ['Ayaka', 'あやか'],
+  ['Saki Kozina', '小篠恵奈'], ['Aoi', 'あおい'], ['Yui', 'ゆい'], ['Miku', 'みく'],
+  ['Hibiki', 'ひびき'], ['Sakura', 'さくら'], ['Mei', 'めい'], ['Rara', 'らら'], ['Moe', 'もえ'],
+  ['Nene', 'ねね'], ['Hana', 'はな'], ['Saki', 'さき'], ['Yuma', 'ゆま'], ['Nao', 'なお'],
+  ['Yua', 'ゆあ']
+];
+var ACTRESS_EN2ZH = {};
+ACTRESS_LIST.forEach(function(p){
+  var parts = String(p[0]).toLowerCase().split(/\s+/).filter(Boolean);
+  ACTRESS_EN2ZH[parts.join(' ')] = p[1];
+  if (parts.length === 2) ACTRESS_EN2ZH[parts[1] + ' ' + parts[0]] = p[1]; // 反序索引，兼容「姓 名」
+});
+function mapActressEnToZh(en){
+  if (!en) return '';
+  var key = String(en).toLowerCase().replace(/\s+/g, ' ').trim();
+  return ACTRESS_EN2ZH[key] || en; // 未命中原样返回英文
+}
+
+/* 图片代理：DMM 图床（pics.dmm.co.jp）经 Worker /img 代理绕跨域；workerBase 为空则直连 */
+function javCoverUrl(raw, workerBase){
+  if (raw && workerBase && raw.indexOf('pics.dmm.co.jp') > -1){
+    return workerBase.replace(/\/+$/, '') + '/img?url=' + encodeURIComponent(raw);
+  }
+  return raw;
+}
+/* 通用图片代理（JavBus 图床 / 剧照）：dataURL 或空直返，否则走 /img */
+function proxyImgUrl(raw, workerBase){
+  if (!raw) return raw;
+  if (raw.indexOf('data:') === 0) return raw;
+  if (!workerBase) return raw;
+  return workerBase.replace(/\/+$/, '') + '/img?url=' + encodeURIComponent(raw);
+}
+/* 归一化 r18.dev 详情 → 标准字段对象（纯逻辑，不碰 DOM/state）。
+ * opts.workerBase：图片代理 Worker 地址；封面/女优头像/剧照经其代理。
+ * 返回全量 actors（显示上限由 UI 控制 slice），galleryLinks 为去重后的代理 URL 全量列表。 */
+function normalizeJavFilm(d, opts){
+  opts = opts || {}; d = d || {};
+  var w = opts.workerBase || '';
+  var title = javStr(d.title_ja || d.title_en || d.title || d.name) || '';
+  var dvdId = javStr(d._dvdId || d.dvd_id || d.dvdId || d.content_id || d.id) || '';
+  var date = javStr(d.release_date || d.releaseDate || d.date) || '';
+  var year = (date || '').slice(0, 4);
+  var runtime = javStr(d.runtime_mins || d.runtime_minutes || d.runtime || d.length) || '';
+  var overview = javStr(d.plot || d.plot_ja || d.comment_ja || d.comment_en || d.comment || d.overview) || '';
+  var rating = '';
+  var countries = ['日本'];
+  var genres = (d.categories || []).map(function(c){ return javStr(c && (c.name_en || c.en || c.name_ja || c.ja || c.name)); }).filter(Boolean).map(mapGenreEnToZh);
+  var actors = (d.actresses || []).map(function(a){
+    var n = mapActressEnToZh(javStr(a)) || javStr(a);
+    var photo = (a && a.image_url) ? javCoverUrl(a.image_url, w) : null;
+    return { name: n, role: '', photo: photo };
+  });
+  var dirSrc = d.directors;
+  if (!dirSrc && d.director) dirSrc = (typeof d.director === 'string') ? [d.director] : (Array.isArray(d.director) ? d.director : [d.director]);
+  var directors = (dirSrc || []).map(function(a){ return javStr(a); }).filter(Boolean).map(function(n){ return { name: n, role: '', photo: null }; });
+  var studio = javName(d.maker_name_ja || d.maker_name_en || d.maker || d.studio);
+  var label = javName(d.label_name_ja || d.label_name_en || d.label || d.publisher || d.distributor);
+  var series = javName(d.series_name_ja || d.series_name_en || d.series || d.seriesName);
+  var trailer = javStr(d.sample_url || (d.sample && d.sample.high) || (typeof d.sample === 'string' ? d.sample : '') || d.trailer) || '';
+  var coverRaw = javStr(d.jacket_full_url || d.jacket_thumb_url);
+  if (!coverRaw && d.images && d.images.jacket_image) coverRaw = d.images.jacket_image.large2 || d.images.jacket_image.large || '';
+  var cover = javCoverUrl(coverRaw, w);
+  var galleryLinks = [];
+  if (cover) galleryLinks.push(cover);
+  (d.gallery || []).map(function(g){
+    if (typeof g === 'string') return javCoverUrl(g, w);
+    return g && (g.image_full || g.image) ? javCoverUrl(g.image_full || g.image, w) : '';
+  }).filter(Boolean).forEach(function(url){ if (galleryLinks.indexOf(url) < 0) galleryLinks.push(url); });
+  return { title: title, dvdId: dvdId, date: date, year: year, runtime: runtime, overview: overview,
+    rating: rating, countries: countries, genres: genres, actors: actors, directors: directors,
+    studio: studio, label: label, series: series, trailer: trailer, cover: cover, galleryLinks: galleryLinks };
+}
+/* 归一化 JavBus 详情 → 标准字段对象（纯逻辑）。
+ * 女优头像保留原始 s.photo（代理由 UI loadJavbusActorPhoto 处理）；封面/剧照经 proxyImgUrl 代理。 */
+function normalizeJavbusFilm(d, opts){
+  opts = opts || {}; d = d || {};
+  var w = opts.workerBase || '';
+  var title = (d.title || d.id || '').trim();
+  var dvdId = (d.id || '').trim();
+  var date = (d.date || '').trim();
+  var year = (date || '').slice(0, 4);
+  var runtime = (d.videoLength ? String(d.videoLength) : '') || '';
+  var overview = d.plot || '';
+  var rating = (d.rating != null && d.rating !== '') ? String(d.rating) : '';
+  var countries = ['日本'];
+  var genres = (d.genres || []).map(function(g){ return (g && g.name) || ''; }).filter(Boolean);
+  var actors = (d.stars || []).map(function(s){ return { name: (s && s.name) || '', role: '', photo: (s && s.photo) || null }; });
+  var directors = (d.director && d.director.name) ? [{ name: d.director.name, role: '', photo: null }] : [];
+  var studio = (d.producer && d.producer.name) || '';
+  var label = (d.publisher && d.publisher.name) || '';
+  var series = (d.series && d.series.name) || '';
+  var cover = proxyImgUrl(d.img || '', w);
+  var galleryLinks = [];
+  if (cover) galleryLinks.push(cover);
+  (d.samples || []).map(function(s){ return s && (s.src || s.thumbnail); }).filter(Boolean).map(function(u){ return proxyImgUrl(u, w); })
+    .forEach(function(url){ if (url && galleryLinks.indexOf(url) < 0) galleryLinks.push(url); });
+  return { title: title, dvdId: dvdId, date: date, year: year, runtime: runtime, overview: overview,
+    rating: rating, countries: countries, genres: genres, actors: actors, directors: directors,
+    studio: studio, label: label, series: series, cover: cover, galleryLinks: galleryLinks };
+}
+
   global.NfoCore = {
     escapeXml: escapeXml,
     sanitizeName: sanitizeName,
@@ -139,6 +312,14 @@
     needsTranslation: needsTranslation,
     extractJsonObject: extractJsonObject,
     computeTranslateNeed: computeTranslateNeed,
-    translateMeta: translateMeta
+    translateMeta: translateMeta,
+    javStr: javStr,
+    javName: javName,
+    mapGenreEnToZh: mapGenreEnToZh,
+    mapActressEnToZh: mapActressEnToZh,
+    javCoverUrl: javCoverUrl,
+    proxyImgUrl: proxyImgUrl,
+    normalizeJavFilm: normalizeJavFilm,
+    normalizeJavbusFilm: normalizeJavbusFilm
   };
 })(typeof window !== 'undefined' ? window : this);
