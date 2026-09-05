@@ -110,18 +110,7 @@ var DB_NAME = 'NFOEditorFS', DB_VERSION = 1;
 
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
 
-var TMDB_IMG_BASE = 'https://image.tmdb.org/t/p';
-
-var CC_MAP = {
-  US:'美国', GB:'英国', CN:'中国大陆', HK:'香港', TW:'台湾', JP:'日本', KR:'韩国',
-  FR:'法国', DE:'德国', IN:'印度', TH:'泰国', CA:'加拿大', AU:'澳大利亚',
-  IT:'意大利', ES:'西班牙', RU:'俄罗斯', NZ:'新西兰', NL:'荷兰', SE:'瑞典',
-  CH:'瑞士', BR:'巴西', MX:'墨西哥', DK:'丹麦', NO:'挪威', FI:'芬兰',
-  BE:'比利时', AT:'奥地利', IE:'爱尔兰', PT:'葡萄牙', PL:'波兰', CZ:'捷克',
-  HU:'匈牙利', GR:'希腊', TR:'土耳其', IL:'以色列', ZA:'南非',
-  AR:'阿根廷', CL:'智利', CO:'哥伦比亚', PH:'菲律宾', SG:'新加坡', MY:'马来西亚',
-  ID:'印度尼西亚', VN:'越南', EG:'埃及', AE:'阿联酋', SA:'沙特阿拉伯'
-};
+/* TMDB_IMG_BASE / CC_MAP 已迁入共享核心 src/core-shared.js；tmdbImgUrl 经 NfoCore.tmdbImgUrl 转发，populateFromTMDB 改调 NfoCore.normalizeTmdbFilm */
 
 /* GENRE_EN2ZH / ACTRESS_LIST / ACTRESS_EN2ZH 已迁入共享核心 src/core-shared.js（单点真相），由 NfoCore.mapGenreEnToZh / mapActressEnToZh 提供 */
 
@@ -551,20 +540,13 @@ function populateFromJavbus(d){
 function populateFromTMDB(d){
   resetSourceState();
   state.adult = !!d.adult;
-  var isTV = state.tmdbMediaType === 'tv';   // 剧集详情字段与电影不同（name/first_air_date/episode_run_time/created_by/content_ratings）
   state.source = 'tmdb';   // 记录来源，供「刷新」按源刷新
 
-  var title = d.title || (isTV ? d.name : '') || d.original_title || (isTV ? d.original_name : '') || '';
-  var orig = d.original_title || (isTV ? d.original_name : '') || d.title || (isTV ? d.name : '') || '';
-  var date = d.release_date || d.first_air_date || '';
-  var year = (date || '').slice(0, 4);
-  var runtime = d.runtime || (d.episode_run_time && d.episode_run_time[0]) || '';
-  var overview = d.overview || '';
-  var rating = (typeof d.vote_average === 'number') ? d.vote_average.toFixed(1) : '';
-  var countries = (d.production_countries && d.production_countries.length)
-    ? d.production_countries.map(function(c){ return CC_MAP[c.iso_3166_1] || c.name; })
-    : (d.origin_country || []).map(function(code){ return CC_MAP[code] || code; });
-  var genres = (d.genres || []).map(function(g){ return g.name; });
+  // TMDB 字段归一化已抽至共享核心 src/core-shared.js（纯逻辑，不读全局 state）
+  var n = NfoCore.normalizeTmdbFilm(d, { isTV: state.tmdbMediaType === 'tv', actorLimit: 11 });
+  var title = n.title, orig = n.originaltitle, date = n.date, year = n.year,
+      runtime = n.runtime, overview = n.overview, rating = n.rating,
+      countries = n.countries, genres = n.genres, cert = n.cert;
 
   setFieldVal('title', title);
   syncFilename();                        // 文件名只读：优先番号（TMDB 通常无），无番号用片名
@@ -575,15 +557,6 @@ function populateFromTMDB(d){
   setFieldVal('plot', overview);
   setFieldVal('rating', rating);
 
-  var cert = '';
-  if (d.release_dates && d.release_dates.results){
-    var us = (d.release_dates.results || []).find(function(r){ return r.iso_3166_1 === 'US'; });
-    if (us){ var c = (us.release_dates || []).find(function(x){ return x.certification; }); cert = c ? c.certification : ''; }
-  } else if (d.content_ratings && d.content_ratings.results){
-    // 剧集（TV）无 release_dates，分级在 content_ratings 里
-    var usTv = (d.content_ratings.results || []).find(function(r){ return r.iso_3166_1 === 'US'; });
-    if (usTv) cert = usTv.rating || '';
-  }
   if (cert){ setMpaa(cert); }
 
   state.countries = countries.slice();
@@ -593,32 +566,22 @@ function populateFromTMDB(d){
   state.genres = genres.slice();
   renderGenreChips();
 
-  if (d.credits){
-    var crew = d.credits.crew || [];
-    var dir = crew.find(function(p){ return p.job === 'Director'; });
-    // 剧集（TV）多数无 crew.Director，用 created_by（主创/编剧）兜底
-    if (!dir && d.created_by && d.created_by.length) dir = { name: d.created_by[0].name, profile_path: d.created_by[0].profile_path };
-    state.directors = dir ? [{ name: dir.name || '', dept: '导演', role: '', photo: null, _profile: dir.profile_path || null }] : [];
-    var cast = (d.credits.cast || []).slice(0, 11);
-    state.actors = cast.map(function(p){ return { name: p.name || '', role: p.character || '', photo: null, _profile: p.profile_path || null }; });
-  }
+  state.directors = n.directors;
+  state.actors = n.actors;
   renderCast();
 
   var imgPromises = [];
   state.posterCandidates = [];
   state.fanartCandidates = [];
-  var posters = (d.images && d.images.posters) || [];
-  var backdrops = (d.images && d.images.backdrops) || [];
   // 海报：优先用 images.posters（多张），回退到 d.poster_path；最多缓存 3 张
-  if (posters.length) imgPromises = imgPromises.concat(loadMediaCandidates(posters.map(function(p){ return p.file_path; }), 'poster', 'w780'));
-  else if (d.poster_path) imgPromises = imgPromises.concat(loadMediaCandidates([d.poster_path], 'poster', 'w780'));
+  if (n.posterPaths.length) imgPromises = imgPromises.concat(loadMediaCandidates(n.posterPaths, 'poster', 'w780'));
   // 剧照：用 images.backdrops（多张），最多缓存 3 张；注意：无 backdrops 时不再回退到海报，避免「剧照」变成海报
-  if (backdrops.length){
-    imgPromises = imgPromises.concat(loadMediaCandidates(backdrops.map(function(b){ return b.file_path; }), 'fanart', 'w1280'));
+  if (n.backdropPaths.length){
+    imgPromises = imgPromises.concat(loadMediaCandidates(n.backdropPaths, 'fanart', 'w1280'));
     // 同时把原比例剧照存进 state.gallery（数组，不裁剪），供详情页「剧照」区展示
-    state.galleryLinks = backdrops.map(function(b){ return tmdbImgUrl(b.file_path, 'w1280'); });  // 全量链接
-    var galleryPromises = backdrops.slice(0, 6).map(function(b){
-      var url = tmdbImgUrl(b.file_path, 'w1280');
+    state.galleryLinks = n.galleryLinks;  // 全量链接（w1280 直连 URL，已含 CORS 直连）
+    var galleryPromises = n.backdropPaths.slice(0, 6).map(function(p){
+      var url = NfoCore.tmdbImgUrl(p, 'w1280');
       var pr = fetch(url)
         .then(function(r){ return r.ok ? r.blob() : null; })
         .then(function(blob){
@@ -631,20 +594,11 @@ function populateFromTMDB(d){
     });
     Promise.all(galleryPromises).then(function(urls){ state.gallery = urls.filter(Boolean); });
   }
-  if (d.images && d.images.logos && d.images.logos.length){
-    var logos = d.images.logos;
-    var zh = logos.find(function(l){ return l.iso_639_1 === 'zh'; });
-    var en = logos.find(function(l){ return l.iso_639_1 === 'en'; });
-    imgPromises.push(loadImageFromTMDB((zh || en || logos[0]).file_path, 'logo', 'w500'));
+  if (n.logoPath){
+    imgPromises.push(loadImageFromTMDB(n.logoPath, 'logo', 'w500'));
   }
   // 预告片：语言无关合并后的 YouTube 视频，优先官方 Trailer
-  var trailerKey = '';
-  if (d.videos && d.videos.results && d.videos.results.length){
-    var yt = d.videos.results.filter(function(v){ return v.site === 'YouTube' && v.key; });
-    var officialTrailer = yt.find(function(v){ return v.type === 'Trailer' && v.official; });
-    var tr = officialTrailer || yt.find(function(v){ return v.type === 'Trailer'; }) || yt[0];
-    if (tr) trailerKey = tr.key;
-  }
+  var trailerKey = n.trailerKey;
   state.trailer = trailerKey;
   var tEl = document.getElementById('trailer');
   if (tEl){ tEl.value = trailerKey || ''; var th = document.getElementById('trailerHint'); if (th){ th.textContent = trailerKey ? ('已识别预告片 ID：' + trailerKey) : ''; th.className = 'trailer-hint' + (trailerKey ? ' ok' : ''); } }
@@ -652,7 +606,7 @@ function populateFromTMDB(d){
   loadCurrentCastPhotos();
 
   // 记录 TMDB id，供「刷新」功能重新拉取元数据
-  if (d.id != null) state.tmdbId = d.id;
+  if (n.tmdbId != null) state.tmdbId = n.tmdbId;
 
   applyEditMode();
   updateState();
@@ -1789,11 +1743,7 @@ function randomAdultLoadingPhrase(){
 
 function javbusApiBase(){ var w = state.magnetWorker || DEFAULT_WORKER; return w.replace(/\/+$/, '') + '/javbus'; }
 
-function tmdbImgUrl(path, size){
-  // 直连 TMDB 图片 CDN（image.tmdb.org 支持跨域 <img> 与 fetch），不绕 Worker，
-  // 避免免费档刷剧照就把 Worker 流量打满；普通海报图零成本。
-  return TMDB_IMG_BASE + '/' + size + (path || '');
-}
+function tmdbImgUrl(path, size){ return NfoCore.tmdbImgUrl(path, size); }  // 纯函数已抽至共享核心 src/core-shared.js
 
 /* JAV 解析 helper 已转发至共享核心 src/core-shared.js（单点真相） */
 function javStr(v){ return NfoCore.javStr(v); }
