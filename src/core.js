@@ -1846,19 +1846,6 @@ function downloadSubtitle(idx){
     .catch(function(err){ showToast('下载失败：' + escapeHtml((err&&err.message)||'网络错误'), 'error'); });
 }
 
-function buildDmmTrailerUrl(dvdId){
-  // DMM 免费预览 mp4：http(s)://cc3001.dmm.co.jp/litevideo/freepv/<首字母>/<前三字母>/<字母>00<数字>/<同左>_dmb_w.mp4
-  // 例：rki00481 → https://cc3001.dmm.co.jp/litevideo/freepv/r/rki/rki00481/rki00481_dmb_w.mp4
-  var raw = String(dvdId || '').toLowerCase().replace(/[\s-]/g, '');
-  var m = raw.match(/^([a-z]+)(\d+)$/);
-  if (!m) return '';
-  var letters = m[1];
-  var num = m[2].replace(/^0+/, '');
-  if (!letters || !num) return '';
-  var seg = letters + '00' + num;
-  return 'https://cc3001.dmm.co.jp/litevideo/freepv/'
-    + letters.charAt(0) + '/' + letters.slice(0, 3) + '/' + seg + '/' + seg + '_dmb_w.mp4';
-}
 
 function isDirectVideoUrl(s){
   return /^https?:\/\//i.test(s) && !/(?:youtube\.com|youtu\.be|youtube-nocookie\.com)/i.test(s);

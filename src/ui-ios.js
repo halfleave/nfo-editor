@@ -1,7 +1,11 @@
 
 /* ===== 骨架导航 + 全局交互（页面切换、Toast、各类弹窗开合） ===== */
 
+var currentPage = '';
 function switchPage(page) {
+  var from = currentPage;
+  currentPage = page;
+  if (from === 'detail' && page !== 'detail') stopDetailBgSlideshow(); // 离开详情页：停掉底图轮播，释放定时器
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
   if (page === 'search'){
@@ -4041,12 +4045,25 @@ function renderFilmDetail(film){
   currentDetailFilm = film || null;
   var d = film.data || {};
   var adult = !!film.adult;
-  var bgUrl = d.detailPoster || film.posterDataUrl || d.poster || d.fanart || '';
+  // 底图优先用剧照（宽图 fanart），没有剧照时再回退到海报；与 PC 端一致
+  var bgUrl = d.fanart || (d.fanartCandidates && d.fanartCandidates[0]) || d.detailPoster || film.posterDataUrl || d.poster || '';
+  var bgIsLandscape = !!(d.fanart || (d.fanartCandidates && d.fanartCandidates[0]));
   var bgEl = document.getElementById('detailBg');
   var pe = document.getElementById('detailPoster');
-  if (pe){ pe.style.backgroundImage = bgUrl ? 'url(' + escapeAttr(bgUrl) + ')' : ''; } // 海报底图（静态，不再随滚动视差）
-  // 复位上一轮查看/缩放遗留的视觉状态：位移、过渡、叠加透明度、磨砂、底色
-  resetDetailZoom();                                 // 复用：清底图与内容的 transform/transition
+  stopDetailBgSlideshow();                           // 停掉上一部影片的轮播并复位两层
+  if (pe){
+    pe.style.transition = 'none';
+    pe.style.opacity = '1';
+    pe.style.transform = 'scale(1)';
+    applyBgImage(pe, bgUrl, bgIsLandscape);          // 初始底图：横版 80% 宽 / 竖版 80% 高，居中
+    if (bgUrl){
+      // 基线缓缓放大：即使只有单张底图也缓慢放大到 110%（多张时由轮播持续放大 + 切换）
+      requestAnimationFrame(function(){
+        pe.style.transition = 'transform 5s ease-out, filter .15s linear';
+        pe.style.transform = 'scale(1.1)';
+      });
+    }
+  }
   bgEl.style.setProperty('--dt-alpha', '0');          // 顶部：海报色叠加透明度归零（画面清晰）
   bgEl.style.setProperty('--dt-glass', '0px');        // 磨砂玻璃归零
   bgEl.style.removeProperty('--dt-r'); bgEl.style.removeProperty('--dt-g'); bgEl.style.removeProperty('--dt-b'); // 底色回退默认黑，待下面重算
@@ -4320,6 +4337,9 @@ function placeShot(idx, src, nw, nh){
   el.classList.remove('shot-in');
   detailShotRevealQueue.push(el);
   pumpShotReveal();
+  /* 已显示的剧照进入底图轮播候选池（带真实尺寸，无需再全量预载）；池扩大时自动重算横版 */
+  detailVisibleShots.push({ url: src, w: nw, h: nh });
+  refreshDetailBgPool();
 }
 function pumpShotReveal(){
   if (detailShotRevealing) return;
@@ -4339,19 +4359,6 @@ function openTrailer(){
   if (!currentDetailTrailer) return;
   // YouTube 视频 ID：隐私增强模式（nocookie）内嵌播放，不跳新页面
   showTrailerModal();
-}
-function buildDmmTrailerUrl(dvdId){
-  // DMM 免费预览 mp4：http(s)://cc3001.dmm.co.jp/litevideo/freepv/<首字母>/<前三字母>/<字母>00<数字>/<同左>_dmb_w.mp4
-  // 例：rki00481 → https://cc3001.dmm.co.jp/litevideo/freepv/r/rki/rki00481/rki00481_dmb_w.mp4
-  var raw = String(dvdId || '').toLowerCase().replace(/[\s-]/g, '');
-  var m = raw.match(/^([a-z]+)(\d+)$/);
-  if (!m) return '';
-  var letters = m[1];
-  var num = m[2].replace(/^0+/, '');
-  if (!letters || !num) return '';
-  var seg = letters + '00' + num;
-  return 'https://cc3001.dmm.co.jp/litevideo/freepv/'
-    + letters.charAt(0) + '/' + letters.slice(0, 3) + '/' + seg + '/' + seg + '_dmb_w.mp4';
 }
 function isDirectVideoUrl(s){
   return /^https?:\/\//i.test(s) && !/(?:youtube\.com|youtu\.be|youtube-nocookie\.com)/i.test(s);
@@ -4847,58 +4854,13 @@ function clearExpiredFilms(){
   });
 }
 
-/* ===== 详情页动态交互：下拉放大底图 + 上滑阅读时底图渐变模糊 ===== */
-var detailScrollEl = null, detailBgEl = null, detailContentEl = null;
-var detailZoom = { active: false, startY: 0, startX: 0, startTop: 0, pull: 0 };
-// 触发「下拉放大底图」所需的最小向下位移(px)。低于此值不拦截手势，让原生滚动正常工作，
-// 否则在顶部按下的瞬间只要手指有 1px 向下抖动就会被当成放大手势并 preventDefault，导致本次触摸无法滚动（表现为「滑不动」）。
-var DETAIL_ZOOM_THRESHOLD = 12;
-function initDetailInteractions(){
+/* ===== 详情页动态交互：上滑阅读时底图渐变模糊（下拉放大已移除，改为底图自动轮播缓缓放大） ===== */
+var detailScrollEl = null, detailBgEl = null;
+function initDetailScrollOverlay(){
   detailScrollEl = document.getElementById('detailScroll');
   detailBgEl = document.getElementById('detailBg');
   if (!detailScrollEl || !detailBgEl) return;
-  detailContentEl = detailScrollEl.querySelector('.detail-content');
-  detailScrollEl.addEventListener('touchstart', onDetailTouchStart, { passive: false });
-  detailScrollEl.addEventListener('touchmove', onDetailTouchMove, { passive: false });
-  detailScrollEl.addEventListener('touchend', onDetailTouchEnd);
-  detailScrollEl.addEventListener('touchcancel', onDetailTouchEnd);
   detailScrollEl.addEventListener('scroll', onDetailScroll, { passive: true });
-}
-function onDetailTouchStart(e){
-  if (e.touches.length !== 1) { resetDetailZoom(); return; }
-  detailZoom.startY = e.touches[0].clientY;
-  detailZoom.startX = e.touches[0].clientX;
-  detailZoom.startTop = detailScrollEl.scrollTop; // 记录手势起点滚动位置，用于判断是否处于顶部
-  detailZoom.active = false;
-  detailZoom.pull = 0;
-}
-function onDetailTouchMove(e){
-  if (e.touches.length !== 1) { resetDetailZoom(); return; }
-  var dy = e.touches[0].clientY - detailZoom.startY;
-  var dx = e.touches[0].clientX - detailZoom.startX;
-  // 仅在顶部(scrollTop≈0)且手指「明确向下」拖(竖向、超过阈值)才放大底图，避免误触拦截导致滑不动
-  var atTop = detailZoom.startTop <= 2;
-  var verticalPull = dy > DETAIL_ZOOM_THRESHOLD && dy > Math.abs(dx);
-  if (atTop && verticalPull){
-    if (!detailZoom.active){ detailZoom.active = true; detailBgEl.style.transition = 'none'; if (detailContentEl) detailContentEl.style.transition = 'none'; }
-    detailZoom.pull = dy; // 不封顶，手指下滑可一直放大
-    var s = 1 + detailZoom.pull * 0.0008; // 缓慢放大
-    if (s > 1.3) s = 1.3; // 最多 1.3
-    detailBgEl.style.transform = 'translateY(' + Math.min(detailZoom.pull * 0.12, 40).toFixed(1) + 'px) scale(' + s.toFixed(4) + ')';
-    // 内容也微微向下滑（幅度受限，保持轻微）
-    if (detailContentEl) detailContentEl.style.transform = 'translateY(' + Math.min(detailZoom.pull * 0.1, 30).toFixed(1) + 'px)';
-    if (e.cancelable) e.preventDefault(); // 已确认是下拉放大手势，独占滚动
-  } else if (detailZoom.active){
-    resetDetailZoom();
-  }
-}
-function onDetailTouchEnd(){
-  if (detailZoom.active) resetDetailZoom();
-}
-function resetDetailZoom(){
-  detailZoom.active = false;
-  if (detailBgEl){ detailBgEl.style.transition = ''; detailBgEl.style.transform = ''; }
-  if (detailContentEl){ detailContentEl.style.transition = ''; detailContentEl.style.transform = ''; }
 }
 /* 滚动驱动的叠加曲线参数（均为「占视口高度的比例」，集中管理便于调参） */
 var DETAIL_ALPHA_CAP_AT = 0.35; // 上滑到此比例时，海报色叠加透明度达到封顶值
@@ -4910,7 +4872,6 @@ var DETAIL_EXP_BASE = Math.exp(2.5); // 指数曲线分母预计算，避免每�
 // 阅读时随滚动更新底图叠加层：① 叠加海报色（指数，35% 封顶）② 磨砂玻璃（25% 起，最大 50px）
 function onDetailScroll(){
   if (!detailBgEl || !detailScrollEl) return;
-  if (detailZoom.active) return; // 下拉放大手势进行中：跳过，避免与缩放动画冲突
   var sc = detailScrollEl;
   // 归一化进度 p：0（顶部）→ 1（上滑 DETAIL_ALPHA_CAP_AT 视口高度）
   var range = sc.clientHeight * DETAIL_ALPHA_CAP_AT || 320;
@@ -4924,6 +4885,83 @@ function onDetailScroll(){
   var glass = Math.max(0, (p - gStart) / (1 - gStart)) * DETAIL_GLASS_MAX;
   if (glass > DETAIL_GLASS_MAX) glass = DETAIL_GLASS_MAX;
   detailBgEl.style.setProperty('--dt-glass', glass.toFixed(1) + 'px');
+}
+
+/* ===== 详情页底图自动轮播（仅横版剧照，交叉淡入 + 缓慢放大；对齐 PC 端） ===== */
+var detailBgTimer = null;
+var detailBgActiveLayer = 0;   /* 0 = #detailPoster，1 = #detailPoster2 */
+var detailBgCurrentUrl = '';
+var detailBgPool = [];         /* 底图轮播候选池：所有已显示剧照（含真实尺寸 w/h 与横/竖标记） */
+var detailVisibleShots = [];    /* 当前已显示的剧照（含真实尺寸 w/h），作为底图轮播候选池 */
+
+/* 停止轮播并复位两层 */
+function stopDetailBgSlideshow(){
+  if (detailBgTimer){ clearInterval(detailBgTimer); detailBgTimer = null; }
+  detailBgPool = [];
+  detailVisibleShots = [];
+  detailBgCurrentUrl = '';
+  detailBgActiveLayer = 0;
+  var p1 = document.getElementById('detailPoster');
+  var p2 = document.getElementById('detailPoster2');
+  if (p1){ p1.style.transition = 'none'; p1.style.transform = 'scale(1)'; p1.style.opacity = '1'; p1.style.backgroundImage = ''; }
+  if (p2){ p2.style.transition = 'none'; p2.style.transform = 'scale(1)'; p2.style.opacity = '0'; p2.style.backgroundImage = ''; }
+}
+
+/* 把所有「当前已显示的剧照」纳入底图轮播候选池（横版、竖版都参与切换，不只横版）。
+   点「加载更多」后已显示剧照增多，池子自动扩大；不足 2 张则不切换，保持静止（与 PC 一致）。 */
+function refreshDetailBgPool(){
+  var pool = [];
+  var seen = {};
+  for (var i = 0; i < detailVisibleShots.length; i++){
+    var it = detailVisibleShots[i];
+    if (it && it.url && !seen[it.url]){
+      seen[it.url] = 1;
+      pool.push({ url: it.url, landscape: it.w > it.h * 1.05 });
+    }
+  }
+  detailBgPool = pool;
+  if (pool.length < 2) return;   /* 不足 2 张则不切换，保持静止 */
+  if (detailBgTimer) return;     /* 已在轮播，仅更新候选池即可 */
+  /* 首次启动：当前显示的初始图立即开始 5 秒缓慢放大 */
+  var layers = [document.getElementById('detailPoster'), document.getElementById('detailPoster2')];
+  var cur = layers[detailBgActiveLayer];
+  if (cur){ cur.style.transition = 'opacity .9s ease, transform 5s ease-out, filter .15s linear'; cur.style.transform = 'scale(1.1)'; }
+  detailBgTimer = setInterval(detailBgCrossfade, 5000);
+}
+
+/* 缓慢放大 + 交叉淡入：当前图放大到 110% 后，换下一张（下一张从 100% 重新放大） */
+function detailBgCrossfade(){
+  if (!detailBgPool.length) return;
+  var idx;
+  do { idx = Math.floor(Math.random() * detailBgPool.length); }
+  while (detailBgPool.length > 1 && detailBgPool[idx].url === detailBgCurrentUrl);
+  var item = detailBgPool[idx];
+  var url = item.url;
+  var layers = [document.getElementById('detailPoster'), document.getElementById('detailPoster2')];
+  var active = layers[detailBgActiveLayer];
+  var inactive = layers[1 - detailBgActiveLayer];
+  if (!active || !inactive) return;
+  /* 非活动层：先无动画复位到 scale(1)、设新图，强制重排后再淡入 + 缓慢放大到 110% */
+  inactive.style.transition = 'none';
+  inactive.style.transform = 'scale(1)';
+  applyBgImage(inactive, url, item.landscape);   /* 按每张剧照实际横/竖版分别 80% 宽 / 80% 高，居中 */
+  void inactive.offsetWidth;           /* 强制重排，确保 opacity/transform 过渡生效 */
+  inactive.style.transition = 'opacity .9s ease, transform 5s ease-out, filter .15s linear';
+  inactive.style.opacity = '1';
+  inactive.style.transform = 'scale(1.1)';
+  /* 当前活动层淡出（保留其在放大尾段状态，仅做淡出） */
+  active.style.transition = 'opacity .9s ease, filter .15s linear';
+  active.style.opacity = '0';
+  detailBgActiveLayer = 1 - detailBgActiveLayer;
+  detailBgCurrentUrl = url;
+}
+
+/* 按横/竖版设置底图尺寸：横版 → 80% 宽（高度等比、居中）；竖版 → 80% 高（宽度等比、居中） */
+function applyBgImage(layer, url, landscape){
+  if (!layer) return;
+  layer.style.backgroundImage = url ? 'url(' + escapeAttr(url) + ')' : '';
+  layer.style.backgroundSize = url ? (landscape ? '80% auto' : 'auto 80%') : '';
+  layer.style.backgroundPosition = 'center';
 }
 
 /* ===== Init（渐进加载：先让启动页绘制，再分步初始化，最后淡出） ===== */
@@ -5043,7 +5081,7 @@ function bootApp(){
   renderGenreChips();
   loadPresets().then(function(){ renderCountryChips(); renderGenreChips(); }).catch(function(){});
   initNativeSelects();
-  initDetailInteractions();
+  initDetailScrollOverlay();
   syncAllSelectDisplays();
   populateSettingSelects();
   updateSubtitleBtn();

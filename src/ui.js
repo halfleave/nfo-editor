@@ -1984,7 +1984,7 @@ function renderFilmDetail(film){
   el2.style.display = tags.length ? '' : 'none';
 
   /* 预告片 */
-  currentDetailTrailer = (adult && d.dvdId) ? buildDmmTrailerUrl(d.dvdId) : (d.trailer || '');
+  currentDetailTrailer = d.trailer || '';   // 统一用后端 /meta 带回的预告片（DMM 动态签名 / 无码源预览，best-effort）；不再静态拼 cc3001 freepv（已失效）
   var isAvTrailer = adult && d.dvdId;
   var extBtn = document.getElementById('trailerExtBtn');
   if (extBtn) extBtn.style.display = (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)) ? '' : 'none';

@@ -123,15 +123,29 @@ img { display: block; }
   transform-origin: center center; will-change: transform;
   transition: transform .5s cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* 海报底图：独立图层，固定在底部作背景，不随滚动移动（视差已移除），渐变叠层在其之上。
+/* 底图图层：固定在详情页底部作背景，不随滚动移动（视差已移除），渐变叠层在其之上。
    磨砂模糊直接作用于本图层（filter），这样无论滚动叠加层是否透明都能稳定生效。
-   background-size: auto 80% + top center → 海报高度=容器高度 80%，宽度等比缩放，顶部对齐居中，不再被 cover 裁切 */
+   尺寸策略（由 JS applyBgImage 按横/竖版动态设置 background-size）：
+   横版剧照 → 80% 宽（高度等比、居中）；竖版画（海报）→ 80% 高（宽度等比、居中）。
+   两层叠加用于「交叉淡入 + 缓慢放大」自动轮播（对齐 PC 端），故需 transform/opacity 过渡。 */
 .detail-poster {
   position: absolute; inset: 0; z-index: 0;
-  background-size: auto 80%; background-position: top center; background-repeat: no-repeat;
+  background-repeat: no-repeat; background-position: center; background-size: auto 80%;
   filter: blur(var(--dt-glass, 0px));
   -webkit-filter: blur(var(--dt-glass, 0px));
-  will-change: filter;
+  transform: scale(1); opacity: 1;
+  transition: opacity .9s ease, transform 5s ease-out, filter .15s linear;
+  will-change: transform, opacity, filter;
+}
+/* 轮播第二层：初始透明，交叉淡入时由 JS 切换 opacity + 缓慢放大 */
+.detail-poster-2 {
+  position: absolute; inset: 0; z-index: 0;
+  background-repeat: no-repeat; background-position: center; background-size: auto 80%;
+  filter: blur(var(--dt-glass, 0px));
+  -webkit-filter: blur(var(--dt-glass, 0px));
+  transform: scale(1); opacity: 0;
+  transition: opacity .9s ease, transform 5s ease-out, filter .15s linear;
+  will-change: transform, opacity, filter;
 }
 /* 基线渐变：底部 35% 始终为不透明海报色（不随滚动变化） */
 .detail-bg::before {
