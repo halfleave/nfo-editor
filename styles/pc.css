@@ -163,6 +163,12 @@ a:hover { text-decoration: underline; }
 .field-hint { font-size: 11px; color: var(--text-3); }
 .field-row { display: flex; align-items: center; gap: 10px; }
 .field-row .field { flex: 1; min-width: 0; }
+.field-row.form-row { align-items: stretch; gap: 12px; }
+.field-row.form-row > .field { flex: 1; min-width: 0; }
+.field-row.form-row > .field.grow-3 { flex: 3; }
+.field-row.form-row > .field.grow-1 { flex: 1; }
+.preset-chips { margin-top: 8px; }
+.preset-chips .chip-add { cursor: pointer; user-select: none; }
 
 .input, .textarea, .select {
   width: 100%; height: var(--control-h); padding: 0 10px;

@@ -414,13 +414,15 @@
         <!-- 基础 -->
           <div id="tab-basic" data-page-node-id="KeAhMIjZll2k5VAcfdCDM2">
             <div class="form-grid" data-page-node-id="XF0PV4hrThCwvOkoRgnb9Z">
-              <div class="field span-2" data-page-node-id="GDmp01waCCo3aOeOp0Tt7z">
-                <label class="field-label" for="title" data-page-node-id="CeFlGRX8K8xZR22STQseeM"><span class="req" data-page-node-id="ra4WS60jCRZWs5cpqS8j7L">*</span>影片名</label>
-                <input class="input" type="text" id="title" placeholder="请输入影片名" oninput="onTitleChanged(this)" data-page-node-id="saeOIFE1a0MZLrE1StHraC">
-              </div>
-              <div class="field span-2" data-page-node-id="qSlzhMge6CEgEuVR5CtTqM">
-                <label class="field-label" for="filename" data-page-node-id="sEsRKEtikcki78fPO3qnXF">文件名</label>
-                <input class="input" type="text" id="filename" placeholder="自动填充" readonly style="background:var(--surface-sunken);" data-page-node-id="h4ooUB7WHn52mwK0NdSOTb">
+              <div class="field-row form-row span-2" data-page-node-id="GDmp01waCCo3aOeOp0Tt7z">
+                <div class="field grow-3" data-page-node-id="CeFlGRX8K8xZR22STQseeM">
+                  <label class="field-label" for="title" data-page-node-id="CeFlGRX8K8xZR22STQseeM"><span class="req" data-page-node-id="ra4WS60jCRZWs5cpqS8j7L">*</span>影片名</label>
+                  <input class="input" type="text" id="title" placeholder="请输入影片名" oninput="onTitleChanged(this)" data-page-node-id="saeOIFE1a0MZLrE1StHraC">
+                </div>
+                <div class="field grow-1" data-page-node-id="qSlzhMge6CEgEuVR5CtTqM">
+                  <label class="field-label" for="filename" data-page-node-id="sEsRKEtikcki78fPO3qnXF">文件名</label>
+                  <input class="input" type="text" id="filename" placeholder="自动填充" readonly style="background:var(--surface-sunken);" data-page-node-id="h4ooUB7WHn52mwK0NdSOTb">
+                </div>
               </div>
               <div class="field" data-page-node-id="xFwshsGYtg3fhEwELoTZwa">
                 <label class="field-label" for="originaltitle" data-page-node-id="Gl8BBpqEVxjcY80Jpu3YeU">原始标题</label>
@@ -430,21 +432,23 @@
                 <label class="field-label" for="premiered" data-page-node-id="IIk8nqoJwYybHhW0lI8atx">首播日期</label>
                 <input class="input" type="date" id="premiered" onchange="onPremieredChange(this)" data-page-node-id="cM7fFDCVBd3cPBAc7OGCfm">
               </div>
-              <div class="field" data-page-node-id="Iu4eHbyuWealEPZmYbnKaR">
-                <label class="field-label" for="year" data-page-node-id="fTem5171ABzFJs0nvrSiUP">年份</label>
-                <select class="select" id="year" onchange="onYearSelect(this)" data-page-node-id="EHWQCBl8rUkSiJXAnfJ7GK"></select>
-              </div>
-              <div class="field" data-page-node-id="vuX9d38hgLewEEjSD42s11">
-                <label class="field-label" for="runtime" data-page-node-id="LYOEn4YNDYQ3RHm15inRb3">时长（分钟）</label>
-                <input class="input" type="number" id="runtime" placeholder="如 120" min="1" max="600" oninput="updateState()" data-page-node-id="DYnHf6mYL9lzoNSdIQr4QU">
-              </div>
-              <div class="field" data-page-node-id="fvAbFjbNnagFpNQzvPjbZL">
-                <label class="field-label" for="rating" data-page-node-id="yLud2q9S8wdf8o884341cL">评分</label>
-                <input class="input" type="number" id="rating" placeholder="0 - 10" min="0" max="10" step="0.1" onblur="validateRating(this)" oninput="updateState()" data-page-node-id="uytyoFqtbEFXaeiMVhE4J8">
-              </div>
-              <div class="field" data-page-node-id="KOmb916P5KVRvnuMjujLVx">
-                <label class="field-label" for="mpaa" data-page-node-id="1LC1Os6IUesTozhGJiMYVV">分级</label>
-                <select class="select" id="mpaa" onchange="onMpaaSelect(this)" data-page-node-id="E3I2FOlU285O55DqGIciXh"></select>
+              <div class="field-row form-row span-2 four" data-page-node-id="Iu4eHbyuWealEPZmYbnKaR">
+                <div class="field" data-page-node-id="fTem5171ABzFJs0nvrSiUP">
+                  <label class="field-label" for="year" data-page-node-id="EHWQCBl8rUkSiJXAnfJ7GK">年份</label>
+                  <select class="select" id="year" onchange="onYearSelect(this)" data-page-node-id="YbWcDd8kQpL0JTnXqR2mZv"></select>
+                </div>
+                <div class="field" data-page-node-id="vuX9d38hgLewEEjSD42s11">
+                  <label class="field-label" for="runtime" data-page-node-id="LYOEn4YNDYQ3RHm15inRb3">时长（分钟）</label>
+                  <input class="input" type="number" id="runtime" placeholder="如 120" min="1" max="600" oninput="updateState()" data-page-node-id="DYnHf6mYL9lzoNSdIQr4QU">
+                </div>
+                <div class="field" data-page-node-id="fvAbFjbNnagFpNQzvPjbZL">
+                  <label class="field-label" for="rating" data-page-node-id="yLud2q9S8wdf8o884341cL">评分</label>
+                  <input class="input" type="number" id="rating" placeholder="0 - 10" min="0" max="10" step="0.1" onblur="validateRating(this)" oninput="updateState()" data-page-node-id="uytyoFqtbEFXaeiMVhE4J8">
+                </div>
+                <div class="field" data-page-node-id="KOmb916P5KVRvnuMjujLVx">
+                  <label class="field-label" for="mpaa" data-page-node-id="1LC1Os6IUesTozhGJiMYVV">分级</label>
+                  <select class="select" id="mpaa" onchange="onMpaaSelect(this)" data-page-node-id="E3I2FOlU285O55DqGIciXh"></select>
+                </div>
               </div>
             </div>
 
@@ -474,21 +478,15 @@
               <div class="section-title" data-page-node-id="88DDRWOo42WWp2CsHpHzmh">分类</div>
               <div class="form-grid" data-page-node-id="NZGoy0po7CsiBaJU7pIHd6">
                 <div class="field span-2" data-page-node-id="VUpyxeSYXBehBLJoGBSasv">
-                  <label class="field-label" data-page-node-id="0cjTYBEyDh943mddQIQOAe">国家/地区</label>
-                  <div class="tag-cloud" id="countryTags" data-page-node-id="YAdFgTcaW4hfUrpAvjss7d"></div>
-                  <button class="chip-add mt-8" id="countryRow" onclick="openCountrySheet()" data-page-node-id="J7ADdPuYSHKeikLp1JCtRD">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:11px;height:11px;" data-page-node-id="wORvJykdsrrjxGH27yJCNv"><path d="M12 5v14M5 12h14" data-page-node-id="cKKAxG13gP0d45ZklAQZdf"/></svg>
-                    选择国家/地区
-                  </button>
+                  <label class="field-label" for="countryInput" data-page-node-id="0cjTYBEyDh943mddQIQOAe">国家/地区</label>
+                  <input class="input" type="text" id="countryInput" placeholder="输入国家/地区，用逗号分隔" oninput="onCountryInput(this)" data-page-node-id="YAdFgTcaW4hfUrpAvjss7d">
+                  <div class="tag-cloud preset-chips" id="countryPresets" data-page-node-id="J7ADdPuYSHKeikLp1JCtRD"></div>
                   <span class="hidden" id="countryVal" data-page-node-id="I69pjWQfqNCY1LbAEmSyuU"></span>
                 </div>
                 <div class="field span-2" data-page-node-id="cYQvclFNre45KmP8idKLi6">
-                  <label class="field-label" data-page-node-id="yslcFeSn8HDcrmnz9SlSZM">类型</label>
-                  <div class="tag-cloud" id="genreTags" data-page-node-id="a85FAat5jD7p9bBlYXl1Dh"></div>
-                  <button class="chip-add mt-8" id="genreRow" onclick="openGenreSheet()" data-page-node-id="oHqAGsAzlPeMUc3bYeRRcI">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:11px;height:11px;" data-page-node-id="5sYFTG08oewZ2Z2ReffXVw"><path d="M12 5v14M5 12h14" data-page-node-id="rNshd6GUnq021pU1H2nfAC"/></svg>
-                    选择类型
-                  </button>
+                  <label class="field-label" for="genreInput" data-page-node-id="yslcFeSn8HDcrmnz9SlSZM">类型</label>
+                  <input class="input" type="text" id="genreInput" placeholder="输入类型，用逗号分隔" oninput="onGenreInput(this)" data-page-node-id="a85FAat5jD7p9bBlYXl1Dh">
+                  <div class="tag-cloud preset-chips" id="genrePresets" data-page-node-id="oHqAGsAzlPeMUc3bYeRRcI"></div>
                   <span class="hidden" id="genreVal" data-page-node-id="UR9BF4WNze8JziZeDGebow"></span>
                 </div>
               </div>
