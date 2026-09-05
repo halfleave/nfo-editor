@@ -42,6 +42,10 @@ var state = {
   tier: '',            // 激活层级：''=免费, 'medium'=中等, 'full'=满级（由 /verify 解析后写入）
   activationCode: '',  // 用户填入的激活码（持久化，后续 Worker 请求拼 ?code= 供服务端识别个人配额桶）
   overviewTab: 'movie',
+  translateBaseUrl: '', translateApiKey: '', translateModel: '', // 翻译 AI 配置（OpenAI 兼容，客户端直连 LLM）
+  translatingIds: new Set(),       // 正在后台翻译的影片 id 集合（仅运行时，用于首页加载图标）
+  translatingInFlight: new Set(),  // 正在发翻译请求的 id（防重入，与 UI 图标分离）
+  pendingTranslateIds: new Set(),  // 已保存、待「数据加载完」后再翻译的 id
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
   javCensor: 'masked', // javCensor: 'masked'(有码) | 'uncensored'(无码)，仅 metaSource==='jav' 时生效，切换 JavBus 搜索路由
@@ -279,10 +283,7 @@ function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt
 
 function escapeAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
-function escapeXml(str){
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-}
+var escapeXml = NfoCore.escapeXml;
 
 function decodeXmlEntities(s){
   return String(s)
@@ -294,7 +295,7 @@ function decodeXmlEntities(s){
     .replace(/&#x27;/gi, "'");
 }
 
-function sanitizeName(name){ return (name || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie'; }
+var sanitizeName = NfoCore.sanitizeName;
 
 function getVal(id){ var el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
@@ -309,6 +310,144 @@ function updateClearButtonState(){
   var btn = document.getElementById('btnClear');
   if (!btn) return;
   btn.classList.toggle('muted', !hasFormContent());
+}
+
+/* ===== 翻译配置（OpenAI 兼容，客户端直连 LLM） ===== */
+var TRANSLATE_SYSTEM_PROMPT = [
+  '你是将成人影视元数据译为简体中文的翻译专家。请把下方日文的影片标题与简介翻译为简体中文。',
+  '硬性规则：',
+  '1. 仅做等值翻译，不增删、不概括、不改写语气。',
+  '2. 专有名词保留原文并附中文：演员名、片商、系列名。',
+  '3. 番号/型号代码（如 SONE-456、ABC-123）一律原样输出，绝不翻译或改写。',
+  '4. 日文汉字按简体中文习惯转写（例：妻→人妻按需），但语义必须准确。',
+  '5. 不雅化也不净化原文本措辞，保持原营销/直述风格。',
+  '6. 已知源语言：日文，请勿误判。',
+  '7. 若某字段已是简体中文、英文或纯番号代码，则原样输出，不要改写或翻译。',
+  '8. 严格输出 JSON，不要任何多余文字、不要 markdown 代码块包裹。格式：{"title":"简体中文标题","summary":"简体中文简介"}'
+].join('\n');
+var TRANSLATE_CFG_KEY = 'translateConfig';
+function getTranslateConfig(){
+  return idbGet('kv', TRANSLATE_CFG_KEY).then(function(v){
+    return (v && typeof v === 'object') ? { baseUrl: v.baseUrl||'', apiKey: v.apiKey||'', model: v.model||'' } : { baseUrl:'', apiKey:'', model:'' };
+  });
+}
+function setTranslateConfig(cfg){
+  return idbPut('kv', TRANSLATE_CFG_KEY, { baseUrl: cfg.baseUrl||'', apiKey: cfg.apiKey||'', model: cfg.model||'' });
+}
+function translateConfigReady(){
+  return !!(state.translateBaseUrl && state.translateApiKey && state.translateModel);
+}
+/* 是否需要翻译：仅当文本含日文假名（平/片假名）时判定为日文，需翻译为简体中文；
+   纯汉字（视为已是中文）、英文、番号代码等不翻译，避免误翻。 */
+function needsTranslation(text){
+  if (!text || !String(text).trim()) return false;
+  return /[ぁ-んァ-ヶ]/.test(String(text));
+}
+/* 从模型返回中解析 JSON 对象：兼容 ```json 代码块包裹 / 首尾空白 / 多余噪音文字。
+   截取首个 { 到末个 } 之间的内容再 JSON.parse；失败抛出错误（由调用方保留原文）。 */
+function extractJsonObject(s){
+  s = String(s || '').trim();
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  var a = s.indexOf('{'); var b = s.lastIndexOf('}');
+  if (a === -1 || b === -1 || b < a) throw new Error('翻译返回非 JSON');
+  return JSON.parse(s.slice(a, b + 1));
+}
+/* 调用 OpenAI 兼容接口，一次请求翻译 title + plot；返回 Promise<{title, summary}>（30s 超时） */
+function translateMeta(title, plot){
+  return new Promise(function(resolve, reject){
+    if (!translateConfigReady()){ reject(new Error('翻译未配置')); return; }
+    var base = state.translateBaseUrl.trim().replace(/\/+$/, '');
+    var endpoint = /\/chat\/completions$/i.test(base) ? base : base + '/chat/completions';
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, 30000) : null;
+    var userMsg = '【标题】\n' + (title || '') + '\n\n【简介】\n' + (plot || '');
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + state.translateApiKey },
+      body: JSON.stringify({ model: state.translateModel, temperature: 0.3, messages: [
+        { role:'system', content: TRANSLATE_SYSTEM_PROMPT },
+        { role:'user', content: userMsg }
+      ] }),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function(r){
+      if (!r.ok) return r.text().then(function(t){ throw new Error('HTTP ' + r.status + '：' + t.slice(0,200)); });
+      return r.json();
+    }).then(function(d){
+      if (timer) clearTimeout(timer);
+      var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+      if (!c) throw new Error('翻译返回为空');
+      try { resolve(extractJsonObject(c)); }
+      catch(e){ reject(new Error('翻译结果解析失败')); }
+    }).catch(function(err){
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+/* 按字段独立判断是否需要翻译（含日文假名才翻译，已有中文/英文/番号跳过） */
+function computeTranslateNeed(film){
+  var title = (film.data && film.data.title) || film.title || '';
+  var plot = (film.data && film.data.plot) || '';
+  return { title: needsTranslation(title), plot: needsTranslation(plot) };
+}
+/* 后台翻译并覆盖更新影片记录；完成后移除首页加载图标。
+   一次请求翻译 title + summary，按当前数据逐字段判定是否需要覆盖（简介可能晚于保存到达，故可重复调用）。 */
+function startFilmTranslation(id){
+  if (!translateConfigReady() || state.translatingInFlight.has(id)) return; // 防重入（与 UI 图标分离）
+  loadFilm(id).then(function(f){
+    if (!f) return;
+    var need = computeTranslateNeed(f);
+    if (!need.title && !need.plot){ return; } // 无需翻译（已是中文/英文/番号）
+    state.translatingInFlight.add(id);
+    state.translatingIds.add(id);
+    renderOverview(); // 显示加载图标
+    var title = (f.data && f.data.title) || f.title || '';
+    var plot = (f.data && f.data.plot) || '';
+    translateMeta(title, plot).then(function(res){
+      loadFilm(id).then(function(ff){
+        if (!ff){ finishTranslation(id); return; }
+        var newTitle = (typeof res.title === 'string') ? res.title : '';
+        var newSummary = (typeof res.summary === 'string') ? res.summary : '';
+        var changed = false;
+        if (need.title && newTitle && newTitle !== title){ ff.title = newTitle; if (ff.data) ff.data.title = newTitle; changed = true; }
+        if (need.plot && newSummary && newSummary !== plot){ if (ff.data) ff.data.plot = newSummary; changed = true; }
+        if (!changed){ finishTranslation(id); return; }
+        saveFilm(ff).then(function(){
+          // 若正在查看该影片，回写编辑态，避免后续 silentRefresh 用原始日文覆盖已翻好的中文
+          if (currentFilmId === id){
+            if (need.title && newTitle && newTitle !== (getVal('title')||'')) setFieldVal('title', newTitle);
+            if (need.plot && newSummary && newSummary !== (getVal('plot')||'')) setFieldVal('plot', newSummary);
+          }
+          finishTranslation(id); renderOverview(); showToast('已翻译标题/简介', 'success');
+        }).catch(function(){ finishTranslation(id); });
+      }).catch(function(){ finishTranslation(id); });
+    }).catch(function(){
+      finishTranslation(id);
+      showToast('翻译失败，已保留原文', 'error');
+    });
+  }).catch(function(){});
+}
+function finishTranslation(id){
+  state.translatingIds.delete(id);
+  state.translatingInFlight.delete(id);
+  renderOverview();
+}
+/* 标记影片「已保存、待数据加载完后翻译」：立即显示首页刷新图标（translatingIds），
+   并把 id 放入 pending；由 flushPendingTranslate 在 silentRefresh 后（数据全）触发翻译。
+   saveToDisk（手动保存、无后续异步）可直接在调用后 flush；quickSaveAndHome 等 silentRefresh 触发。
+   6s 兜底确保即使 silentRefresh 未跑（无图/加载失败）也不卡图标。 */
+function markPendingTranslate(id){
+  if (!translateConfigReady()) return;
+  state.translatingIds.add(id);
+  renderOverview();
+  state.pendingTranslateIds.add(id);
+  setTimeout(function(){ flushPendingTranslate(id); }, 6000);
+}
+function flushPendingTranslate(id){
+  if (state.pendingTranslateIds.has(id)){
+    state.pendingTranslateIds.delete(id);
+    startFilmTranslation(id); // 此时数据已加载完（silentRefresh 已补存），再翻译标题/简介
+  }
 }
 
 function persistApiSettings(allowClear){
@@ -820,10 +959,8 @@ function javCoverUrl(raw){
 function javbusImgUrl(raw){
   if (!raw) return raw;
   if (raw.startsWith('data:')) return raw;   // 已转 dataURL 无需再代理
-  if (state.magnetWorker){
-    return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(raw);
-  }
-  return raw;
+  var w = state.magnetWorker || DEFAULT_WORKER;
+  return w.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(raw);
 }
 
 function normalizeTextField(v){
@@ -1126,7 +1263,11 @@ function silentRefreshCurrentFilm(){
   if (!currentFilmId) return;
   var film = buildFilmFromCurrent();
   film.id = currentFilmId;
-  saveFilm(film).then(function(){ renderOverview(); }).catch(function(){});
+  saveFilm(film).then(function(){
+    renderOverview();
+    // 图片/元数据刷新完成后，再翻译标题/简介（此时数据已全，避免保存到一半就翻、简介还没到）
+    flushPendingTranslate(currentFilmId);
+  }).catch(function(){});
 }
 
 function cropToRatio(dataUrl, ratio){
@@ -1220,6 +1361,19 @@ function fetchJavbusSearch(q, box){
     .then(function(res){
       var movies = (res && res.movies) || [];
       if (!movies.length){
+        // 无结果回退：FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内；放宽到「任意像番号的输入」也直查 /api/meta，
+        // 以补全 JavBus 无但 DMM 有的数据（DMM 按番号搜，关键词搜不了，故片名仍走 JavBus/未找到）
+        var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
+        if (looksLikeId) {
+          fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + '&_=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+              if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
+              else box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>';
+            })
+            .catch(function () { box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>'; });
+          return;
+        }
         box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>';
         return;
       }
@@ -1778,7 +1932,7 @@ function randomAdultLoadingPhrase(){
   return currentAdultPhrases[Math.floor(Math.random() * currentAdultPhrases.length)];
 }
 
-function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') + '/javbus'; }
+function javbusApiBase(){ var w = state.magnetWorker || DEFAULT_WORKER; return w.replace(/\/+$/, '') + '/javbus'; }
 
 function tmdbImgUrl(path, size){
   // 直连 TMDB 图片 CDN（image.tmdb.org 支持跨域 <img> 与 fetch），不绕 Worker，
@@ -1815,35 +1969,7 @@ function mapActressEnToZh(en){
   return ACTRESS_EN2ZH[key] || en; // 未命中原样返回英文
 }
 
-function buildNFOMovieXml(d){
-  var title = d.title || '', originaltitle = d.originaltitle || '',
-      year = d.year || '', premiered = d.premiered || '',
-      runtime = d.runtime || '', plot = d.plot || '', rating = d.rating || '',
-      mpaa = d.mpaa || '';
-  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<movie>\n';
-  if (title) xml += '    <title>' + escapeXml(title) + '</title>\n';
-  if (originaltitle) xml += '    <originaltitle>' + escapeXml(originaltitle) + '</originaltitle>\n';
-  if (year) xml += '    <year>' + escapeXml(year) + '</year>\n';
-  if (premiered) xml += '    <premiered>' + escapeXml(premiered) + '</premiered>\n';
-  if (runtime) xml += '    <runtime>' + escapeXml(runtime) + '</runtime>\n';
-  if (rating) xml += '    <rating>' + escapeXml(rating) + '</rating>\n';
-  if (plot) xml += '    <plot>' + escapeXml(plot) + '</plot>\n';
-  (d.genres || []).forEach(function(g){ if (g) xml += '    <genre>' + escapeXml(g) + '</genre>\n'; });
-  (d.countries || []).forEach(function(c){ if (c) xml += '    <country>' + escapeXml(c) + '</country>\n'; });
-  if (mpaa) xml += '    <mpaa>' + escapeXml(mpaa) + '</mpaa>\n';
-  (d.directors || []).forEach(function(dir){ if (dir && dir.name) xml += '    <director>' + escapeXml(dir.name) + '</director>\n'; });
-  (d.actors || []).forEach(function(a, i){
-    if (!a || !a.name) return;
-    xml += '    <actor>\n';
-    xml += '      <name>' + escapeXml(a.name) + '</name>\n';
-    if (a.role) xml += '      <role>' + escapeXml(a.role) + '</role>\n';
-    xml += '      <order>' + (i + 1) + '</order>\n';
-    xml += '    </actor>\n';
-  });
-  if (d.hasSubtitle) xml += '    <subtitles>字幕</subtitles>\n';
-  xml += '</movie>\n';
-  return xml;
-}
+var buildNFOMovieXml = NfoCore.buildMovieXml;
 
 function downloadMetadata(id){
   loadFilm(id).then(function(film){

@@ -2265,6 +2265,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
   <div class="toast" id="toast" data-page-node-id="kQXLVcJHmasANAWqCwvZ0s"></div>
 </div>
 
+<script src="src/core-shared.js"></script>
 <script>
 /* ===== 骨架导航 + 全局交互（页面切换、Toast、各类弹窗开合） ===== */
 
@@ -2385,11 +2386,11 @@ function initDetailTitleCopy(){
   function onMove(x, y){ if (st && (Math.abs(x - sx) > 14 || Math.abs(y - sy) > 14)) moved = true; }
   function copySingle(){ // 单击 → 复制番号（无番号则复制标题）
     var txt = (currentDetailDvdId || '').trim() || (currentDetailTitle || '').trim() || '';
-    if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制' : '复制失败', ok ? 'success' : 'error'); }); }
+    if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制番号' : '复制失败', ok ? 'success' : 'error'); }); }
   }
   function copyDouble(){ // 双击 → 复制【标题】（不附带番号）
     var title = (currentDetailTitleFull || '').trim();
-    if (title){ copyText(title, function(ok){ showToast(ok ? '已复制' : '复制失败', ok ? 'success' : 'error'); }); }
+    if (title){ copyText(title, function(ok){ showToast(ok ? '已复制标题' : '复制失败', ok ? 'success' : 'error'); }); }
   }
   function clearSingle(){ if (singleTimer){ clearTimeout(singleTimer); singleTimer = null; } }
   // 在「松手」的用户手势内判定单击/双击并复制（iOS 的 clipboard API 必须处于用户手势上下文才生效）
@@ -6163,41 +6164,19 @@ function setMpaa(val){
 }
 
 /* —— NFO 生成 —— */
-function escapeXml(str){
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-}
+var escapeXml = NfoCore.escapeXml;
 function getVal(id){ var el = document.getElementById(id); return el ? el.value.trim() : ''; }
-function sanitizeName(name){ return (name || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie'; }
+var sanitizeName = NfoCore.sanitizeName;
 function generateNFOMovie(){
-  var title = getVal('title'), originaltitle = getVal('originaltitle'),
-      year = getVal('year'), premiered = getVal('premiered'),
-      runtime = getVal('runtime'), plot = getVal('plot'), rating = getVal('rating'),
-      mpaa = getVal('mpaa');
-  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<movie>\n';
-  if (title) xml += '    <title>' + escapeXml(title) + '</title>\n';
-  if (originaltitle) xml += '    <originaltitle>' + escapeXml(originaltitle) + '</originaltitle>\n';
-  if (year) xml += '    <year>' + escapeXml(year) + '</year>\n';
-  if (premiered) xml += '    <premiered>' + escapeXml(premiered) + '</premiered>\n';
-  if (runtime) xml += '    <runtime>' + escapeXml(runtime) + '</runtime>\n';
-  if (rating) xml += '    <rating>' + escapeXml(rating) + '</rating>\n';
-  if (plot) xml += '    <plot>' + escapeXml(plot) + '</plot>\n';
-  (state.genres || []).forEach(function(g){ xml += '    <genre>' + escapeXml(g) + '</genre>\n'; });
-  (state.countries || []).forEach(function(c){ xml += '    <country>' + escapeXml(c) + '</country>\n'; });
-  if (mpaa) xml += '    <mpaa>' + escapeXml(mpaa) + '</mpaa>\n';
-  (state.directors || []).forEach(function(d){ if (d.name) xml += '    <director>' + escapeXml(d.name) + '</director>\n'; });
-  (state.actors || []).forEach(function(a, i){
-    if (!a.name) return;
-    xml += '    <actor>\n';
-    xml += '      <name>' + escapeXml(a.name) + '</name>\n';
-    if (a.role) xml += '      <role>' + escapeXml(a.role) + '</role>\n';
-    if (a.photo) xml += '      <thumb>' + escapeXml(sanitizeName(a.name) + '-actor.jpg') + '</thumb>\n';
-    xml += '      <order>' + (i + 1) + '</order>\n';
-    xml += '    </actor>\n';
-  });
-  if (state.hasSubtitle) xml += '    <subtitles>字幕</subtitles>\n';
-  xml += '</movie>\n';
-  return xml;
+  var d = {
+    title: getVal('title'), originaltitle: getVal('originaltitle'),
+    year: getVal('year'), premiered: getVal('premiered'),
+    runtime: getVal('runtime'), plot: getVal('plot'), rating: getVal('rating'), mpaa: getVal('mpaa'),
+    genres: state.genres || [], countries: state.countries || [],
+    directors: state.directors || [], actors: state.actors || [],
+    hasSubtitle: state.hasSubtitle
+  };
+  return NfoCore.buildMovieXml(d);
 }
 
 /* —— 字幕角标绘制（导出图用） —— */
@@ -6609,35 +6588,7 @@ function toggleLock(id){
     });
   });
 }
-function buildNFOMovieXml(d){
-  var title = d.title || '', originaltitle = d.originaltitle || '',
-      year = d.year || '', premiered = d.premiered || '',
-      runtime = d.runtime || '', plot = d.plot || '', rating = d.rating || '',
-      mpaa = d.mpaa || '';
-  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<movie>\n';
-  if (title) xml += '    <title>' + escapeXml(title) + '</title>\n';
-  if (originaltitle) xml += '    <originaltitle>' + escapeXml(originaltitle) + '</originaltitle>\n';
-  if (year) xml += '    <year>' + escapeXml(year) + '</year>\n';
-  if (premiered) xml += '    <premiered>' + escapeXml(premiered) + '</premiered>\n';
-  if (runtime) xml += '    <runtime>' + escapeXml(runtime) + '</runtime>\n';
-  if (rating) xml += '    <rating>' + escapeXml(rating) + '</rating>\n';
-  if (plot) xml += '    <plot>' + escapeXml(plot) + '</plot>\n';
-  (d.genres || []).forEach(function(g){ if (g) xml += '    <genre>' + escapeXml(g) + '</genre>\n'; });
-  (d.countries || []).forEach(function(c){ if (c) xml += '    <country>' + escapeXml(c) + '</country>\n'; });
-  if (mpaa) xml += '    <mpaa>' + escapeXml(mpaa) + '</mpaa>\n';
-  (d.directors || []).forEach(function(dir){ if (dir && dir.name) xml += '    <director>' + escapeXml(dir.name) + '</director>\n'; });
-  (d.actors || []).forEach(function(a, i){
-    if (!a || !a.name) return;
-    xml += '    <actor>\n';
-    xml += '      <name>' + escapeXml(a.name) + '</name>\n';
-    if (a.role) xml += '      <role>' + escapeXml(a.role) + '</role>\n';
-    xml += '      <order>' + (i + 1) + '</order>\n';
-    xml += '    </actor>\n';
-  });
-  if (d.hasSubtitle) xml += '    <subtitles>字幕</subtitles>\n';
-  xml += '</movie>\n';
-  return xml;
-}
+var buildNFOMovieXml = NfoCore.buildMovieXml;
 /* 首页/详情页「下载元数据」：直接把该影片已存的元数据导出为 NFO + 图片的 zip 并下载，不再跳转到 TMDB 搜索 */
 function downloadMetadata(id){
   loadFilm(id).then(function(film){

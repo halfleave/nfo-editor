@@ -5,14 +5,14 @@
   功能：元数据编辑、TMDB/JAV 搜索、NFO 生成、ZIP 导出、磁力与字幕
   结构：样式层 → 应用骨架与各页面 → 逻辑与交互层
 -->
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzAwN0FGRiIvPjxwYXRoIGQ9Ik0xMiAxMGwxMCA2LTEwIDZ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+">
+<html lang="zh-CN" data-page-node-id="XwqMlAHi1qbAC1yKeqDFiA">
+<head data-page-node-id="EPgmu7LHupNq1mbMizTKHC">
+<meta charset="UTF-8" data-page-node-id="AyFzNKLBPhOMUQXPutANJV">
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="Gvb0b7IJQiO6vnVU48Opbj">
+<meta name="color-scheme" content="light dark" data-page-node-id="jErD6Cqs5fcGpZCZFDZMjC">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzAwN0FGRiIvPjxwYXRoIGQ9Ik0xMiAxMGwxMCA2LTEwIDZ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+" data-page-node-id="YEPH7RjM30f9lDAmrM7Exz">
 <title>NFO 编辑器</title>
-  <link rel="stylesheet" href="./styles/pc.css?v=36">
+  <link rel="stylesheet" href="./styles/pc.css?v=38" data-page-node-id="McivyXH0xfpFASamTE8Ha4">
   <script>
   /* 首屏同步应用主题色，避免刷新瞬间默认蓝 → 主题色的闪烁 (FOUC)。
      主题色权威值存于 IndexedDB（异步），这里仅用 localStorage 镜像做首屏兜底。 */
@@ -28,105 +28,105 @@
   })();
   </script>
 </head>
-<body>
-<div class="app" id="app">
+<body data-page-node-id="fLabrFDdG6UEsUy5XNGGPz">
+<div class="app" id="app" data-page-node-id="KucsG5JsE0DiQbGdlG3oSm">
 
 
   <!-- ==================== 主区 ==================== -->
-  <main class="main" id="main">
+  <main class="main" id="main" data-page-node-id="XGU8FNUN0TzkBuLr2w5Wjr">
 
     <!-- ---------- 库页 ---------- -->
-    <section class="page active" id="page-home">
-      <div class="topbar">
-        <div class="app-brand" ondblclick="toggleThemeHiddenDblClick()" title="双击切换里模式">
-          <div class="app-brand-logo">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    <section class="page active" id="page-home" data-page-node-id="GE9jv1pCZBneT1HrkES7Ca">
+      <div class="topbar" data-page-node-id="nn8YSfgPMvRcDuRlW55r3R">
+        <div class="app-brand" ondblclick="toggleThemeHiddenDblClick()" title="双击切换里模式" data-page-node-id="JOMMCY3Kn8ZMg6iHiIRzma">
+          <div class="app-brand-logo" data-page-node-id="aKJoiDIsifJD15ysLrv6eH">
+            <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="3Tx54U8Kq510JFdgHjBLHz"><path d="M8 5v14l11-7z" data-page-node-id="LnSp793lcG6vZWuLW3e21s"/></svg>
           </div>
-          <span class="app-brand-name">NFO</span>
+          <span class="app-brand-name" data-page-node-id="r0qOK4QXpjViSq5yomys8z">NFO</span>
         </div>
-        <div class="spacer"></div>
-        <button class="hidden-badge" id="hiddenBadge" onclick="closeThemeHidden()" title="里模式已开启，点击关闭">18+</button>
-        <button class="settings-fab" id="settingsFab" onclick="toggleSettingsMenu()" title="设置" aria-label="设置" aria-haspopup="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        <div class="spacer" data-page-node-id="TESTRTIkGUEw5DETYMrGqL"></div>
+        <button class="hidden-badge" id="hiddenBadge" onclick="closeThemeHidden()" title="里模式已开启，点击关闭" data-page-node-id="2u0pJi9zWjdRaE1i9kKZoz">18+</button>
+        <button class="settings-fab" id="settingsFab" onclick="toggleSettingsMenu()" title="设置" aria-label="设置" aria-haspopup="true" data-page-node-id="26LQVvrai8ZGVHPrin1ROh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="uKavzUu4FwAHGCjCoIGcjn"><circle cx="12" cy="12" r="3" data-page-node-id="ipxVNVVF6MXg5N08gw4s7V"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" data-page-node-id="uyTMLMoFKXPyAFMzBw84zZ"/></svg>
         </button>
       </div>
 
-      <div class="batch-bar hidden" id="libBatchBar">
-        <label class="checkbox"><input type="checkbox" id="libSelAll" onchange="toggleSelectAll(this.checked)"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span>全选</span></label>
-        <span class="batch-count" id="libSelCount">已选 0 部</span>
-        <div class="spacer"></div>
-        <button class="btn btn-default btn-sm" onclick="batchExportNfo()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      <div class="batch-bar hidden" id="libBatchBar" data-page-node-id="S1HP6MrhlNF4znglDq39Fi">
+        <label class="checkbox" data-page-node-id="vkxMGWM0ymCMcmwAfHMqpB"><input type="checkbox" id="libSelAll" onchange="toggleSelectAll(this.checked)" data-page-node-id="hiFjVWD8xhDrH4uvmvb1tU"><span class="box" data-page-node-id="ra3LCyqmKqF9jtUjK7kpZ9"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="mXhoq84yDugpEYdZ2qKggZ"><path d="M20 6 9 17l-5-5" data-page-node-id="O7JgG6XeTIyn9sWQTr9NRk"/></svg></span><span data-page-node-id="PHeLiRerlgHzBezZtS7GzX">全选</span></label>
+        <span class="batch-count" id="libSelCount" data-page-node-id="iFdoZkLJi1XsyPveHkrtC1">已选 0 部</span>
+        <div class="spacer" data-page-node-id="wS0nOkT6imYogO656LkOWI"></div>
+        <button class="btn btn-default btn-sm" onclick="batchExportNfo()" data-page-node-id="ljOs7XalgaUX5Pa6jZtPai">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="ufEfYN2TLoeuZtnRkfOgC7"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" data-page-node-id="sx4n2n7fqZTbtMjDEATUwB"/></svg>
           导出 NFO
         </button>
-        <button class="btn btn-default btn-sm" onclick="batchRefresh()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        <button class="btn btn-default btn-sm" onclick="batchRefresh()" data-page-node-id="Mej9ubhlVY7ZBaMvmLRljs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="3IjypoqiZAQoKc30kwpTB4"><path d="M21 12a9 9 0 1 1-2.64-6.36" data-page-node-id="qZ6xyqKeWdf5CWC06r3tl5"/><path d="M21 3v6h-6" data-page-node-id="eFgolwAtUfraqnyn7O2xuu"/></svg>
           刷新元数据
         </button>
-        <button class="btn btn-danger btn-sm" onclick="batchDelete()">删除</button>
-        <button class="btn btn-ghost btn-sm" onclick="toggleSelectMode()">取消</button>
+        <button class="btn btn-danger btn-sm" onclick="batchDelete()" data-page-node-id="ACnyVQJG64AJ0S6vXRRfWW">删除</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleSelectMode()" data-page-node-id="rkDAkwj9zyHsXhMXN583C9">取消</button>
       </div>
 
-      <div class="page-scroll" id="libraryScroll">
-        <div class="lib-search-wrap" id="libSearchWrap">
-          <div class="lib-search-row">
-            <div class="search-combo" id="libSearchCombo">
-              <div class="search-src-seg" id="libSrcSeg">
-                <button type="button" class="active" data-source="tmdb" onclick="setLibSource('tmdb',this)">TMDB</button>
-                <button type="button" data-source="jav" onclick="setLibSource('jav',this)">JAV</button>
+      <div class="page-scroll" id="libraryScroll" data-page-node-id="ArmmWZLKQdDvxs68n4mXbq">
+        <div class="lib-search-wrap" id="libSearchWrap" data-page-node-id="DxdeW9ko7UTXtqssThySXj">
+          <div class="lib-search-row" data-page-node-id="dMnIdtvHjEGonxBpANY8FT">
+            <div class="search-combo" id="libSearchCombo" data-page-node-id="xqGhiNjJgTYMxjZJgn75Z4">
+              <div class="search-src-seg" id="libSrcSeg" data-page-node-id="yHT1gmVTDpwHZfXdDeWNP4">
+                <button type="button" class="active" data-source="tmdb" onclick="setLibSource('tmdb',this)" data-page-node-id="dgoliysYDZJp8hGEx1nmeb">TMDB</button>
+                <button type="button" data-source="jav" onclick="setLibSource('jav',this)" data-page-node-id="22F76vzoSFZbJEGUZbeV6X">JAV</button>
               </div>
-              <span class="search-sep"></span>
-              <input class="search-field" type="text" id="libSearch" placeholder="搜索 TMDB 影片库…" autocomplete="off" oninput="onLibSearchInput()" onkeydown="onLibSearchKey(event)" onfocus="onLibSearchFocus()" onblur="onLibSearchBlur()">
-              <button type="button" class="search-type-pill" id="libTypePill" onclick="cycleLibType()" title="切换类型">
-                <span class="type-layer is-current">电影</span>
-                <span class="type-layer is-incoming">剧集</span>
+              <span class="search-sep" data-page-node-id="urM6U3B46RL4JmeZfRZQpk"></span>
+              <input class="search-field" type="text" id="libSearch" placeholder="搜索 TMDB 影片库…" autocomplete="off" oninput="onLibSearchInput()" onkeydown="onLibSearchKey(event)" onfocus="onLibSearchFocus()" onblur="onLibSearchBlur()" data-page-node-id="sfDTaHJbpQh9iibVDgB6nW">
+              <button type="button" class="search-type-pill" id="libTypePill" onclick="cycleLibType()" title="切换类型" data-page-node-id="I7Mw643yPq2QC9mRGAvNdB">
+                <span class="type-layer is-current" data-page-node-id="JTAZ0yisIXd2PTOHknsnEA">电影</span>
+                <span class="type-layer is-incoming" data-page-node-id="EEEVTXwbLQBbKagmdVXpzO">剧集</span>
               </button>
-              <button type="button" class="search-clear" id="libSearchClear" onclick="clearLibSearch()" aria-label="清除">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              <button type="button" class="search-clear" id="libSearchClear" onclick="clearLibSearch()" aria-label="清除" data-page-node-id="Ila9vwzTNsTbqpBry1lE0D">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" data-page-node-id="3YARLtHadwFdZpGxIWsrft"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="nKM26ZGeGIxUzPzZdsmng8"/></svg>
               </button>
-              <div class="lib-search-dropdown hidden" id="libSearchDropdown"></div>
+              <div class="lib-search-dropdown hidden" id="libSearchDropdown" data-page-node-id="FrOXm0V5ozm8jEOkBYriXA"></div>
             </div>
-            <button class="btn btn-primary search-go" id="libSearchBtn" onclick="runLibSearch()" title="搜索 (Enter)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <button class="btn btn-primary search-go" id="libSearchBtn" onclick="runLibSearch()" title="搜索 (Enter)" data-page-node-id="THiG9CX6V27plsy1wCI73D">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-page-node-id="JvgPSrP4OXnGXhXPxIdgQL"><circle cx="11" cy="11" r="7" data-page-node-id="1AmrXbYZX2PUGBH933HqtY"/><path d="m20 20-3.5-3.5" data-page-node-id="Yb8Dv8u5SvTo3hHe22LVTC"/></svg>
               搜索
             </button>
           </div>
-          <div class="lib-sub-toolbar">
-            <div class="lib-sub-left">
-              <div class="seg seg-pill" id="overviewTabs" style="display:none;">
-                <button type="button" class="active" data-tab="movie" onclick="setOverviewTab('movie',this)">影片</button>
-                <button type="button" data-tab="xv" onclick="setOverviewTab('xv',this)">XV</button>
+          <div class="lib-sub-toolbar" data-page-node-id="WpyqhteoQSoRMQC2pIUwOt">
+            <div class="lib-sub-left" data-page-node-id="2sGY4w13PyGBmDrezMA2wx">
+              <div class="seg seg-pill" id="overviewTabs" style="display:none;" data-page-node-id="hTJzJ6eXqWghx2M0yxI6UM">
+                <button type="button" class="active" data-tab="movie" onclick="setOverviewTab('movie',this)" data-page-node-id="cWBUXh5RSC3eYT88XhJTSZ">影片</button>
+                <button type="button" data-tab="xv" onclick="setOverviewTab('xv',this)" data-page-node-id="pqJgrgWrtgPiMyo98qgSpg">XV</button>
               </div>
-              <select class="select select-sm" id="libSort" onchange="renderOverview()">
-                <option value="updated">最近更新</option>
-                <option value="title">名称</option>
-                <option value="year">年份</option>
-                <option value="rating">评分</option>
+              <select class="select select-sm" id="libSort" onchange="renderOverview()" data-page-node-id="FRoAhbC6qIBNCjIysb4FB2">
+                <option value="updated" data-page-node-id="bmSQKOpiS881B15b5P6msO">最近更新</option>
+                <option value="title" data-page-node-id="uMniLY9LCk0iuaDoClSe5b">名称</option>
+                <option value="year" data-page-node-id="7GCDCIBDyEFVcONFUDdRzb">年份</option>
+                <option value="rating" data-page-node-id="uyhDWFGXvef2xfTrUhBTjY">评分</option>
               </select>
             </div>
-            <div class="lib-actions">
-              <div class="btn-group" id="libViewGroup">
-                <button class="btn active" data-view="grid" onclick="setLibraryView('grid')" title="网格视图">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            <div class="lib-actions" data-page-node-id="Z8S3iFXpGIaLtU9sDM68pj">
+              <div class="btn-group" id="libViewGroup" data-page-node-id="fytQWUSBNRfEEBgOIdEd7R">
+                <button class="btn active" data-view="grid" onclick="setLibraryView('grid')" title="网格视图" data-page-node-id="Djzm2UvIDb1g1DUPpGog62">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" data-page-node-id="yMmtsPZbaRBvQFhN2sSkb2"><rect x="3" y="3" width="7" height="7" rx="1.5" data-page-node-id="xltHjEu04NzNvcV8edd4oy"/><rect x="14" y="3" width="7" height="7" rx="1.5" data-page-node-id="XGPfmmCQnJweKhw5GWWyl4"/><rect x="3" y="14" width="7" height="7" rx="1.5" data-page-node-id="vWFHAHRd7n99vc59stYnZo"/><rect x="14" y="14" width="7" height="7" rx="1.5" data-page-node-id="U2AZOFyiH5Tw0ol59DKMah"/></svg>
                 </button>
-                <button class="btn" data-view="list" onclick="setLibraryView('list')" title="列表视图">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                <button class="btn" data-view="list" onclick="setLibraryView('list')" title="列表视图" data-page-node-id="d00mlDogqwhxHgfFp9EEoE">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" data-page-node-id="r2e0klKHPtfo1tSPm771r8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" data-page-node-id="z5yxQdumhlrg46HdXwPpw2"/></svg>
                 </button>
               </div>
-              <button class="btn btn-default btn-sm btn-icon" id="libSelectBtn" onclick="toggleSelectMode()" title="批量选择">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <button class="btn btn-default btn-sm btn-icon" id="libSelectBtn" onclick="toggleSelectMode()" title="批量选择" data-page-node-id="wPZEYzhvsMF84kwyjRFxlc">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="KtfAstSY7RO7jLQHIe0umW"><path d="M9 11l3 3L22 4" data-page-node-id="dMTzQNn1VXQMDP4VMG9fuV"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" data-page-node-id="tDL8g9nBwRoNBjnXluEpPN"/></svg>
               </button>
             </div>
           </div>
         </div>
 
-        <div class="poster-grid" id="overviewGrid"></div>
-        <div class="list-wrap hidden" id="overviewList"></div>
-        <div class="lib-count-bar hidden" id="libCountBar"><span id="libCount"></span></div>
-        <div class="empty hidden" id="overviewEmpty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M16 3v18M3 8h18M3 16h18"/></svg>
-          <div class="empty-title">还没有影片</div>
-          <div class="empty-desc"></div>
+        <div class="poster-grid" id="overviewGrid" data-page-node-id="WqJV2WqZ6VqsGJ7Xi16Fec"></div>
+        <div class="list-wrap hidden" id="overviewList" data-page-node-id="9sOZhMDMBuGSnPTUDFtkk2"></div>
+        <div class="lib-count-bar hidden" id="libCountBar" data-page-node-id="ng1Ska3FNT9eyBozJBbGxA"><span id="libCount" data-page-node-id="q3vDjMsqUGNBb8bisk45MQ"></span></div>
+        <div class="empty hidden" id="overviewEmpty" data-page-node-id="R4yOCSmVRPKqRfBrmYn7SD">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-page-node-id="ZJ0fsgXveMGjAqSxAoiqXG"><rect x="3" y="3" width="18" height="18" rx="2" data-page-node-id="EUyjS9VHQ6pmRZ6BsBYozb"/><path d="M8 3v18M16 3v18M3 8h18M3 16h18" data-page-node-id="44Jx4XsLeGpnoBnCRzy8p1"/></svg>
+          <div class="empty-title" data-page-node-id="TOUxGBylGm2Ky6A74BdIYl">还没有影片</div>
+          <div class="empty-desc" data-page-node-id="vKRXl2aa5dMOaYNwZgCsmp"></div>
         </div>
       </div>
     </section>
@@ -135,181 +135,181 @@
     
 
     <!-- ---------- 详情页（沉浸式） ---------- -->
-    <section class="page" id="page-detail">
-      <div class="detail-bg" id="detailBg"><div class="detail-poster" id="detailPoster"></div><div class="detail-poster detail-poster-2" id="detailPoster2"></div></div>
-      <div class="detail-topbar">
-        <button class="detail-back" onclick="goBackFromDetail()" title="返回 (Esc)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+    <section class="page" id="page-detail" data-page-node-id="tyDYcLBTyJqW9qMhXdCz6k">
+      <div class="detail-bg" id="detailBg" data-page-node-id="VUxz9ItmablI55SuBmBKrz"><div class="detail-poster" id="detailPoster" data-page-node-id="AjLva85tzepHIkd7h631Ef"></div><div class="detail-poster detail-poster-2" id="detailPoster2" data-page-node-id="1i6bjHw1WHzoL2MJd9VGsX"></div></div>
+      <div class="detail-topbar" data-page-node-id="acURneCGEuH3W0xA5AVAC8">
+        <button class="detail-back" onclick="goBackFromDetail()" title="返回 (Esc)" data-page-node-id="cQ3Thy6E5GpbyAHXKX7gDb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="6W01FSYMMLogkpKG4mm6cm"><path d="m15 18-6-6 6-6" data-page-node-id="7YTOAqyqWDZBeNJByyPaho"/></svg>
           返回
         </button>
       </div>
-      <div class="detail-scroll" id="detailScroll">
-        <div class="detail-inner">
-          <div class="detail-hero">
-            <div class="detail-hero-left">
-              <h1 class="detail-title" id="detailTitle"></h1>
-              <div class="detail-info1" id="detailInfo1"></div>
-              <div class="detail-info-av" id="detailInfoAv"></div>
-              <div class="detail-info2" id="detailInfo2"></div>
+      <div class="detail-scroll" id="detailScroll" data-page-node-id="mPdCB85WzkINu3plEbFgRX">
+        <div class="detail-inner" data-page-node-id="kZZoX2Q96HjK8GCmbCYwCX">
+          <div class="detail-hero" data-page-node-id="15Bnf8xs7AaWf8SS8Cpyzb">
+            <div class="detail-hero-left" data-page-node-id="DkWNHBnmgBxZfkFy2YRIsv">
+              <h1 class="detail-title" id="detailTitle" data-page-node-id="IQ6ViAzdIRfEAHrHuI2sfC"></h1>
+              <div class="detail-info1" id="detailInfo1" data-page-node-id="7pSpL2vtkXGgH1B10QPdt4"></div>
+              <div class="detail-info-av" id="detailInfoAv" data-page-node-id="0YS02QaGbxT7QREjgLgbMN"></div>
+              <div class="detail-info2" id="detailInfo2" data-page-node-id="FibJDpEvV92HnGaSCOSGOr"></div>
             </div>
-            <button class="detail-trailer-btn" id="detailTrailer" onclick="openTrailer()">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              <span id="detailTrailerText">播放预告片</span>
+            <button class="detail-trailer-btn" id="detailTrailer" onclick="openTrailer()" data-page-node-id="9eoT8aTDPjEkc3LH2sOUws">
+              <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="zFVRmwqhwi1hihE5pOm91t"><path d="M8 5v14l11-7z" data-page-node-id="NulEVM5GkoDb47jhVhXKt8"/></svg>
+              <span id="detailTrailerText" data-page-node-id="NUErymHBCYjjp7lH7FMmGf">播放预告片</span>
             </button>
-            <div class="detail-actions" id="detailActions">
-              <button class="detail-act" onclick="detailEdit()" title="编辑">
-                <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <div class="detail-actions" id="detailActions" data-page-node-id="urceGx297sEFmhAWrwwS9S">
+              <button class="detail-act" onclick="detailEdit()" title="编辑" data-page-node-id="IwWOeEA54AWUcwcfGmHNyH">
+                <svg viewBox="0 0 24 24" data-page-node-id="ZxDOh4r5c8k5J2wFyIotN5"><path d="M12 20h9" data-page-node-id="7FcwztD76JxeIZSVZV2xX4"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" data-page-node-id="C6Z2V3RU4ALFhzvPGDe3GM"/></svg>
               </button>
-              <button class="detail-act" onclick="detailDownloadMeta()" title="下载元数据">
-                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              <button class="detail-act" onclick="detailDownloadMeta()" title="下载元数据" data-page-node-id="o6cHvI5t5BsTEzL11XB1V9">
+                <svg viewBox="0 0 24 24" data-page-node-id="d0AHHdGRHhBI2zxPp3BNfv"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="ZgWi8RxPRIpxjFCLAjswdg"/><path d="M7 10l5 5 5-5" data-page-node-id="VvtSm8ZYeScpufUlbHq8eU"/><path d="M12 15V3" data-page-node-id="fyXuyGOioRxVykh7O7vfPn"/></svg>
               </button>
-              <button class="detail-act" id="dtActMagnet" onclick="openMagnetSheet()" title="磁力">
-                <svg viewBox="0 0 24 24"><path d="M6 21h3v-8q0-5 5-5t5 5v8h3V13q0-8-6-8T6 13Z"/></svg>
+              <button class="detail-act" id="dtActMagnet" onclick="openMagnetSheet()" title="磁力" data-page-node-id="znKp2zUR7Uur5BoxZQ9t2D">
+                <svg viewBox="0 0 24 24" data-page-node-id="KZ1nwxEYMtNCaWkMaW7xPC"><path d="M6 21h3v-8q0-5 5-5t5 5v8h3V13q0-8-6-8T6 13Z" data-page-node-id="xX7ZL6DoxOrIVat6BxrWH9"/></svg>
               </button>
-              <button class="detail-act" id="dtActSub" onclick="openSubtitleSheet()" style="display:none;" title="字幕">
-                <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M7 10h4M7 13.5h6M14 10h3"/></svg>
+              <button class="detail-act" id="dtActSub" onclick="openSubtitleSheet()" style="display:none;" title="字幕" data-page-node-id="UJlohF2cvBf4BAmC7E8CQV">
+                <svg viewBox="0 0 24 24" data-page-node-id="qFnlq4gtnADuofHylbxiBO"><rect x="3" y="5" width="18" height="13" rx="2" data-page-node-id="8xVeAp9Wkcmesuejs0KBg9"/><path d="M7 10h4M7 13.5h6M14 10h3" data-page-node-id="MFPHjdxYwqBYibKmuhHgsl"/></svg>
               </button>
-              <button class="detail-act danger" id="dtActDel" onclick="detailDelete()" title="删除">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
+              <button class="detail-act danger" id="dtActDel" onclick="detailDelete()" title="删除" data-page-node-id="v5oXE1H4XCHryatYhnV3Qi">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="JOyWf4onuqJgE3JD6zHquL"><path d="M3 6h18" data-page-node-id="KINvSxOVN9ZouSjZbBfkhv"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" data-page-node-id="V8Sl0dyInMasYlsokqlCBT"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" data-page-node-id="tS3ODeRBRpNYC82SApliCZ"/><path d="M10 11v6M14 11v6" data-page-node-id="Azo35dwUD2BkAaOyRQBFuf"/></svg>
               </button>
             </div>
           </div>
-          <div class="detail-plot" id="detailPlot"></div>
-          <div class="detail-cast" id="detailCast"></div>
-          <div class="detail-magnets" id="detailMagnets" style="display:none;"></div>
-          <div class="detail-shots" id="detailShots"></div>
+          <div class="detail-plot" id="detailPlot" data-page-node-id="A9ywCm7JT9IxMiDvCru2UY"></div>
+          <div class="detail-cast" id="detailCast" data-page-node-id="M6jQs2rTdMxQYKCFZUAziw"></div>
+          <div class="detail-magnets" id="detailMagnets" style="display:none;" data-page-node-id="MdqOL6K3hCVWxfht89wnO8"></div>
+          <div class="detail-shots" id="detailShots" data-page-node-id="uUF0oel5AEuNKBPA1198wM"></div>
         </div>
       </div>
     </section>
 
     <!-- ---------- 设置页 ---------- -->
-    <section class="page" id="page-settings">
-      <div class="topbar">
-        <div class="tb-title">设置</div>
-        <div class="spacer"></div>
+    <section class="page" id="page-settings" data-page-node-id="05DfPCwYL4QhTXQxfUanSX">
+      <div class="topbar" data-page-node-id="sP1SltQUQBkdk0um5xI5xy">
+        <div class="tb-title" data-page-node-id="lGoyLqzHG9gfhx7EByBubR">设置</div>
+        <div class="spacer" data-page-node-id="KSZHmVAwdZOnDoRm0oDTq6"></div>
       </div>
 
-      <div class="page-scroll">
-        <div class="settings-wrap">
+      <div class="page-scroll" data-page-node-id="vsGGod08MQlplIMWEXTwpM">
+        <div class="settings-wrap" data-page-node-id="CBNR8QWq7dFWNGxeyNnyn5">
 
-          <div class="settings-group hidden" id="themeHiddenSettingsGroup">
-            <div class="settings-group-head">内容</div>
-            <div class="srow">
-              <span class="sr-icon" style="background:linear-gradient(135deg,#000,#B8860B);font-size:9px;font-weight:800;">18+</span>
-              <span class="sr-body">
-                <span class="sr-label">里模式</span>
-                <span class="sr-desc">开启后显示成人内容、XV 分类与 JAV 数据源</span>
+          <div class="settings-group hidden" id="themeHiddenSettingsGroup" data-page-node-id="CL5cvc35QZSqNj2cuzBogf">
+            <div class="settings-group-head" data-page-node-id="nv2NCGDmFtUFtMBtzpRQMu">内容</div>
+            <div class="srow" data-page-node-id="8vWWgJSmCLLvoFUBAR7t3k">
+              <span class="sr-icon" style="background:linear-gradient(135deg,#000,#B8860B);font-size:9px;font-weight:800;" data-page-node-id="dPDXaGtoBl1OR2xsDKutHD">18+</span>
+              <span class="sr-body" data-page-node-id="9IJSslWSXjfIaCWFfKYPtd">
+                <span class="sr-label" data-page-node-id="XKO29Lsc5O3liwVdLbqr1H">里模式</span>
+                <span class="sr-desc" data-page-node-id="e1nHMBDwfLSHQzU2C7Pt6C">开启后显示成人内容、XV 分类与 JAV 数据源</span>
               </span>
-              <span class="sr-ctrl">
-                <label class="switch"><input type="checkbox" id="themeHiddenSwitch" onchange="toggleThemeHidden(this)"><span class="track"><span class="thumb"></span></span></label>
+              <span class="sr-ctrl" data-page-node-id="VJ9T0jiWZ7HveZvm0grZzR">
+                <label class="switch" data-page-node-id="OKx8NKtXojkK2NojFsfUKT"><input type="checkbox" id="themeHiddenSwitch" onchange="toggleThemeHidden(this)" data-page-node-id="jgjcuVjux5cox56IwBy0uA"><span class="track" data-page-node-id="klUJaUqEJClF0F2murUIfT"><span class="thumb" data-page-node-id="iOFo3D5bTfXUT4F4ISiIPt"></span></span></label>
               </span>
             </div>
-            <div class="srow" id="adultPhraseRow" style="display:none;">
-              <span class="sr-icon" style="background:#FF2D55;">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4h14a1 1 0 0 1 1 1v15l-2.4-2-2.2 2-2-2-2 2-2.2-2L6 18l-2 1.6V5a1 1 0 0 1 1-1z"/></svg>
+            <div class="srow" id="adultPhraseRow" style="display:none;" data-page-node-id="sQfsGNAFXdQQcjrRS71nHG">
+              <span class="sr-icon" style="background:#FF2D55;" data-page-node-id="zdzX0m3g1KiPEjKDC6Anaz">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="hRpUYUAt5M6JTiI5XNgNlM"><path d="M5 4h14a1 1 0 0 1 1 1v15l-2.4-2-2.2 2-2-2-2 2-2.2-2L6 18l-2 1.6V5a1 1 0 0 1 1-1z" data-page-node-id="HJBhvrDgLkblpnCAHr1ZjJ"/></svg>
               </span>
-              <span class="sr-body">
-                <span class="sr-label">加载配置</span>
-                <span class="sr-desc">自定义加载提示语，每行一条</span>
+              <span class="sr-body" data-page-node-id="wPhEWYSqi85j4GAqjuF1Sh">
+                <span class="sr-label" data-page-node-id="pb5i1b3Sx9m73MdPYBwKP4">加载配置</span>
+                <span class="sr-desc" data-page-node-id="wpRGIbxQ7ClYqEi0XKPS2v">自定义加载提示语，每行一条</span>
               </span>
-              <span class="sr-ctrl"><button class="btn btn-default btn-sm" onclick="openAdultPhraseSheet()">编辑</button></span>
+              <span class="sr-ctrl" data-page-node-id="Dm7TJpWCCEw8scguoEkwGW"><button class="btn btn-default btn-sm" onclick="openAdultPhraseSheet()" data-page-node-id="aan2fRbjbbHTaqBeHpcwGO">编辑</button></span>
             </div>
           </div>
 
-          <div class="settings-group">
-            <div class="settings-group-head">数据源</div>
-            <div class="srow" onclick="openApiKeySheet()" style="cursor:pointer;">
-              <span class="sr-icon" style="background:#FF9500;">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z"/></svg>
+          <div class="settings-group" data-page-node-id="oZVqNo1emnRdLH42DYyIoM">
+            <div class="settings-group-head" data-page-node-id="ZCYcJcnXCzjGStniM3ruLt">数据源</div>
+            <div class="srow" onclick="openApiKeySheet()" style="cursor:pointer;" data-page-node-id="YhCMAl311Gsho5tx5Fryx0">
+              <span class="sr-icon" style="background:#FF9500;" data-page-node-id="EEcmoDT0y3ClyHyVBtTKk5">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="KSD424bulyEI2HXMBCVEVm"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z" data-page-node-id="3dFzHRX9tSnOHFKVjX6wT6"/></svg>
               </span>
-              <span class="sr-body">
-                <span class="sr-label">API 配置</span>
-                <span class="sr-desc">TMDB Key、字幕 Token、代理 Worker 地址</span>
+              <span class="sr-body" data-page-node-id="WFyNk8DTBVsZXauUJzaZzj">
+                <span class="sr-label" data-page-node-id="DI2zGBVYlJCermGaSKnRb3">API 配置</span>
+                <span class="sr-desc" data-page-node-id="BFSmyVCZqx7P4p3ByFqRSm">TMDB Key、字幕 Token、代理 Worker 地址</span>
               </span>
-              <span class="sr-ctrl"><button class="btn btn-default btn-sm">配置</button></span>
+              <span class="sr-ctrl" data-page-node-id="41f31ptaKBmSWGcycrDY6X"><button class="btn btn-default btn-sm" data-page-node-id="gGm6BzUG1968xke9ATCdfd">配置</button></span>
             </div>
-            <div class="srow" onclick="openCountryManage()" style="cursor:pointer;">
-              <span class="sr-icon" style="background:#34C759;">
-                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z" fill="none" stroke="#fff" stroke-width="1.6"/></svg>
+            <div class="srow" onclick="openCountryManage()" style="cursor:pointer;" data-page-node-id="1vX7A34l4xaEMFbWyhw3Kl">
+              <span class="sr-icon" style="background:#34C759;" data-page-node-id="6L2Qy0s2AkMRnaWLR4DRV7">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="x9fR04KEZhFR9gJO5F0gKz"><circle cx="12" cy="12" r="9" data-page-node-id="daz7aD1ROGfaY3nGROB9Rb"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z" fill="none" stroke="#fff" stroke-width="1.6" data-page-node-id="fpCA1VpAqdsGEmOoacJLDo"/></svg>
               </span>
-              <span class="sr-body">
-                <span class="sr-label">国家/地区配置</span>
-                <span class="sr-desc">管理可选的国家与地区列表</span>
+              <span class="sr-body" data-page-node-id="IylAmqbuLBGDGK8hDN6rj7">
+                <span class="sr-label" data-page-node-id="3IW1GyeX2qxtF0FeXcshCr">国家/地区配置</span>
+                <span class="sr-desc" data-page-node-id="vAeAHhHc0A3EPju66USSlp">管理可选的国家与地区列表</span>
               </span>
-              <span class="sr-ctrl"><button class="btn btn-default btn-sm">管理</button></span>
+              <span class="sr-ctrl" data-page-node-id="nzGhtgOMqjI3jY4Xkv8YGj"><button class="btn btn-default btn-sm" data-page-node-id="qvLzTNEQHHQT1qyiA5HAKW">管理</button></span>
             </div>
-            <div class="srow" onclick="openGenreManage()" style="cursor:pointer;">
-              <span class="sr-icon" style="background:#5856D6;">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.4 12.5l-8.6 8.6a2 2 0 0 1-2.8 0L2 12.9V3h9.9l8.5 8.5a2 2 0 0 1 0 2.8zM7 8a1 1 0 1 0-1 1 1 1 0 0 0 1-1z"/></svg>
+            <div class="srow" onclick="openGenreManage()" style="cursor:pointer;" data-page-node-id="mk4sLaTySzeZ0olvWDfKpB">
+              <span class="sr-icon" style="background:#5856D6;" data-page-node-id="0MbwdbBpBIXNDBKTbdjG3E">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="CDxWiNHuRGjyUWrhlFRN2v"><path d="M21.4 12.5l-8.6 8.6a2 2 0 0 1-2.8 0L2 12.9V3h9.9l8.5 8.5a2 2 0 0 1 0 2.8zM7 8a1 1 0 1 0-1 1 1 1 0 0 0 1-1z" data-page-node-id="SQcV5hrpW2EMturm9ohhTG"/></svg>
               </span>
-              <span class="sr-body">
-                <span class="sr-label">类型配置</span>
-                <span class="sr-desc">管理普通与成人类型标签</span>
+              <span class="sr-body" data-page-node-id="0iFqoykp844hxOrQ8hAYMm">
+                <span class="sr-label" data-page-node-id="rn9hOTnGm7AVCzlf83DE2u">类型配置</span>
+                <span class="sr-desc" data-page-node-id="DJEHwubJXGWtWblPGDyQZc">管理普通与成人类型标签</span>
               </span>
-              <span class="sr-ctrl"><button class="btn btn-default btn-sm">管理</button></span>
-            </div>
-          </div>
-
-          <div class="settings-group">
-            <div class="settings-group-head">外观</div>
-            <div class="srow">
-              <span class="sr-icon" style="background:#8E8E93;">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 13.5 3.1C13 3 12.5 3 12 3z"/></svg>
-              </span>
-              <span class="sr-body"><span class="sr-label">外观</span></span>
-              <span class="sr-ctrl">
-                <select class="select select-sm" id="appearanceSelect" onchange="onAppearanceSelect(this)" style="width:96px;"></select>
-              </span>
-            </div>
-            <div class="srow">
-              <span class="sr-icon" style="background:var(--accent);">
-                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#000" opacity=".35"/></svg>
-              </span>
-              <span class="sr-body"><span class="sr-label">主题色</span></span>
-              <span class="sr-ctrl">
-                <div class="theme-swatches" id="themeGrid" style="padding:0;gap:6px;"></div>
-              </span>
-            </div>
-            <div class="srow">
-              <span class="sr-icon" style="background:#AF52DE;">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-              </span>
-              <span class="sr-body">
-                <span class="sr-label">自动清除缓存</span>
-                <span class="sr-desc">清理超过设定时间未更新的影片</span>
-              </span>
-              <span class="sr-ctrl">
-                <select class="select select-sm" id="autoClearSelect" onchange="onAutoClearSelect(this)" style="width:104px;"></select>
-              </span>
+              <span class="sr-ctrl" data-page-node-id="qg17gqWuZb2eCfhlwpGrgo"><button class="btn btn-default btn-sm" data-page-node-id="hOHU3n6OpnSKJ1RfbqLGGl">管理</button></span>
             </div>
           </div>
 
-          <div class="settings-group">
-            <div class="settings-group-head">关于</div>
-            <div class="srow" onclick="showRestoreConfirm()" style="cursor:pointer;">
-              <span class="sr-icon" style="background:#FF3B30;">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+          <div class="settings-group" data-page-node-id="KoBpyF2CL8vZbfy8NlPN5y">
+            <div class="settings-group-head" data-page-node-id="WW0Fi2xWpXgAEEC4FU4QIU">外观</div>
+            <div class="srow" data-page-node-id="Ft1F2fytq6F8nAUIWisSpn">
+              <span class="sr-icon" style="background:#8E8E93;" data-page-node-id="9D0Jn1fbuNBjw0XAp8bKJr">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="Pdfx3oBLI1gJvPeRbaBGVF"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 13.5 3.1C13 3 12.5 3 12 3z" data-page-node-id="qtw5WNeYufyKET0J0FlKtc"/></svg>
               </span>
-              <span class="sr-body">
-                <span class="sr-label">恢复初始状态</span>
-                <span class="sr-desc">清空所有配置与本地缓存，不可撤销</span>
+              <span class="sr-body" data-page-node-id="UlK9ekzTfvoRsVFF79oyCa"><span class="sr-label" data-page-node-id="1FQ6cC48UEJ4U70QDE9lBR">外观</span></span>
+              <span class="sr-ctrl" data-page-node-id="pmniFrlaX2Wf2K1VnkY60f">
+                <select class="select select-sm" id="appearanceSelect" onchange="onAppearanceSelect(this)" style="width:96px;" data-page-node-id="nf6THmzcE3W9ZmHMjTm5vF"></select>
               </span>
-              <span class="sr-ctrl"><button class="btn btn-danger-ghost btn-sm">恢复</button></span>
             </div>
-            <div class="srow" onclick="showAboutModal()" style="cursor:pointer;">
-              <span class="sr-icon" style="background:#00C7BE;">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3.75a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5zM11 9h2v8h-2z"/></svg>
+            <div class="srow" data-page-node-id="NdvKKNORrretNg6rPS8VkL">
+              <span class="sr-icon" style="background:var(--accent);" data-page-node-id="oQf8muU5s0u95rDcBqxEJ3">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="jqe5Rgi3aNYSsGkBpEA04a"><circle cx="12" cy="12" r="9" data-page-node-id="iAL2FyVTSvbwEa5yWFOVD6"/><circle cx="12" cy="12" r="4" fill="#000" opacity=".35" data-page-node-id="XglA8z4wMRaLYVP8yxNb6c"/></svg>
               </span>
-              <span class="sr-body">
-                <span class="sr-label">关于</span>
-                <span class="sr-desc">版本信息与数据来源声明</span>
+              <span class="sr-body" data-page-node-id="V46KWYue4lQQGEzGQUnX5y"><span class="sr-label" data-page-node-id="wXmCgqgh9VmD48Z18E368D">主题色</span></span>
+              <span class="sr-ctrl" data-page-node-id="P7s53zr6rlQs6dgP4UBq6d">
+                <div class="theme-swatches" id="themeGrid" style="padding:0;gap:6px;" data-page-node-id="fjBhJR6Rr6mrTT7hIqKBhD"></div>
               </span>
-              <span class="sr-ctrl"><button class="btn btn-default btn-sm">查看</button></span>
+            </div>
+            <div class="srow" data-page-node-id="xWazYMqNtCu5tpRZaUoGq4">
+              <span class="sr-icon" style="background:#AF52DE;" data-page-node-id="sfxU2BAw18n4kSbq49lWvB">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="xJLsE7mlkMFa1e7TluURn9"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" data-page-node-id="PDKLzhJMQDSd6CGieTgqpG"/></svg>
+              </span>
+              <span class="sr-body" data-page-node-id="OjUS2WC7FvQhXmbFC01qk7">
+                <span class="sr-label" data-page-node-id="UgzRDXS4XnYLSlF8CFTrZ4">自动清除缓存</span>
+                <span class="sr-desc" data-page-node-id="DU0l76IYsnICHILAl1AtFZ">清理超过设定时间未更新的影片</span>
+              </span>
+              <span class="sr-ctrl" data-page-node-id="jjYJ498QrMw2eYWAP2pUb0">
+                <select class="select select-sm" id="autoClearSelect" onchange="onAutoClearSelect(this)" style="width:104px;" data-page-node-id="oCRqedCJ3U41PaSOCkcHSm"></select>
+              </span>
             </div>
           </div>
 
-          <div style="padding:4px 2px 8px;font-size:11.5px;color:var(--text-3);line-height:1.7;">
-            This product uses the TMDB API but is not endorsed or certified by TMDB.<br>
+          <div class="settings-group" data-page-node-id="sepFYH78V7kaQdz6WsniMh">
+            <div class="settings-group-head" data-page-node-id="qxHFarRCHbbjDs0VEFHVPn">关于</div>
+            <div class="srow" onclick="showRestoreConfirm()" style="cursor:pointer;" data-page-node-id="3Wb2XTfvQHcmb6EZ9Q0azO">
+              <span class="sr-icon" style="background:#FF3B30;" data-page-node-id="7vi7CVYpJSfZJDEEASdtLU">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="vCuvtRJChtgCsmhsxeR9N6"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" data-page-node-id="COrXSXxCdlM77UoCCJ9fqp"/></svg>
+              </span>
+              <span class="sr-body" data-page-node-id="mcPIhis0qycLte7fQHCg0k">
+                <span class="sr-label" data-page-node-id="9eiYis8nug7nXeCtNOPnN9">恢复初始状态</span>
+                <span class="sr-desc" data-page-node-id="1D576e8795wnGzDGX99qmc">清空所有配置与本地缓存，不可撤销</span>
+              </span>
+              <span class="sr-ctrl" data-page-node-id="7P0cvKs4nGhrOD9msv9cHF"><button class="btn btn-danger-ghost btn-sm" data-page-node-id="3ySLi4Xe5g5FrW0jctngY4">恢复</button></span>
+            </div>
+            <div class="srow" onclick="showAboutModal()" style="cursor:pointer;" data-page-node-id="uXlm4USaDWbcxbbumHBJZF">
+              <span class="sr-icon" style="background:#00C7BE;" data-page-node-id="me1KoNpnPUNbHN7JxIS5qk">
+                <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="kEXWb5DIYC7jJcxUuNLB8K"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3.75a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5zM11 9h2v8h-2z" data-page-node-id="xyep2p0bnACPwAPCaRu7cE"/></svg>
+              </span>
+              <span class="sr-body" data-page-node-id="IALewWGioRlEXuw8M1FTxI">
+                <span class="sr-label" data-page-node-id="SOgCfsXRJF9XatnjNGIqZQ">关于</span>
+                <span class="sr-desc" data-page-node-id="BpQkOrTDywnTUmFYlnDPfe">版本信息与数据来源声明</span>
+              </span>
+              <span class="sr-ctrl" data-page-node-id="aP04qRmhEedd9qtxFkHU4w"><button class="btn btn-default btn-sm" data-page-node-id="wlgQFbzIB4E3T1SO8TJ44P">查看</button></span>
+            </div>
+          </div>
+
+          <div style="padding:4px 2px 8px;font-size:11.5px;color:var(--text-3);line-height:1.7;" data-page-node-id="M9JqVRVNGzXtrkoFnA0Bxz">
+            This product uses the TMDB API but is not endorsed or certified by TMDB.<br data-page-node-id="SPTWelE1U7QmrC0JB2pGlw">
             @Halfleave · v2.1.0 · 桌面版
           </div>
         </div>
@@ -318,86 +318,86 @@
 
   </main>
 
-  <section class="page" id="page-edit">
-    <div class="edit-modal-card">
-    <div class="modal-head edit-head">
-      <h3 id="editCrumb">新建影片</h3>
-      <span class="badge badge-warning hidden" id="editDirty"><span class="dirty-dot"></span>未保存</span>
-      <div class="spacer"></div>
-      <div class="edit-head-actions">
-        <button class="btn btn-default btn-sm" onclick="document.getElementById('nfoImport').click()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 8l5-5 5 5"/><path d="M12 3v12"/></svg>
+  <section class="page" id="page-edit" data-page-node-id="2kOb9benFkV3HFbnKA6VUr">
+    <div class="edit-modal-card" data-page-node-id="PdW9yDoUXRhnHiXwvNFm7h">
+    <div class="modal-head edit-head" data-page-node-id="6xPUwDmtu4DQEk6F1YiCrc">
+      <h3 id="editCrumb" data-page-node-id="ZjBQzKuwQVAXTX4pFjzuyN">新建影片</h3>
+      <span class="badge badge-warning hidden" id="editDirty" data-page-node-id="eIFMAetLhxRHYXPkYDWxtd"><span class="dirty-dot" data-page-node-id="M1OGQQfgIKBqknM1rbIwrL"></span>未保存</span>
+      <div class="spacer" data-page-node-id="bB8KwwGBaapTcMEYH7U2qQ"></div>
+      <div class="edit-head-actions" data-page-node-id="GdXEamS4TiwcbdxzZJkcyW">
+        <button class="btn btn-default btn-sm" onclick="document.getElementById('nfoImport').click()" data-page-node-id="ubAEwWkUlLJuNt5JifIJAz">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="2QxOVYNNIW1yVBVywqs6r9"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="1AvBOu26pgGBGIvfTTMupA"/><path d="M7 8l5-5 5 5" data-page-node-id="jGGbrnI8lOcfRJME9WlT12"/><path d="M12 3v12" data-page-node-id="hdhFdUQy0e4Y9DQ2V9Y4T5"/></svg>
           导入 NFO
         </button>
-        <button class="btn btn-ghost btn-sm" id="btnClear" onclick="newFilm()">清空</button>
-        <button class="btn btn-primary btn-sm" id="btnSave" onclick="saveToDisk()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        <button class="btn btn-ghost btn-sm" id="btnClear" onclick="newFilm()" data-page-node-id="5ohbqeJfUDAxyeQdFFLE06">清空</button>
+        <button class="btn btn-primary btn-sm" id="btnSave" onclick="saveToDisk()" data-page-node-id="mdk91RhWkNv3aYZPUlrGHa">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="C7FSmkA7HWsDOMwwtQCp6Y"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" data-page-node-id="5KQKuOpOwS212CyFKM3zYj"/><path d="M17 21v-8H7v8M7 3v5h8" data-page-node-id="FelAeFzT5IYD5jKgYAs2zu"/></svg>
           保存
         </button>
       </div>
-      <button class="modal-close" onclick="closeEditModal()" title="关闭" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      <button class="modal-close" onclick="closeEditModal()" title="关闭" aria-label="关闭" data-page-node-id="5vSU9dOmBwNLQ9WVKzNa4j">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" data-page-node-id="HujbSfEQUvkG8fha3b3FPW"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="BOP18dT7yluopCBP6ihpgf"/></svg>
       </button>
     </div>
 
-    <div class="modal-body edit-body">
-      <div class="edit-tabs">
-        <div class="seg" id="homeTabs">
-          <button data-tab="poster" onclick="switchHomeTab('poster')">海报</button>
-          <button class="active" data-tab="basic" onclick="switchHomeTab('basic')">基础信息</button>
-          <button data-tab="cast" onclick="switchHomeTab('cast')">演职人员</button>
-          <button data-tab="media" onclick="switchHomeTab('media')">媒体与预告</button>
+    <div class="modal-body edit-body" data-page-node-id="CENTMwPsmL1JHtjB2uFqey">
+      <div class="edit-tabs" data-page-node-id="5KIDY2WSvSIHKp17uorGQk">
+        <div class="seg" id="homeTabs" data-page-node-id="ZtdmMZEYlFpOixm0vMFXS3">
+          <button data-tab="poster" onclick="switchHomeTab('poster')" data-page-node-id="GxidBlCzLKZSSmYnIOXeUB">海报</button>
+          <button class="active" data-tab="basic" onclick="switchHomeTab('basic')" data-page-node-id="7XUTdypzJJaBBG21sUMIf2">基础信息</button>
+          <button data-tab="cast" onclick="switchHomeTab('cast')" data-page-node-id="PmRvLDkmgRkn2z4v7HJxPZ">演职人员</button>
+          <button data-tab="media" onclick="switchHomeTab('media')" data-page-node-id="O9WQiYUkKkjeXmsYJreOA2">媒体与预告</button>
         </div>
       </div>
 
-      <div class="editor-body" id="editScroll">
+      <div class="editor-body" id="editScroll" data-page-node-id="I7XrTazTU1sfpby3zmoCxs">
         <!-- 海报 -->
-        <div id="tab-poster" style="display:none;">
-          <div class="poster-grid">
-            <div class="field">
-              <span class="field-label">海报</span>
-              <div class="media-drop poster" id="posterUpload" onclick="onMediaColClick('poster')">
-                <div class="md-ph">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-                  <span>点击或拖入</span>
+        <div id="tab-poster" style="display:none;" data-page-node-id="f1ZD9Bdl5Lj71DZQ4LA3PI">
+          <div class="poster-grid" data-page-node-id="e2ugn4BpFoqbmvPbKCRsjF">
+            <div class="field" data-page-node-id="9XLwVf6FGUliRSv1tGjkNY">
+              <span class="field-label" data-page-node-id="u6q9NxKhFmjtvBCrRLl4XL">海报</span>
+              <div class="media-drop poster" id="posterUpload" onclick="onMediaColClick('poster')" data-page-node-id="zHYcht4k97toaD2Hl2q7ns">
+                <div class="md-ph" data-page-node-id="qwcF2vcuhHIxGNsqPBsUOV">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="3jPBYVcgmvsXjouB9Q1bEl"><rect x="3" y="3" width="18" height="18" rx="2" data-page-node-id="jWRBTEWQAPcXmWM5I3TukI"/><circle cx="8.5" cy="8.5" r="1.5" data-page-node-id="Dfd5wqyGpax8Gl1cwqXmKM"/><path d="m21 15-5-5L5 21" data-page-node-id="1azQ8Lx4wWaoIIc78RGj7f"/></svg>
+                  <span data-page-node-id="Qcqsi3j0yrcTmC06qEIOoK">点击或拖入</span>
                 </div>
-                <div class="media-tools" id="posterBar" style="display:none;">
-                  <button onclick="event.stopPropagation();openCrop('poster')" title="裁剪">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+                <div class="media-tools" id="posterBar" style="display:none;" data-page-node-id="3CGMHOKyhO3iOnAjwnmJcy">
+                  <button onclick="event.stopPropagation();openCrop('poster')" title="裁剪" data-page-node-id="afCLjBLgvBK3xMY1ljzZlD">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="cVM6DIDgGZk21l1tDWaWNo"><path d="M6 2v14a2 2 0 0 0 2 2h14" data-page-node-id="zc6QmyeJyAj6bvngyHgZiZ"/><path d="M18 22V8a2 2 0 0 0-2-2H2" data-page-node-id="az6tElAQXGLH0pFhC1ky4p"/></svg>
                   </button>
-                  <button class="del" onclick="event.stopPropagation();deleteMedia('poster')" title="删除">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div class="field">
-              <span class="field-label">剧照</span>
-              <div class="media-drop fanart" id="fanartUpload" onclick="onMediaColClick('fanart')">
-                <div class="md-ph">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="m2 15 5-4 4 3 3-2 6 5"/></svg>
-                  <span>点击或拖入</span>
-                </div>
-                <div class="media-tools" id="fanartBar" style="display:none;">
-                  <button onclick="event.stopPropagation();openCrop('fanart')" title="裁剪">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
-                  </button>
-                  <button class="del" onclick="event.stopPropagation();deleteMedia('fanart')" title="删除">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
+                  <button class="del" onclick="event.stopPropagation();deleteMedia('poster')" title="删除" data-page-node-id="5FaefOlnCiIFWUFCsAn7Rl">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="7hwcHhsaYwFGVdGruUaILa"><path d="M3 6h18" data-page-node-id="QVGeTPwaMqhl2vdLLa91oF"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" data-page-node-id="EN8KR2mXWY9tmtaCPgsL1L"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" data-page-node-id="ZXzJCFL3vDFPc77RpBOUmd"/><path d="M10 11v6M14 11v6" data-page-node-id="YFYQhceVsgvcbqOinlxl4g"/></svg>
                   </button>
                 </div>
               </div>
             </div>
-            <div class="field">
-              <span class="field-label">Logo</span>
-              <div class="media-drop logo" id="logoUpload" onclick="onMediaColClick('logo')">
-                <div class="md-ph">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/></svg>
-                  <span>点击或拖入</span>
+            <div class="field" data-page-node-id="XuM3nmRLCIxmpvSXbdbuyP">
+              <span class="field-label" data-page-node-id="GCECC0cXCSg1tgKCDqjjeN">剧照</span>
+              <div class="media-drop fanart" id="fanartUpload" onclick="onMediaColClick('fanart')" data-page-node-id="BxnIWL3Ch2H9scCIlCOnr6">
+                <div class="md-ph" data-page-node-id="n9jee3dUcyiJ6lU5C6YKF6">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="WzNqYIpafYE0EP8jjs4AFt"><rect x="2" y="5" width="20" height="14" rx="2" data-page-node-id="izZSgAo5GcWwAT83RylBNS"/><path d="m2 15 5-4 4 3 3-2 6 5" data-page-node-id="HOL8u4vC1NDZrf6ilq0jkM"/></svg>
+                  <span data-page-node-id="Yq30pL6IndASBl5eix4vfv">点击或拖入</span>
                 </div>
-                <div class="media-tools" id="logoBar" style="display:none;">
-                  <button class="del" onclick="event.stopPropagation();deleteMedia('logo')" title="删除">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
+                <div class="media-tools" id="fanartBar" style="display:none;" data-page-node-id="Q3IVYtCtPNz7p3JqReSG9p">
+                  <button onclick="event.stopPropagation();openCrop('fanart')" title="裁剪" data-page-node-id="JcfhIiD02HPLom54t4xaaZ">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Ydf0XcV3YqEJ21O2qgkwnb"><path d="M6 2v14a2 2 0 0 0 2 2h14" data-page-node-id="uGpY6iIHQf6gBbOnY1dZRf"/><path d="M18 22V8a2 2 0 0 0-2-2H2" data-page-node-id="12WLNyKRSdtCSl2ZhYwG0x"/></svg>
+                  </button>
+                  <button class="del" onclick="event.stopPropagation();deleteMedia('fanart')" title="删除" data-page-node-id="jOcitdRUVo8II4j4oIlTW8">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="oEogLZzOQ3xWoq319p6Fds"><path d="M3 6h18" data-page-node-id="TaL5fwWKXTV3Xgfyf3J1qG"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" data-page-node-id="VBRPyEXhFnZchvDf7DtzUd"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" data-page-node-id="u5bXPy2nDOK6ZhphHjc0LQ"/><path d="M10 11v6M14 11v6" data-page-node-id="TjI1T5lEDYsQoUggibpcCA"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="field" data-page-node-id="3JjVJB2TSfqbFcUzKIdlYz">
+              <span class="field-label" data-page-node-id="fs6ctO8bP523GcKvLiIWw0">Logo</span>
+              <div class="media-drop logo" id="logoUpload" onclick="onMediaColClick('logo')" data-page-node-id="20Tq1PasIhMEWzbPW7TpTO">
+                <div class="md-ph" data-page-node-id="faiRS94PTz0xqV3eRDHWwz">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="MbwBrEvBilzYGfdMVr3g0Z"><path d="M4 20V9l8-5 8 5v11" data-page-node-id="hC0jLc1WRHVQXaFuC7e2RC"/><path d="M9 20v-6h6v6" data-page-node-id="J5DdcY3JDwYHE0Ijo5yml4"/></svg>
+                  <span data-page-node-id="oEIdZQvA9XKD1HYe59hgkb">点击或拖入</span>
+                </div>
+                <div class="media-tools" id="logoBar" style="display:none;" data-page-node-id="HrFh4THsbKtAQ72CeZ1Ld3">
+                  <button class="del" onclick="event.stopPropagation();deleteMedia('logo')" title="删除" data-page-node-id="VvaZ2ocya03jgjw15Wqjcv">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="57eEykS4Cd9HkhfNkiI93A"><path d="M3 6h18" data-page-node-id="sB7S4GOffjDArZ6J902FPP"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" data-page-node-id="kEp1VZzWAvjNfeo05aZHk8"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" data-page-node-id="FYP2BGq7RKkhqL0IQS5CxZ"/><path d="M10 11v6M14 11v6" data-page-node-id="FiQ8rL4vAupSWqtvP0p9qN"/></svg>
                   </button>
                 </div>
               </div>
@@ -406,650 +406,704 @@
         </div>
 
         <!-- 基础 -->
-          <div id="tab-basic">
-            <div class="form-grid">
-              <div class="field span-2">
-                <label class="field-label" for="title"><span class="req">*</span>影片名</label>
-                <input class="input" type="text" id="title" placeholder="请输入影片名" oninput="onTitleChanged(this)">
+          <div id="tab-basic" data-page-node-id="KeAhMIjZll2k5VAcfdCDM2">
+            <div class="form-grid" data-page-node-id="XF0PV4hrThCwvOkoRgnb9Z">
+              <div class="field span-2" data-page-node-id="GDmp01waCCo3aOeOp0Tt7z">
+                <label class="field-label" for="title" data-page-node-id="CeFlGRX8K8xZR22STQseeM"><span class="req" data-page-node-id="ra4WS60jCRZWs5cpqS8j7L">*</span>影片名</label>
+                <input class="input" type="text" id="title" placeholder="请输入影片名" oninput="onTitleChanged(this)" data-page-node-id="saeOIFE1a0MZLrE1StHraC">
               </div>
-              <div class="field span-2">
-                <label class="field-label" for="filename">文件名</label>
-                <input class="input" type="text" id="filename" placeholder="自动填充" readonly style="background:var(--surface-sunken);">
+              <div class="field span-2" data-page-node-id="qSlzhMge6CEgEuVR5CtTqM">
+                <label class="field-label" for="filename" data-page-node-id="sEsRKEtikcki78fPO3qnXF">文件名</label>
+                <input class="input" type="text" id="filename" placeholder="自动填充" readonly style="background:var(--surface-sunken);" data-page-node-id="h4ooUB7WHn52mwK0NdSOTb">
               </div>
-              <div class="field">
-                <label class="field-label" for="originaltitle">原始标题</label>
-                <input class="input" type="text" id="originaltitle" placeholder="原名" oninput="updateState()">
+              <div class="field" data-page-node-id="xFwshsGYtg3fhEwELoTZwa">
+                <label class="field-label" for="originaltitle" data-page-node-id="Gl8BBpqEVxjcY80Jpu3YeU">原始标题</label>
+                <input class="input" type="text" id="originaltitle" placeholder="原名" oninput="updateState()" data-page-node-id="61ADcri47pX2R8O2hqXqUq">
               </div>
-              <div class="field">
-                <label class="field-label" for="premiered">首播日期</label>
-                <input class="input" type="date" id="premiered" onchange="onPremieredChange(this)">
+              <div class="field" data-page-node-id="IpuiOr2ibgxMVZSUIgtxiy">
+                <label class="field-label" for="premiered" data-page-node-id="IIk8nqoJwYybHhW0lI8atx">首播日期</label>
+                <input class="input" type="date" id="premiered" onchange="onPremieredChange(this)" data-page-node-id="cM7fFDCVBd3cPBAc7OGCfm">
               </div>
-              <div class="field">
-                <label class="field-label" for="year">年份</label>
-                <select class="select" id="year" onchange="onYearSelect(this)"></select>
+              <div class="field" data-page-node-id="Iu4eHbyuWealEPZmYbnKaR">
+                <label class="field-label" for="year" data-page-node-id="fTem5171ABzFJs0nvrSiUP">年份</label>
+                <select class="select" id="year" onchange="onYearSelect(this)" data-page-node-id="EHWQCBl8rUkSiJXAnfJ7GK"></select>
               </div>
-              <div class="field">
-                <label class="field-label" for="runtime">时长（分钟）</label>
-                <input class="input" type="number" id="runtime" placeholder="如 120" min="1" max="600" oninput="updateState()">
+              <div class="field" data-page-node-id="vuX9d38hgLewEEjSD42s11">
+                <label class="field-label" for="runtime" data-page-node-id="LYOEn4YNDYQ3RHm15inRb3">时长（分钟）</label>
+                <input class="input" type="number" id="runtime" placeholder="如 120" min="1" max="600" oninput="updateState()" data-page-node-id="DYnHf6mYL9lzoNSdIQr4QU">
               </div>
-              <div class="field">
-                <label class="field-label" for="rating">评分</label>
-                <input class="input" type="number" id="rating" placeholder="0 - 10" min="0" max="10" step="0.1" onblur="validateRating(this)" oninput="updateState()">
+              <div class="field" data-page-node-id="fvAbFjbNnagFpNQzvPjbZL">
+                <label class="field-label" for="rating" data-page-node-id="yLud2q9S8wdf8o884341cL">评分</label>
+                <input class="input" type="number" id="rating" placeholder="0 - 10" min="0" max="10" step="0.1" onblur="validateRating(this)" oninput="updateState()" data-page-node-id="uytyoFqtbEFXaeiMVhE4J8">
               </div>
-              <div class="field">
-                <label class="field-label" for="mpaa">分级</label>
-                <select class="select" id="mpaa" onchange="onMpaaSelect(this)"></select>
-              </div>
-            </div>
-
-            <div id="avFieldsCard" class="mt-16">
-              <div class="section-title">附加信息</div>
-              <div class="form-grid">
-                <div class="field" id="dvdidField">
-                  <label class="field-label" for="dvdid">番号</label>
-                  <input class="input" type="text" id="dvdid" placeholder="如 ABC-123" oninput="onDvdidInput(this)">
-                </div>
-                <div class="field">
-                  <label class="field-label" for="series">系列</label>
-                  <input class="input" type="text" id="series" placeholder="所属系列" oninput="updateState()">
-                </div>
-                <div class="field">
-                  <label class="field-label" for="studio">制作商</label>
-                  <input class="input" type="text" id="studio" placeholder="制作商" oninput="updateState()">
-                </div>
-                <div class="field">
-                  <label class="field-label" for="label">发行商</label>
-                  <input class="input" type="text" id="label" placeholder="发行商" oninput="updateState()">
-                </div>
+              <div class="field" data-page-node-id="KOmb916P5KVRvnuMjujLVx">
+                <label class="field-label" for="mpaa" data-page-node-id="1LC1Os6IUesTozhGJiMYVV">分级</label>
+                <select class="select" id="mpaa" onchange="onMpaaSelect(this)" data-page-node-id="E3I2FOlU285O55DqGIciXh"></select>
               </div>
             </div>
 
-            <div class="mt-16">
-              <div class="section-title">分类</div>
-              <div class="form-grid">
-                <div class="field span-2">
-                  <label class="field-label">国家/地区</label>
-                  <div class="tag-cloud" id="countryTags"></div>
-                  <button class="chip-add mt-8" id="countryRow" onclick="openCountrySheet()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:11px;height:11px;"><path d="M12 5v14M5 12h14"/></svg>
+            <div id="avFieldsCard" class="mt-16" data-page-node-id="4Sp4Fo1K8W2xtJm12ZqllV">
+              <div class="section-title" data-page-node-id="2pyteYoOPKpCmP2w7s3qCk">附加信息</div>
+              <div class="form-grid" data-page-node-id="j87CgQgEvN69mBTzrduf65">
+                <div class="field" id="dvdidField" data-page-node-id="RImMURjAnJcGWTdQgUNZ0D">
+                  <label class="field-label" for="dvdid" data-page-node-id="HsG9GPS5iB49vk8EZNEdhF">番号</label>
+                  <input class="input" type="text" id="dvdid" placeholder="如 ABC-123" oninput="onDvdidInput(this)" data-page-node-id="uYtNQ3EPghf9mjki2CIaSJ">
+                </div>
+                <div class="field" data-page-node-id="NVvXrRfhlx759C9DA2dyVe">
+                  <label class="field-label" for="series" data-page-node-id="EUSYZABQlVxA4FHvFEEJkS">系列</label>
+                  <input class="input" type="text" id="series" placeholder="所属系列" oninput="updateState()" data-page-node-id="O6Y74PYcawEmja0WGIFTKc">
+                </div>
+                <div class="field" data-page-node-id="cxqrGzlPV6rVhydWIFH5wD">
+                  <label class="field-label" for="studio" data-page-node-id="frgfrCEZNCNksoJnaLmSmR">制作商</label>
+                  <input class="input" type="text" id="studio" placeholder="制作商" oninput="updateState()" data-page-node-id="Q3vUjpENnW5sZafuzkpF6L">
+                </div>
+                <div class="field" data-page-node-id="bBrAJKpmgDRFvEThLpEAcf">
+                  <label class="field-label" for="label" data-page-node-id="axc7wS5NaWpKdq9eSfpD4c">发行商</label>
+                  <input class="input" type="text" id="label" placeholder="发行商" oninput="updateState()" data-page-node-id="xBuw57frUU9Cl92zR6df67">
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-16" data-page-node-id="qSKIuBz6Vyb83TalzCp7MC">
+              <div class="section-title" data-page-node-id="88DDRWOo42WWp2CsHpHzmh">分类</div>
+              <div class="form-grid" data-page-node-id="NZGoy0po7CsiBaJU7pIHd6">
+                <div class="field span-2" data-page-node-id="VUpyxeSYXBehBLJoGBSasv">
+                  <label class="field-label" data-page-node-id="0cjTYBEyDh943mddQIQOAe">国家/地区</label>
+                  <div class="tag-cloud" id="countryTags" data-page-node-id="YAdFgTcaW4hfUrpAvjss7d"></div>
+                  <button class="chip-add mt-8" id="countryRow" onclick="openCountrySheet()" data-page-node-id="J7ADdPuYSHKeikLp1JCtRD">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:11px;height:11px;" data-page-node-id="wORvJykdsrrjxGH27yJCNv"><path d="M12 5v14M5 12h14" data-page-node-id="cKKAxG13gP0d45ZklAQZdf"/></svg>
                     选择国家/地区
                   </button>
-                  <span class="hidden" id="countryVal"></span>
+                  <span class="hidden" id="countryVal" data-page-node-id="I69pjWQfqNCY1LbAEmSyuU"></span>
                 </div>
-                <div class="field span-2">
-                  <label class="field-label">类型</label>
-                  <div class="tag-cloud" id="genreTags"></div>
-                  <button class="chip-add mt-8" id="genreRow" onclick="openGenreSheet()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:11px;height:11px;"><path d="M12 5v14M5 12h14"/></svg>
+                <div class="field span-2" data-page-node-id="cYQvclFNre45KmP8idKLi6">
+                  <label class="field-label" data-page-node-id="yslcFeSn8HDcrmnz9SlSZM">类型</label>
+                  <div class="tag-cloud" id="genreTags" data-page-node-id="a85FAat5jD7p9bBlYXl1Dh"></div>
+                  <button class="chip-add mt-8" id="genreRow" onclick="openGenreSheet()" data-page-node-id="oHqAGsAzlPeMUc3bYeRRcI">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:11px;height:11px;" data-page-node-id="5sYFTG08oewZ2Z2ReffXVw"><path d="M12 5v14M5 12h14" data-page-node-id="rNshd6GUnq021pU1H2nfAC"/></svg>
                     选择类型
                   </button>
-                  <span class="hidden" id="genreVal"></span>
+                  <span class="hidden" id="genreVal" data-page-node-id="UR9BF4WNze8JziZeDGebow"></span>
                 </div>
               </div>
             </div>
 
             <!-- 取值镜像：供 core 层同步显示文案，PC 直接用原生控件，故隐藏 -->
-            <span class="hidden" id="premieredVal"></span>
-            <span class="hidden" id="yearVal"></span>
-            <span class="hidden" id="mpaaVal"></span>
+            <span class="hidden" id="premieredVal" data-page-node-id="fflFrmbWxx3uDs1mDatOo6"></span>
+            <span class="hidden" id="yearVal" data-page-node-id="1vQpnmpk6eqWCyQGBc8PQD"></span>
+            <span class="hidden" id="mpaaVal" data-page-node-id="5klfApW6X1WR5W4ysnDoZb"></span>
 
-            <div class="field mt-16">
-              <label class="field-label" for="plot">剧情简介</label>
+            <div class="field mt-16" data-page-node-id="m4BTCUb2s1GPRpYGXSGBwf">
+              <label class="field-label" for="plot" data-page-node-id="JhId9Uhs53ZhxYHtZWhNhI">剧情简介</label>
               <textarea class="textarea" id="plot" rows="5" placeholder="请输入剧情简介" oninput="updateState()"></textarea>
             </div>
           </div>
 
           <!-- 演职人员 -->
-          <div id="tab-cast" style="display:none;">
-            <div id="directorSection">
-              <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
-                <span>职员</span>
-                <button class="btn btn-ghost btn-sm" onclick="openPersonSheet('director')">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <div id="tab-cast" style="display:none;" data-page-node-id="p7WAj1Abpi8ySHDLGi3svo">
+            <div id="directorSection" data-page-node-id="RjUFzw3eoI3eRXgOdntSMU">
+              <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;" data-page-node-id="yuuh2U4EjyJCzvX6nnA0Iv">
+                <span data-page-node-id="1iOoCtKsyzXcHJ4NgI4v44">职员</span>
+                <button class="btn btn-ghost btn-sm" onclick="openPersonSheet('director')" data-page-node-id="R8neA0rRyvHCWx0U06s0Bn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="GvjyjpKaFP3O8zUVeRPSaX"><path d="M12 5v14M5 12h14" data-page-node-id="aSRvyZFpgVpB22okPUOSxb"/></svg>
                   添加
                 </button>
               </div>
-              <div class="people-grid" id="directorCard"></div>
+              <div class="people-grid" id="directorCard" data-page-node-id="V3H9S0bP7HMwpOIIOkbfAS"></div>
             </div>
-            <div class="mt-16" id="actorHeading">
-              <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
-                <span>演员</span>
-                <button class="btn btn-ghost btn-sm" onclick="openPersonSheet('actor')">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <div class="mt-16" id="actorHeading" data-page-node-id="AlEu2QHRTN55d0gQDdezEM">
+              <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;" data-page-node-id="xpkiB21s3DEyoWaDvGSuQs">
+                <span data-page-node-id="Vqd6VWY5nXpM3mZ8ZPE3Ki">演员</span>
+                <button class="btn btn-ghost btn-sm" onclick="openPersonSheet('actor')" data-page-node-id="arZU3caxLaXGF1GVrskoGC">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="W301HHXe7wcz4q5zo9pUwM"><path d="M12 5v14M5 12h14" data-page-node-id="ufqfjktVQBGY17aOjSMsVe"/></svg>
                   添加
                 </button>
               </div>
-              <div class="people-grid" id="actorCards"></div>
+              <div class="people-grid" id="actorCards" data-page-node-id="0xIkhS3vSZgpkgGzO6ioyj"></div>
             </div>
           </div>
 
           <!-- 媒体与预告 -->
-          <div id="tab-media" style="display:none;">
-            <div class="field">
-              <label class="field-label" for="trailer">预告片</label>
-              <input class="input" type="text" id="trailer" placeholder="YouTube 链接 / 视频 ID / 直链" oninput="onTrailerInput(this)">
-              <div class="field-hint" id="trailerHint"></div>
+          <div id="tab-media" style="display:none;" data-page-node-id="xDsoSrzTpLaBMWXdBC1hGL">
+            <div class="field" data-page-node-id="0cmukHDaDXPdSYs6u86ZZv">
+              <label class="field-label" for="trailer" data-page-node-id="CgZ2fCTxXSRXxWDEKl2q7P">预告片</label>
+              <input class="input" type="text" id="trailer" placeholder="YouTube 链接 / 视频 ID / 直链" oninput="onTrailerInput(this)" data-page-node-id="mal52FWHrR0iUKROJRs8Ws">
+              <div class="field-hint" id="trailerHint" data-page-node-id="vxRWh0OhHBdpEjsD8pPsGn"></div>
             </div>
-            <div class="srow mt-16" style="border:none;">
-              <div class="sr-body">
-                <div class="sr-label" style="font-size:12.5px;">包含字幕</div>
-                <div class="sr-desc">导出时写入字幕标记</div>
+            <div class="srow mt-16" style="border:none;" data-page-node-id="EBHeup4QkgjFZo5tl2INY4">
+              <div class="sr-body" data-page-node-id="Tg643vgpNtCoPt9iRDrjQK">
+                <div class="sr-label" style="font-size:12.5px;" data-page-node-id="E0WxON5v4FBI1h0JTSMlFh">包含字幕</div>
+                <div class="sr-desc" data-page-node-id="piD54a6mK5pYwWMPzpylkx">导出时写入字幕标记</div>
               </div>
-              <div class="sr-ctrl">
-                <label class="switch"><input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()"><span class="track"><span class="thumb"></span></span></label>
+              <div class="sr-ctrl" data-page-node-id="c26rF4XhmBRCeyC5OTogAg">
+                <label class="switch" data-page-node-id="mJrySDXlS7sOWEYJGVVg54"><input type="checkbox" id="hasSubtitle" onchange="toggleSubtitle()" data-page-node-id="fkHM4613QW4XwQibP4GMMs"><span class="track" data-page-node-id="K0KLB4X0DClCdpejvjbjS9"><span class="thumb" data-page-node-id="DI7ufY1HcX24BGFQHjPBPh"></span></span></label>
               </div>
             </div>
-            <div class="mt-16">
-              <div class="section-title">字幕资源</div>
-              <p class="t-small">在详情页点击「字幕」按钮，可按片名搜索并下载字幕。</p>
+            <div class="mt-16" data-page-node-id="Jgu9IViH3DgqDeMCpYUS9T">
+              <div class="section-title" data-page-node-id="0j30KpSPi9ni3Dg1tYcTIV">字幕资源</div>
+              <p class="t-small" data-page-node-id="ZQbYhwe5gdOA34ntVdwvkm">在详情页点击「字幕」按钮，可按片名搜索并下载字幕。</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="modal-foot edit-foot">
-        <span class="t-small" id="editFootHint"></span>
-        <div class="spacer"></div>
-        <button class="btn btn-default btn-sm" onclick="goLibrary()">取消</button>
-        <button class="btn btn-primary btn-sm" onclick="saveToDisk()">保存到本地库</button>
+      <div class="modal-foot edit-foot" data-page-node-id="sa3Vwhych0zkJFPscNysM1">
+        <span class="t-small" id="editFootHint" data-page-node-id="LiAcFgoXs5F3UDn7MF439B"></span>
+        <div class="spacer" data-page-node-id="tJecpRWCgngMahujgBt2Dd"></div>
+        <button class="btn btn-default btn-sm" onclick="goLibrary()" data-page-node-id="CaRfIAaIRY1m9CPfokCCCr">取消</button>
+        <button class="btn btn-primary btn-sm" onclick="saveToDisk()" data-page-node-id="3zarB97YmNRaVEvQ4PsQD2">保存到本地库</button>
       </div>
     </div>
   </section>
 
 
   <!-- 设置弹出菜单 -->
-  <div class="settings-menu" id="settingsMenu" role="menu" aria-label="设置">
-    <button class="sm-item" role="menuitem" onclick="openSettingsItem('add')">
-      <span class="sm-ic" style="background:var(--accent);">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  <div class="settings-menu" id="settingsMenu" role="menu" aria-label="设置" data-page-node-id="BTf6YcWyWw6QggT1QmkSXH">
+    <button class="sm-item" role="menuitem" onclick="openSettingsItem('add')" data-page-node-id="20C8vv3ORMMOFLEVhDJu8K">
+      <span class="sm-ic" style="background:var(--accent);" data-page-node-id="9V9RZqLF4nmnFBvtSa7Tqr">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="Gf35sTjXuqAQPfgE08SwPP"><path d="M12 5v14M5 12h14" data-page-node-id="WWjOuHfsdGAdHFbpnDsEK6"/></svg>
       </span>
-      <span class="sm-tx">添加影片</span>
+      <span class="sm-tx" data-page-node-id="9Yxu3TGnPCcFAoDBDvlOns">添加影片</span>
     </button>
-    <button class="sm-item" role="menuitem" onclick="openSettingsItem('api')">
-      <span class="sm-ic" style="background:#FF9500;">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z"/></svg>
+    <button class="sm-item" role="menuitem" onclick="openSettingsItem('api')" data-page-node-id="huupi1fptEZViV6G5g47ub">
+      <span class="sm-ic" style="background:#FF9500;" data-page-node-id="MEbpYvc0petZqwdfJdZfiZ">
+        <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="jSfZzgD5g22QAxmPImGXEv"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z" data-page-node-id="ew5sq10wA92Zu7Dwch7yMO"/></svg>
       </span>
-      <span class="sm-tx">API 配置</span>
+      <span class="sm-tx" data-page-node-id="clFFTDWV4TSbPA9kKvkxSc">API 配置</span>
     </button>
-    <button class="sm-item" role="menuitem" onclick="openSettingsItem('country')">
-      <span class="sm-ic" style="background:#34C759;">
-        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z" fill="none" stroke="#fff" stroke-width="1.6"/></svg>
+    <button class="sm-item" role="menuitem" onclick="openTranslateSheet()" data-page-node-id="pcTrItem">
+      <span class="sm-ic" style="background:#0A84FF;" data-page-node-id="pcTrIc">
+        <svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3a9 9 0 0 0-9 9 9 9 0 0 0 3.6 7.2L12 22l5.4-2.8A9 9 0 0 0 21 12a9 9 0 0 0-9-9Zm0 13.2a4.2 4.2 0 1 1 0-8.4 4.2 4.2 0 0 1 0 8.4Zm0-6.4a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg>
       </span>
-      <span class="sm-tx">国家 / 地区</span>
+      <span class="sm-tx" data-page-node-id="pcTrTx">翻译配置</span>
     </button>
-    <button class="sm-item" role="menuitem" onclick="openSettingsItem('genre')">
-      <span class="sm-ic" style="background:#5856D6;">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.4 12.5l-8.6 8.6a2 2 0 0 1-2.8 0L2 12.9V3h9.9l8.5 8.5a2 2 0 0 1 0 2.8zM7 8a1 1 0 1 0-1 1 1 1 0 0 0 1-1z"/></svg>
+    <button class="sm-item" role="menuitem" onclick="openSettingsItem('country')" data-page-node-id="VEaL7eOTBr8hkIBcCKDqLL">
+      <span class="sm-ic" style="background:#34C759;" data-page-node-id="yUQCRQUIJu1pk3A7Rg0V3I">
+        <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="GIJB12fQZ3ZltvisgFQSEW"><circle cx="12" cy="12" r="9" data-page-node-id="1MuNEwFaoEiuK6QMcBEMpy"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z" fill="none" stroke="#fff" stroke-width="1.6" data-page-node-id="2nKOI8QLRH3FFVrQrfpVj3"/></svg>
       </span>
-      <span class="sm-tx">类型</span>
+      <span class="sm-tx" data-page-node-id="SRnikuJGHEH93d2V9h0vud">国家 / 地区</span>
     </button>
-    <button class="sm-item" role="menuitem" onclick="openSettingsItem('theme')">
-      <span class="sm-ic" style="background:var(--accent);">
-        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#000" opacity=".35"/></svg>
+    <button class="sm-item" role="menuitem" onclick="openSettingsItem('genre')" data-page-node-id="4VW061rgXHusOx2MZo49vY">
+      <span class="sm-ic" style="background:#5856D6;" data-page-node-id="MOtNAkgvY9IbBCVWKnQqfS">
+        <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="rUvJTYFWvTIqRzEcSNfAfG"><path d="M21.4 12.5l-8.6 8.6a2 2 0 0 1-2.8 0L2 12.9V3h9.9l8.5 8.5a2 2 0 0 1 0 2.8zM7 8a1 1 0 1 0-1 1 1 1 0 0 0 1-1z" data-page-node-id="PhaSQIoW3H1LKwBkwj4quO"/></svg>
       </span>
-      <span class="sm-tx">主题色</span>
+      <span class="sm-tx" data-page-node-id="9LQOaJepUQB6iDGa3K5jNz">类型</span>
     </button>
-    <div class="sm-item appearance-row" role="menuitem">
-      <span class="sm-ic" style="background:#8E8E93;">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 13.5 3.1C13 3 12.5 3 12 3z"/></svg>
+    <button class="sm-item" role="menuitem" onclick="openSettingsItem('theme')" data-page-node-id="D2tfynzsPxIoaRGJBCR271">
+      <span class="sm-ic" style="background:var(--accent);" data-page-node-id="Spj24VBm940uYjRWG6wOAq">
+        <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="iOPYkFk9ptOjoJTsbmnglC"><circle cx="12" cy="12" r="9" data-page-node-id="Q6zFPYkLoThUfrE9Ziw7ml"/><circle cx="12" cy="12" r="4" fill="#000" opacity=".35" data-page-node-id="GVZ1gkCZAK9xivImvHFqxm"/></svg>
       </span>
-      <span class="sm-tx">外观</span>
-      <span class="sm-ctrl">
-        <span class="seg appearance-seg" role="group" aria-label="外观模式" id="appearanceSeg">
-          <button type="button" class="active" data-mode="auto" onclick="onAppearanceSegClick('auto')" title="自动">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v2"/><path d="M12 19v2"/><path d="M4.22 4.22l1.42 1.42"/><path d="M18.36 18.36l1.42 1.42"/><path d="M12 7a5 5 0 0 0 0 10"/><path d="M17 12a5 5 0 0 1-5 5"/></svg>
+      <span class="sm-tx" data-page-node-id="hGC9BUG91g8GifXaL5vfsS">主题色</span>
+    </button>
+    <div class="sm-item appearance-row" role="menuitem" data-page-node-id="oFcRhjwuMGIoqLcjKnqiJ4">
+      <span class="sm-ic" style="background:#8E8E93;" data-page-node-id="w9lLrwiLitTBYVeLYfsSOp">
+        <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="UVs3JiUF8jr8yEC8YBN9Uj"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 13.5 3.1C13 3 12.5 3 12 3z" data-page-node-id="eS0lXTr8X38WBXZg8qVTCa"/></svg>
+      </span>
+      <span class="sm-tx" data-page-node-id="xZ9ftmjJpUCQtyWapoz4rc">外观</span>
+      <span class="sm-ctrl" data-page-node-id="hFCn2EZGm4TQQHFqF1hsQA">
+        <span class="seg appearance-seg" role="group" aria-label="外观模式" id="appearanceSeg" data-page-node-id="1j5uTzsG4FsQnOdu10mVwj">
+          <button type="button" class="active" data-mode="auto" onclick="onAppearanceSegClick('auto')" title="自动" data-page-node-id="IqSG1A5bkjZ1m1304q5keV">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="z5fnNAK4O6BXq48wgy7arI"><circle cx="12" cy="12" r="9" data-page-node-id="FdQQxratARmXtpFx7B5gqA"/><path d="M12 3v2" data-page-node-id="nsuDswt5aOt2HyD0Sk4amt"/><path d="M12 19v2" data-page-node-id="7NDy88W3D7EpHIA30cV5eB"/><path d="M4.22 4.22l1.42 1.42" data-page-node-id="j14LshiQymN4ynnfRKZ8Fw"/><path d="M18.36 18.36l1.42 1.42" data-page-node-id="PB5RuSnQHCz3te7Xk0UhCF"/><path d="M12 7a5 5 0 0 0 0 10" data-page-node-id="hvjDp34jNDw59cq3qDlIR2"/><path d="M17 12a5 5 0 0 1-5 5" data-page-node-id="FE6ERVN0HWRWE1CnmOdAEA"/></svg>
           </button>
-          <button type="button" data-mode="light" onclick="onAppearanceSegClick('light')" title="浅色">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <button type="button" data-mode="light" onclick="onAppearanceSegClick('light')" title="浅色" data-page-node-id="hHoptUhutmg4AfDz9DkwsR">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="R2utEddOU8Y67F2xdF6ena"><circle cx="12" cy="12" r="5" data-page-node-id="P0PqZc4FBaYZcWMoSTHstf"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" data-page-node-id="FtHbP2wTL2LzEd3vTlJESK"/></svg>
           </button>
-          <button type="button" data-mode="dark" onclick="onAppearanceSegClick('dark')" title="深色">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <button type="button" data-mode="dark" onclick="onAppearanceSegClick('dark')" title="深色" data-page-node-id="s44KbdwSkbhjUJEonzU8On">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="CEAe69firNsiioXnM9OK14"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" data-page-node-id="vpZni46CBxMPibvrG0Dy6x"/></svg>
           </button>
         </span>
       </span>
     </div>
-    <button class="sm-item" role="menuitem" onclick="openSettingsItem('cache')">
-      <span class="sm-ic" style="background:#AF52DE;">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+    <button class="sm-item" role="menuitem" onclick="openSettingsItem('cache')" data-page-node-id="7MSP6zLgtRVeCl4PESOblE">
+      <span class="sm-ic" style="background:#AF52DE;" data-page-node-id="s0gYHEhFHKC1C0ZLKFvUPO">
+        <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="CsGEd4qY0FGFRhNVJRpE3c"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" data-page-node-id="qpN0LpcIJEvdtR7DUOYNc3"/></svg>
       </span>
-      <span class="sm-tx">缓存配置</span>
+      <span class="sm-tx" data-page-node-id="3f6Zus3sWa9JlWEfsYk8Sh">缓存配置</span>
     </button>
   </div>
 </div>
 
 <!-- 主题色 / 外观 / 自动清除 迷你抽屉 -->
-<div class="modal settings-mini" id="settingsMini">
-  <div class="modal-head">
-    <h3 id="settingsMiniTitle">外观</h3>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal settings-mini" id="settingsMini" data-page-node-id="GsvhEv4QEx4JFKaDUC2w9q">
+  <div class="modal-head" data-page-node-id="8qDHSoI5Fv0GXySnWRZNl3">
+    <h3 id="settingsMiniTitle" data-page-node-id="A17dl5FRnoTT1duZZBueP4">外观</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="3XyGbtCCOGu5YiyCfqnehB">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="wPGU702glxmQpBRtCNXild"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="loy0XsukjF3VI2130nLL1V"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <div class="sm-section" id="smSecTheme">
-      <div class="theme-swatches" id="drawerThemeGrid"></div>
+  <div class="modal-body" data-page-node-id="sAILIHW8U2vM0Aj8oauIGE">
+    <div class="sm-section" id="smSecTheme" data-page-node-id="m6IpMmyH8ApKXczzrBAP0a">
+      <div class="theme-swatches" id="drawerThemeGrid" data-page-node-id="eneKXlaefZmdXNgLWDPEyc"></div>
     </div>
-    <div class="sm-section" id="smSecAppearance">
-      <div class="section-title">外观</div>
-      <select class="select" id="drawerAppearanceSelect" style="width:100%;" onchange="onAppearanceSelect(this)"></select>
+    <div class="sm-section" id="smSecAppearance" data-page-node-id="N26Nya1xZ4O7wjMhwWE4dM">
+      <div class="section-title" data-page-node-id="bBMFlnVku6UW5fBIib6pfn">外观</div>
+      <select class="select" id="drawerAppearanceSelect" style="width:100%;" onchange="onAppearanceSelect(this)" data-page-node-id="CHCUQYwpbbk4crvkj9DISu"></select>
     </div>
-    <div class="sm-section" id="smSecAutoClear">
-      <div class="section-title">自动清除缓存</div>
-      <select class="select" id="drawerAutoClearSelect" style="width:100%;" onchange="onAutoClearSelect(this)"></select>
-      <div class="field-hint mt-8">清理超过设定时间未更新的影片</div>
+    <div class="sm-section" id="smSecAutoClear" data-page-node-id="HwXvFPvB66WE4dSo9HpNcf">
+      <div class="section-title" data-page-node-id="3TvsyFR2Qmgei5H29Z8xqh">自动清除缓存</div>
+      <select class="select" id="drawerAutoClearSelect" style="width:100%;" onchange="onAutoClearSelect(this)" data-page-node-id="R4vDtPuL0wHRVk4vLM1qvQ"></select>
+      <div class="field-hint mt-8" data-page-node-id="sQQ3mSM5cKqzgtrqq5BIG2">清理超过设定时间未更新的影片</div>
     </div>
   </div>
-  <div class="modal-foot">
-    <div class="spacer"></div>
-    <button class="btn btn-primary" onclick="closeAllSheets()">完成</button>
+  <div class="modal-foot" data-page-node-id="uJtlfco5eR6vFI14bnsVVk">
+    <div class="spacer" data-page-node-id="xJwxRtX5cWSd2oJIN09rX5"></div>
+    <button class="btn btn-primary" onclick="closeAllSheets()" data-page-node-id="F3y90koKhsRhB9NeoWaOkk">完成</button>
   </div>
 </div>
 
 <!-- ==================== 缓存配置抽屉 ==================== -->
-<div class="modal" id="cacheConfigSheet">
-  <div class="modal-head">
-    <h3>缓存配置</h3>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal" id="cacheConfigSheet" data-page-node-id="NB6oa4xilujrEdtpWsicHY">
+  <div class="modal-head" data-page-node-id="9VR2n5oRjcQu1zpnY1JSfc">
+    <h3 data-page-node-id="ni2snB7SiEIRKGEtCBdjpK">缓存配置</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="o1yNL7DLDgR2NpB135vQbd">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="65c9nkdpNHxWBEJg6eb6hb"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="eOtFmscsCOIBqc0ltT6B0W"/></svg>
     </button>
   </div>
-  <div class="modal-body cache-body">
-    <div class="cache-section">
-      <div class="cache-days-row">
-        <span>每</span>
-        <input class="input input-sm" type="number" id="cacheDaysInput" min="0" max="365" value="3">
-        <span>天自动删除</span>
+  <div class="modal-body cache-body" data-page-node-id="Fwj8OrTftfD58wBr0xPmLv">
+    <div class="cache-section" data-page-node-id="4ozmyPUTInipe8CRFyFydt">
+      <div class="cache-days-row" data-page-node-id="LxsZklcxlBdTxvdvkE67KO">
+        <span data-page-node-id="tm0XGbje3bf2gFleqf9eRC">每</span>
+        <input class="input input-sm" type="number" id="cacheDaysInput" min="0" max="365" value="3" data-page-node-id="QiVvhQpL0wKKCiFfcwdYRG">
+        <span data-page-node-id="GwVkLdf2mHYcCf9hmLClt9">天自动删除</span>
       </div>
     </div>
   </div>
-  <div class="modal-foot cache-foot">
-    <div class="cache-foot-left">
-      <button class="btn btn-default" onclick="clearAllFilms()">清除影片</button>
-      <button class="btn btn-default" onclick="showRestoreConfirm()">重置</button>
+  <div class="modal-foot cache-foot" data-page-node-id="vonJlyPUxB4h77ZAVdT4GE">
+    <div class="cache-foot-left" data-page-node-id="THAFASREm3HWHYa4u7EDLT">
+      <button class="btn btn-default" onclick="clearAllFilms()" data-page-node-id="N2hdMAvfpnX7u4lSBJ4QK9">清除影片</button>
+      <button class="btn btn-default" onclick="showRestoreConfirm()" data-page-node-id="lc7Ish3rJJXrdAJDJHmW1k">重置</button>
     </div>
-    <div class="spacer"></div>
-    <button class="btn btn-primary" onclick="saveCacheDays()">保存</button>
+    <div class="spacer" data-page-node-id="Yfs2ZIiCxMOkvbNv7ybyCs"></div>
+    <button class="btn btn-primary" onclick="saveCacheDays()" data-page-node-id="c1K3jzmpF5vjhSLIpUsGt9">保存</button>
   </div>
 </div>
 
 <!-- ==================== 共享遮罩 ==================== -->
-<div class="mask" id="sheetMask" onclick="closeAllSheets()"></div>
-<div class="mask edit-backdrop" id="editModalBackdrop" onclick="closeEditModal()"></div>
+<div class="mask" id="sheetMask" onclick="closeAllSheets()" data-page-node-id="sSsEmMlKwZW9vRSKEWIvWi"></div>
+<div class="mask edit-backdrop" id="editModalBackdrop" onclick="closeEditModal()" data-page-node-id="D2wL7IiEpfltxnsf86ujho"></div>
 
 <!-- ==================== 列表 / 多选 / 管理 ==================== -->
-<div class="modal" id="listSheet">
-  <div class="modal-head">
-    <h3 id="listTitle">选择</h3>
-    <span id="listLeftSlot"></span>
-    <span id="listRightSlot"></span>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal" id="listSheet" data-page-node-id="5JXfp3ucFlrN50o1DR3a52">
+  <div class="modal-head" data-page-node-id="RBxvd1Hfe12suZvlibYBmY">
+    <h3 id="listTitle" data-page-node-id="SB6hOoPEQVmZoBBTpUkbwm">选择</h3>
+    <span id="listLeftSlot" data-page-node-id="sKgyBfIfjjJQJG423XREei"></span>
+    <span id="listRightSlot" data-page-node-id="zeOhoEBxkwgEx7jWZl7V0F"></span>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="RFWpvHtSH4tzVMyyVAsP0t">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="Buo0yaVYyhsSH9h0pDaxZI"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="FBiINT4JJfUmb9AhDqBeod"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <div class="seg mb-20" id="listGenreSeg" style="display:none;">
-      <button type="button" id="genreSegNormal" class="active" onclick="switchGenreTab('normal')">普通</button>
-      <button type="button" id="genreSegAdult" onclick="switchGenreTab('adult')">成人</button>
+  <div class="modal-body" data-page-node-id="TdDKMHbhNZfXXioZxBIGua">
+    <div class="seg mb-20" id="listGenreSeg" style="display:none;" data-page-node-id="GXjXrxE6wDdxXrsFc9j7w3">
+      <button type="button" id="genreSegNormal" class="active" onclick="switchGenreTab('normal')" data-page-node-id="2XqWNpSLZqAB2e1nQxswaD">普通</button>
+      <button type="button" id="genreSegAdult" onclick="switchGenreTab('adult')" data-page-node-id="Jty7wIrahe8Hwulgk4ZLPc">成人</button>
     </div>
-    <div id="listAddWrap" style="display:none;gap:8px;margin-bottom:12px;">
-      <input class="input" type="text" id="listAddInput" placeholder="请输入" onkeydown="if(event.key==='Enter'){listSheetAdd();}">
-      <button class="btn btn-primary" onclick="listSheetAdd()">添加</button>
+    <div id="listAddWrap" style="display:none;gap:8px;margin-bottom:12px;" data-page-node-id="hEIoxwBumgT33M24HA1t7k">
+      <input class="input" type="text" id="listAddInput" placeholder="请输入" onkeydown="if(event.key==='Enter'){listSheetAdd();}" data-page-node-id="EcRKFb8oOTBH4cOB5oJGWO">
+      <button class="btn btn-primary" onclick="listSheetAdd()" data-page-node-id="SIEOoS8xlOqR06ypBpAL8d">添加</button>
     </div>
-    <div id="listBody"></div>
+    <div id="listBody" data-page-node-id="Xbh3rZMQaCIhFd6s54GbqA"></div>
   </div>
-  <div class="modal-foot">
-    <span class="t-small" id="listFooter" style="display:none;"></span>
-    <button class="btn btn-ghost" id="listRestoreBtn" onclick="resetPresetList()" style="display:none;">恢复默认</button>
-    <div class="spacer"></div>
-    <button class="btn btn-default" onclick="closeAllSheets()">关闭</button>
-    <button class="btn btn-primary" id="listSheetOk" onclick="listSheetConfirm()">确定</button>
+  <div class="modal-foot" data-page-node-id="I4altLbQ0LGLKtn7bL8tqs">
+    <span class="t-small" id="listFooter" style="display:none;" data-page-node-id="wr6wvPxGNH4a9uYet6U4jq"></span>
+    <button class="btn btn-ghost" id="listRestoreBtn" onclick="resetPresetList()" style="display:none;" data-page-node-id="4RoGXtbNlX9LuvJ4JgWLcA">恢复默认</button>
+    <div class="spacer" data-page-node-id="uGgj2Py4Ewzc4sRSzUlN9m"></div>
+    <button class="btn btn-default" onclick="closeAllSheets()" data-page-node-id="Cv77TEvfu4JG0gf88MArMl">关闭</button>
+    <button class="btn btn-primary" id="listSheetOk" onclick="listSheetConfirm()" data-page-node-id="oO6hBW5iAEhu32GyIJ6FR3">确定</button>
   </div>
 </div>
 
 <!-- ==================== API 配置 ==================== -->
-<div class="modal" id="apiSheet">
+<div class="modal" id="apiSheet" data-page-node-id="DLZhtnwVVx0ACgMoAN9Erp">
+  <div class="modal-head" data-page-node-id="7q69C7B54RegUO7sr5H3ln">
+    <h3 data-page-node-id="iUTAll8ENkuLIVsZ6hYFZ4">API 配置</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="jaZG2bsTd923X8njIU7b3r">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="M7fuC1Fp4qOl7uWYyqLJIn"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="QivC4iRYGzsNsXOHj8OL63"/></svg>
+    </button>
+  </div>
+  <div class="modal-body" data-page-node-id="sSss5fdUig8wG1bjnEYcDA">
+    <div class="section-title" data-page-node-id="sE7I6vHBUjVUl0Xyq9Iq1h">元数据</div>
+    <div class="field mb-12" data-page-node-id="Ipw1lhD32RevH90ghPJfB2">
+      <div class="input-wrap has-title" data-page-node-id="h9AuLjPyC6tADi7jWYbDAU">
+        <span class="input-title" data-page-node-id="i6r8lTbUnnS0nOc1XV4y7F">TMDB</span>
+        <input class="input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" style="padding-left: 58px;" oninput="toggleApiClear()" data-page-node-id="Ro4W5LR1BJxmklnPaQuopY">
+        <button class="input-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" data-page-node-id="TJHKU8culWiAvEywEVRwVn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" data-page-node-id="FAaJFo5ILhTZoApGuxegbV"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="IBRAFrfOWLt32wdkuPDBVd"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="section-title" data-page-node-id="EgaSEaU4Pwp0HpMGmWtRdZ">激活码</div>
+    <div class="field mb-12" data-page-node-id="HRC8SsvrHsDNh15S7xwl51">
+      <div class="input-wrap has-title" data-page-node-id="gxwHbh1p2ib3TbPukuP9TG">
+        <span class="input-title" data-page-node-id="DxdfUr4PKMgjM6UH00KpYq">激活码</span>
+        <input class="input" type="text" id="activationCodeInput" placeholder="输入激活码" style="padding-left: 58px;" oninput="toggleActivationClear()" data-page-node-id="FvRcqsgcwVfYhTftFoiGaG">
+        <button class="input-clear" id="activationClearBtn" onclick="clearActivationInput()" aria-label="清除" data-page-node-id="lf2HdBdBxYJqDCZOu9u8JW">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" data-page-node-id="quUI9XsEae4PQnrJ2RE28m"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="8FHDDX03sUAaFrHlvN93vK"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="activation-row" data-page-node-id="vmeX8KWFWawW9veFEAADMM">
+      <span id="activationStatus" class="activation-status" data-page-node-id="d47rfGsJGyEIwDYKDrHR9L">未激活</span>
+      <button class="btn btn-default btn-sm" onclick="verifyActivationCode()" data-page-node-id="yzYhyBdF2Na2RHEVyBjWUs">验证</button>
+    </div>
+  </div>
+  <div class="modal-foot" data-page-node-id="Xfgdz5Uidh4GKjP6QsNcvW">
+    <button class="btn btn-ghost" onclick="openApiHelp()" data-page-node-id="PUrNhERsElZsIXPgcK07fd">说明</button>
+    <div class="spacer" data-page-node-id="inYYPwwCbICDBe8OlSDJBh"></div>
+    <button class="btn btn-default" onclick="closeAllSheets()" data-page-node-id="YY7goPqqVdYA8L0jF1woOA">取消</button>
+    <button class="btn btn-primary" onclick="saveApiKey()" data-page-node-id="do2U72GEl9BPlI7A9TTS3q">保存</button>
+  </div>
+</div>
+
+<!-- ==================== 翻译配置 ==================== -->
+<div class="modal" id="translateSheet">
   <div class="modal-head">
-    <h3>API 配置</h3>
+    <h3>翻译配置</h3>
     <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
   </div>
   <div class="modal-body">
-    <div class="section-title">元数据</div>
+    <div class="section-title">接口地址</div>
     <div class="field mb-12">
       <div class="input-wrap has-title">
-        <span class="input-title">TMDB</span>
-        <input class="input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" style="padding-left: 58px;" oninput="toggleApiClear()">
-        <button class="input-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除">
+        <span class="input-title">接口</span>
+        <input class="input" type="text" id="translateBaseUrl" placeholder="https://api.deepseek.com/v1" style="padding-left:58px;" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+        <button class="input-clear" id="translateBaseClear" onclick="clearTranslateBase()" aria-label="清除">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
       </div>
     </div>
-
-    <div class="section-title">激活码</div>
+    <div class="section-title">API Key</div>
     <div class="field mb-12">
       <div class="input-wrap has-title">
-        <span class="input-title">激活码</span>
-        <input class="input" type="text" id="activationCodeInput" placeholder="输入激活码" style="padding-left: 58px;" oninput="toggleActivationClear()">
-        <button class="input-clear" id="activationClearBtn" onclick="clearActivationInput()" aria-label="清除">
+        <span class="input-title">Key</span>
+        <input class="input" type="password" id="translateApiKey" placeholder="粘贴 API Key" style="padding-left:58px;" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+        <button class="input-clear" id="translateKeyClear" onclick="clearTranslateKey()" aria-label="清除">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
       </div>
     </div>
-    <div class="activation-row">
-      <span id="activationStatus" class="activation-status">未激活</span>
-      <button class="btn btn-default btn-sm" onclick="verifyActivationCode()">验证</button>
+    <div class="section-title">模型名称</div>
+    <div class="field mb-12">
+      <div class="input-wrap has-title">
+        <span class="input-title">模型</span>
+        <input class="input" type="text" id="translateModel" placeholder="deepseek-chat" style="padding-left:58px;" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+        <button class="input-clear" id="translateModelClear" onclick="clearTranslateModel()" aria-label="清除">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
     </div>
+    <p class="field-hint">保存影片时，标题与简介若非中文将自动翻译为简体中文；翻译中会在首页剧照右上角显示加载图标，完成后自动覆盖更新。</p>
   </div>
   <div class="modal-foot">
-    <button class="btn btn-ghost" onclick="openApiHelp()">说明</button>
     <div class="spacer"></div>
-    <button class="btn btn-default" onclick="closeAllSheets()">取消</button>
-    <button class="btn btn-primary" onclick="saveApiKey()">保存</button>
+    <button class="btn btn-primary" onclick="saveTranslateConfig()">保存</button>
   </div>
 </div>
 
 <!-- ==================== API 说明 ==================== -->
-<div class="modal" id="apiHelpSheet">
-  <div class="modal-head">
-    <h3>API 说明</h3>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal" id="apiHelpSheet" data-page-node-id="OrTdb3npYF6LLKRp4WmvHo">
+  <div class="modal-head" data-page-node-id="VZzT4lDIW2fHo1WLA08H1v">
+    <h3 data-page-node-id="YuVMPGO9BGbvUvFhO9MTJt">API 说明</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="lbluO0FomJLSGtQOA5zPQM">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="eclEAQCC9Nd7nqNhEWK2wN"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="YrsfHe0TMKfz31v9H1b0KN"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <div class="section-title">TMDB Key</div>
-    <p class="t-small mb-12">访问 themoviedb.org/settings/api 注册并创建 API Key，复制后粘贴到「TMDB API Key」。</p>
-    <div class="section-title">Assrt Token</div>
-    <p class="t-small mb-12">访问 assrt.net/usercp.php 登录，在用户中心找到 API Token。</p>
-    <div class="section-title">OpenSubtitles Key</div>
-    <p class="t-small mb-12">访问 opensubtitles.com/consumers 注册应用后获取 API Key。</p>
-    <div class="section-title">Worker 代理地址</div>
-    <p class="t-small">部分在线功能（搜索、详情、图片代理）需要代理服务转发请求，填入 HTTPS 地址即可。JAV 等子功能会自动复用该地址。不填则相关在线功能不可用。</p>
+  <div class="modal-body" data-page-node-id="nLYkHhGAt78V5SzTo2LpA7">
+    <div class="section-title" data-page-node-id="pY1Faieyce0WaCC8MnEz2Q">TMDB Key</div>
+    <p class="t-small mb-12" data-page-node-id="REJvAtZ1EPD67bOWXkDSaH">访问 themoviedb.org/settings/api 注册并创建 API Key，复制后粘贴到「TMDB API Key」。</p>
+    <div class="section-title" data-page-node-id="CmNo3x1domqgNDJrFzVdso">Assrt Token</div>
+    <p class="t-small mb-12" data-page-node-id="ONyS9KgyInBBLLM3sP7MdS">访问 assrt.net/usercp.php 登录，在用户中心找到 API Token。</p>
+    <div class="section-title" data-page-node-id="oXwDEtU4DlfITghC0jZlLW">OpenSubtitles Key</div>
+    <p class="t-small mb-12" data-page-node-id="SHTQdMy6A9HnnQyHaU0C1i">访问 opensubtitles.com/consumers 注册应用后获取 API Key。</p>
+    <div class="section-title" data-page-node-id="mrCzV7PqC3KXcGT9kqTENi">Worker 代理地址</div>
+    <p class="t-small" data-page-node-id="OMrr2FCrhNqxH6URmbPhky">部分在线功能（搜索、详情、图片代理）需要代理服务转发请求，填入 HTTPS 地址即可。JAV 等子功能会自动复用该地址。不填则相关在线功能不可用。</p>
   </div>
-  <div class="modal-foot">
-    <div class="spacer"></div>
-    <button class="btn btn-primary" onclick="closeAllSheets()">知道了</button>
+  <div class="modal-foot" data-page-node-id="yvwv7vEdal618zV4DUKQBg">
+    <div class="spacer" data-page-node-id="vwCu2fV4NGb9zRTcFJEaNB"></div>
+    <button class="btn btn-primary" onclick="closeAllSheets()" data-page-node-id="c311GvQyMd10PEb1XADyot">知道了</button>
   </div>
 </div>
 
 <!-- ==================== 裁剪 ==================== -->
-<div class="modal modal-wide modal-tall" id="cropModal">
-  <div class="modal-head">
-    <h3>裁剪图片</h3>
-    <div class="seg hidden" id="cropRatios">
-      <button type="button" data-ratio="16:9" onclick="setFanartRatio('16:9', this)">16:9</button>
-      <button type="button" data-ratio="3:2" onclick="setFanartRatio('3:2', this)">3:2</button>
-      <button type="button" data-ratio="4:3" onclick="setFanartRatio('4:3', this)">4:3</button>
+<div class="modal modal-wide modal-tall" id="cropModal" data-page-node-id="BCYQcRgSGfqXaZZAIk4CvH">
+  <div class="modal-head" data-page-node-id="aPFAVzS6iG4oBa0S6B4r9v">
+    <h3 data-page-node-id="mFVhK4BVh3ZANM0silkF2A">裁剪图片</h3>
+    <div class="seg hidden" id="cropRatios" data-page-node-id="I0QTJaBfWfhKKTZ76KpUzU">
+      <button type="button" data-ratio="16:9" onclick="setFanartRatio('16:9', this)" data-page-node-id="phSAk5MWeEfEdIj6wKsFVM">16:9</button>
+      <button type="button" data-ratio="3:2" onclick="setFanartRatio('3:2', this)" data-page-node-id="9lXMrFa5BGUFoSpQCG7UjJ">3:2</button>
+      <button type="button" data-ratio="4:3" onclick="setFanartRatio('4:3', this)" data-page-node-id="CAzbLwoswl9u5IbZEsVpBc">4:3</button>
     </div>
-    <button class="modal-close" onclick="closeCrop()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    <button class="modal-close" onclick="closeCrop()" aria-label="关闭" data-page-node-id="haWtHFfiUNmhalDZa4yBOn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="abMm2hcgfaGjPucuxDMc6l"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="rt1XcltvRZ08x0GBDSL7em"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <div class="crop-stage" id="cropStage">
-      <div class="crop-viewport" id="cropViewport">
-        <img id="cropImg" alt="">
-        <div class="crop-box" id="cropBox"></div>
+  <div class="modal-body" data-page-node-id="9R7TjHGhXMT4ZcLPerGX0M">
+    <div class="crop-stage" id="cropStage" data-page-node-id="vFbe5uxveplDd0AD2xJgUh">
+      <div class="crop-viewport" id="cropViewport" data-page-node-id="FPFWSTSzRZYTDVVKQJUm26">
+        <img id="cropImg" alt="" data-page-node-id="GSA0wkAJSMFw9djZTNtkfe">
+        <div class="crop-box" id="cropBox" data-page-node-id="BMwJ6QmJ4N5UP8AVXuzFni"></div>
       </div>
     </div>
-    <div class="crop-hint">滚轮缩放 · 拖动移动 · 双击复位</div>
+    <div class="crop-hint" data-page-node-id="owRI2OSBDT164YifvLWTK8">滚轮缩放 · 拖动移动 · 双击复位</div>
   </div>
-  <div class="modal-foot">
-    <button class="btn btn-ghost btn-sm" onclick="resetCropTransform()">复位</button>
-    <div class="spacer"></div>
-    <button class="btn btn-default" onclick="closeCrop()">取消</button>
-    <button class="btn btn-primary" onclick="applyCrop()">应用</button>
+  <div class="modal-foot" data-page-node-id="cFFzIg1HYufYJEwCOFFTaB">
+    <button class="btn btn-ghost btn-sm" onclick="resetCropTransform()" data-page-node-id="NyJBUvUjBsSTsK7GgLNYU8">复位</button>
+    <div class="spacer" data-page-node-id="VytKpZZOgAS3INvTucQ8uP"></div>
+    <button class="btn btn-default" onclick="closeCrop()" data-page-node-id="5WGNSYUi9oDsCTWd6Cnx97">取消</button>
+    <button class="btn btn-primary" onclick="applyCrop()" data-page-node-id="fyQMt9iRhITT7NBzevIiw1">应用</button>
   </div>
 </div>
 
 <!-- ==================== 磁力搜索 ==================== -->
-<div class="modal modal-wide modal-tall" id="magnetSheet">
-  <div class="modal-head">
-    <h3>磁力搜索</h3>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal modal-wide modal-tall" id="magnetSheet" data-page-node-id="P5xpI0X2doXzi9edHVPwx9">
+  <div class="modal-head" data-page-node-id="u5LwW2Q6lIEmoKHGpazgqM">
+    <h3 data-page-node-id="Ull47ecxNrLUjUCQ2ePimh">磁力搜索</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="1tufxVdQFet2x48s1ZuCYb">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="sAH50ogfoj3Bt9VGCQ3MGQ"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="rIRpKcLMnIv03mQXcVdzDe"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <div style="display:flex;gap:8px;margin-bottom:10px;">
-      <div class="input-wrap" style="flex:1;">
-        <input class="input" type="text" id="magnetQueryInput" placeholder="输入关键词" oninput="toggleMagnetClear()" onkeydown="if(event.key==='Enter')searchMagnet()">
-        <button class="input-clear" id="magnetClear" onclick="clearMagnetQuery()" aria-label="清除">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="modal-body" data-page-node-id="5aOsRTMaT8zcMOGe2Zieuu">
+    <div style="display:flex;gap:8px;margin-bottom:10px;" data-page-node-id="LNRWeD2F5sBeuvKfheXVR3">
+      <div class="input-wrap" style="flex:1;" data-page-node-id="SGxpVjCgcWQJqqhR3Wenh0">
+        <input class="input" type="text" id="magnetQueryInput" placeholder="输入关键词" oninput="toggleMagnetClear()" onkeydown="if(event.key==='Enter')searchMagnet()" data-page-node-id="N6yjyiKrz7fTmn5l3YxCNY">
+        <button class="input-clear" id="magnetClear" onclick="clearMagnetQuery()" aria-label="清除" data-page-node-id="vIRiWOnSKBDh5S6U2pHreB">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" data-page-node-id="V2uGmmB1Jeu57vpgWgiVBn"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="ZHe3JgW6f9NWRc4FOk6NI0"/></svg>
         </button>
       </div>
-      <button class="btn btn-primary" onclick="searchMagnet()">搜索</button>
+      <button class="btn btn-primary" onclick="searchMagnet()" data-page-node-id="9dJBO1WE8S9qRAzUS185F4">搜索</button>
     </div>
-    <div class="seg mb-12" id="magnetTitleMode" style="display:none;">
-      <button type="button" class="active" data-mode="title" onclick="onMagnetTitleModeChange('title',this)">影片名</button>
-      <button type="button" data-mode="original" onclick="onMagnetTitleModeChange('original',this)">原始标题</button>
+    <div class="seg mb-12" id="magnetTitleMode" style="display:none;" data-page-node-id="k4PpY9RroLp6SxSdMcNU3t">
+      <button type="button" class="active" data-mode="title" onclick="onMagnetTitleModeChange('title',this)" data-page-node-id="9SgS3NQrw24mnPdollPIWI">影片名</button>
+      <button type="button" data-mode="original" onclick="onMagnetTitleModeChange('original',this)" data-page-node-id="2HpuPktnxQANHPYZKC7UBD">原始标题</button>
     </div>
-    <div id="magnetResults"></div>
+    <div id="magnetResults" data-page-node-id="CdxQ4k667NRfGwHtZzBsL0"></div>
   </div>
 </div>
 
 <!-- ==================== 字幕搜索 ==================== -->
-<div class="modal modal-wide modal-tall" id="subtitleSheet">
-  <div class="modal-head">
-    <h3>字幕搜索</h3>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal modal-wide modal-tall" id="subtitleSheet" data-page-node-id="f9NazNoywEGk7eBzq1Tljg">
+  <div class="modal-head" data-page-node-id="XujWxsya91I3ByQRl6mXm9">
+    <h3 data-page-node-id="1mekyR0CTrIWX1MSUZucsT">字幕搜索</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="rnjrBAUFHepbu6YRgFqGw1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="IxulwtjWCeNA5t7ttzfJVU"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="YTrnEvswwngQ3Zj9H5k9le"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <div style="display:flex;gap:8px;margin-bottom:10px;">
-      <div class="input-wrap" style="flex:1;">
-        <input class="input" type="text" id="subQueryInput" placeholder="影片名" oninput="onSubQueryChange()" onkeydown="if(event.key==='Enter')searchSubtitles()">
-        <button class="input-clear" id="subQueryClear" onclick="clearSubQuery()" aria-label="清除">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="modal-body" data-page-node-id="hBJRco0yUBurCf8c3prP5Z">
+    <div style="display:flex;gap:8px;margin-bottom:10px;" data-page-node-id="lUoqGPeWrVxPxtqp7B72WI">
+      <div class="input-wrap" style="flex:1;" data-page-node-id="EVSIllkHBCSuxsjLoy41um">
+        <input class="input" type="text" id="subQueryInput" placeholder="影片名" oninput="onSubQueryChange()" onkeydown="if(event.key==='Enter')searchSubtitles()" data-page-node-id="2XE5UXPGcrhGycL80bv43L">
+        <button class="input-clear" id="subQueryClear" onclick="clearSubQuery()" aria-label="清除" data-page-node-id="gImyH6wyfjAQ1RDHCHdGx6">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" data-page-node-id="ULFILGHz8Yd90xTrGsvJsq"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="ivZZcOW2pxTNlXXoOMyNO3"/></svg>
         </button>
       </div>
-      <select class="select" id="subSrcBtn" style="width:104px;" onchange="onSubSrcChange(this)">
-        <option value="assrt">伪射手</option>
-        <option value="os">OpenSubtitles</option>
+      <select class="select" id="subSrcBtn" style="width:104px;" onchange="onSubSrcChange(this)" data-page-node-id="KCziyubbS3uBmi4ycIH1KT">
+        <option value="assrt" data-page-node-id="hTSbAOLyiGR73X767rKQCo">伪射手</option>
+        <option value="os" data-page-node-id="z9chjuJqqO74nZPwf1IoGN">OpenSubtitles</option>
       </select>
-      <button class="btn btn-primary" onclick="searchSubtitles()">搜索</button>
+      <button class="btn btn-primary" onclick="searchSubtitles()" data-page-node-id="4nBzbh27LcojNFfGOUHaQj">搜索</button>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-      <div class="seg" id="subTitleModeSeg">
-        <button type="button" class="active" data-mode="title" onclick="selectSubTitleMode('title',this)">影片名</button>
-        <button type="button" data-mode="original" onclick="selectSubTitleMode('original',this)">原始标题</button>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;" data-page-node-id="uFGvgcpgRxIYnQFWcSeR90">
+      <div class="seg" id="subTitleModeSeg" data-page-node-id="SEVjxnlRFbXWtDyxCywrMF">
+        <button type="button" class="active" data-mode="title" onclick="selectSubTitleMode('title',this)" data-page-node-id="Gb2TW98DZUpEofXRKKujRo">影片名</button>
+        <button type="button" data-mode="original" onclick="selectSubTitleMode('original',this)" data-page-node-id="Wpl32o1QtzAwHTLjEA8qdj">原始标题</button>
       </div>
-      <div class="spacer" style="flex:1;"></div>
-      <select class="select select-sm" id="subLangSelect" style="width:88px;" onchange="onSubLangSelect(this)">
-        <option value="all">全部</option>
-        <option value="zh">简中</option>
-        <option value="zht">繁中</option>
-        <option value="en">英文</option>
+      <div class="spacer" style="flex:1;" data-page-node-id="Hfj4yQBXtWrvd8DfOIK9PT"></div>
+      <select class="select select-sm" id="subLangSelect" style="width:88px;" onchange="onSubLangSelect(this)" data-page-node-id="GPsFWtW5kBZPaBt68Lu53G">
+        <option value="all" data-page-node-id="qACY2zSOJs7Mo7mb0J9tio">全部</option>
+        <option value="zh" data-page-node-id="KNC0QFuuayjVNoECFJaJvu">简中</option>
+        <option value="zht" data-page-node-id="GcjERkcp4iqSyLplGG2ecE">繁中</option>
+        <option value="en" data-page-node-id="G6zK0bh4W8XCjOW7Y39f9d">英文</option>
       </select>
     </div>
-    <div id="subResults"><div class="empty"><div class="empty-desc">输入片名后点击搜索</div></div></div>
+    <div id="subResults" data-page-node-id="kaDERcrZRTSiCVVG4sYAQd"><div class="empty" data-page-node-id="fGcYyUNFK126vyJnl1aEex"><div class="empty-desc" data-page-node-id="XhH0VSEsoQYaPvq3uERncK">输入片名后点击搜索</div></div></div>
   </div>
 </div>
 
 <!-- ==================== 人员编辑 ==================== -->
-<div class="modal modal-narrow" id="personSheet">
-  <div class="modal-head">
-    <h3 id="personSheetTitle">添加人员</h3>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal modal-narrow" id="personSheet" data-page-node-id="5OIgFRFVbycO87GHSQ117E">
+  <div class="modal-head" data-page-node-id="qU2FVgOLyRqerRfGw8kLav">
+    <h3 id="personSheetTitle" data-page-node-id="d59ZaqF1BlP2mL0kFbWbfl">添加人员</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="8oJ1kmSoQ1jyeEYofUZDNc">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="tESK9vbuk6bTxiprCkfjJa"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="ypiTIX2yXpoH4OFmAcljyL"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px;">
-      <div class="person-ava" style="width:64px;height:64px;flex:0 0 64px;cursor:pointer;" id="personAvatarPreview" onclick="triggerUpload('person')"></div>
-      <div style="flex:1;display:flex;flex-direction:column;gap:10px;">
-        <div class="field">
-          <label class="field-label" for="personName">姓名</label>
-          <input class="input" type="text" id="personName" placeholder="请输入">
+  <div class="modal-body" data-page-node-id="0VfmH7p1TacvMSj4WwyVVA">
+    <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px;" data-page-node-id="BomGjt6Hne7s6Zxn2EMCsC">
+      <div class="person-ava" style="width:64px;height:64px;flex:0 0 64px;cursor:pointer;" id="personAvatarPreview" onclick="triggerUpload('person')" data-page-node-id="0heRCPlyf9CdPbDGATzq9n"></div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:10px;" data-page-node-id="JS8aRVqlCVzdYsbMMu7HUj">
+        <div class="field" data-page-node-id="WmhL0VOyTRrMPP9el6ZTyM">
+          <label class="field-label" for="personName" data-page-node-id="7EyWOds3YYoYhj67549Tde">姓名</label>
+          <input class="input" type="text" id="personName" placeholder="请输入" data-page-node-id="QRuxytqz8b2DM9eI1XpjcJ">
         </div>
       </div>
     </div>
-    <div class="field mb-12" id="personDeptRow">
-      <label class="field-label" for="personDept">部门</label>
-      <select class="select" id="personDept" onchange="onPersonDeptChange(this)">
-        <option value="导演">导演</option>
-        <option value="制片">制片</option>
-        <option value="编剧">编剧</option>
-        <option value="摄影">摄影</option>
-        <option value="声音">声音</option>
-        <option value="剪辑">剪辑</option>
-        <option value="美术">美术</option>
-        <option value="服装与化妆">服装与化妆</option>
-        <option value="视效">视效</option>
-        <option value="灯光">灯光</option>
-        <option value="其他剧组">其他剧组</option>
-        <option value="演员">演员</option>
+    <div class="field mb-12" id="personDeptRow" data-page-node-id="GJRmhzDHPkk1DREK3DE9eE">
+      <label class="field-label" for="personDept" data-page-node-id="IK5ZYnTgS8GWpVK8sfO74h">部门</label>
+      <select class="select" id="personDept" onchange="onPersonDeptChange(this)" data-page-node-id="L73Q4ZPeKQ6Y2SL7SDAY1l">
+        <option value="导演" data-page-node-id="3xixEJAXeqb8EDLOccHwkd">导演</option>
+        <option value="制片" data-page-node-id="xtUbx61mNcIktUDJw4mgM2">制片</option>
+        <option value="编剧" data-page-node-id="I4Ej0F8wsVq8IbE94yxHAF">编剧</option>
+        <option value="摄影" data-page-node-id="hu14dqVqWLijOPawijgWvF">摄影</option>
+        <option value="声音" data-page-node-id="8kMQCIsQG7BnBnGknuAXmY">声音</option>
+        <option value="剪辑" data-page-node-id="2DtxqJ6HGbFHivTlwNDrT6">剪辑</option>
+        <option value="美术" data-page-node-id="GktBIH7bYMNsElQB25H0S8">美术</option>
+        <option value="服装与化妆" data-page-node-id="kmsUAqtDNJ7dA85i1qwLHU">服装与化妆</option>
+        <option value="视效" data-page-node-id="nP54pBHYEVrLCWdrtzmvwJ">视效</option>
+        <option value="灯光" data-page-node-id="UjX6d87gcvDpClkazDLApe">灯光</option>
+        <option value="其他剧组" data-page-node-id="O6u0b2Pqkv4zXKr4l0inub">其他剧组</option>
+        <option value="演员" data-page-node-id="awcU2Un3urRv209V6MmK1Q">演员</option>
       </select>
     </div>
-    <div class="field" id="personRoleRow">
-      <label class="field-label" for="personRole">角色名</label>
-      <input class="input" type="text" id="personRole" placeholder="请输入">
+    <div class="field" id="personRoleRow" data-page-node-id="A4R0Gl54pAzKM2u4DJkwQd">
+      <label class="field-label" for="personRole" data-page-node-id="ds2BEhefS8X8EoGDC7lT4D">角色名</label>
+      <input class="input" type="text" id="personRole" placeholder="请输入" data-page-node-id="hClAJerrZqddcGTxHlOq7d">
     </div>
-    <span class="hidden" id="personDeptVal"></span>
+    <span class="hidden" id="personDeptVal" data-page-node-id="BYIALDg3YTefqgkhG7ZLEz"></span>
   </div>
-  <div class="modal-foot">
-    <button class="btn btn-danger-ghost btn-sm hidden" id="personDelBtn" onclick="deletePerson()">删除</button>
-    <div class="spacer"></div>
-    <button class="btn btn-default" onclick="closeAllSheets()">取消</button>
-    <button class="btn btn-primary" onclick="savePerson()">保存</button>
+  <div class="modal-foot" data-page-node-id="AhNw0KGy56Haaej8p8UDrt">
+    <button class="btn btn-danger-ghost btn-sm hidden" id="personDelBtn" onclick="deletePerson()" data-page-node-id="3e5hZYtlWEV2bXU93Ip6s0">删除</button>
+    <div class="spacer" data-page-node-id="MehnSw49GZT6OHeUGeKsWJ"></div>
+    <button class="btn btn-default" onclick="closeAllSheets()" data-page-node-id="kAZ2HfgtOCKOR7fL5wOEDF">取消</button>
+    <button class="btn btn-primary" onclick="savePerson()" data-page-node-id="0UWt3xy6jGL0YEkh9wwq43">保存</button>
   </div>
 </div>
 
 <!-- ==================== 加载短语 ==================== -->
-<div class="modal modal-tall drawer-right" id="adultPhraseSheet">
-  <div class="modal-head">
-    <h3>加载配置</h3>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal modal-tall drawer-right" id="adultPhraseSheet" data-page-node-id="xZC6nGg0BFb7Mt4aZsNtiV">
+  <div class="modal-head" data-page-node-id="Gj5DHLNulHItPWTseSUYoY">
+    <h3 data-page-node-id="oHEioPkD2uCre5WVspvVXa">加载配置</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="kKyWksxdpOx8abVY989UhR">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="XziBMcvxW19Hk71jcYlsqB"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="JjBGKMbrnpK0guPgfSooyd"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>提示语（每行一条）</span>
-      <button class="btn btn-default btn-sm" onclick="document.getElementById('adultPhraseFile').click()">导入</button>
+  <div class="modal-body" data-page-node-id="qXtT3iVWgxelNpFEB7Mb0i">
+    <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;" data-page-node-id="2itX027L144nciBbOmQIu5">
+      <span data-page-node-id="VSSga6iTqECa1IyEChTCAS">提示语（每行一条）</span>
+      <button class="btn btn-default btn-sm" onclick="document.getElementById('adultPhraseFile').click()" data-page-node-id="gH2SZfuXsbFYC8g9WyHr4z">导入</button>
     </div>
     <textarea class="textarea" id="adultPhraseInput" style="min-height:34vh;" oninput="updateAdultPhraseCount()" placeholder="请输入…"></textarea>
-    <div class="field-hint mt-8" id="adultPhraseCount">共 0 条</div>
-    <input type="file" id="adultPhraseFile" accept=".txt,.json,application/json,text/plain" style="display:none" onchange="onAdultPhraseFile(this)">
+    <div class="field-hint mt-8" id="adultPhraseCount" data-page-node-id="PUrUyyZ8AD2Ko7kg1ITpKH">共 0 条</div>
+    <input type="file" id="adultPhraseFile" accept=".txt,.json,application/json,text/plain" style="display:none" onchange="onAdultPhraseFile(this)" data-page-node-id="S5pU5DR7Q5X92IYrRRUFrj">
   </div>
-  <div class="modal-foot">
-    <div class="spacer"></div>
-    <button class="btn btn-default" onclick="closeAllSheets()">取消</button>
-    <button class="btn btn-primary" onclick="saveAdultPhrases()">保存</button>
+  <div class="modal-foot" data-page-node-id="6iCYbfbgBEfA4KGzIf5uWo">
+    <div class="spacer" data-page-node-id="84kV7Cj7HTJ1LI2OwdWeGE"></div>
+    <button class="btn btn-default" onclick="closeAllSheets()" data-page-node-id="7pBvZexMzzo9093aZEe9fq">取消</button>
+    <button class="btn btn-primary" onclick="saveAdultPhrases()" data-page-node-id="ZZf5dnWmdjltXgXeNTBIKs">保存</button>
   </div>
 </div>
 
 <!-- ==================== 通用确认 ==================== -->
-<div class="modal modal-narrow" id="confirmModal">
-  <div class="modal-body flush">
-    <div class="confirm-body">
-      <div class="confirm-icon" id="confirmIcon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
+<div class="modal modal-narrow" id="confirmModal" data-page-node-id="6dyI3eRxkURHUklnN2CQLZ">
+  <div class="modal-body flush" data-page-node-id="1YqOvnh2lpa3TiesX2peNL">
+    <div class="confirm-body" data-page-node-id="Vy5iOgsOYXkYqieFbUJrCo">
+      <div class="confirm-icon" id="confirmIcon" data-page-node-id="lBISVqiUa8qHjUdPVbN4mu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="0Ou5Omqj4UEbuVGMjrsLfS"><path d="M3 6h18" data-page-node-id="3CYcsQORUnemrzNrtR2RPY"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" data-page-node-id="LXQJ5WOARTQn0DfcllzOuN"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" data-page-node-id="FOZVJ2fCAKs2HGeNZ7SQSl"/><path d="M10 11v6M14 11v6" data-page-node-id="faqR3KGQjHRvlHEvyLwwy1"/></svg>
       </div>
-      <div class="confirm-title" id="confirmTitle"></div>
-      <div class="confirm-desc" id="confirmDesc"></div>
+      <div class="confirm-title" id="confirmTitle" data-page-node-id="Il3qBA4c9eHMrdIwVyn36e"></div>
+      <div class="confirm-desc" id="confirmDesc" data-page-node-id="D0VTOAtlqer9jks4rFdRd5"></div>
     </div>
   </div>
-  <div class="modal-foot">
-    <button class="btn btn-default" id="confirmCancel" onclick="closeConfirm()">取消</button>
-    <button class="btn btn-danger" id="confirmOk">确定</button>
+  <div class="modal-foot" data-page-node-id="HXJb81vQZ5wOSviGAydSg6">
+    <button class="btn btn-default" id="confirmCancel" onclick="closeConfirm()" data-page-node-id="8FaUicRd4MZzL3jVbH7ofW">取消</button>
+    <button class="btn btn-danger" id="confirmOk" data-page-node-id="kdxTSzPhxVxxenqaGChne1">确定</button>
   </div>
 </div>
 
 <!-- ==================== 关于 ==================== -->
-<div class="modal modal-narrow drawer-right" id="aboutModal">
-  <div class="modal-head"><h3>关于</h3>
-    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal modal-narrow drawer-right" id="aboutModal" data-page-node-id="89FFUBRTz5HU84zXsQ2drc">
+  <div class="modal-head" data-page-node-id="qMX5w5ECcEE3CA5pJMriAi"><h3 data-page-node-id="utkdoOoVArXqvz97nK2li9">关于</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="gMo8soirvfAOkj8PxbgWpb">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="i8kpctTbPY1366tD5i7mE9"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="EqSgdBrSJkVM2mpI2DGIEj"/></svg>
     </button>
   </div>
-  <div class="modal-body">
-    <p class="t-body" style="line-height:1.7;">影视元数据编辑工具，可生成 Kodi / Jellyfin 兼容的 .nfo 文件，并导出海报、剧照、Logo 与演职人员照片。</p>
-    <p class="t-small mt-12">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-    <p class="t-small mt-8">@Halfleave · v2.1.0 · 桌面版</p>
+  <div class="modal-body" data-page-node-id="2ov5Ds9SUMR8VWVljHeFCH">
+    <p class="t-body" style="line-height:1.7;" data-page-node-id="Urt1YosT3BNeV7INz13BEu">影视元数据编辑工具，可生成 Kodi / Jellyfin 兼容的 .nfo 文件，并导出海报、剧照、Logo 与演职人员照片。</p>
+    <p class="t-small mt-12" data-page-node-id="SYmzX6qZYhnxm7sR8fBm2f">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+    <p class="t-small mt-8" data-page-node-id="K3Ld6KfnoyuiybINLgYIOo">@Halfleave · v2.1.0 · 桌面版</p>
   </div>
-  <div class="modal-foot">
-    <div class="spacer"></div>
-    <button class="btn btn-primary" onclick="closeAllSheets()">好</button>
+  <div class="modal-foot" data-page-node-id="iU0bJclnsnUAn6HsFYYmgt">
+    <div class="spacer" data-page-node-id="OUHuK26iEo8ZCfTUNBzjye"></div>
+    <button class="btn btn-primary" onclick="closeAllSheets()" data-page-node-id="8J6GkK0RYpEYsdCjcZlmEW">好</button>
   </div>
 </div>
 
 <!-- ==================== 预告片 ==================== -->
-<div class="modal modal-wide" id="trailerModal">
-  <div class="modal-head">
-    <h3>预告片</h3>
-    <button class="btn btn-ghost btn-sm" id="trailerExtBtn" onclick="openTrailerExternal()">在外部打开</button>
-    <button class="modal-close" onclick="closeTrailer()" aria-label="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+<div class="modal modal-wide" id="trailerModal" data-page-node-id="z6wcKeKdsg2NZsKcbep3zh">
+  <div class="modal-head" data-page-node-id="6qWTkB6uKgbxwPxuDY4LqR">
+    <h3 data-page-node-id="9XmN1S3rjV0QFY6SVASoNg">预告片</h3>
+    <button class="btn btn-ghost btn-sm" id="trailerExtBtn" onclick="openTrailerExternal()" data-page-node-id="l1lLclB8lSJSWbLFisdxSF">在外部打开</button>
+    <button class="modal-close" onclick="closeTrailer()" aria-label="关闭" data-page-node-id="TYz1biGO0J9vOU30BfxZFM">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="bMJbstqkBfdG3nwumQgXUT"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="GFXFCGbKIRFB9VgHyCJZQG"/></svg>
     </button>
   </div>
-  <div class="modal-body flush">
-    <div style="position:relative;width:100%;aspect-ratio:16/9;background:#000;">
+  <div class="modal-body flush" data-page-node-id="hHPGyDzh4HQl2EpxCdhQlD">
+    <div style="position:relative;width:100%;aspect-ratio:16/9;background:#000;" data-page-node-id="8zbjF6svm0UGAgqT0SeCLW">
       <iframe id="trailerFrame" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen
-        style="position:absolute;inset:0;width:100%;height:100%;border:0;"></iframe>
+        style="position:absolute;inset:0;width:100%;height:100%;border:0;" data-page-node-id="xuGzHDQk3LSsDVLM9x35Jy"></iframe>
     </div>
   </div>
 </div>
 
 <!-- ==================== 图片预览 ==================== -->
-<div class="preview-mask" id="imagePreviewMask" onclick="closeImagePreview()"></div>
-<div class="preview-stage" id="imagePreviewModal">
-  <img class="preview-img" id="previewImg" alt="">
-  <div class="preview-top-bar">
-    <span class="preview-count" id="previewDots">1 / 1</span>
+<div class="preview-mask" id="imagePreviewMask" onclick="closeImagePreview()" data-page-node-id="lUWUjTHbyyM9SznOxmyjdi"></div>
+<div class="preview-stage" id="imagePreviewModal" data-page-node-id="Fsvk1LC6pUuat4DhTz4kQJ">
+  <img class="preview-img" id="previewImg" alt="" data-page-node-id="FZIlO68SLtU1kxmLsJGGOI">
+  <div class="preview-top-bar" data-page-node-id="DYfsZizCuSvYefgpvhuIt7">
+    <span class="preview-count" id="previewDots" data-page-node-id="YQOAq6NI5eXOrYnoUWDiuY">1 / 1</span>
   </div>
-  <button class="preview-nav prev" id="previewPrev" onclick="previewStep(-1)" aria-label="上一张">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+  <button class="preview-nav prev" id="previewPrev" onclick="previewStep(-1)" aria-label="上一张" data-page-node-id="sL6y3gcIma198gRWBViU23">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="PlunF4tGtLUaksFOSHWMuZ"><path d="m15 18-6-6 6-6" data-page-node-id="CPKka5PmAnLgoFWyjpXooi"/></svg>
   </button>
-  <button class="preview-nav next" id="previewNext" onclick="previewStep(1)" aria-label="下一张">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+  <button class="preview-nav next" id="previewNext" onclick="previewStep(1)" aria-label="下一张" data-page-node-id="0znB3s3RtG2PxcaS4par5b">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="WZVhha2JJC7mlWButIe5CG"><path d="m9 18 6-6-6-6" data-page-node-id="HS5VXEybrtYgXohwUNc0eQ"/></svg>
   </button>
-  <div class="preview-side-bar">
-    <button class="preview-round-btn" onclick="closeImagePreview()" aria-label="关闭" title="关闭">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  <div class="preview-side-bar" data-page-node-id="o0ELrs3HVPue3Jtgmesnac">
+    <button class="preview-round-btn" onclick="closeImagePreview()" aria-label="关闭" title="关闭" data-page-node-id="AjeHKucljDExJjcu69JpOb">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="AordS3IskNOWeAsKcMBK7l"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="yV612e87UInEhIFTVdMFnO"/></svg>
     </button>
-    <button class="preview-round-btn" onclick="previewZoomBy(0.25)" title="放大">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6"/></svg>
+    <button class="preview-round-btn" onclick="previewZoomBy(0.25)" title="放大" data-page-node-id="0izAD4X37TKxjqCwMjz4xI">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-page-node-id="7BpPob7ZKilQc7bNqFTg4c"><circle cx="11" cy="11" r="7" data-page-node-id="WtavrAojAPoYzqUHipRdY4"/><path d="M11 8v6M8 11h6" data-page-node-id="bP8d1LS4a7XN3HvQsdu8Gc"/></svg>
     </button>
-    <button class="preview-round-btn" onclick="previewZoomBy(-0.25)" title="减小">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6"/></svg>
+    <button class="preview-round-btn" onclick="previewZoomBy(-0.25)" title="减小" data-page-node-id="Gl1Crlw054BHk5vz4AtnyI">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-page-node-id="QnGQ0Aa5HdgmE0O507ebOw"><circle cx="11" cy="11" r="7" data-page-node-id="FrwjzMloPwWe0XFwmQ8Tyo"/><path d="M8 11h6" data-page-node-id="FBiKmxChz5RyLGziIEN10t"/></svg>
     </button>
-    <button class="preview-round-btn" onclick="downloadCurrentPreview()" title="下载">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 12-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+    <button class="preview-round-btn" onclick="downloadCurrentPreview()" title="下载" data-page-node-id="FI6kyzQgQkSXTxLS9PcK1H">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="L6v4tfvwJQfvvRBbnJNcNE"><path d="M12 15V3m0 12-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" data-page-node-id="PrZZaDBqT3B7pd4p9jFmfb"/></svg>
     </button>
   </div>
 </div>
 
 <!-- ==================== 右键菜单 ==================== -->
-<div class="menu" id="contextSheet">
-  <div class="menu-label hidden" id="contextSheetTitle"></div>
-  <div id="contextSheetInner"></div>
+<div class="menu" id="contextSheet" data-page-node-id="3Ytx2hhmdCDOAV2dhpCZ1m">
+  <div class="menu-label hidden" id="contextSheetTitle" data-page-node-id="0TaeoCPUXzgxWnlGL5i74f"></div>
+  <div id="contextSheetInner" data-page-node-id="IEzfwae4diqpJGInzJRHmH"></div>
 </div>
 
 <!-- ==================== 命令面板 (⌘K) ==================== -->
-<div class="mask cmd-mask" id="cmdMask" onclick="closeCmdPalette()"></div>
-<div class="cmd-palette" id="cmdPalette">
-  <div class="cmd-input-row">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <input class="cmd-input" id="cmdInput" placeholder="输入命令，或搜索影片名 / 番号…" oninput="renderCmdResults(this.value)" onkeydown="cmdInputKey(event)">
-    <kbd class="cmd-kbd">Esc</kbd>
+<div class="mask cmd-mask" id="cmdMask" onclick="closeCmdPalette()" data-page-node-id="ytD9lsW1UOzApStYBVCxuW"></div>
+<div class="cmd-palette" id="cmdPalette" data-page-node-id="KIbHarhFw17WCWgJARgc7y">
+  <div class="cmd-input-row" data-page-node-id="CMyOUzcoVyP6unpDcl662W">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-page-node-id="1hA16MOtRhNJxTU83Sboq8"><circle cx="11" cy="11" r="7" data-page-node-id="CoAhhsdZlf8lPTwtMCJw1F"/><path d="m20 20-3.5-3.5" data-page-node-id="mMSmA3r4tfGCG8Ob2jy1Yt"/></svg>
+    <input class="cmd-input" id="cmdInput" placeholder="输入命令，或搜索影片名 / 番号…" oninput="renderCmdResults(this.value)" onkeydown="cmdInputKey(event)" data-page-node-id="aozRrJq5aMhlKNBSF6y4Z9">
+    <kbd class="cmd-kbd" data-page-node-id="pZB7QyiGBSg0QFTnF2ivC2">Esc</kbd>
   </div>
-  <div class="cmd-list" id="cmdList"></div>
+  <div class="cmd-list" id="cmdList" data-page-node-id="O722647qb9IVNaadGjaMz3"></div>
 </div>
 
 <!-- ==================== 隐藏的文件输入 ==================== -->
-<input type="file" id="nfoImport" accept=".nfo" style="display:none" onchange="handleNfoImport(event)">
-<input type="file" id="posterInput" accept="image/*" style="display:none" onchange="handleImageUpload(event,'poster')">
-<input type="file" id="fanartInput" accept="image/*" style="display:none" onchange="handleImageUpload(event,'fanart')">
-<input type="file" id="logoInput" accept="image/*" style="display:none" onchange="handleImageUpload(event,'logo')">
-<input type="file" id="personInput" accept="image/*" style="display:none" onchange="handleImageUpload(event,'person')">
+<input type="file" id="nfoImport" accept=".nfo" style="display:none" onchange="handleNfoImport(event)" data-page-node-id="UOrryiXPXu9qzUHyoN1UkY">
+<input type="file" id="posterInput" accept="image/*" style="display:none" onchange="handleImageUpload(event,'poster')" data-page-node-id="n1THnSgeAAvyoHyIrvvOwG">
+<input type="file" id="fanartInput" accept="image/*" style="display:none" onchange="handleImageUpload(event,'fanart')" data-page-node-id="gEiIpAoodGYBEcFilWPYB0">
+<input type="file" id="logoInput" accept="image/*" style="display:none" onchange="handleImageUpload(event,'logo')" data-page-node-id="yuWQPvuFtKSnosjF6gvboL">
+<input type="file" id="personInput" accept="image/*" style="display:none" onchange="handleImageUpload(event,'person')" data-page-node-id="E1FZ6yt9DXJdxNIGZEpURO">
 
 <!-- ==================== Toast ==================== -->
-<div class="toasts" id="toasts"></div>
-  <script src="./src/core.js?v=36"></script>
-  <script src="./src/ui.js?v=36"></script>
-  <script src="./src/main.js?v=36"></script>
+<div class="toasts" id="toasts" data-page-node-id="TD9n03wFqRdZX4PS2qQlOt"></div>
+  <script src="./src/core-shared.js?v=38"></script>
+  <script src="./src/core.js?v=38"></script>
+  <script src="./src/ui.js?v=38"></script>
+  <script src="./src/main.js?v=38"></script>
 </body>
 </html>
