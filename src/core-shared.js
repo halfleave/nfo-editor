@@ -95,6 +95,28 @@
     return { title: needsTranslation(title), plot: needsTranslation(plot) };
   }
 
+  // 清理翻译结果里的 HTML 标签：LLM 常返回带 <br>/<p> 的简介，
+  // 若原样存进 plot 会被详情页 textContent 当成字面文字显示成「<br>」。
+  // 块级标签转换行、行内标签剥离、HTML 实体解码；单点真相，两端 translateMeta 共用
+  function cleanTranslatedText(s) {
+    if (typeof s !== 'string' || !s) return s;
+    return s
+      .replace(/<br\s*\/?>/gi, '\n')                        // <br> / <br/> → 换行
+      .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')          // 块级结束 → 换行
+      .replace(/<(p|div|li|tr|h[1-6])(\s[^>]*)?>/gi, '\n')  // 块级开始 → 换行
+      .replace(/<[^>]+>/g, '')                              // 其余标签（<b>/<span> 等）剥离
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&#0?39;/gi, "'")
+      .replace(/&quot;/gi, '"')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim();
+  }
+
   // 调用 OpenAI 兼容接口，一次请求翻译 title + plot；返回 Promise<{title, summary}>（30s 超时）
   // cfg = { baseUrl, apiKey, model } 由调用方从配置/state 传入（不读全局，便于两端复用）
   function translateMeta(title, plot, cfg) {
@@ -122,7 +144,12 @@
         if (timer) clearTimeout(timer);
         var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
         if (!c) throw new Error('翻译返回为空');
-        try { resolve(extractJsonObject(c)); }
+        try {
+          var res = extractJsonObject(c);
+          if (typeof res.title === 'string') res.title = cleanTranslatedText(res.title);
+          if (typeof res.summary === 'string') res.summary = cleanTranslatedText(res.summary);
+          resolve(res);
+        }
         catch (e) { reject(new Error('翻译结果解析失败')); }
       }).catch(function (err) {
         if (timer) clearTimeout(timer);
@@ -508,6 +535,7 @@ function normalizeJavbusFilm(d, opts){
     extractJsonObject: extractJsonObject,
     computeTranslateNeed: computeTranslateNeed,
     translateMeta: translateMeta,
+    cleanTranslatedText: cleanTranslatedText,
     javStr: javStr,
     javName: javName,
     mapGenreEnToZh: mapGenreEnToZh,

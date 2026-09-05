@@ -1084,7 +1084,7 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
 .detail-act svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .detail-act #dtActMagnet svg, .detail-act .da-solid { fill: currentColor; stroke: none; }
 
-.detail-plot { font-size: 13.5px; line-height: 1.75; color: rgba(255,255,255,.9); cursor: pointer; }
+.detail-plot { font-size: 13.5px; line-height: 1.75; color: rgba(255,255,255,.9); cursor: pointer; white-space: pre-line; }
 .detail-plot:empty { display: none; }
 .detail-plot:hover { color: #fff; }
 /* 翻译失败：简介下方「重新翻译」小按钮 */

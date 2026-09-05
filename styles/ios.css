@@ -234,7 +234,7 @@ img { display: block; }
 .detail-act#dtActMagnet .da-ic svg { width: 24px; height: 24px; fill: currentColor; stroke: none; }
 .detail-act .da-lb { display: none; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
-.detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); cursor: pointer; -webkit-tap-highlight-color: transparent; white-space: pre-line; }
 .detail-plot:empty { display: none; }
 /* 翻译失败：简介下方「重新翻译」小按钮 */
 .detail-translate-retry { margin-top: 12px; }

@@ -307,7 +307,14 @@ function translateMeta(title, plot){
       if (timer) clearTimeout(timer);
       var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
       if (!c) throw new Error('翻译返回为空');
-      try { resolve(extractJsonObject(c)); }
+      try {
+        var res = extractJsonObject(c);
+        if (typeof NfoCore !== 'undefined' && NfoCore.cleanTranslatedText) {
+          if (typeof res.title === 'string') res.title = NfoCore.cleanTranslatedText(res.title);
+          if (typeof res.summary === 'string') res.summary = NfoCore.cleanTranslatedText(res.summary);
+        }
+        resolve(res);
+      }
       catch(e){ reject(new Error('翻译结果解析失败')); }
     }).catch(function(err){
       if (timer) clearTimeout(timer);
