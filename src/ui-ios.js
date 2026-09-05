@@ -1058,10 +1058,24 @@ function c115ProxyFetch(targetUrl, opts){
   opts.headers = opts.headers || {};
   opts.headers['X-Proxy-Token'] = C115_PROXY_TOKEN;
   opts.cache = 'no-store';
-  var full = c115ProxyBase() + '/api/115/proxy?url=' + encodeURIComponent(targetUrl);
+  var base = c115ProxyBase();
+  if (!base){
+    var err = new Error('未配置代理服务地址');
+    err.status = 0; err.body = '';
+    return Promise.reject(err);
+  }
+  var full = base + '/api/115/proxy?url=' + encodeURIComponent(targetUrl);
   return fetch(full, opts).then(function(r){
-    return r.json().then(function(d){ return { ok: r.ok, status: r.status, d: d || {} }; })
-      .catch(function(){ return { ok: r.ok, status: r.status, d: {} }; });
+    return r.text().then(function(txt){
+      var d = {};
+      try { d = JSON.parse(txt); } catch(_){ d = { raw: txt.slice(0, 300) }; }
+      if (!r.ok){
+        var err = new Error(d && d.error ? d.error : ('HTTP ' + r.status));
+        err.status = r.status; err.body = txt.slice(0, 300); err.data = d;
+        throw err;
+      }
+      return { ok: r.ok, status: r.status, d: d || {} };
+    });
   });
 }
 function set115Status(text, type){
@@ -1113,7 +1127,10 @@ function start115Login(){
       start115Countdown(); // 每 2 分钟刷新二维码 + 显示倒计时
     })
     .catch(function(e){
-      set115Status('生成二维码失败：' + (e && e.message ? e.message : '网络错误'), 'err');
+      var info = (e && e.message ? e.message : '网络错误');
+      if (e && e.status) info += ' (HTTP ' + e.status + ')';
+      if (e && e.body && e.body.length < 80) info += ' ' + e.body;
+      set115Status('生成二维码失败：' + info, 'err');
     });
 }
 function show115QrArea(){
@@ -1196,9 +1213,11 @@ function c115PollOnce(){
         c115PollTimer = setTimeout(c115PollOnce, 1800);
       }
     })
-    .catch(function(){
+    .catch(function(e){
       if (!c115Polling) return;
-      set115Status('轮询失败，重试中…', 'err');
+      var info = (e && e.message ? e.message : '网络错误');
+      if (e && e.status) info += ' (' + e.status + ')';
+      set115Status('轮询失败：' + info + '，重试中…', 'err');
       c115PollTimer = setTimeout(c115PollOnce, 2500);
     });
 }
@@ -1217,7 +1236,11 @@ function exchange115Cookie(uid){
     body: JSON.stringify({ app: app, account: uid })
   })
     .then(function(res){
-      if (!res.ok || !res.d || !res.d.data || !res.d.data.cookie){ throw new Error('换取 Cookie 失败'); }
+      if (!res.ok || !res.d || !res.d.data || !res.d.data.cookie){
+        var msg = (res.d && res.d.error) ? res.d.error : '换取 Cookie 失败';
+        var err = new Error(msg); err.status = res.status; err.data = res.d;
+        throw err;
+      }
       var ck = res.d.data.cookie;
       var cookieStr = Object.keys(ck).map(function(k){ return k + '=' + ck[k]; }).join('; ');
       var ta = document.getElementById('c115Cookie');
@@ -1231,7 +1254,9 @@ function exchange115Cookie(uid){
       });
     })
     .catch(function(e){
-      set115Status('换取 Cookie 失败：' + (e && e.message ? e.message : '网络错误'), 'err');
+      var info = (e && e.message ? e.message : '网络错误');
+      if (e && e.status) info += ' (HTTP ' + e.status + ')';
+      set115Status('换取 Cookie 失败：' + info, 'err');
       if (btn) btn.disabled = false;
     });
 }
