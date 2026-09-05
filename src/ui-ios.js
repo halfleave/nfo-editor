@@ -4956,11 +4956,11 @@ function detailBgCrossfade(){
   detailBgCurrentUrl = url;
 }
 
-/* 按横/竖版设置底图尺寸：横版 → 80% 宽（高度等比、居中）；竖版 → 80% 高（宽度等比、居中） */
+/* 手机端剧照统一按「等比例铺满屏幕 80% 高」居中（横版/竖版都如此，宽度随比例溢出两侧）；缓缓放大时再整体 scale 到 110% */
 function applyBgImage(layer, url, landscape){
   if (!layer) return;
   layer.style.backgroundImage = url ? 'url(' + escapeAttr(url) + ')' : '';
-  layer.style.backgroundSize = url ? (landscape ? '80% auto' : 'auto 80%') : '';
+  layer.style.backgroundSize = url ? 'auto 80%' : '';
   layer.style.backgroundPosition = 'center';
 }
 
