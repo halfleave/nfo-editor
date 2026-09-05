@@ -501,10 +501,33 @@ function normalizeJavbusFilm(d, opts){
     if (url.indexOf('/img?url=') > -1 || (state.magnetWorker && url.indexOf(state.magnetWorker) > -1)) return url;
     return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(url);
   }
+  // 首页海报「翻译中」图标（translatingIds）的 60s 兜底：翻译 Promise 可能因网络挂起而既不 resolve 也不 reject，
+  // 导致 finishTranslation 永不调用、图标永久卡住。每标记一次翻译就起一个按 id 的安全计时器，
+  // 到点无论翻译是否完成都强制从 translatingIds 移除并刷新首页；翻译正常结束时由 clearTranslatingFallback 清掉计时器。
+  var _translatingFallbackTimers = {};
+  function armTranslatingFallback(id){
+    if (!id) return;
+    if (_translatingFallbackTimers[id]) clearTimeout(_translatingFallbackTimers[id]);
+    _translatingFallbackTimers[id] = setTimeout(function(){
+      delete _translatingFallbackTimers[id];
+      if (state.translatingIds.has(id)){
+        state.translatingIds.delete(id);
+        state.translatingInFlight.delete(id);
+        state.translateFailedIds.add(id);
+        if (typeof updateTranslateRetryBtn === 'function') updateTranslateRetryBtn();
+        renderOverview();
+      }
+    }, 60000);
+  }
+  function clearTranslatingFallback(id){
+    if (!id) return;
+    if (_translatingFallbackTimers[id]){ clearTimeout(_translatingFallbackTimers[id]); delete _translatingFallbackTimers[id]; }
+  }
   function markPendingTranslate(id){
     if (state.metaSource === 'tmdb') return; // TMDB 来源影片保存时不自动触发翻译
     if (!translateConfigReady()) return;
     state.translatingIds.add(id);
+    armTranslatingFallback(id);   // 起 60s 兜底：最多 60 秒后图标强制消失
     renderOverview();
     state.pendingTranslateIds.add(id);
     setTimeout(function(){ flushPendingTranslate(id); }, 6000);
@@ -555,6 +578,8 @@ function normalizeJavbusFilm(d, opts){
     fetchImageToDataURL: fetchImageToDataURL,
     stillDisplayUrl: stillDisplayUrl,
     markPendingTranslate: markPendingTranslate,
+    armTranslatingFallback: armTranslatingFallback,
+    clearTranslatingFallback: clearTranslatingFallback,
     loadImageFromURL: loadImageFromURL,
     buildFilmFromCurrent: buildFilmFromCurrent
   };

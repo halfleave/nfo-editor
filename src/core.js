@@ -331,13 +331,15 @@ function computeTranslateNeed(film){
 /* 后台翻译并覆盖更新影片记录；完成后移除首页加载图标。
    一次请求翻译 title + summary，按当前数据逐字段判定是否需要覆盖（简介可能晚于保存到达，故可重复调用）。 */
 function startFilmTranslation(id){
-  if (!translateConfigReady() || state.translatingInFlight.has(id)) return; // 防重入（与 UI 图标分离）
+  if (state.translatingInFlight.has(id)) return;            // 已在翻译中：由在途任务负责收尾
+  if (!translateConfigReady()){ finishTranslation(id); return; } // 配置未就绪：清掉 markPendingTranslate 已显示的图标，避免卡死
   loadFilm(id).then(function(f){
-    if (!f) return;
+    if (!f){ finishTranslation(id); return; }
     var need = computeTranslateNeed(f);
-    if (!need.title && !need.plot){ return; } // 无需翻译（已是中文/英文/番号）
+    if (!need.title && !need.plot){ finishTranslation(id); return; } // 无需翻译：清掉图标，避免永久卡住
     state.translatingInFlight.add(id);
     state.translatingIds.add(id);
+    if (typeof NfoCore !== 'undefined' && NfoCore.armTranslatingFallback) NfoCore.armTranslatingFallback(id);
     renderOverview(); // 显示加载图标
     var title = (f.data && f.data.title) || f.title || '';
     var plot = (f.data && f.data.plot) || '';
@@ -370,6 +372,7 @@ function startFilmTranslation(id){
   }).catch(function(){});
 }
 function finishTranslation(id){
+  if (typeof NfoCore !== 'undefined' && NfoCore.clearTranslatingFallback) NfoCore.clearTranslatingFallback(id);
   state.translatingIds.delete(id);
   state.translatingInFlight.delete(id);
   renderOverview();
