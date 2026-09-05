@@ -1197,6 +1197,26 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #apiSheet .activation-status { font-size: 13px; color: var(--label-2); }
 #apiSheet .activation-status.ok { color: var(--accent); font-weight: 600; }
 #apiSheet .sb-pill-ghost { background: var(--card-fill); color: var(--accent); border: 1px solid var(--accent); font-size: 13px; padding: 4px 14px; border-radius: 980px; }
+/* ===== 115 网盘配置页 ===== */
+#sheet115 .c115-qr-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18px 0 12px; min-height: 180px; }
+#sheet115 .c115-qr-wrap #c115Qr { width: 168px; height: 168px; padding: 10px; background: #fff; border-radius: 14px; box-shadow: 0 4px 18px rgba(0,0,0,0.12); }
+#sheet115 .c115-qr-wrap #c115Qr img { display: block; width: 100% !important; height: 100% !important; }
+#sheet115 .c115-qr-wrap #c115Qr canvas { display: block; }
+#sheet115 .c115-status { font-size: 14px; line-height: 1.5; color: var(--label-2); text-align: center; padding: 4px 8px; min-height: 22px; }
+#sheet115 .c115-status.ok { color: var(--accent); font-weight: 600; }
+#sheet115 .c115-status.err { color: #ff3b30; font-weight: 600; }
+#sheet115 .c115-login-btn { width: 100%; margin-top: 6px; background: var(--accent); color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; padding: 13px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#sheet115 .c115-login-btn:active { filter: brightness(0.94); }
+#sheet115 .c115-login-btn:disabled { opacity: 0.5; }
+#sheet115 .c115-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 6px; }
+#sheet115 .c115-row button { flex: 1; border: 1px solid var(--accent); background: var(--card-fill); color: var(--accent); border-radius: 980px; font-size: 14px; font-weight: 600; padding: 10px 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#sheet115 .c115-row button:active { background: var(--accent); color: #fff; }
+#sheet115 .c115-cookie { width: 100%; min-height: 96px; border: 1px solid var(--sep); border-radius: 12px; background: var(--card-fill); color: var(--label); font-size: 13px; line-height: 1.5; padding: 12px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; -webkit-tap-highlight-color: transparent; }
+#sheet115 .c115-cookie::placeholder { color: var(--label-3); }
+#sheet115 .c115-verify { font-size: 13px; color: var(--label-2); text-align: center; margin-top: 8px; min-height: 18px; }
+#sheet115 .c115-verify.ok { color: var(--accent); font-weight: 600; }
+#sheet115 .c115-verify.err { color: #ff3b30; font-weight: 600; }
+#sheet115 .c115-hint { font-size: 12px; line-height: 1.5; color: var(--label-3); background: var(--card-fill); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
 /* API 分组帮助中间弹窗 */
 .api-group-help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 1; transition: opacity .2s ease; }
 .api-group-help-overlay.api-group-help-hidden { opacity: 0; pointer-events: none; }

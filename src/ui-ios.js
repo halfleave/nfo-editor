@@ -1036,6 +1036,187 @@ function updateSubtitleBtn(){
   var hasDvdId = !!(state.dvdId && String(state.dvdId).trim());
   if (btn) btn.style.display = (state.activationCode && !hasDvdId) ? '' : 'none';
 }
+/* ===== 115 网盘配置（扫码登录 + Cookie 管理） ===== */
+var C115_PROXY_TOKEN = 'C115PX_7d3k9f2m5q8x1a4t'; // 与 Vercel 代理 C115_TOKEN 约定一致（可被环境变量覆盖）
+var C115_APP = 'web'; // 扫码/兑换所用的 115 app 标识（与 P0 实测一致）
+var C115_COOKIE_KEY = 'c115cookie'; // IndexedDB(kv) 存储键
+var c115QrInstance = null;
+var c115Polling = false;
+var c115PollTimer = null;
+var c115Session = null; // { uid, time, sign }
+
+function c115ProxyBase(){
+  return (state.magnetWorker || DEFAULT_WORKER || '').replace(/\/$/, '');
+}
+/* 统一经 /api/115/proxy 透明转发；自动带 X-Proxy-Token，返回 { ok, status, d } */
+function c115ProxyFetch(targetUrl, opts){
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  opts.headers['X-Proxy-Token'] = C115_PROXY_TOKEN;
+  opts.cache = 'no-store';
+  var full = c115ProxyBase() + '/api/115/proxy?url=' + encodeURIComponent(targetUrl);
+  return fetch(full, opts).then(function(r){
+    return r.json().then(function(d){ return { ok: r.ok, status: r.status, d: d || {} }; })
+      .catch(function(){ return { ok: r.ok, status: r.status, d: {} }; });
+  });
+}
+function set115Status(text, type){
+  var el = document.getElementById('c115Status');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'c115-status' + (type ? ' ' + type : '');
+}
+function open115Sheet(){
+  var ta = document.getElementById('c115Cookie');
+  if (ta) ta.value = '';
+  idbGet('kv', C115_COOKIE_KEY).then(function(v){
+    if (ta && v){
+      ta.value = (typeof v === 'string') ? v : (v.cookie || '');
+      state.c115Cookie = ta.value;
+    }
+  }).catch(function(){});
+  set115Status('点击「扫码登录」生成二维码', '');
+  var vEl = document.getElementById('c115Verify');
+  if (vEl){ vEl.textContent = ''; vEl.className = 'c115-verify'; }
+}
+function start115Login(){
+  var base = c115ProxyBase();
+  if (!base){ showToast('请先在「API 配置」填写代理服务地址', 'error'); return; }
+  set115Status('正在生成二维码…', '');
+  var btn = document.getElementById('c115LoginBtn');
+  if (btn) btn.disabled = true;
+  c115ProxyFetch('https://qrcodeapi.115.com/api/1.0/web/1.0/token/')
+    .then(function(res){
+      if (!res.ok || !res.d || !res.d.data || !res.d.data.uid){ throw new Error('获取二维码失败'); }
+      var data = res.d.data;
+      c115Session = { uid: data.uid, time: data.time, sign: data.sign, app: C115_APP };
+      var qrText = data.qrcode || ('https://qrcodeapi.115.com/api/1.0/web/1.0/token/?uid=' + data.uid + '&time=' + data.time + '&sign=' + data.sign + '&app=' + C115_APP);
+      // 若接口返回的二维码 URL 自带 app 参数，优先与之保持一致（避免扫码 app 与兑换 app 不一致被拒）
+      var m = /[?&]app=([^&]+)/.exec(qrText);
+      if (m) c115Session.app = decodeURIComponent(m[1]);
+      render115Qr(qrText);
+      set115Status('请用 115 App 扫码并在手机上确认', '');
+      start115Polling();
+    })
+    .catch(function(e){
+      set115Status('生成二维码失败：' + (e && e.message ? e.message : '网络错误'), 'err');
+      if (btn) btn.disabled = false;
+    });
+}
+function render115Qr(text){
+  var el = document.getElementById('c115Qr');
+  if (!el) return;
+  el.innerHTML = '';
+  if (typeof QRCode === 'undefined'){ set115Status('二维码库未加载', 'err'); return; }
+  c115QrInstance = new QRCode(el, { text: text, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.M });
+}
+function start115Polling(){
+  if (c115Polling) return;
+  c115Polling = true;
+  c115PollOnce();
+}
+function c115StatusValue(res){
+  if (!res || !res.d || !res.d.data) return null;
+  var d = res.d.data;
+  if (typeof d.status !== 'undefined' && d.status !== null) return d.status;
+  if (Array.isArray(d) && d[0] && typeof d[0].status !== 'undefined') return d[0].status;
+  return null;
+}
+function c115PollOnce(){
+  if (!c115Polling || !c115Session) return;
+  var s = c115Session;
+  var url = 'https://qrcodeapi.115.com/get/status/?uid=' + s.uid + '&time=' + s.time + '&sign=' + encodeURIComponent(s.sign);
+  c115ProxyFetch(url)
+    .then(function(res){
+      if (!c115Polling) return;
+      var st = c115StatusValue(res);
+      if (st === 0 || st === null){
+        set115Status('请用 115 App 扫码并在手机上确认', '');
+        c115PollTimer = setTimeout(c115PollOnce, 1800);
+      } else if (st === 1){
+        set115Status('已扫码，请在 115 App 上确认登录', '');
+        c115PollTimer = setTimeout(c115PollOnce, 1800);
+      } else if (st === 2){
+        set115Status('已确认，正在换取 Cookie…', 'ok');
+        stop115Polling();
+        exchange115Cookie(s.uid);
+      } else if (st === -1){
+        set115Status('二维码已过期，请重新点击「扫码登录」', 'err');
+        stop115Polling();
+      } else if (st === -2){
+        set115Status('已取消登录', 'err');
+        stop115Polling();
+      } else {
+        set115Status('未知状态：' + st, 'err');
+        c115PollTimer = setTimeout(c115PollOnce, 1800);
+      }
+    })
+    .catch(function(){
+      if (!c115Polling) return;
+      set115Status('轮询失败，重试中…', 'err');
+      c115PollTimer = setTimeout(c115PollOnce, 2500);
+    });
+}
+function stop115Polling(){
+  c115Polling = false;
+  if (c115PollTimer){ clearTimeout(c115PollTimer); c115PollTimer = null; }
+  var btn = document.getElementById('c115LoginBtn');
+  if (btn) btn.disabled = false;
+}
+function exchange115Cookie(uid){
+  var btn = document.getElementById('c115LoginBtn');
+  if (btn) btn.disabled = true;
+  var app = (c115Session && c115Session.app) || C115_APP;
+  c115ProxyFetch('https://passportapi.115.com/app/1.0/' + app + '/1.0/login/qrcode/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app: app, account: uid })
+  })
+    .then(function(res){
+      if (!res.ok || !res.d || !res.d.data || !res.d.data.cookie){ throw new Error('换取 Cookie 失败'); }
+      var ck = res.d.data.cookie;
+      var cookieStr = Object.keys(ck).map(function(k){ return k + '=' + ck[k]; }).join('; ');
+      var ta = document.getElementById('c115Cookie');
+      if (ta) ta.value = cookieStr;
+      state.c115Cookie = cookieStr;
+      return idbPut('kv', C115_COOKIE_KEY, cookieStr).then(function(){
+        set115Status('登录成功，Cookie 已自动保存', 'ok');
+        showToast('115 登录成功', 'success');
+        verify115();
+      });
+    })
+    .catch(function(e){
+      set115Status('换取 Cookie 失败：' + (e && e.message ? e.message : '网络错误'), 'err');
+      if (btn) btn.disabled = false;
+    });
+}
+function save115Cookie(){
+  var ta = document.getElementById('c115Cookie');
+  var v = ta ? ta.value.trim() : '';
+  if (!v){ showToast('Cookie 不能为空', 'error'); return; }
+  state.c115Cookie = v;
+  idbPut('kv', C115_COOKIE_KEY, v).then(function(){
+    showToast('已保存 Cookie', 'success');
+    verify115();
+  }).catch(function(){ showToast('保存失败', 'error'); });
+}
+function verify115(){
+  var vEl = document.getElementById('c115Verify');
+  var ta = document.getElementById('c115Cookie');
+  var cookie = (ta && ta.value) ? ta.value.trim() : (state.c115Cookie || '');
+  if (!cookie){ if (vEl){ vEl.textContent = '请先填写 Cookie'; vEl.className = 'c115-verify err'; } return; }
+  if (vEl){ vEl.textContent = '连通性自检中…'; vEl.className = 'c115-verify'; }
+  c115ProxyFetch('https://webapi.115.com/files?cid=0', { headers: { 'Cookie': cookie } })
+    .then(function(res){
+      if (!res.ok || !res.d || res.d.state !== true){ throw new Error((res.d && (res.d.error || res.d.msg)) || 'Cookie 无效'); }
+      var user = (res.d.data && (res.d.data.user_name || res.d.data.user)) || '';
+      var msg = '✓ Cookie 有效' + (user ? '（' + user + '）' : '');
+      if (vEl){ vEl.textContent = msg; vEl.className = 'c115-verify ok'; }
+    })
+    .catch(function(e){
+      if (vEl){ vEl.textContent = '✗ ' + (e && e.message ? e.message : '自检失败'); vEl.className = 'c115-verify err'; }
+    });
+}
 /* ===== 翻译配置（OpenAI 兼容，客户端直连 LLM） ===== */
 var TRANSLATE_SYSTEM_PROMPT = NfoCore.TRANSLATE_SYSTEM_PROMPT; // 翻译纯逻辑已抽至 src/core-shared.js
 var TRANSLATE_CFG_KEY = 'translateConfig';

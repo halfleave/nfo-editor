@@ -182,6 +182,42 @@
     </div>
   </div>
 
+  <!-- 115 网盘配置 -->
+  <div class="sheet" id="sheet115">
+    <div class="sheet-bar sheet-bar-center">
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="sb-title">115 网盘</span>
+      <button class="sb-pill" onclick="closeAllSheets()">完成</button>
+    </div>
+    <div class="sheet-list c115-list">
+      <div class="api-group">
+        <div class="api-group-title-row">
+          <div class="api-group-title">扫码登录</div>
+          <button class="api-help-q-sm" onclick="showToast('用 115 App 扫下方二维码并确认，登录成功后 Cookie 自动填入','info')" aria-label="关于">?</button>
+        </div>
+        <div class="c115-qr-wrap"><div id="c115Qr"></div></div>
+        <div class="c115-status" id="c115Status">点击「扫码登录」生成二维码</div>
+        <button class="c115-login-btn" id="c115LoginBtn" onclick="start115Login()">扫码登录</button>
+      </div>
+      <div class="api-group">
+        <div class="api-group-title-row">
+          <div class="api-group-title">Cookie</div>
+        </div>
+        <div class="field field-stacked no-border">
+          <textarea class="ios-input c115-cookie" id="c115Cookie" rows="3" placeholder="UID=...; CID=...; SEID=...; KID=..."></textarea>
+        </div>
+        <div class="c115-row">
+          <button onclick="save115Cookie()">保存 Cookie</button>
+          <button onclick="verify115()">连通性自检</button>
+        </div>
+        <div class="c115-verify" id="c115Verify"></div>
+      </div>
+      <div class="api-help-note">Cookie 仅保存在本机（IndexedDB），不会上传到任何服务器。115 代理只做请求转发，不存储你的数据。</div>
+    </div>
+  </div>
+
   <!-- 翻译配置 -->
   <div class="sheet" id="translateSheet">
     <div class="sheet-bar sheet-bar-center">
@@ -650,6 +686,11 @@
           <span class="sr-label" data-page-node-id="T6Mzz8MejvJovKb0R5B4OW">API 配置</span>
           <span class="sr-chevron" data-page-node-id="VRZZ70fbtdmP3AXc5pksLY"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="00pGc0fNT2IHFujZELXIRo"><path d="M9 18l6-6-6-6" data-page-node-id="viNlOcgj4Bl14P33hD6klD"/></svg></span>
         </button>
+        <button class="settings-row" onclick="open115Sheet()">
+          <span class="sr-icon" style="background:#FF6B00;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 3v9h16V7H4zm2 2h.01M6.5 9h5" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></span>
+          <span class="sr-label">115 网盘</span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
         <button class="settings-row" onclick="openTranslateSheet()">
           <span class="sr-icon" style="background:#0A84FF;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3a9 9 0 0 0-9 9 9 9 0 0 0 3.6 7.2L12 22l5.4-2.8A9 9 0 0 0 21 12a9 9 0 0 0-9-9Zm0 13.2a4.2 4.2 0 1 1 0-8.4 4.2 4.2 0 0 1 0 8.4Zm0-6.4a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg></span>
           <span class="sr-label">翻译配置</span>
@@ -864,6 +905,7 @@
   <div class="toast" id="toast" data-page-node-id="kQXLVcJHmasANAWqCwvZ0s"></div>
 </div>
 
+<script src="src/qrcode.min.js"></script>
 <script src="src/core-shared.js"></script>
 <script src="src/ui-ios.js"></script>
 </body>
