@@ -832,8 +832,11 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
   overflow: hidden; background: var(--surface-sunken); border: 1px solid var(--border);
 }
 .result-poster img { width: 100%; height: 100%; object-fit: cover; }
+.result-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.result-ph svg { width: 22px; height: 22px; opacity: .4; }
 .result-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .result-title { font-size: 13.5px; font-weight: 600; display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.result-tags { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
 .result-meta { font-size: 11.5px; color: var(--text-3); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .result-overview {
   font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin-top: 2px;
@@ -1084,6 +1087,17 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
 .detail-plot { font-size: 13.5px; line-height: 1.75; color: rgba(255,255,255,.9); cursor: pointer; }
 .detail-plot:empty { display: none; }
 .detail-plot:hover { color: #fff; }
+/* 翻译失败：简介下方「重新翻译」小按钮 */
+.detail-translate-retry { margin-top: 10px; }
+.tr-retry-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px; border: 1px solid rgba(255,255,255,.25);
+  border-radius: 999px; background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.85); font-size: 12px; line-height: 1; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tr-retry-btn:hover { background: rgba(255,255,255,.16); color: #fff; }
+.tr-retry-btn svg { width: 13px; height: 13px; }
 
 .detail-cast { margin-top: 26px; }
 .detail-cast:empty, .detail-shots:empty { display: none; }
@@ -1704,3 +1718,22 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .poster-card .poster-art { position: relative; }
 .result-item { position: relative; }
 .result-poster { position: relative; }
+/* 列表缩略图需相对定位，让「翻译中」角标右上角吸附 */
+.list-thumb { position: relative; }
+
+/* 翻译中：首页海报/列表缩略图右上角的旋转加载角标 */
+.mc-translating {
+  position: absolute; top: 6px; right: 6px; z-index: 4;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+.tr-spin {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: tr-spin 0.8s linear infinite;
+}
+@keyframes tr-spin { to { transform: rotate(360deg); } }

@@ -222,6 +222,17 @@ img { display: block; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
 .detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-plot:empty { display: none; }
+/* 翻译失败：简介下方「重新翻译」小按钮 */
+.detail-translate-retry { margin-top: 12px; }
+.tr-retry-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border: 1px solid rgba(255,255,255,.25);
+  border-radius: 999px; background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.85); font-size: 13px; line-height: 1; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tr-retry-btn:active { background: rgba(255,255,255,.18); color: #fff; }
+.tr-retry-btn svg { width: 14px; height: 14px; }
 /* 详情页底部「演职人员」 */
 .detail-cast { margin-top: 22px; padding-top: 16px; }
 .detail-cast:empty { display: none; }

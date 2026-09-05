@@ -364,6 +364,7 @@ var state = {
   translatingIds: new Set(), // 正在后台翻译的影片 id 集合（仅运行时，用于首页加载图标）
   translatingInFlight: new Set(), // 正在发翻译请求的 id（防重入，与 UI 图标分离）
   pendingTranslateIds: new Set(), // 已保存、待「数据加载完」后再翻译的 id
+  translateFailedIds: new Set(), // 翻译失败的影片 id 集合（详情页简介下方显示「重新翻译」按钮）
   overviewTab: 'movie',
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
@@ -1112,18 +1113,20 @@ function startFilmTranslation(id){
         var changed = false;
         if (need.title && newTitle && newTitle !== title){ ff.title = newTitle; if (ff.data) ff.data.title = newTitle; changed = true; }
         if (need.plot && newSummary && newSummary !== plot){ if (ff.data) ff.data.plot = newSummary; changed = true; }
-        if (!changed){ finishTranslation(id); return; }
+        if (!changed){ state.translateFailedIds.delete(id); updateTranslateRetryBtn(); finishTranslation(id); return; }
         saveFilm(ff).then(function(){
           // 若正在查看该影片，回写编辑态，避免后续 silentRefresh 用原始日文覆盖已翻好的中文
           if (currentFilmId === id){
             if (need.title && newTitle && newTitle !== (getVal('title')||'')) setFieldVal('title', newTitle);
             if (need.plot && newSummary && newSummary !== (getVal('plot')||'')) setFieldVal('plot', newSummary);
           }
-          finishTranslation(id); renderOverview();
+          state.translateFailedIds.delete(id); updateTranslateRetryBtn(); finishTranslation(id); renderOverview();
         }).catch(function(){ finishTranslation(id); });
       }).catch(function(){ finishTranslation(id); });
     }).catch(function(){
+      state.translateFailedIds.add(id);
       finishTranslation(id);
+      updateTranslateRetryBtn();
       var tDvd = (f && (f.dvdId || (f.data && f.data.dvdId))) || '';
       var tLabel = tDvd ? String(tDvd).trim() : (f && (f.title || ''));
       showToast('【' + tLabel + ' 翻译失败】', 'error');
@@ -2194,7 +2197,7 @@ function saveToDisk(){
     state.overviewTab = film.adult ? 'xv' : 'movie';
     var tabs = document.getElementById('overviewTabs');
     if (tabs) tabs.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === state.overviewTab); });
-    switchPage('home');
+    goAfterEdit(film.id);
     renderOverview();
     // 保存完成后按配置自动清理过期缓存
     clearExpiredFilms();
@@ -2221,7 +2224,7 @@ function quickSaveAndHome(){
     var tabs = document.getElementById('overviewTabs');
     if (tabs) tabs.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === state.overviewTab); });
     renderOverview(); clearExpiredFilms();
-    switchPage('home');
+    goAfterEdit(saved.id);
     showToast(result.merged ? '已合并更新并保存' : '已保存，返回首页', 'success');
     checkFilmCap(1500);
     // 先存原文；保存时即显示首页剧照刷新图标，等 silentRefresh（图片/简介加载完）后由 flushPendingTranslate 翻译
@@ -3244,7 +3247,7 @@ function refreshFromJavbus(film){
   showToast('正在从 JavBus 刷新…', 'success');
   currentFilmId = film.id;
   currentFilmLocked = !!film.locked;
-  return fetch(base + '/api/movies/' + encodeURIComponent(id))
+  return fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(id))
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d){
       if (!d || (!d.title && !d.id)) throw new Error('无详情数据');
@@ -4023,6 +4026,17 @@ function applyDetailTint(url, bgEl){
   img.onerror = function(){};
   img.src = url;
 }
+function updateTranslateRetryBtn(){
+  var box = document.getElementById('detailTranslateRetry');
+  if (!box) return;
+  box.style.display = (currentDetailFilmId && state.translateFailedIds && state.translateFailedIds.has(currentDetailFilmId)) ? '' : 'none';
+}
+function retryTranslate(){
+  if (!currentDetailFilmId) return;
+  if (state.translateFailedIds) state.translateFailedIds.delete(currentDetailFilmId);
+  updateTranslateRetryBtn();
+  startFilmTranslation(currentDetailFilmId);
+}
 function renderFilmDetail(film){
   currentDetailFilm = film || null;
   var d = film.data || {};
@@ -4104,6 +4118,7 @@ function renderFilmDetail(film){
   var plotText = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
   document.getElementById('detailPlot').textContent = plotText;
   document.getElementById('detailPlot').onclick = function(){ copyText(plotText, '简介'); };
+  updateTranslateRetryBtn();
   // 演职人员：演员在前，导演统一放最后；所有影片统一标题「演职人员」
   var people = [];
   (d.actors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.role || '', photo: p.photo }); });
@@ -4384,8 +4399,26 @@ function closeTrailer(){
   if (v){ try { v.pause(); } catch(e){} v.remove(); }
 }
 /* —— 详情页底部胶囊按钮下的图标操作 —— */
+var editReturnToDetail = false;
+function goAfterEdit(id){
+  if (editReturnToDetail && id){
+    editReturnToDetail = false;
+    openFilmDetail(encodeURIComponent(id));
+  } else {
+    switchPage('home');
+  }
+}
+function editPageBack(){
+  if (editReturnToDetail && currentFilmId){
+    editReturnToDetail = false;
+    openFilmDetail(encodeURIComponent(currentFilmId));
+  } else {
+    switchPage('search');
+  }
+}
 function detailEdit(){
   if (!currentDetailFilmId) return;
+  editReturnToDetail = true;
   openFilm(encodeURIComponent(currentDetailFilmId));
 }
 function detailDownloadMeta(){
@@ -4465,7 +4498,7 @@ function bindOverviewLongPress(){
             var locked = film && film.locked;
             var isCustom = film && film.source === 'custom';
             showContextSheet('影片操作', [
-              { label: '编辑', icon: 'pencil', onClick: function(){ newFilm(); openFilm(encodeURIComponent(id)); } },
+              { label: '编辑', icon: 'pencil', onClick: function(){ editReturnToDetail = true; newFilm(); openFilm(encodeURIComponent(id)); } },
               { label: '刷新', icon: 'refresh', onClick: function(){ refreshFilm(id); }, disabled: isCustom },
               { label: '下载元数据', icon: 'download', onClick: function(){ downloadMetadata(id); } },
               { label: locked ? '解锁' : '锁定', icon: locked ? 'unlock' : 'lock', onClick: function(){ toggleLock(id); } },
@@ -4475,7 +4508,7 @@ function bindOverviewLongPress(){
             ], { x: startX, y: startY });
           }).catch(function(){
             showContextSheet('影片操作', [
-              { label: '编辑', icon: 'pencil', onClick: function(){ newFilm(); openFilm(encodeURIComponent(id)); } },
+              { label: '编辑', icon: 'pencil', onClick: function(){ editReturnToDetail = true; newFilm(); openFilm(encodeURIComponent(id)); } },
               { label: '刷新', icon: 'refresh', onClick: function(){ refreshFilm(id); }, disabled: true },
               { label: '下载元数据', icon: 'download', onClick: function(){ downloadMetadata(id); } },
               { label: '锁定', icon: 'lock', onClick: function(){ toggleLock(id); } },

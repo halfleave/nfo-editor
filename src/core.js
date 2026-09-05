@@ -46,6 +46,7 @@ var state = {
   translatingIds: new Set(),       // 正在后台翻译的影片 id 集合（仅运行时，用于首页加载图标）
   translatingInFlight: new Set(),  // 正在发翻译请求的 id（防重入，与 UI 图标分离）
   pendingTranslateIds: new Set(),  // 已保存、待「数据加载完」后再翻译的 id
+  translateFailedIds: new Set(),   // 翻译失败的影片 id 集合（详情页简介下方显示「重新翻译」按钮）
   adult: false,
   metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
   javCensor: 'masked', // javCensor: 'masked'(有码) | 'uncensored'(无码)，仅 metaSource==='jav' 时生效，切换 JavBus 搜索路由
@@ -341,18 +342,20 @@ function startFilmTranslation(id){
         var changed = false;
         if (need.title && newTitle && newTitle !== title){ ff.title = newTitle; if (ff.data) ff.data.title = newTitle; changed = true; }
         if (need.plot && newSummary && newSummary !== plot){ if (ff.data) ff.data.plot = newSummary; changed = true; }
-        if (!changed){ finishTranslation(id); return; }
+        if (!changed){ state.translateFailedIds.delete(id); if (typeof updateTranslateRetryBtn === 'function') updateTranslateRetryBtn(); finishTranslation(id); return; }
         saveFilm(ff).then(function(){
           // 若正在查看该影片，回写编辑态，避免后续 silentRefresh 用原始日文覆盖已翻好的中文
           if (currentFilmId === id){
             if (need.title && newTitle && newTitle !== (getVal('title')||'')) setFieldVal('title', newTitle);
             if (need.plot && newSummary && newSummary !== (getVal('plot')||'')) setFieldVal('plot', newSummary);
           }
-          finishTranslation(id); renderOverview();
+          state.translateFailedIds.delete(id); if (typeof updateTranslateRetryBtn === 'function') updateTranslateRetryBtn(); finishTranslation(id); renderOverview();
         }).catch(function(){ finishTranslation(id); });
       }).catch(function(){ finishTranslation(id); });
     }).catch(function(){
+      state.translateFailedIds.add(id);
       finishTranslation(id);
+      if (typeof updateTranslateRetryBtn === 'function') updateTranslateRetryBtn();
       var tDvd = (f && (f.dvdId || (f.data && f.data.dvdId))) || '';
       var tLabel = tDvd ? String(tDvd).trim() : (f && (f.title || ''));
       showToast('【' + tLabel + ' 翻译失败】', 'error');

@@ -1321,6 +1321,7 @@ function openCustomEdit(){
   switchHomeTab('basic');
   setTimeout(function(){ var t = document.getElementById('title'); if (t) t.focus(); }, 60);
 }
+var editReturnToDetail = false;
 function closeEditModal(){
   if (document.body.classList.contains('edit-modal-open')){
     var card = document.querySelector('#page-edit .edit-modal-card');
@@ -1330,6 +1331,11 @@ function closeEditModal(){
     setTimeout(function(){
       document.body.classList.remove('edit-modal-open');
     }, 180);
+    // 从详情页弹出的编辑弹窗：关闭后刷新并回到详情页（底层即详情页，这里主动重载最新数据）
+    if (editReturnToDetail){
+      editReturnToDetail = false;
+      if (currentFilmId) openFilmDetail(encodeURIComponent(currentFilmId));
+    }
   } else {
     switchPage('home');
   }
@@ -1902,6 +1908,17 @@ function saveAdultPhrases(){
 /* ===================================================================
    详情页（沉浸式，宽屏限宽居中）
    =================================================================== */
+function updateTranslateRetryBtn(){
+  var box = document.getElementById('detailTranslateRetry');
+  if (!box) return;
+  box.style.display = (currentDetailFilmId && state.translateFailedIds && state.translateFailedIds.has(currentDetailFilmId)) ? '' : 'none';
+}
+function retryTranslate(){
+  if (!currentDetailFilmId) return;
+  if (state.translateFailedIds) state.translateFailedIds.delete(currentDetailFilmId);
+  updateTranslateRetryBtn();
+  startFilmTranslation(currentDetailFilmId);
+}
 function renderFilmDetail(film){
   stopDetailBgSlideshow();
   currentDetailFilm = film || null;
@@ -1986,6 +2003,7 @@ function renderFilmDetail(film){
   var plotEl = document.getElementById('detailPlot');
   plotEl.textContent = plotText;
   plotEl.onclick = function(){ copyText(plotText, '简介'); };
+  updateTranslateRetryBtn();
 
   /* 演职员：演员在前（最多 11 位），导演在后 */
   var people = [];
@@ -2268,8 +2286,24 @@ function detailBgCrossfade(){
 /* ---------- 详情页操作 ---------- */
 function detailEdit(){
   if (!currentDetailFilmId) return;
-  newFilm();
-  openFilm(encodeURIComponent(currentDetailFilmId));
+  editReturnToDetail = true;
+  loadFilm(currentDetailFilmId).then(function(film){
+    if (!film){ showToast('未找到影片', 'error'); editReturnToDetail = false; return; }
+    // 以弹窗形式在详情页之上打开编辑，关闭/保存后自然回到详情页（底层即详情页）
+    newFilm();
+    applyFilmData(film);
+    currentFilmId = film.id;
+    var bd = document.getElementById('editModalBackdrop');
+    if (bd) bd.classList.add('show');
+    document.body.classList.add('edit-modal-open');
+    var card = document.querySelector('#page-edit .edit-modal-card');
+    if (card){
+      card.classList.remove('show');
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){ card.classList.add('show'); }); });
+    }
+    switchHomeTab('basic');
+    setTimeout(function(){ var t = document.getElementById('title'); if (t) t.focus(); }, 60);
+  }).catch(function(){ showToast('读取影片失败', 'error'); editReturnToDetail = false; });
 }
 function detailDownloadMeta(){
   if (!currentDetailFilmId) return;
