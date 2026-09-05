@@ -4309,8 +4309,9 @@ var SHOT_REVEAL_MS = 150;
 var detailRenderSeq = 0;   // 详情页渲染代号：每次 renderFilmDetail +1，用于丢弃上一部影片的延迟 still 加载回调，防止剧照污染不同影片
 function loadMoreShots(){
   if (!detailShotCols.length) return;
-  // 续入队下一批，走同一 queueShot/placeShot，前面已放置的图零重排
-  var end = Math.min(detailShotQueueIndex + SHOTS_BATCH, detailFullShots.length, getShotCap());
+  // 续入队下一批尚未加载的剧照，走同一 queueShot/placeShot，前面已放置的图零重排。
+  // 注意：不受 getShotCap() 限制（getShotCap 只决定初始展示几张），点击应能逐步揭示全部未加载剧照，直到没有更多为止。
+  var end = Math.min(detailShotQueueIndex + SHOTS_BATCH, detailFullShots.length);
   for (; detailShotQueueIndex < end; detailShotQueueIndex++){
     queueShot(detailShotQueueIndex, NfoCore.stillDisplayUrl(detailFullShots[detailShotQueueIndex]));
   }
