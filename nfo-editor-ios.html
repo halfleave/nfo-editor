@@ -194,16 +194,8 @@
     <div class="sheet-list c115-list">
       <div class="api-group">
         <div class="api-group-title-row">
-          <div class="api-group-title">扫码登录</div>
-          <button class="api-help-q-sm" onclick="showToast('用 115 App 扫下方二维码并确认，登录成功后 Cookie 自动填入','info')" aria-label="关于">?</button>
-        </div>
-        <div class="c115-qr-wrap"><div id="c115Qr"></div></div>
-        <div class="c115-status" id="c115Status">点击「扫码登录」生成二维码</div>
-        <button class="c115-login-btn" id="c115LoginBtn" onclick="start115Login()">扫码登录</button>
-      </div>
-      <div class="api-group">
-        <div class="api-group-title-row">
           <div class="api-group-title">Cookie</div>
+          <button class="api-help-q-sm" onclick="showToast('登录成功后 Cookie 自动保存；也可手动粘贴','info')" aria-label="关于">?</button>
         </div>
         <div class="field field-stacked no-border">
           <textarea class="ios-input c115-cookie" id="c115Cookie" rows="3" placeholder="UID=...; CID=...; SEID=...; KID=..."></textarea>
@@ -213,6 +205,16 @@
           <button onclick="verify115()">连通性自检</button>
         </div>
         <div class="c115-verify" id="c115Verify"></div>
+      </div>
+      <div class="api-group" id="c115QrGroup">
+        <div class="api-group-title-row">
+          <div class="api-group-title">扫码登录</div>
+          <button class="api-help-q-sm" onclick="showToast('用 115 App 扫下方二维码并确认，登录成功后 Cookie 自动填入','info')" aria-label="关于">?</button>
+        </div>
+        <div class="c115-qr-wrap" id="c115QrWrap"><div id="c115Qr"></div></div>
+        <div class="c115-status" id="c115Status">正在生成二维码…</div>
+        <div class="c115-countdown" id="c115Countdown"></div>
+        <button class="c115-login-btn" id="c115ReQrBtn" onclick="start115Login()" style="display:none;">重新展示二维码</button>
       </div>
       <div class="api-help-note">Cookie 仅保存在本机（IndexedDB），不会上传到任何服务器。115 代理只做请求转发，不存储你的数据。</div>
     </div>

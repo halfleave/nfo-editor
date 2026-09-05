@@ -1040,9 +1040,13 @@ function updateSubtitleBtn(){
 var C115_PROXY_TOKEN = 'C115PX_7d3k9f2m5q8x1a4t'; // 与 Vercel 代理 C115_TOKEN 约定一致（可被环境变量覆盖）
 var C115_APP = 'web'; // 扫码/兑换所用的 115 app 标识（与 P0 实测一致）
 var C115_COOKIE_KEY = 'c115cookie'; // IndexedDB(kv) 存储键
+var C115_DEFAULT_DIR_CID = '3311283881428122938'; // P0 实测「云下载」目录（离线下载固定到此，不让用户选）
 var c115QrInstance = null;
 var c115Polling = false;
 var c115PollTimer = null;
+var c115QrTimer = null; // 二维码每 2 分钟自动刷新（setTimeout 兜底）
+var c115CountdownTimer = null; // 每秒刷新的倒计时（setInterval）
+var c115QrDeadline = 0; // 下次刷新二维码的时间戳
 var c115Session = null; // { uid, time, sign }
 
 function c115ProxyBase(){
@@ -1067,6 +1071,7 @@ function set115Status(text, type){
   el.className = 'c115-status' + (type ? ' ' + type : '');
 }
 function open115Sheet(){
+  closeAllSheets();
   var ta = document.getElementById('c115Cookie');
   if (ta) ta.value = '';
   idbGet('kv', C115_COOKIE_KEY).then(function(v){
@@ -1075,16 +1080,24 @@ function open115Sheet(){
       state.c115Cookie = ta.value;
     }
   }).catch(function(){});
-  set115Status('点击「扫码登录」生成二维码', '');
   var vEl = document.getElementById('c115Verify');
   if (vEl){ vEl.textContent = ''; vEl.className = 'c115-verify'; }
+  openSheet('sheet115');
+  if (state.c115Cookie){
+    hide115QrArea(); // 已登录：不显示二维码，给「重新展示二维码」入口
+  } else {
+    start115Login(); // 进入即展示二维码
+  }
 }
 function start115Login(){
+  if (c115QrTimer){ clearTimeout(c115QrTimer); c115QrTimer = null; }
+  if (c115CountdownTimer){ clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+  show115QrArea();
+  var sheet = document.getElementById('sheet115');
+  if (!sheet || !sheet.classList.contains('show')) return; // 弹层关闭后不再刷新
   var base = c115ProxyBase();
   if (!base){ showToast('请先在「API 配置」填写代理服务地址', 'error'); return; }
   set115Status('正在生成二维码…', '');
-  var btn = document.getElementById('c115LoginBtn');
-  if (btn) btn.disabled = true;
   c115ProxyFetch('https://qrcodeapi.115.com/api/1.0/web/1.0/token/')
     .then(function(res){
       if (!res.ok || !res.d || !res.d.data || !res.d.data.uid){ throw new Error('获取二维码失败'); }
@@ -1097,11 +1110,43 @@ function start115Login(){
       render115Qr(qrText);
       set115Status('请用 115 App 扫码并在手机上确认', '');
       start115Polling();
+      start115Countdown(); // 每 2 分钟刷新二维码 + 显示倒计时
     })
     .catch(function(e){
       set115Status('生成二维码失败：' + (e && e.message ? e.message : '网络错误'), 'err');
-      if (btn) btn.disabled = false;
     });
+}
+function show115QrArea(){
+  var wrap = document.getElementById('c115QrWrap'); if (wrap) wrap.style.display = '';
+  var st = document.getElementById('c115Status'); if (st) st.textContent = '正在生成二维码…';
+  var cd = document.getElementById('c115Countdown'); if (cd) cd.textContent = '';
+  var btn = document.getElementById('c115ReQrBtn'); if (btn) btn.style.display = 'none';
+}
+function hide115QrArea(){
+  if (c115CountdownTimer){ clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+  if (c115QrTimer){ clearTimeout(c115QrTimer); c115QrTimer = null; }
+  stop115Polling();
+  var wrap = document.getElementById('c115QrWrap'); if (wrap) wrap.style.display = 'none';
+  var st = document.getElementById('c115Status'); if (st) st.textContent = '已登录，需重新扫码时点「重新展示二维码」';
+  var cd = document.getElementById('c115Countdown'); if (cd) cd.textContent = '';
+  var btn = document.getElementById('c115ReQrBtn'); if (btn) btn.style.display = '';
+}
+function start115Countdown(){
+  if (c115CountdownTimer){ clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+  c115QrDeadline = Date.now() + 120000;
+  update115Countdown();
+  c115CountdownTimer = setInterval(update115Countdown, 1000);
+}
+function update115Countdown(){
+  var el = document.getElementById('c115Countdown');
+  if (!el) return;
+  var remain = Math.ceil((c115QrDeadline - Date.now()) / 1000);
+  if (remain <= 0){
+    if (c115CountdownTimer){ clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+    start115Login(); // 到点重新生成二维码（自动重启倒计时）
+    return;
+  }
+  el.textContent = '二维码 ' + remain + ' 秒后刷新';
 }
 function render115Qr(text){
   var el = document.getElementById('c115Qr');
@@ -1160,8 +1205,7 @@ function c115PollOnce(){
 function stop115Polling(){
   c115Polling = false;
   if (c115PollTimer){ clearTimeout(c115PollTimer); c115PollTimer = null; }
-  var btn = document.getElementById('c115LoginBtn');
-  if (btn) btn.disabled = false;
+  if (c115QrTimer){ clearTimeout(c115QrTimer); c115QrTimer = null; }
 }
 function exchange115Cookie(uid){
   var btn = document.getElementById('c115LoginBtn');
@@ -1181,6 +1225,7 @@ function exchange115Cookie(uid){
       state.c115Cookie = cookieStr;
       return idbPut('kv', C115_COOKIE_KEY, cookieStr).then(function(){
         set115Status('登录成功，Cookie 已自动保存', 'ok');
+        hide115QrArea();
         showToast('115 登录成功', 'success');
         verify115();
       });
@@ -1216,6 +1261,28 @@ function verify115(){
     .catch(function(e){
       if (vEl){ vEl.textContent = '✗ ' + (e && e.message ? e.message : '自检失败'); vEl.className = 'c115-verify err'; }
     });
+}
+/* 磁力列表一键离线：固定离线到默认目录（不让用户选目录） */
+function c115OfflineFromMagnet(mrEl){
+  var magnet = mrEl ? mrEl.getAttribute('data-magnet') : '';
+  if (!magnet){ showToast('没有可离线的链接', 'error'); return; }
+  var cookie = state.c115Cookie || '';
+  if (!cookie){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+  showToast('正在添加到 115 离线下载…', 'info');
+  var cid = C115_DEFAULT_DIR_CID;
+  var body = 'url=' + encodeURIComponent(magnet) + '&wp_path_id=' + encodeURIComponent(cid);
+  c115ProxyFetch('https://clouddownload.115.com/lixianssp/?ac=add_task_url', {
+    method: 'POST',
+    headers: { 'Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body
+  })
+  .then(function(res){
+    var d = res.d || {};
+    var ok = res.ok && (d.state === true || (d.data && (d.data.tid || d.data.task_id || d.data.infoid)));
+    if (ok){ showToast('已发送到 115 离线下载（默认目录）', 'success'); }
+    else { showToast('离线下载失败：' + ((d.error || d.msg) ? (d.error || d.msg) : '未知错误'), 'error'); }
+  })
+  .catch(function(e){ showToast('离线下载请求失败：' + (e && e.message ? e.message : '网络错误'), 'error'); });
 }
 /* ===== 翻译配置（OpenAI 兼容，客户端直连 LLM） ===== */
 var TRANSLATE_SYSTEM_PROMPT = NfoCore.TRANSLATE_SYSTEM_PROMPT; // 翻译纯逻辑已抽至 src/core-shared.js
@@ -1572,16 +1639,26 @@ function renderMagnetResults(items){
     if (it.seeders) meta.push('做种 ' + it.seeders);
     if (it.leechers) meta.push('下载 ' + it.leechers);
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
-    html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="copyMagnet(this)">'
+    html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="toggleMagnetActions(this)">'
       + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
       + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + (meta.length ? '<span>' + meta.join(' · ') + '</span>' : '') + '</div>'
       + (magnet ? '<div class="mr-magnet">' + magnet + '</div>' : '')
       + '</div>'
+      + '<div class="mr-actions">'
+      + '<button type="button" class="mr-copy" onclick="event.stopPropagation(); copyMagnet(this.closest(\'.magnet-result\'))">复制</button>'
+      + '<button type="button" class="mr-115" onclick="event.stopPropagation(); c115OfflineFromMagnet(this.closest(\'.magnet-result\'))">115 离线</button>'
+      + '</div>'
       + '</div>';
   }
   box.innerHTML = html;
+}
+function toggleMagnetActions(el){
+  var wasExpanded = el.classList.contains('expanded');
+  var all = document.querySelectorAll('.magnet-result.expanded');
+  for (var i = 0; i < all.length; i++){ all[i].classList.remove('expanded'); }
+  if (!wasExpanded) el.classList.add('expanded');
 }
 function copyMagnet(el){
   var magnet = el.getAttribute('data-magnet');

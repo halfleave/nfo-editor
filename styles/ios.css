@@ -1216,7 +1216,21 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #sheet115 .c115-verify { font-size: 13px; color: var(--label-2); text-align: center; margin-top: 8px; min-height: 18px; }
 #sheet115 .c115-verify.ok { color: var(--accent); font-weight: 600; }
 #sheet115 .c115-verify.err { color: #ff3b30; font-weight: 600; }
+/* 115 配置弹窗 85% 高 + 刷新倒计时 */
+#sheet115 { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
+#sheet115 .sheet-list { max-height: 72vh; max-height: 72dvh; }
+#sheet115 .c115-countdown { font-size: 12px; color: var(--label-3); text-align: center; margin-top: 6px; min-height: 16px; }
+/* 磁力列表：点击展开 复制 / 115离线 */
+.magnet-result { flex-wrap: wrap; }
+.magnet-result .mr-actions { display: none; width: 100%; gap: 10px; margin-top: 10px; }
+.magnet-result.expanded .mr-actions { display: flex; }
+.magnet-result .mr-actions button { flex: 1; border: none; border-radius: 980px; font-size: 14px; font-weight: 600; padding: 11px 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.magnet-result .mr-actions .mr-copy { background: var(--card-fill); color: var(--label); box-shadow: inset 0 0 0 1px var(--sep); }
+.magnet-result .mr-actions .mr-115 { background: var(--accent); color: var(--accent-text); }
 #sheet115 .c115-hint { font-size: 12px; line-height: 1.5; color: var(--label-3); background: var(--card-fill); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+#sheet115 .c115-dl-url { width: 100%; min-height: 52px; border: 1px solid var(--sep); border-radius: 12px; background: var(--card-fill); color: var(--label); font-size: 13px; line-height: 1.5; padding: 12px; resize: vertical; -webkit-tap-highlight-color: transparent; }
+#sheet115 .c115-dl-url::placeholder { color: var(--label-3); }
+#sheet115 .c115-dl-dir { flex: 1; -webkit-appearance: none; border: 1px solid var(--sep); border-radius: 980px; background: var(--card-fill); color: var(--label); font-size: 14px; font-weight: 600; padding: 10px 12px; }
 /* API 分组帮助中间弹窗 */
 .api-group-help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 1; transition: opacity .2s ease; }
 .api-group-help-overlay.api-group-help-hidden { opacity: 0; pointer-events: none; }
