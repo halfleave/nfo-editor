@@ -4416,6 +4416,7 @@ function renderFilmDetail(film){
         detailShotColW = colsWrap ? Math.max(1, (colsWrap.clientWidth - 10) / 2) : 200; // 2 列 gap 10
         var initN = Math.min(getShotCap(), fullShots.length);
         for (var q = 0; q < initN; q++) queueShot(q, NfoCore.stillDisplayUrl(fullShots[q]));
+        detailShotQueueIndex = initN; // 初始已入队 initN 张，推进游标避免「加载更多」重复加载前 initN 张
       });
     } else {
       shotEl.innerHTML = '';
