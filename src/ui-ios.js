@@ -4045,8 +4045,8 @@ function renderFilmDetail(film){
   currentDetailFilm = film || null;
   var d = film.data || {};
   var adult = !!film.adult;
-  // 底图优先用剧照（宽图 fanart），没有剧照时再回退到海报；与 PC 端一致
-  var bgUrl = d.fanart || (d.fanartCandidates && d.fanartCandidates[0]) || d.detailPoster || film.posterDataUrl || d.poster || '';
+  // 进入详情页时底图先用「海报」，再回退到 fanart/剧照；海报为竖版，按 80% 屏高顶对齐、缓缓放大
+  var bgUrl = d.poster || film.posterDataUrl || d.fanart || (d.fanartCandidates && d.fanartCandidates[0]) || d.detailPoster || '';
   var bgIsLandscape = !!(d.fanart || (d.fanartCandidates && d.fanartCandidates[0]));
   var bgEl = document.getElementById('detailBg');
   var pe = document.getElementById('detailPoster');
@@ -4055,7 +4055,7 @@ function renderFilmDetail(film){
     pe.style.transition = 'none';
     pe.style.opacity = '1';
     pe.style.transform = 'scale(1)';
-    applyBgImage(pe, bgUrl, bgIsLandscape);          // 初始底图：横版 80% 宽 / 竖版 80% 高，居中
+    applyBgImage(pe, bgUrl, bgIsLandscape);          // 初始底图：海报优先，80% 屏高、顶对齐、缓缓放大
     if (bgUrl){
       // 基线缓缓放大：即使只有单张底图也缓慢放大到 110%（多张时由轮播持续放大 + 切换）
       requestAnimationFrame(function(){
@@ -4956,12 +4956,12 @@ function detailBgCrossfade(){
   detailBgCurrentUrl = url;
 }
 
-/* 手机端剧照统一按「等比例铺满屏幕 80% 高」居中（横版/竖版都如此，宽度随比例溢出两侧）；缓缓放大时再整体 scale 到 110% */
+/* 手机端底图统一按「等比例铺满屏幕 80% 高 + 顶对齐」（横版/竖版都如此，宽度随比例溢出两侧）；缓缓放大时再整体 scale 到 110% */
 function applyBgImage(layer, url, landscape){
   if (!layer) return;
   layer.style.backgroundImage = url ? 'url(' + escapeAttr(url) + ')' : '';
   layer.style.backgroundSize = url ? 'auto 80%' : '';
-  layer.style.backgroundPosition = 'center';
+  layer.style.backgroundPosition = 'center top';
 }
 
 /* ===== Init（渐进加载：先让启动页绘制，再分步初始化，最后淡出） ===== */
