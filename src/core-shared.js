@@ -413,11 +413,46 @@ function normalizeJavbusFilm(d, opts){
     return { id: '', adult: !!opts.adult, data: {} };
   }
 
+  /* ============ 当前影片 ↔ 记录 互转（单点真相） ============ */
+  // 从当前编辑态构建影片对象：两端此前逐字一致的重复实现合并为单点真相。
+  // 仍依赖各端顶层全局：getVal / state / currentFilmLocked / normalizeTextField（两端均声明为顶层全局，调用时按当前加载的端解析）。
+  function buildFilmFromCurrent(){
+    var id = sanitizeName(getVal('filename') || getVal('title') || ('film-' + Date.now()));
+    // 成人归属完全由分级决定：nc-17 或 nr（含 JAV 默认 NR）即归 18+（XV）——集中到共享核心单点真相
+    var adult = isAdultByRating(state.mpaa);
+    // 来源：优先沿用当前编辑态（刷新时由对应 populate 重新赋值），否则按搜索源推导，自定义兜底
+    var src = state.source || (state.metaSource === 'jav' ? 'jav' : 'tmdb');
+    return {
+      __type: FILM_TYPE, id: id, adult: adult,
+      source: src,
+      title: getVal('title'),
+      rating: getVal('rating'),
+      locked: currentFilmLocked,
+      posterDataUrl: state.poster || null,
+      data: {
+        title: getVal('title'), filename: getVal('filename'), originaltitle: getVal('originaltitle'),
+        adult: adult,
+        premiered: getVal('premiered'), year: getVal('year'), runtime: getVal('runtime'),
+        plot: getVal('plot'), rating: getVal('rating'), mpaa: getVal('mpaa'),
+        countries: state.countries.slice(), genres: state.genres.slice(),
+        directors: state.directors, actors: state.actors,
+        studio: normalizeTextField(state.studio), label: normalizeTextField(state.label), series: normalizeTextField(state.series), dvdId: state.dvdId || null,
+        poster: state.poster || null, originalPoster: state.originalPoster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
+        posterCandidates: state.posterCandidates || null, fanartCandidates: state.fanartCandidates || null,
+        gallery: state.gallery || [], galleryLinks: state.galleryLinks || [], hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null,
+        tmdbMediaType: state.tmdbMediaType || 'movie',
+        javbusId: state.javbusId || null,
+        javbusMagnets: (state.javbusMagnets || []).slice()
+      },
+      updatedAt: Date.now()
+    };
+  }
+
   /* ============ img：图片 URL 加载纯逻辑（单点真相） ============ */
   // 图片加载核心：fetch → blob → FileReader → dataURL。不碰 DOM / 不读 state，
   // 两端 loadImageFromURL 胶水层在拿到 dataURL 后再做 state 赋值 / 裁剪 / 渲染。
   function fetchImageToDataURL(url){
-    return fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
+    return fetch(url, { mode: 'cors', cache: 'force-cache' }).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
       .then(function(blob){
         return new Promise(function(resolve, reject){
           var reader = new FileReader();
@@ -426,6 +461,42 @@ function normalizeJavbusFilm(d, opts){
           reader.readAsDataURL(blob);
         });
       });
+  }
+
+  // ===== 图片显示 / 加载胶水（两端逐字一致的重复实现合并为单点真相）=====
+  // 注：以下函数仍引用各端的顶层全局（state / renderOverview / cropRightHalfAuto 等），
+  // 两端均将其声明为顶层全局，调用时按当前加载的端解析，不存在分叉。
+  function stillDisplayUrl(url){
+    if (!url || url.indexOf('data:') === 0) return url;
+    var isAv = currentDetailFilm && (currentDetailFilm.adult || (currentDetailFilm.data && currentDetailFilm.data.adult));
+    if (!isAv) return url;
+    if (!state.magnetWorker) return url;
+    if (url.indexOf('/img?url=') > -1 || (state.magnetWorker && url.indexOf(state.magnetWorker) > -1)) return url;
+    return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(url);
+  }
+  function markPendingTranslate(id){
+    if (state.metaSource === 'tmdb') return; // TMDB 来源影片保存时不自动触发翻译
+    if (!translateConfigReady()) return;
+    state.translatingIds.add(id);
+    renderOverview();
+    state.pendingTranslateIds.add(id);
+    setTimeout(function(){ flushPendingTranslate(id); }, 6000);
+  }
+  function loadImageFromURL(url, type, ratio, cropMode){
+    ratio = ratio || 0;
+    var cropFn;
+    if (cropMode === 'right') cropFn = cropRightHalfAuto;   // 横图右切去标题；竖图取整张
+    else if (cropMode === 'full') cropFn = function(durl){ return Promise.resolve(durl); };  // 不裁剪，保留原图
+    else cropFn = function(durl){ return cropToRatio(durl, ratio); };
+    return fetchImageToDataURL(url).then(function(durl){
+      cropOriginals[type] = durl;
+      // AV 海报走 'right' 裁剪（首页用裁剪版、详情页用原始版）：保留未裁剪的原始海报
+      if (type === 'poster' && cropMode === 'right') state.originalPoster = durl;
+      return cropFn(durl).then(function(cropped){
+        state[type] = cropped;
+        renderMediaThumb(type, cropped);
+      });
+    }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
   }
 
   global.NfoCore = {
@@ -453,6 +524,10 @@ function normalizeJavbusFilm(d, opts){
     isAdultByRating: isAdultByRating,
     filmKey: filmKey,
     createEmptyFilm: createEmptyFilm,
-    fetchImageToDataURL: fetchImageToDataURL
+    fetchImageToDataURL: fetchImageToDataURL,
+    stillDisplayUrl: stillDisplayUrl,
+    markPendingTranslate: markPendingTranslate,
+    loadImageFromURL: loadImageFromURL,
+    buildFilmFromCurrent: buildFilmFromCurrent
   };
 })(typeof window !== 'undefined' ? window : this);

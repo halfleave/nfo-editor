@@ -537,33 +537,35 @@ function switchHomeTab(tab){
    =================================================================== */
 function posterCardHtml(f){
   var enc = escapeAttr(encodeURIComponent(f.id));
-  var art = f.posterDataUrl
-    ? '<img src="' + escapeAttr(f.posterDataUrl) + '" alt="" loading="lazy">'
+  var posterUrl = f.posterDataUrl || (f.data && f.data.poster) || '';
+  var art = posterUrl
+    ? '<img src="' + escapeAttr(posterUrl) + '" alt="" loading="lazy">'
     : '<div class="poster-ph">' + ICON.film + '</div>';
   var d = f.data || {};
   var subOn = !!d.hasSubtitle;
   var badges = (d.rating || f.rating) ? '<div class="poster-badges"><span class="poster-rating">' + escapeHtml(String(d.rating || f.rating)) + '</span></div>' : '';
   var lock = f.locked ? '<span class="poster-lock">' + ICON.lock + '</span>' : '';
   var title = (f.adult && d.dvdId) ? String(d.dvdId).toUpperCase() : (f.title || f.id);
-  var subBadge = subOn ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '';
+  var translating = (state.translatingIds && state.translatingIds.has(f.id)) ? '<div class="mc-translating"><span class="tr-spin"></span></div>' : '';
   var bits = [];
   if (d.year || f.year) bits.push(escapeHtml(String(d.year || f.year)));
   if (d.runtime || f.runtime) bits.push(escapeHtml(String(d.runtime || f.runtime)) + ' 分钟');
   var sub = bits.length ? '<div class="poster-sub">' + bits.join('<span class="dot">·</span>') + '</div>' : '';
   return '<div class="poster-card' + (subOn ? ' has-sub' : '') + '" data-id="' + enc + '">'
-       +   '<div class="poster-art">' + art + badges + lock + (subOn ? '<span class="img-sub-badge">字幕</span>' : '')
+       +   '<div class="poster-art">' + art + badges + lock + (subOn ? '<span class="img-sub-badge">字幕</span>' : '') + translating
        +     '<div class="poster-actions">'
        +       '<button class="pa-btn" data-act="edit" title="编辑">' + CTX_ICONS.pencil + '</button>'
        +       '<button class="pa-btn danger" data-act="del" title="删除">' + CTX_ICONS.trash + '</button>'
        +     '</div>'
        +   '</div>'
-       +   '<div class="poster-meta"><div class="poster-name">' + escapeHtml(title) + subBadge + '</div>' + sub + '</div>'
+       +   '<div class="poster-meta"><div class="poster-name">' + escapeHtml(title) + '</div>' + sub + '</div>'
        + '</div>';
 }
 
 function listRowHtml(f){
   var enc = escapeAttr(encodeURIComponent(f.id));
-  var thumb = f.posterDataUrl ? '<img src="' + escapeAttr(f.posterDataUrl) + '" alt="" loading="lazy">' : '';
+  var thumbUrl = f.posterDataUrl || (f.data && f.data.poster) || '';
+  var thumb = thumbUrl ? '<img src="' + escapeAttr(thumbUrl) + '" alt="" loading="lazy">' : '';
   var title = (f.adult && f.data && f.data.dvdId) ? String(f.data.dvdId).toUpperCase() : (f.title || f.id);
   var d = f.data || {};
   var plot = String(d.plot || f.plot || '').trim();
@@ -582,8 +584,9 @@ function listRowHtml(f){
   var runtime = d.runtime || f.runtime;
   if (runtime) meta.push('<span class="lm-runtime">' + escapeHtml(String(runtime)) + ' 分钟</span>');
   var when = f.updatedAt ? new Date(f.updatedAt).toLocaleDateString('zh-CN') : '';
+  var translating = (state.translatingIds && state.translatingIds.has(f.id)) ? '<div class="mc-translating"><span class="tr-spin"></span></div>' : '';
   return '<div class="list-row" data-id="' + enc + '">'
-       +   '<div class="list-thumb">' + thumb + '</div>'
+       +   '<div class="list-thumb">' + thumb + translating + '</div>'
        +   '<div class="list-main">'
        +     '<div class="list-name">' + escapeHtml(title) + (f.data && f.data.hasSubtitle ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '') + '</div>'
        +     '<div class="list-desc">' + (plot ? escapeHtml(plot) : '<span class="list-empty">暂无简介</span>') + '</div>'
@@ -1139,17 +1142,18 @@ function renderJavbusResults(items, box){
     var bits = [];
     if (it.date) bits.push(it.date);
     if (it.id) bits.push(it.id);
-    // 搜索接口 tags 数组含「高清/字幕/新种」三类，标题后缀全量显示为胶囊
+    // 搜索接口 tags 数组含「高清/字幕/新种」三类，单独一行放在标题下方
     var tags = (it.tags && it.tags.indexOf) ? it.tags.slice() : [];
     var subTag = tags.indexOf('字幕') >= 0;
-    var tagBadges = tags.length ? ' ' + tags.map(function(t){
+    var tagBadges = tags.length ? tags.map(function(t){
       var cls = t === '字幕' ? 'sub-badge-sub' : (t === '高清' ? 'sub-badge-hd' : (t === '新种' ? 'sub-badge-new' : 'sub-badge-other'));
       return '<span class="sub-badge ' + cls + '">' + escapeHtml(t) + '</span>';
     }).join('') : '';
     return '<div class="result-item' + (subTag ? ' has-sub' : '') + '" onclick="applyJavbusResult(' + i + ')">'
-         +   '<div class="result-poster">' + (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" alt="">' + (subTag ? '<span class="img-sub-badge">字幕</span>' : '') : '') + '</div>'
+         +   '<div class="result-poster">' + (cover ? '<img src="' + escapeAttr(cover) + '" loading="lazy" alt="">' : '<div class="result-ph">' + ICON.film + '</div>') + '</div>'
          +   '<div class="result-body">'
-         +     '<div class="result-title">' + escapeHtml(title) + '<span class="badge badge-danger">18+</span>' + tagBadges + '</div>'
+         +     '<div class="result-title">' + escapeHtml(title) + '<span class="badge badge-danger">18+</span></div>'
+         +     (tagBadges ? '<div class="result-tags">' + tagBadges + '</div>' : '')
          +     (bits.length ? '<div class="result-meta">' + escapeHtml(bits.join(' · ')) + '</div>' : '')
          +   '</div>'
          + '</div>';
@@ -1363,7 +1367,7 @@ function saveToDisk(){
   var title = getVal('title');
   var filename = getVal('filename');
   if (!filename && !title){ showToast('请先填写影片名或文件名', 'error'); return; }
-  var film = buildFilmFromCurrent();
+  var film = NfoCore.buildFilmFromCurrent();
   saveFilm(film).then(function(){
     currentFilmId = film.id;
     state.overviewTab = film.adult ? 'xv' : 'movie';
@@ -1373,6 +1377,9 @@ function saveToDisk(){
     showToast('已保存', 'success');
     markDirty(false);
     checkFilmCap(1500);
+    // 先存原文；保存时即显示首页剧照刷新图标，等数据加载完再翻译（手动编辑无后续异步，立即 flush）
+    NfoCore.markPendingTranslate(film.id);
+    flushPendingTranslate(film.id);
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
@@ -1381,7 +1388,7 @@ function quickSaveAndHome(){
   var title = getVal('title');
   var filename = getVal('filename');
   if (!filename && !title){ showToast('缺少影片名，无法保存', 'error'); return Promise.resolve(); }
-  var film = buildFilmFromCurrent();
+  var film = NfoCore.buildFilmFromCurrent();
   return saveFilmWithMerge(film).then(function(result){
     var saved = result.film;
     currentFilmId = saved.id;
@@ -1391,6 +1398,8 @@ function quickSaveAndHome(){
     if (document.body.classList.contains('edit-modal-open')) closeEditModal(); else switchPage('home');
     showToast(result.merged ? '已合并更新并保存' : '已保存', 'success');
     checkFilmCap(1500);
+    // 先存原文；保存时即显示首页剧照刷新图标，等 silentRefresh（图片/简介加载完）后由 flushPendingTranslate 翻译
+    NfoCore.markPendingTranslate(saved.id);
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
@@ -1840,7 +1849,9 @@ function handleNfoImport(ev){
 /* ---------- 其它同步 ---------- */
 function updateSubtitleBtn(){
   var b = document.getElementById('dtActSub');
-  if (b) b.style.display = state.activationCode ? '' : 'none';
+  // 有番号（如 JAV）的影片不显示字幕按钮；字幕搜索按标题匹配，仅无番号影片适用
+  var hasDvdId = !!(state.dvdId && String(state.dvdId).trim());
+  if (b) b.style.display = (state.activationCode && !hasDvdId) ? '' : 'none';
 }
 function updateAdultPhraseCount(){
   var ta = document.getElementById('adultPhraseInput');
@@ -2065,7 +2076,7 @@ function renderFilmDetail(film){
         var colsWrap = shotEl.querySelector('.detail-shots-cols');
         detailShotColW = colsWrap ? Math.max(1, (colsWrap.clientWidth - 24) / 3) : 200;
         var initN = Math.min(getShotCap(), fullShots.length);
-        for (var q = 0; q < initN; q++) queueShot(q, stillDisplayUrl(fullShots[q]));
+        for (var q = 0; q < initN; q++) queueShot(q, NfoCore.stillDisplayUrl(fullShots[q]));
       });
     } else {
       shotEl.innerHTML = '';
@@ -2096,7 +2107,7 @@ function loadMoreShots(){
   // 续入队下一批，走同一 queueShot/placeShot，前面已放置的图零重排
   var end = Math.min(detailShotQueueIndex + SHOTS_BATCH, detailFullShots.length, getShotCap());
   for (; detailShotQueueIndex < end; detailShotQueueIndex++){
-    queueShot(detailShotQueueIndex, stillDisplayUrl(detailFullShots[detailShotQueueIndex]));
+    queueShot(detailShotQueueIndex, NfoCore.stillDisplayUrl(detailFullShots[detailShotQueueIndex]));
   }
   var btn = document.querySelector('.detail-shots-more');
   if (btn) btn.style.display = (detailShotQueueIndex >= detailFullShots.length) ? 'none' : '';
@@ -2749,6 +2760,42 @@ function verifyActivationCode(){
     .catch(function(){ showToast('验证失败，请检查 Worker 地址', 'error'); });
 }
 
+/* 翻译配置弹窗：回填输入框 */
+function openTranslateSheet(){
+  var set = function(id, v){ var el = document.getElementById(id); if (el) el.value = v || ''; };
+  set('translateBaseUrl', state.translateBaseUrl);
+  set('translateApiKey', state.translateApiKey);
+  set('translateModel', state.translateModel);
+  toggleTranslateClear();
+  openSheet('translateSheet');
+}
+function toggleTranslateClear(){
+  var map = [['translateBaseUrl','translateBaseClear'],['translateApiKey','translateKeyClear'],['translateModel','translateModelClear']];
+  map.forEach(function(p){
+    var inp = document.getElementById(p[0]); var btn = document.getElementById(p[1]);
+    if (inp && btn) btn.classList.toggle('show', !!(inp && inp.value));
+  });
+}
+function clearTranslateBase(){ var i=document.getElementById('translateBaseUrl'); if(i){i.value='';toggleTranslateClear();i.focus();} }
+function clearTranslateKey(){ var i=document.getElementById('translateApiKey'); if(i){i.value='';toggleTranslateClear();i.focus();} }
+function clearTranslateModel(){ var i=document.getElementById('translateModel'); if(i){i.value='';toggleTranslateClear();i.focus();} }
+/* 读取翻译配置输入并持久化（静默） */
+function persistTranslateConfig(allowClear){
+  try {
+    var base = (document.getElementById('translateBaseUrl').value||'').trim();
+    var key = (document.getElementById('translateApiKey').value||'').trim();
+    var model = (document.getElementById('translateModel').value||'').trim();
+    if (allowClear || base || !state.translateBaseUrl) state.translateBaseUrl = base;
+    if (allowClear || key || !state.translateApiKey) state.translateApiKey = key;
+    if (allowClear || model || !state.translateModel) state.translateModel = model;
+    setTranslateConfig({ baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel }).catch(function(){});
+  } catch(e){}
+}
+function saveTranslateConfig(){
+  try { persistTranslateConfig(true); closeAllSheets(); showToast('已保存','success'); }
+  catch(e){ showToast('保存失败','error'); }
+}
+
 /* ===================================================================
    恢复初始状态
    =================================================================== */
@@ -2903,6 +2950,9 @@ function bootApp(){
     getMagnetConfig().then(function(cfg){ if (cfg && cfg.worker) state.magnetWorker = cfg.worker; }).catch(function(){}),
     getTier().then(function(t){ state.tier = t || ''; }).catch(function(){}),
     getActivationCode().then(function(c){ state.activationCode = c || ''; updateActivationStatus(); }).catch(function(){}),
+    getTranslateConfig().then(function(c){
+      state.translateBaseUrl = c.baseUrl || ''; state.translateApiKey = c.apiKey || ''; state.translateModel = c.model || '';
+    }).catch(function(){}),
     getAdultLoadingPhrases().then(function(list){ currentAdultPhrases = list || []; }).catch(function(){}),
     idbGet('kv', 'libView').then(function(v){ if (v === 'grid' || v === 'list') state._libView = v; }).catch(function(){}),
     getThemeHidden().then(function(h){

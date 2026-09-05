@@ -348,12 +348,14 @@ function startFilmTranslation(id){
             if (need.title && newTitle && newTitle !== (getVal('title')||'')) setFieldVal('title', newTitle);
             if (need.plot && newSummary && newSummary !== (getVal('plot')||'')) setFieldVal('plot', newSummary);
           }
-          finishTranslation(id); renderOverview(); showToast('已翻译标题/简介', 'success');
+          finishTranslation(id); renderOverview();
         }).catch(function(){ finishTranslation(id); });
       }).catch(function(){ finishTranslation(id); });
     }).catch(function(){
       finishTranslation(id);
-      showToast('翻译失败，已保留原文', 'error');
+      var tDvd = (f && (f.dvdId || (f.data && f.data.dvdId))) || '';
+      var tLabel = tDvd ? String(tDvd).trim() : (f && (f.title || ''));
+      showToast('【' + tLabel + ' 翻译失败】', 'error');
     });
   }).catch(function(){});
 }
@@ -366,13 +368,6 @@ function finishTranslation(id){
    并把 id 放入 pending；由 flushPendingTranslate 在 silentRefresh 后（数据全）触发翻译。
    saveToDisk（手动保存、无后续异步）可直接在调用后 flush；quickSaveAndHome 等 silentRefresh 触发。
    6s 兜底确保即使 silentRefresh 未跑（无图/加载失败）也不卡图标。 */
-function markPendingTranslate(id){
-  if (!translateConfigReady()) return;
-  state.translatingIds.add(id);
-  renderOverview();
-  state.pendingTranslateIds.add(id);
-  setTimeout(function(){ flushPendingTranslate(id); }, 6000);
-}
 function flushPendingTranslate(id){
   if (state.pendingTranslateIds.has(id)){
     state.pendingTranslateIds.delete(id);
@@ -454,9 +449,9 @@ function populateFromJAV(d){
   state.fanart = cachedUrls[0] || '';
   state.fanartCandidates = cachedUrls.slice(1);
   var imgPromises = [];
-  if (n.cover) imgPromises.push(loadImageFromURL(n.cover, 'poster', 2/3, 'right'));
+  if (n.cover) imgPromises.push(NfoCore.loadImageFromURL(n.cover, 'poster', 2/3, 'right'));
   imgPromises.push(
-    Promise.all(cachedUrls.map(function(u){ return fetchImageDataURL(u).catch(function(){ return null; }); }))
+    Promise.all(cachedUrls.map(function(u){ return NfoCore.fetchImageToDataURL(u).catch(function(){ return null; }); }))
       .then(function(urls){
         var dataUrls = urls.filter(Boolean);
         if (!dataUrls.length) dataUrls = cachedUrls.slice();
@@ -520,9 +515,9 @@ function populateFromJavbus(d){
   state.fanart = cachedUrls[0] || '';
   state.fanartCandidates = cachedUrls.slice(1);
   var imgPromises = [];
-  if (n.cover) imgPromises.push(loadImageFromURL(n.cover, 'poster', 2/3, 'right'));
+  if (n.cover) imgPromises.push(NfoCore.loadImageFromURL(n.cover, 'poster', 2/3, 'right'));
   imgPromises.push(
-    Promise.all(cachedUrls.map(function(u){ return fetchImageDataURL(u).catch(function(){ return null; }); }))
+    Promise.all(cachedUrls.map(function(u){ return NfoCore.fetchImageToDataURL(u).catch(function(){ return null; }); }))
       .then(function(urls){
         var dataUrls = urls.filter(Boolean);
         if (!dataUrls.length) dataUrls = cachedUrls.slice();
@@ -679,7 +674,7 @@ function refreshFromJavbus(film){
       if (!d || (!d.title && !d.id)) throw new Error('无详情数据');
       state.javbusId = d.id || id;   // 刷新时回填番号，保证后续可再刷
       var imgP = populateFromJavbus(d);   // 内部重设 state.source='javbus'、state.javbusId
-      var f = buildFilmFromCurrent();
+      var f = NfoCore.buildFilmFromCurrent();
       f.id = film.id;            // 强制覆盖原影片，避免生成新条目
       f.locked = !!film.locked;
       return saveFilm(f).then(function(){
@@ -697,7 +692,7 @@ function doApplyRefresh(film, tid, mediaType){
   currentFilmId = film.id;
   currentFilmLocked = !!film.locked;
   applyTMDBById(tid, function(){
-    var f = buildFilmFromCurrent();
+    var f = NfoCore.buildFilmFromCurrent();
     f.id = film.id;            // 强制覆盖原影片，避免 id 变化生成新条目
     f.locked = !!film.locked;
     saveFilm(f).then(function(){
@@ -887,50 +882,6 @@ function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
   });
 }
 
-function buildFilmFromCurrent(){
-  var id = sanitizeName(getVal('filename') || getVal('title') || ('film-' + Date.now()));
-  // 成人归属完全由分级决定：nc-17 或 nr（含 JAV 默认 NR）即归 18+（XV）——集中到共享核心单点真相
-  var adult = NfoCore.isAdultByRating(state.mpaa);
-  // 来源：优先沿用当前编辑态（刷新时由对应 populate 重新赋值），否则按搜索源推导，自定义兜底
-  var src = state.source || (state.metaSource === 'jav' ? 'jav' : 'tmdb');
-  return {
-    __type: NfoCore.FILM_TYPE, id: id, adult: adult,
-    source: src,
-    title: getVal('title'),
-    rating: getVal('rating'),
-    locked: currentFilmLocked,
-    posterDataUrl: state.poster || null,
-    data: {
-      title: getVal('title'), filename: getVal('filename'), originaltitle: getVal('originaltitle'),
-      adult: adult,
-      premiered: getVal('premiered'), year: getVal('year'), runtime: getVal('runtime'),
-      plot: getVal('plot'), rating: getVal('rating'), mpaa: getVal('mpaa'),
-      countries: state.countries.slice(), genres: state.genres.slice(),
-      directors: state.directors, actors: state.actors,
-      studio: normalizeTextField(state.studio), label: normalizeTextField(state.label), series: normalizeTextField(state.series), dvdId: state.dvdId || null,
-      poster: state.poster || null, originalPoster: state.originalPoster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
-      posterCandidates: state.posterCandidates || null, fanartCandidates: state.fanartCandidates || null,
-      gallery: state.gallery || [], galleryLinks: state.galleryLinks || [], hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null,
-      tmdbMediaType: state.tmdbMediaType || 'movie',
-      javbusId: state.javbusId || null,
-      javbusMagnets: (state.javbusMagnets || []).slice()
-    },
-    updatedAt: Date.now()
-  };
-}
-
-function fetchImageDataURL(url){
-  return fetch(url, { mode: 'cors', cache: 'force-cache' })
-    .then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
-    .then(function(blob){
-      return new Promise(function(resolve){
-        var rd = new FileReader();
-        rd.onload = function(evt){ resolve(evt.target.result); };
-        rd.readAsDataURL(blob);
-      });
-    });
-}
-
 function loadImageFromTMDB(posterPath, type, size){
   size = size || 'original';
   var url = tmdbImgUrl(posterPath, size);
@@ -949,23 +900,6 @@ function loadImageFromTMDB(posterPath, type, size){
         reader.readAsDataURL(blob);
       });
     }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
-}
-
-function loadImageFromURL(url, type, ratio, cropMode){
-  ratio = ratio || 0;
-  var cropFn;
-  if (cropMode === 'right') cropFn = cropRightHalfAuto;   // 横图右切去标题；竖图取整张
-  else if (cropMode === 'full') cropFn = function(durl){ return Promise.resolve(durl); };  // 不裁剪，保留原图
-  else cropFn = function(durl){ return cropToRatio(durl, ratio); };
-  return NfoCore.fetchImageToDataURL(url).then(function(durl){
-    cropOriginals[type] = durl;
-    // AV 海报走 'right' 裁剪（首页用裁剪版、详情页用原始版）：保留未裁剪的原始海报
-    if (type === 'poster' && cropMode === 'right') state.originalPoster = durl;
-    return cropFn(durl).then(function(cropped){
-      state[type] = cropped;
-      renderMediaThumb(type, cropped);
-    });
-  }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
 }
 
 function loadJavbusActorPhoto(photoUrl, idx){
@@ -1062,7 +996,7 @@ function clearMediaThumb(type){
 
 function silentRefreshCurrentFilm(){
   if (!currentFilmId) return;
-  var film = buildFilmFromCurrent();
+  var film = NfoCore.buildFilmFromCurrent();
   film.id = currentFilmId;
   saveFilm(film).then(function(){
     renderOverview();
@@ -1110,7 +1044,7 @@ function fetchVideosMerged(urls){
 function prefetchSearchPoster(posterPath){
   if (!posterPath) return Promise.resolve();
   var url = tmdbImgUrl(posterPath, 'w154');
-  return fetchImageDataURL(url)
+  return NfoCore.fetchImageToDataURL(url)
     .then(function(durl){ return cropToRatio(durl, 2/3); })
     .then(function(cropped){ if (!state.poster) state.poster = cropped; })
     .catch(function(){});
@@ -1184,15 +1118,6 @@ function fetchJavbusSearch(q, box){
       var msg = (e && e.message) ? e.message : '未知错误';
     box.innerHTML = '<div class="tmdb-msg">试试其他神秘代码吧～</div>';
   }).finally(function(){ stopLoadingRotator(); });
-}
-
-function stillDisplayUrl(url){
-  if (!url || url.indexOf('data:') === 0) return url;
-  var isAv = currentDetailFilm && (currentDetailFilm.adult || (currentDetailFilm.data && currentDetailFilm.data.adult));
-  if (!isAv) return url;
-  if (!state.magnetWorker) return url;
-  if (url.indexOf('/img?url=') > -1 || (state.magnetWorker && url.indexOf(state.magnetWorker) > -1)) return url;
-  return state.magnetWorker.replace(/\/$/, '') + '/img?url=' + encodeURIComponent(url);
 }
 
 function renderMagnetItemInner(m){
