@@ -1308,6 +1308,9 @@ function newFilm(adult){
 function openCustomEdit(){
   newFilm(false);
   state.source = 'custom';
+  // 添加影片模式：显式断开「回到详情页」标记，避免残留详情页编辑状态（editReturnToDetail=true）
+  // 导致本弹窗关闭/保存时被 closeEditModal 误判为「从详情页编辑」，从而跳进详情页而非回首页。
+  editReturnToDetail = false;
   var bd = document.getElementById('editModalBackdrop');
   if (bd) bd.classList.add('show');
   document.body.classList.add('edit-modal-open');
