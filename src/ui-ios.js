@@ -4046,6 +4046,7 @@ function retryTranslate(){
 }
 function renderFilmDetail(film){
   currentDetailFilm = film || null;
+  detailRenderSeq++;   // 本次渲染代号；任何上一部影片的延迟(still probe onload)回调都会被判定为过期而丢弃，避免污染当前影片
   var d = film.data || {};
   var adult = !!film.adult;
   // 进入详情页时底图先用「海报」，再回退到 fanart/剧照；海报为竖版，按 80% 屏高顶对齐、缓缓放大
@@ -4305,6 +4306,7 @@ var detailShotRevealQueue = [];
 var detailShotRevealing = false;
 var SHOTS_BATCH = 12;
 var SHOT_REVEAL_MS = 150;
+var detailRenderSeq = 0;   // 详情页渲染代号：每次 renderFilmDetail +1，用于丢弃上一部影片的延迟 still 加载回调，防止剧照污染不同影片
 function loadMoreShots(){
   if (!detailShotCols.length) return;
   // 续入队下一批，走同一 queueShot/placeShot，前面已放置的图零重排
@@ -4316,13 +4318,16 @@ function loadMoreShots(){
   if (btn) btn.style.display = (detailShotQueueIndex >= detailFullShots.length) ? 'none' : '';
 }
 function queueShot(idx, src){
-  // 用 Image() 预载探测尺寸，onload 后再插入最矮列，避免占位导致整体重排
+  // 用 Image() 预载探测尺寸，onload 后再插入最矮列，避免占位导致整体重排。
+  // 捕获本次渲染代号，旧影片的延迟 onload 会因代号不匹配而被 placeShot 丢弃，杜绝跨影片污染。
+  var seq = detailRenderSeq;
   var probe = new Image();
-  probe.onload = function(){ placeShot(idx, src, probe.naturalWidth, probe.naturalHeight); };
-  probe.onerror = function(){ placeShot(idx, src, 0, 0); };
+  probe.onload = function(){ placeShot(seq, idx, src, probe.naturalWidth, probe.naturalHeight); };
+  probe.onerror = function(){ placeShot(seq, idx, src, 0, 0); };
   probe.src = src;
 }
-function placeShot(idx, src, nw, nh){
+function placeShot(seq, idx, src, nw, nh){
+  if (seq !== detailRenderSeq) return;   // 上一部影片的延迟加载回调：直接丢弃，不写入当前影片的剧照 DOM / 底图轮播池
   if (!detailShotCols.length) return;
   // 选当前逻辑高度最矮的列（iOS 仅两列）
   var c = 0;
