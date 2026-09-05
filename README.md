@@ -2,7 +2,7 @@
 
 一套用于整理电影 / 剧集 NFO 元数据的轻量工具。支持海报、剧照、Logo 等图片编辑，以及演员、导演、国家 / 地区、类型等信息的录入与管理，最终导出标准 `.nfo` 文件，配合 Kodi、Emby、Plex、Infuse 等媒体管理软件使用。
 
-提供两个版本，均由单一 HTML 文件构成，无需服务器、无需安装、双击即可在浏览器打开：
+提供两个版本，均为纯静态前端文件（移动版 `nfo-editor-ios.html` 需与 `src/core-shared.js` 同目录），无需服务器、无需安装、双击即可在浏览器打开：
 
 | 版本 | 文件 | 适用场景 |
 |---|---|---|
@@ -33,7 +33,8 @@
 ```
 nfo-editor/
 ├── index.html            # GitHub Pages 入口，按设备自动跳转
-├── nfo-editor-ios.html   # 移动版（iOS）源文件，单文件自包含
+├── src/                  # 共享核心 core-shared.js（纯逻辑，window.NfoCore）+ 桌面版 core.js/ui.js
+├── nfo-editor-ios.html   # 移动版（iOS）源文件（引用 src/core-shared.js 共享核心）
 ├── nfo-editor.html       # 桌面版源文件（File System Access API 直写目录）
 ├── sw.js                 # 移动版 Service Worker（离线缓存）
 ├── dist/                 # 部署副本（含上述四件套）
