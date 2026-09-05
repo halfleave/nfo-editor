@@ -847,7 +847,7 @@ function setLibSearchPlaceholder(){
   var q = document.getElementById('libSearch');
   if (!q) return;
   if (state.themeHidden && state.metaSource === 'jav') q.placeholder = '搜索番号 / 关键词（JavBus）';
-  else q.placeholder = '搜索 TMDB 影片库（片名 / 番号）…';
+  else q.placeholder = '泰坦尼克号';
 }
 function onLibSearchKey(e){
   var dd = document.getElementById('libSearchDropdown');
@@ -1518,85 +1518,25 @@ function deletePerson(){
 
 /* ---------- 国家 / 类型标签 ---------- */
 var X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
-/* 将逗号/中文逗号分隔的文本拆成数组，去空去重 */
-function splitTags(str){
-  var seen = {};
-  return (str || '').split(/[,，]/).map(function(s){ return s.trim(); }).filter(function(s){
-    if (!s) return false;
-    if (seen[s]) return false;
-    seen[s] = 1;
-    return true;
-  });
-}
-
-function onCountryInput(inp){
-  state.countries = splitTags(inp.value);
-  renderCountryPresets();
-  updateState();
-  markDirty(true);
-}
-function onGenreInput(inp){
-  state.genres = splitTags(inp.value);
-  renderGenrePresets();
-  updateState();
-  markDirty(true);
-}
-
 function renderCountryChips(){
-  var inp = document.getElementById('countryInput');
-  if (inp) inp.value = (state.countries || []).join(', ');
-  renderCountryPresets();
+  var area = document.getElementById('countryTags');
+  if (!area) return;
+  area.innerHTML = (state.countries || []).map(function(c, i){
+    return '<span class="chip">' + escapeHtml(c)
+         + '<button class="chip-x" onclick="removeCountry(' + i + ')" aria-label="移除">' + X_SVG + '</button></span>';
+  }).join('');
 }
+function removeCountry(i){ state.countries.splice(i, 1); renderCountryChips(); updateState(); markDirty(true); }
 function renderGenreChips(){
-  var inp = document.getElementById('genreInput');
-  if (inp) inp.value = (state.genres || []).join(', ');
-  renderGenrePresets();
-}
-
-function renderCountryPresets(){
-  var area = document.getElementById('countryPresets');
+  var area = document.getElementById('genreTags');
   if (!area) return;
-  var selected = new Set(state.countries || []);
-  var items = filterEnabled(state.countryPresets || [], state.countryDisabled || new Set());
-  area.innerHTML = items.filter(function(c){ return !selected.has(c); }).map(function(c){
-    return '<button type="button" class="chip-add" onclick="addCountryChip(' + escapeAttr(JSON.stringify(c)) + ')">' + escapeHtml(c) + '</button>';
+  area.innerHTML = (state.genres || []).map(function(g, i){
+    return '<span class="chip">' + escapeHtml(g)
+         + '<button class="chip-x" onclick="removeGenre(' + i + ')" aria-label="移除">' + X_SVG + '</button></span>';
   }).join('');
 }
-function renderGenrePresets(){
-  var area = document.getElementById('genrePresets');
-  if (!area) return;
-  var selected = new Set(state.genres || []);
-  var normal = filterEnabled(state.genreNormal || [], state.genreNormalDisabled || new Set());
-  var adult = state.themeHidden ? filterEnabled(state.genreAdult || [], state.genreAdultDisabled || new Set()) : [];
-  var seen = {};
-  var items = normal.concat(adult).filter(function(g){ if (!g || seen[g]) return false; seen[g] = 1; return true; });
-  area.innerHTML = items.filter(function(g){ return !selected.has(g); }).map(function(g){
-    return '<button type="button" class="chip-add" onclick="addGenreChip(' + escapeAttr(JSON.stringify(g)) + ')">' + escapeHtml(g) + '</button>';
-  }).join('');
-}
+function removeGenre(i){ state.genres.splice(i, 1); renderGenreChips(); updateState(); markDirty(true); }
 
-function addCountryChip(c){
-  var arr = state.countries || [];
-  if (arr.indexOf(c) === -1) arr.push(c);
-  state.countries = arr;
-  var inp = document.getElementById('countryInput');
-  if (inp) inp.value = arr.join(', ');
-  renderCountryPresets();
-  updateState();
-  markDirty(true);
-}
-function addGenreChip(g){
-  var arr = state.genres || [];
-  if (arr.indexOf(g) === -1) arr.push(g);
-  state.genres = arr;
-  var inp = document.getElementById('genreInput');
-  if (inp) inp.value = arr.join(', ');
-  renderGenrePresets();
-  updateState();
-  markDirty(true);
-}
-
-/* 旧弹窗入口保留，避免外部调用报错；PC 编辑页已改为 input 直接编辑 */
 function openCountrySheet(){
   var seg = document.getElementById('listGenreSeg');
   if (seg) seg.style.display = 'none';
