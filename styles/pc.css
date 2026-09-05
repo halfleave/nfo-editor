@@ -1329,7 +1329,7 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
    15. 模态框（统一居中）
    =================================================================== */
 .mask {
-  position: fixed; inset: 0; z-index: 400;
+  position: fixed; inset: 0; z-index: 505;
   background: rgba(0,0,0,.32);
   backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
   opacity: 0; pointer-events: none; transition: opacity .18s;
@@ -1370,7 +1370,7 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .edit-backdrop { z-index: 450; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 
 .modal {
-  position: fixed; left: 50%; top: 50%; z-index: 401;
+  position: fixed; left: 50%; top: 50%; z-index: 510;
   transform: translate(-50%,-48%) scale(.97);
   width: calc(100vw - 48px); max-width: 560px; max-height: 82vh;
   background: var(--glass-bg-strong); border-radius: var(--radius-panel);
