@@ -957,23 +957,15 @@ function loadImageFromURL(url, type, ratio, cropMode){
   if (cropMode === 'right') cropFn = cropRightHalfAuto;   // 横图右切去标题；竖图取整张
   else if (cropMode === 'full') cropFn = function(durl){ return Promise.resolve(durl); };  // 不裁剪，保留原图
   else cropFn = function(durl){ return cropToRatio(durl, ratio); };
-  return fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
-    .then(function(blob){
-      return new Promise(function(resolve){
-        var reader = new FileReader();
-        reader.onload = function(evt){
-          cropOriginals[type] = evt.target.result;
-          // AV 海报走 'right' 裁剪（首页用裁剪版、详情页用原始版）：保留未裁剪的原始海报
-          if (type === 'poster' && cropMode === 'right') state.originalPoster = evt.target.result;
-          cropFn(evt.target.result).then(function(cropped){
-            state[type] = cropped;
-            renderMediaThumb(type, cropped);
-            resolve();
-          });
-        };
-        reader.readAsDataURL(blob);
-      });
-    }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
+  return NfoCore.fetchImageToDataURL(url).then(function(durl){
+    cropOriginals[type] = durl;
+    // AV 海报走 'right' 裁剪（首页用裁剪版、详情页用原始版）：保留未裁剪的原始海报
+    if (type === 'poster' && cropMode === 'right') state.originalPoster = durl;
+    return cropFn(durl).then(function(cropped){
+      state[type] = cropped;
+      renderMediaThumb(type, cropped);
+    });
+  }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
 }
 
 function loadJavbusActorPhoto(photoUrl, idx){

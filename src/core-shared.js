@@ -413,6 +413,21 @@ function normalizeJavbusFilm(d, opts){
     return { id: '', adult: !!opts.adult, data: {} };
   }
 
+  /* ============ img：图片 URL 加载纯逻辑（单点真相） ============ */
+  // 图片加载核心：fetch → blob → FileReader → dataURL。不碰 DOM / 不读 state，
+  // 两端 loadImageFromURL 胶水层在拿到 dataURL 后再做 state 赋值 / 裁剪 / 渲染。
+  function fetchImageToDataURL(url){
+    return fetch(url).then(function(r){ if (!r.ok) throw new Error('img'); return r.blob(); })
+      .then(function(blob){
+        return new Promise(function(resolve, reject){
+          var reader = new FileReader();
+          reader.onload = function(evt){ resolve(evt.target.result); };
+          reader.onerror = function(){ reject(new Error('read')); };
+          reader.readAsDataURL(blob);
+        });
+      });
+  }
+
   global.NfoCore = {
     escapeXml: escapeXml,
     sanitizeName: sanitizeName,
@@ -437,6 +452,7 @@ function normalizeJavbusFilm(d, opts){
     FILM_TYPE: FILM_TYPE,
     isAdultByRating: isAdultByRating,
     filmKey: filmKey,
-    createEmptyFilm: createEmptyFilm
+    createEmptyFilm: createEmptyFilm,
+    fetchImageToDataURL: fetchImageToDataURL
   };
 })(typeof window !== 'undefined' ? window : this);
