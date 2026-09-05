@@ -4058,9 +4058,14 @@ function renderFilmDetail(film){
     applyBgImage(pe, bgUrl, bgIsLandscape);          // 初始底图：海报优先，80% 屏高、顶对齐、缓缓放大
     if (bgUrl){
       // 基线缓缓放大：即使只有单张底图也缓慢放大到 110%（多张时由轮播持续放大 + 切换）
+      // 用「双 rAF」而非单 rAF：进详情页前页面是 display:none，单 rAF 会在页面首帧绘制前就把
+      // scale(1.1) 一次性应用，导致看不到放大过程；外圈 rAF 先让页面以 scale(1) 完成首帧，
+      // 内圈 rAF 再切到 scale(1.1) 并带过渡，浏览器才会真正从 1 动画到 1.1。
       requestAnimationFrame(function(){
-        pe.style.transition = 'transform 5s ease-out, filter .15s linear';
-        pe.style.transform = 'scale(1.1)';
+        requestAnimationFrame(function(){
+          pe.style.transition = 'transform 5s ease-out, filter .15s linear';
+          pe.style.transform = 'scale(1.1)';
+        });
       });
     }
   }
