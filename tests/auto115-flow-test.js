@@ -240,52 +240,37 @@ const lz4LiteralForTest = (bytes) => {
     assert(JSON.parse(decText).status === 1, '回包长度非 16 倍数 → 截断后解密成功');
   }
 
-  /* 6b. 4.0 全链路：mock 加密回包（用同一 ECDH 会话解密请求、加密响应） */
-  const initForms = [];
+  /* 6b. 开放平台上传全链路（2026-09-08 起：4.0 逆向回退已停用，上传只走官方开放平台通道） */
+  ctx.state.c115Open = { access: 'TEST_OPEN_TOKEN', exp: Date.now() + 3600000 }; // 有效 token，避免触发 refreshToken
+  const initCalls = [];
   const putCalls = [];
-  /* 字面量 LZ4 块（解压端可正确还原） */
-  const lz4Literal = (bytes) => {
-    const out = [];
-    if (bytes.length < 15){ out.push(bytes.length << 4); }
-    else { out.push(0xF0); let x = bytes.length - 15; while (x >= 255){ out.push(255); x -= 255; } out.push(x); }
-    for (const b of bytes) out.push(b);
-    return new Uint8Array(out);
-  };
+  const legacyCalls = []; // 4.0 逆向通道调用次数，应恒为 0
   script = {
-    '/app/uploadinfo': { user_id: 1, userkey: 'USERKEY123' },
-    '4.0/initupload': async (n, url, opts) => {
-      assert(url.indexOf('4.0/initupload.php?k_ec=') >= 0, 'initupload 走 4.0 加密通道（URL 含 k_ec）');
-      /* 请求体 = 纯 AES-CBC（无 LZ4），用同一会话密钥解出表单验证 */
-      const e = await ctx.c115EcdhGet();
-      const v = e.variants[e.active];
-      const plain = new TextDecoder().decode(await ctx.c115AesCbc(v.key, v.iv, ctx.c115B64ToBytes(opts.body), false));
-      initForms.push(plain);
-      const resp = { status: 1, statuscode: 0, bucket: 'BKT115', object: 'OBJ/123', pickcode: 'PC', target: 'U_1_DIR888',
-        callback: { callback: '{"callbackUrl":"http://uplb.115.com/3.0/upload_callback.php"}', callback_var: '{"x:pick_code":"PC"}' } };
-      /* 响应体 = [2 字节 LE 块长度（Go 按此切片）+ LZ4(JSON)] 再 AES-CBC 加密 */
-      const json = new TextEncoder().encode(JSON.stringify(resp));
-      const lz = lz4Literal(json);
-      const body = new Uint8Array(2 + lz.length);
-      body[0] = lz.length & 0xFF; body[1] = (lz.length >> 8) & 0xFF;
-      body.set(lz, 2);
-      return { __bin: ctx.c115BytesToB64(await ctx.c115AesCbc(v.key, v.iv, body, true)) };
+    'open/upload/init': (n, url, opts) => {
+      initCalls.push({ url, body: opts && opts.body, xs: opts && opts.xs });
+      return { state: true, code: 0, data: { status: 1, code: 0, pick_code: 'PC', bucket: 'BKT115', object: 'OBJ/123',
+        callback: { callback: '{"callbackUrl":"http://uplb.115.com/3.0/completeupload.php"}', callback_var: '{"x:pick_code":"PC"}' } } };
     },
-    'getuploadinfo': { endpoint: 'https://oss-cn-test.aliyuncs.com', gettokenurl: 'https://uplb.115.com/3.0/gettoken.php' },
-    'gettoken': { StatusCode: '200', AccessKeyId: 'AKID', AccessKeySecret: 'AKSEC', SecurityToken: 'STSTOK' },
-    'oss-cn-test': (n, url, opts) => { putCalls.push({ url, method: opts.method, xs: opts.xs, body: opts.body }); return { state: true, code: 0 }; }
+    'open/upload/get_token': { state: true, code: 0, data: {
+      endpoint: 'https://oss-cn-test.aliyuncs.com', AccessKeyId: 'AKID', AccessKeySecret: 'AKSEC', SecurityToken: 'STSTOK' } },
+    'oss-cn-test': (n, url, opts) => { putCalls.push({ url, method: opts.method, xs: opts.xs, body: opts.body }); return { state: true, code: 0 }; },
+    '4.0/initupload': (n, url) => { legacyCalls.push(url); return { state: true }; }
   };
   const tu = { id: 'tu1', magnet: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01', magnetTitle: '上传测试', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIR888', offlineDirName: '测试影片', fv: 2 };
   for (let i = 0; i < tu.steps.length; i++){ tu.steps[i].state = 'ok'; }
   doc.tasks.unshift(tu);
   calls.length = 0;
   await ctx.auto115UploadNfoFiles('tu1');
-  assert(initForms.length === 3, 'initupload 加密请求发出 3 次（nfo/poster/fanart），实际=' + initForms.length);
-  assert(initForms[0].indexOf('filename=IPX-486.nfo') >= 0, '加密表单含 filename=番号.nfo');
-  assert(initForms[0].indexOf('target=U_1_DIR888') >= 0, '加密表单含 target=U_1_DIR888');
-  assert(initForms[0].indexOf('fileid=') >= 0 && initForms[0].indexOf('sig=') >= 0 && initForms[0].indexOf('token=') >= 0, '加密表单含 fileid/sig/token');
+  assert(initCalls.length === 3, '开放平台 init 请求 3 次（nfo/poster/fanart），实际=' + initCalls.length);
+  assert(initCalls[0].body.indexOf('file_name=IPX-486.nfo') >= 0, 'init 表单含 file_name=番号.nfo');
+  assert(initCalls[0].body.indexOf('target=U_1_DIR888') >= 0, 'init 表单含 target=U_1_DIR888');
+  assert(initCalls[0].body.indexOf('fileid=') >= 0 && initCalls[0].body.indexOf('preid=') >= 0, 'init 表单含 fileid/preid（SHA1 秒传签名）');
+  assert(initCalls[0].xs && initCalls[0].xs.Authorization === 'Bearer TEST_OPEN_TOKEN', 'init 带 Bearer access_token');
+  assert(legacyCalls.length === 0, '未回退 4.0 逆向通道（实际调用 ' + legacyCalls.length + ' 次）');
   assert(putCalls.length === 3, 'OSS PUT 发出 3 次，实际=' + putCalls.length);
   const pu = putCalls[0];
-  assert(pu.method === 'PUT' && pu.url.indexOf('oss-cn-test.aliyuncs.com/BKT115/OBJ/123') >= 0, 'PUT URL = endpoint/bucket/object');
+  assert(pu.method === 'PUT' && pu.url.indexOf('BKT115.oss-cn-test.aliyuncs.com/OBJ/123') >= 0,
+    'PUT URL = bucket.endpoint/object（OSS 子域名风格，实际=' + pu.url + '）');
   assert(pu.xs && pu.xs.Authorization && pu.xs.Authorization.indexOf('OSS AKID:') === 0, 'PUT 带 OSS V1 签名 Authorization');
   assert(pu.xs['x-oss-security-token'] === 'STSTOK' && pu.xs['x-oss-callback'] && pu.xs['x-oss-callback-var'], 'PUT 带 security-token/callback/callback-var 头');
   assert(tu.nfoUploaded > 0, '上传成功后任务标记 nfoUploaded');

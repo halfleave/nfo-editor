@@ -1063,17 +1063,29 @@ var c115Session = null; // { uid, time, sign }
 function c115ProxyBase(){
   return (state.magnetWorker || DEFAULT_WORKER || '').replace(/\/$/, '');
 }
+/* ---- 自适应失败退避（2026-09-08）----
+   只在「连续失败」时放慢：任一请求成功即清零 → 正常路径零延迟（不拖慢自动化/上传）；
+   失败才按 800ms→1.6s→3.2s→6.4s 递增 + 0~300ms 抖动，上限 6.4s+。
+   目的：避免失败后零间隔连续打 115（典型的风控触发模式），而非无差别限速。 */
+var c115FailStreak = 0; // 连续失败次数
+function c115AdaptiveDelay(){
+  if (c115FailStreak <= 0) return 0;
+  var base = Math.min(800 * Math.pow(2, c115FailStreak - 1), 8000);
+  return base + Math.floor(Math.random() * 300);
+}
+function c115Sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
 /* 统一经 /api/cloud/proxy 透明转发。所有参数（目标 URL、令牌、115 Cookie、POST 体）
    都放 POST body，请求 URL 完全不含 115，规避部分网络对「URL 含 115」的 fetch 拦截
    （Safari 顶层导航不受该限制，故手动测试能通，但 PWA 的 fetch 被挡）。
    不发送任何自定义请求头，避免触发 CORS 预检。返回 { ok, status, d }。 */
-function c115ProxyFetch(targetUrl, opts){
+async function c115ProxyFetch(targetUrl, opts){
   opts = opts || {};
   var base = c115ProxyBase();
   if (!base){
     var err = new Error('未配置代理服务地址');
     err.status = 0; err.body = '';
-    return Promise.reject(err);
+    throw err;
   }
   var proxyUrl = base + '/api/cloud/proxy';
   var form = 'url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN);
@@ -1087,12 +1099,15 @@ function c115ProxyFetch(targetUrl, opts){
     if (opts.headers && opts.headers['Content-Type']) form += '&ct=' + encodeURIComponent(opts.headers['Content-Type']);
     if (opts.b64) form += '&b64=1'; // payload 为 base64 编码的二进制（Worker 侧解码后转发）
   }
+  var waitMs = c115AdaptiveDelay(); // 仅「连续失败过」才 >0，正常路径为 0
+  if (waitMs > 0) await c115Sleep(waitMs);
   return fetch(proxyUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form,
     cache: 'no-store'
   }).then(function(r){
+    c115FailStreak = r.ok ? 0 : Math.min(c115FailStreak + 1, 4); // 成功即复位；HTTP 失败才累加
     if (opts.bin){ /* 二进制响应（115 4.0 加密回包）：以 base64 转交，避免 r.text() 损坏字节 */
       return r.arrayBuffer().then(function(buf){
         return { ok: r.ok, status: r.status, d: {}, raw: '', bin: c115BytesToB64(new Uint8Array(buf)) };
@@ -1111,6 +1126,7 @@ function c115ProxyFetch(targetUrl, opts){
       return { ok: r.ok, status: r.status, d: d || {}, raw: txt.slice(0, 500) };
     });
   }).catch(function(e){
+    if (!(e && e.status)) c115FailStreak = Math.min(c115FailStreak + 1, 4); // 网络层失败（HTTP 失败已在 then 计过，避免重复累加）
     if (e && e.status) throw e;
     var err = new Error((e && e.message ? e.message : '网络错误') + ' [' + proxyUrl + ']');
     err.network = true; err.url = proxyUrl; err.original = e;
@@ -2953,13 +2969,14 @@ async function c115OpenUploadFile(cid, fileName, bytes, mime){
   if (pd.state === true || putRes.status === 200) return '';
   throw new Error('OSS PUT 失败（HTTP ' + putRes.status + '）：' + (pd.message || pd.error || (putRes.raw || '').slice(0, 110)));
 }
-/* 上传入口：优先官方开放平台通道，失败回退逆向 4.0 通道 */
+/* 上传入口：只走官方开放平台通道（2026-09-08 停用 4.0 逆向回退）。
+   停用原因：① 开放平台通道已真机实测跑通（init→get_token→OSS PUT→回调 state:true）；
+             ② 逆向 4.0 通道（uplb.115.com）在 Vercel 海外出口必 403，失败时等于白撞 WAF；
+             ③ 逆向私有协议是 115 风控重点，保留回退反而徒增风险。
+   需恢复时：把函数体换回「try 开放平台 → catch 回退 c115UploadFileLegacy」即可（Legacy 函数保留未删）。
+   注：失败重试退避由统一出口 c115ProxyFetch 的自适应退避兜底，无需在此单独 sleep。 */
 async function c115UploadFileAsync(cid, fileName, bytes, mime){
-  var openErr = null;
-  try { return await c115OpenUploadFile(cid, fileName, bytes, mime); }
-  catch(e){ openErr = e; }
-  try { return await c115UploadFileLegacy(cid, fileName, bytes, mime); }
-  catch(e2){ throw new Error('开放平台：' + ((openErr && openErr.message) || '') + ' ｜ 4.0：' + e2.message); }
+  return await c115OpenUploadFile(cid, fileName, bytes, mime);
 }
 /* 逆向 4.0 通道（保留为回退）：uplb initupload(ECDH+AES) → getuploadinfo → gettoken → OSS PUT */
 async function c115UploadFileLegacy(cid, fileName, bytes, mime){
