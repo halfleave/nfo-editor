@@ -2831,11 +2831,23 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
   }
   var cb = res.callback || {};
   if (!res.bucket || !res.object || !cb.callback) throw new Error('初始化响应缺少 OSS 参数：' + JSON.stringify(res).slice(0, 120));
-  /* STS 临时凭证 */
-  var info = (await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', { headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK })).d || {};
+  /* STS 临时凭证：参考实现为普通 GET（UA+Cookie），403 时自动改 POST 重试一次并带端点标签 */
+  function upInfoOpts(method){ return { method: method, headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK }; }
+  var infoRes;
+  try { infoRes = await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', upInfoOpts('GET')); }
+  catch(e1){
+    try { infoRes = await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', upInfoOpts('POST')); }
+    catch(e2){ throw new Error('[getuploadinfo] GET ' + e1.message + ' / POST ' + e2.message); }
+  }
+  var info = infoRes.d || {};
   if (!info.endpoint || !info.gettokenurl) throw new Error('获取上传信息失败：' + JSON.stringify(info).slice(0, 120));
-  var tok = (await c115ProxyFetch(info.gettokenurl, { headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK })).d || {};
-  if (!tok.SecurityToken || !tok.AccessKeyId || !tok.AccessKeySecret) throw new Error('获取 OSS 临时凭证失败：' + JSON.stringify(tok).slice(0, 120));
+  var tokRes;
+  try { tokRes = await c115ProxyFetch(info.gettokenurl, upInfoOpts('GET')); }
+  catch(e1){
+    try { tokRes = await c115ProxyFetch(info.gettokenurl, upInfoOpts('POST')); }
+    catch(e2){ throw new Error('[gettoken] GET ' + e1.message + ' / POST ' + e2.message); }
+  }
+  var tok = tokRes.d || {};
   /* OSS V1 签名 PUT（callback 经 x-oss-callback 头携带） */
   mime = mime || 'application/octet-stream';
   var date = new Date().toUTCString();
@@ -2860,7 +2872,7 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
 }
 function c115UploadFile(cid, fileName, bytes, mime){
   return c115UploadFileAsync(cid, fileName, bytes, mime).catch(function(e){
-    throw new Error((e && e.message ? e.message : '上传失败') + '〔v197〕');
+    throw new Error((e && e.message ? e.message : '上传失败') + '〔v198〕');
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
