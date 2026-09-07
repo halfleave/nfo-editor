@@ -1080,6 +1080,7 @@ function c115ProxyFetch(targetUrl, opts){
   if (opts.headers && opts.headers['X-115-Cookie']) form += '&ck=' + encodeURIComponent(opts.headers['X-115-Cookie']);
   if (opts.ua) form += '&ua=' + encodeURIComponent(opts.ua); // UA 覆盖（浏览器 fetch 禁设 UA 头，由代理侧代设；115 上传链路需 115disk 客户端 UA）
   if (opts.xs) form += '&xs=' + encodeURIComponent(JSON.stringify(opts.xs)); // 附加请求头（OSS PUT 的 x-oss-* 签名头等，浏览器禁设的名字由代理代设）
+  if (opts.noRef) form += '&noRef=1'; // 代理侧不设 Referer/Origin（参考客户端对 uplb 3.0 只发 UA+Cookie）
   if (opts.method && opts.method !== 'GET'){
     form += '&method=' + encodeURIComponent(opts.method.toUpperCase());
     if (opts.body != null) form += '&payload=' + encodeURIComponent(typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
@@ -2832,7 +2833,7 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
   var cb = res.callback || {};
   if (!res.bucket || !res.object || !cb.callback) throw new Error('初始化响应缺少 OSS 参数：' + JSON.stringify(res).slice(0, 120));
   /* STS 临时凭证：参考实现为普通 GET（UA+Cookie），403 时自动改 POST 重试一次并带端点标签 */
-  function upInfoOpts(method){ return { method: method, headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK }; }
+  function upInfoOpts(method){ return { method: method, noRef: 1, headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK }; }
   var infoRes;
   try { infoRes = await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', upInfoOpts('GET')); }
   catch(e1){
@@ -2872,7 +2873,7 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
 }
 function c115UploadFile(cid, fileName, bytes, mime){
   return c115UploadFileAsync(cid, fileName, bytes, mime).catch(function(e){
-    throw new Error((e && e.message ? e.message : '上传失败') + '〔v198〕');
+    throw new Error((e && e.message ? e.message : '上传失败') + '〔v199〕');
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
