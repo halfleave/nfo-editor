@@ -1340,12 +1340,24 @@ function verify115(silent){
   var cookie = (ta && ta.value) ? ta.value.trim() : (state.c115Cookie || '');
   if (!cookie){ if (vEl){ vEl.textContent = '请先填写 Cookie'; vEl.className = 'c115-verify err'; } return; }
   if (vEl){ vEl.textContent = '连通性自检中…'; vEl.className = 'c115-verify'; }
+  /* 超时兜底：代理无响应时 Promise 会永久挂起，状态行将一直停在「自检中…」 */
+  var timedOut = false;
+  var timer = setTimeout(function(){
+    timedOut = true;
+    if (vEl){ vEl.textContent = '✗ 自检超时（代理无响应）'; vEl.className = 'c115-verify err'; }
+  }, 15000);
+  var done = function(){ clearTimeout(timer); };
   c115ProxyFetch('https://webapi.115.com/files?cid=0', { headers: { 'X-115-Cookie': cookie } })
     .then(function(res){
+      done();
+      if (timedOut) return; /* 已超时提示过，不再覆盖 */
       if (!res.ok || !res.d || res.d.state !== true){ throw new Error((res.d && (res.d.error || res.d.msg)) || 'Cookie 无效'); }
-      /* 后台自检通过：静默即可，不打扰 */
+      /* 成功：silent 时静默不打扰；手动自检必须回写状态行，否则会一直卡在「自检中…」 */
+      if (vEl){ vEl.textContent = '✓ 连接正常'; vEl.className = 'c115-verify ok'; }
     })
     .catch(function(e){
+      done();
+      if (timedOut) return;
       var msg = (e && e.message) ? e.message : '自检失败';
       if (vEl){ vEl.textContent = '✗ ' + msg; vEl.className = 'c115-verify err'; return; }
       if (silent && /Cookie|失效|令牌|登录/.test(msg)) showToast('115 Cookie 已失效，请到设置重新登录', 'error');
