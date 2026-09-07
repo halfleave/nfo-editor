@@ -1193,9 +1193,12 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #apiSheet .api-input-wrap .ios-input { width: 100%; padding-left: 64px; padding-right: 42px; font-size: 15px; }
 #apiSheet .api-input-wrap .ios-input::placeholder { color: var(--label-3); }
 #apiSheet #activationCodeInput { padding-left: 12px; }
-#apiSheet .activation-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding: 0 2px; }
-#apiSheet .activation-status { font-size: 13px; color: var(--label-2); }
-#apiSheet .activation-status.ok { color: var(--accent); font-weight: 600; }
+#apiSheet .activation-input-wrap .ios-input { padding-right: 110px; }
+#apiSheet .activation-input-wrap .api-clear { right: 68px; }
+#apiSheet .api-group-title-row .activation-status { font-size: 13px; color: var(--label-2); }
+#apiSheet .api-group-title-row .activation-status.ok { color: var(--accent); font-weight: 600; }
+#apiSheet .api-group-title-row .activation-status.ok::before { content: "· "; }
+#apiSheet .verify-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 1; background: var(--card-fill); color: var(--accent); border: 1px solid var(--accent); font-size: 13px; padding: 4px 14px; border-radius: 980px; }
 #apiSheet .sb-pill-ghost { background: var(--card-fill); color: var(--accent); border: 1px solid var(--accent); font-size: 13px; padding: 4px 14px; border-radius: 980px; }
 /* ===== 115 网盘配置页 ===== */
 #sheet115 .c115-qr-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18px 0 12px; min-height: 180px; }
