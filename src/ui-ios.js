@@ -1090,7 +1090,7 @@ function c115ProxyFetch(targetUrl, opts){
         err.status = r.status; err.body = txt.slice(0, 300); err.data = d;
         throw err;
       }
-      return { ok: r.ok, status: r.status, d: d || {} };
+      return { ok: r.ok, status: r.status, d: d || {}, raw: txt.slice(0, 500) };
     });
   }).catch(function(e){
     if (e && e.status) throw e;
@@ -1109,12 +1109,19 @@ function open115Sheet(){
   closeAllSheets();
   var ta = document.getElementById('c115Cookie');
   if (ta) ta.value = '';
+  openSheet('sheet115');
+  // 异步读 Cookie，读完再决定是否展示二维码（避免用旧的 state.c115Cookie 误判）
   idbGet('kv', C115_COOKIE_KEY).then(function(v){
-    if (ta && v){
-      ta.value = (typeof v === 'string') ? v : (v.cookie || '');
-      state.c115Cookie = ta.value;
+    var cookie = (typeof v === 'string') ? v : (v && v.cookie) || '';
+    if (ta && cookie) ta.value = cookie;
+    state.c115Cookie = cookie;
+    if (cookie){
+      hide115QrArea(); // 已登录：不显示二维码，给「重新展示二维码」入口
+      verify115();
+    } else {
+      start115Login(); // 未登录：进入即展示二维码
     }
-  }).catch(function(){});
+  }).catch(function(){ start115Login(); });
   // 载入 115 代理令牌（应用内可配，默认回落硬编码串）
   var tk = document.getElementById('c115TokenInput');
   if (tk) tk.value = '';
@@ -1125,12 +1132,6 @@ function open115Sheet(){
   }).catch(function(){ state.c115ProxyToken = C115_PROXY_TOKEN; });
   var vEl = document.getElementById('c115Verify');
   if (vEl){ vEl.textContent = ''; vEl.className = 'c115-verify'; }
-  openSheet('sheet115');
-  if (state.c115Cookie){
-    hide115QrArea(); // 已登录：不显示二维码，给「重新展示二维码」入口
-  } else {
-    start115Login(); // 进入即展示二维码
-  }
 }
 function start115Login(){
   if (c115QrTimer){ clearTimeout(c115QrTimer); c115QrTimer = null; }
@@ -1349,10 +1350,9 @@ function c115OfflineFromMagnet(mrEl){
     var ok = res.ok && (d.state === true || (d.data && (d.data.tid || d.data.task_id || d.data.infoid)));
     if (ok){ showToast('已发送到 115 离线下载（默认目录）', 'success'); }
     else {
-      var detail = '';
-      try { detail = JSON.stringify(d).slice(0, 400); } catch (_) {}
-      var msg = (d.error || d.msg || (d.data && (d.data.error || d.data.msg))) || ('未知错误 ' + detail);
-      showToast('离线下载失败：' + msg, 'error');
+      var msg = (d.error || d.msg || (d.data && (d.data.error || d.data.msg)));
+      if (!msg && res.raw) msg = res.raw;
+      showToast('离线下载失败：' + (msg || '未知错误'), 'error');
     }
   })
   .catch(function(e){
