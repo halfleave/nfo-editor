@@ -2430,7 +2430,8 @@ function c115UploadMultipart(host, fields, fileName, mime, bytes){
   }).then(function(res){
     var d = res.d || {};
     if (d.state === true && Number(d.code) === 0) return '';
-    throw new Error(d.error || d.statusmsg || ('上传失败（state=' + d.state + ' code=' + d.code + '）'));
+    throw new Error(d.error || d.statusmsg || d.message
+      || ('上传失败（state=' + d.state + ' code=' + d.code + (d.errno != null ? ' errno=' + d.errno : '') + '）'));
   });
 }
 function c115UploadFile(cid, fileName, bytes, mime){
@@ -2449,15 +2450,19 @@ function c115UploadFile(cid, fileName, bytes, mime){
     if (!d.host || !d.object || !d.policy){
       throw new Error('上传初始化失败：' + (d.error || d.statusmsg || d.message || res.raw.slice(0, 120)));
     }
+    /* callback 兼容两种返回：字符串，或 {callback, callback_var} 对象（callback_var 缺失会导致 115 回调校验失败 → code=990002） */
+    var cb = d.callback, cbVar = '';
+    if (cb && typeof cb === 'object'){ cbVar = cb.callback_var || ''; cb = cb.callback || ''; }
     var fields = [
       ['name', fileName],
       ['key', d.object],
       ['policy', d.policy],
       ['OSSAccessKeyId', d.accessid],
       ['success_action_status', '200'],
-      ['callback', d.callback],
-      ['signature', d.signature]
+      ['callback', cb]
     ];
+    if (cbVar) fields.push(['callback_var', cbVar]);
+    fields.push(['signature', d.signature]);
     return c115UploadMultipart(d.host, fields, fileName, mime, bytes);
   });
 }
