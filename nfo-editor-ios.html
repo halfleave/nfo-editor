@@ -195,7 +195,6 @@
       <div class="api-group">
         <div class="api-group-title-row">
           <div class="api-group-title">代理令牌</div>
-          <button class="api-help-q-sm" onclick="showToast('需与 Vercel Worker 的 C115_TOKEN 环境变量一致；默认已预填，若你在部署时改过令牌请填你自己的','info')" aria-label="关于">?</button>
         </div>
         <div class="field field-stacked no-border">
           <input class="ios-input" type="text" id="c115TokenInput" placeholder="C115PX_..." oninput="on115TokenInput()">
@@ -204,7 +203,6 @@
       <div class="api-group">
         <div class="api-group-title-row">
           <div class="api-group-title">Cookie</div>
-          <button class="api-help-q-sm" onclick="showToast('登录成功后 Cookie 自动保存；也可手动粘贴','info')" aria-label="关于">?</button>
         </div>
         <div class="field field-stacked no-border">
           <textarea class="ios-input c115-cookie" id="c115Cookie" rows="3" placeholder="UID=...; CID=...; SEID=...; KID=..."></textarea>
@@ -218,14 +216,12 @@
       <div class="api-group" id="c115QrGroup">
         <div class="api-group-title-row">
           <div class="api-group-title">扫码登录</div>
-          <button class="api-help-q-sm" onclick="showToast('用 115 App 扫下方二维码并确认，登录成功后 Cookie 自动填入','info')" aria-label="关于">?</button>
         </div>
         <div class="c115-qr-wrap" id="c115QrWrap"><div id="c115Qr"></div></div>
         <div class="c115-status" id="c115Status">正在生成二维码…</div>
         <div class="c115-countdown" id="c115Countdown"></div>
         <button class="c115-login-btn" id="c115ReQrBtn" onclick="start115Login()" style="display:none;">重新展示二维码</button>
       </div>
-      <div class="api-help-note">Cookie 仅保存在本机（IndexedDB），不会上传到任何服务器。115 代理只做请求转发，不存储你的数据。</div>
     </div>
   </div>
 

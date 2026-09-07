@@ -1054,22 +1054,32 @@ var c115Session = null; // { uid, time, sign }
 function c115ProxyBase(){
   return (state.magnetWorker || DEFAULT_WORKER || '').replace(/\/$/, '');
 }
-/* 统一经 /api/115/proxy 透明转发；Token 走 URL query（非自定义 Header），
-   使请求成为「简单请求」不触发 CORS 预检 —— iOS PWA 对带自定义头的跨域预检
-   极易失败并统一报 load failed。返回 { ok, status, d }。 */
+/* 统一经 /api/cloud/proxy 透明转发。所有参数（目标 URL、令牌、115 Cookie、POST 体）
+   都放 POST body，请求 URL 完全不含 115，规避部分网络对「URL 含 115」的 fetch 拦截
+   （Safari 顶层导航不受该限制，故手动测试能通，但 PWA 的 fetch 被挡）。
+   不发送任何自定义请求头，避免触发 CORS 预检。返回 { ok, status, d }。 */
 function c115ProxyFetch(targetUrl, opts){
   opts = opts || {};
-  opts.headers = opts.headers || {};
-  opts.cache = 'no-store';
   var base = c115ProxyBase();
   if (!base){
     var err = new Error('未配置代理服务地址');
     err.status = 0; err.body = '';
     return Promise.reject(err);
   }
-  // Token 放 URL，避免触发预检；token 取应用内可配值，回落硬编码默认串
-  var full = base + '/api/115/proxy?url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN);
-  return fetch(full, opts).then(function(r){
+  var proxyUrl = base + '/api/cloud/proxy';
+  var form = 'url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN);
+  if (opts.headers && opts.headers['X-115-Cookie']) form += '&ck=' + encodeURIComponent(opts.headers['X-115-Cookie']);
+  if (opts.method && opts.method !== 'GET'){
+    form += '&method=' + encodeURIComponent(opts.method.toUpperCase());
+    if (opts.body != null) form += '&payload=' + encodeURIComponent(typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
+    if (opts.headers && opts.headers['Content-Type']) form += '&ct=' + encodeURIComponent(opts.headers['Content-Type']);
+  }
+  return fetch(proxyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form,
+    cache: 'no-store'
+  }).then(function(r){
     return r.text().then(function(txt){
       var d = {};
       try { d = JSON.parse(txt); } catch(_){ d = { raw: txt.slice(0, 300) }; }
@@ -1082,8 +1092,8 @@ function c115ProxyFetch(targetUrl, opts){
     });
   }).catch(function(e){
     if (e && e.status) throw e;
-    var err = new Error((e && e.message ? e.message : '网络错误') + ' [' + full + ']');
-    err.network = true; err.url = full; err.original = e;
+    var err = new Error((e && e.message ? e.message : '网络错误') + ' [' + proxyUrl + ']');
+    err.network = true; err.url = proxyUrl; err.original = e;
     throw err;
   });
 }
