@@ -2568,11 +2568,10 @@ async function c115EcdhGet(){
   var pubBuf = new Uint8Array(30);
   pubBuf[0] = 29; pubBuf[1] = ((pub.y & 1n) === 1n) ? 0x03 : 0x02;
   pubBuf.set(x28, 2);
-  /* 双派生自愈：若真实服务端 key/iv 切法与去前导零约定不同（如固定 28 字节），
-     首次解密失败后自动切换变体（c115EcdhDecrypt），后续加解密沿用服务端认可的那套 */
-  var variants = [];
+  /* 变体顺序：参考实现（orzogc/fake115uploader）用 aead/ecdh 固定 28 字节共享密钥 → fixed28 为准；
+     strip（big.Int 去前导零语义）留作兜底。解密失败自动切换变体并命中 JSON 判据后，会话级切换。 */
+  var variants = [ { name: 'fixed28', key: s28.slice(0, 16), iv: s28.slice(12, 28) } ];
   if (sBytes.length >= 16) variants.push({ name: 'strip', key: sBytes.slice(0, 16), iv: sBytes.slice(sBytes.length - 16) });
-  variants.push({ name: 'fixed28', key: s28.slice(0, 16), iv: s28.slice(12, 28) });
   c115Ecdh = { pub: pubBuf, variants: variants, active: 0 };
   return c115Ecdh;
 }
@@ -2588,6 +2587,84 @@ async function c115AesCbc(key, iv, data, encrypt, tag){
     /* WebKit OperationError 无细节，补上派生名与长度方便定位 */
     throw new Error('AES-CBC' + (encrypt ? '加密' : '解密') + (tag ? '[' + tag + ']' : '') + '失败：' + ((e && e.message) || e) + ' keyLen=' + key.length + ' ivLen=' + iv.length + ' dataLen=' + data.length);
   }
+}
+/* ---- 纯 JS AES-128 块解密 + CBC（不校验填充，语义与 Go cipher.NewCBCDecrypter 一致）----
+   用途：WebCrypto subtle.decrypt 强制校验 PKCS7 填充，服务端若非 PKCS7 会永远失败；
+   此兜底直接按 CBC 裸解。S 盒按 GF(2^8) 求逆 + 仿射变换运行时生成，避免手抄 256 常量出错 */
+var C115_AES_SBOX = (function(){
+  var sbox = new Uint8Array(256), alog = new Uint8Array(255), lg = new Uint8Array(256);
+  var x = 1, i, b, s, r;
+  for (i = 0; i < 255; i++){ alog[i] = x; lg[x] = i; x = (x ^ ((x << 1) ^ (x & 0x80 ? 0x1b : 0))) & 255; } /* x *= 3 */
+  for (i = 0; i < 256; i++){
+    b = (i === 0) ? 0 : alog[(255 - lg[i]) % 255]; /* GF(2^8) 乘法逆元 */
+    s = b;
+    for (r = 0; r < 4; r++){ b = ((b << 1) | (b >>> 7)) & 255; s ^= b; } /* 仿射 b^b<<<1^b<<<2^b<<<3^b<<<4 */
+    sbox[i] = (s ^ 0x63) & 255;
+  }
+  return sbox;
+})();
+var C115_AES_INV = (function(){ var t = new Uint8Array(256), i; for (i = 0; i < 256; i++) t[C115_AES_SBOX[i]] = i; return t; })();
+function c115Gmul(a, b){
+  var r = 0;
+  while (b){ if (b & 1) r ^= a; a = ((a << 1) ^ (a & 0x80 ? 0x1b : 0)) & 255; b >>= 1; }
+  return r & 255;
+}
+function c115AesExpandKey(key){
+  var w = new Uint32Array(44), i, t, rcon = 1;
+  for (i = 0; i < 4; i++) w[i] = ((key[4*i] << 24) | (key[4*i+1] << 16) | (key[4*i+2] << 8) | key[4*i+3]) >>> 0;
+  for (i = 4; i < 44; i++){
+    t = w[i - 1];
+    if (i % 4 === 0){
+      t = (((t << 8) | (t >>> 24)) >>> 0) >>> 0; /* RotWord */
+      t = (((C115_AES_SBOX[(t >>> 24) & 255] << 24) | (C115_AES_SBOX[(t >>> 16) & 255] << 16) | (C115_AES_SBOX[(t >>> 8) & 255] << 8) | C115_AES_SBOX[t & 255]) >>> 0);
+      t = (t ^ ((rcon << 24) >>> 0)) >>> 0;
+      rcon = ((rcon << 1) ^ (rcon & 0x80 ? 0x1b : 0)) & 255;
+    }
+    w[i] = (w[i - 4] ^ t) >>> 0;
+  }
+  return w;
+}
+function c115AesAddRoundKey(s, w, rnd){
+  for (var c = 0; c < 4; c++){
+    var k = w[rnd * 4 + c];
+    s[4*c] ^= (k >>> 24) & 255; s[4*c+1] ^= (k >>> 16) & 255; s[4*c+2] ^= (k >>> 8) & 255; s[4*c+3] ^= k & 255;
+  }
+}
+function c115AesInvShiftRows(s){
+  for (var r = 1; r < 4; r++){
+    var t = [s[r], s[r+4], s[r+8], s[r+12]];
+    for (var c = 0; c < 4; c++) s[r + 4*c] = t[(c + 4 - r) % 4]; /* 行右移 r（InvShiftRows） */
+  }
+}
+function c115AesInvMixColumns(s){
+  for (var c = 0; c < 4; c++){
+    var a0 = s[4*c], a1 = s[4*c+1], a2 = s[4*c+2], a3 = s[4*c+3];
+    s[4*c]   = c115Gmul(a0,14) ^ c115Gmul(a1,11) ^ c115Gmul(a2,13) ^ c115Gmul(a3,9);
+    s[4*c+1] = c115Gmul(a0,9)  ^ c115Gmul(a1,14) ^ c115Gmul(a2,11) ^ c115Gmul(a3,13);
+    s[4*c+2] = c115Gmul(a0,13) ^ c115Gmul(a1,9)  ^ c115Gmul(a2,14) ^ c115Gmul(a3,11);
+    s[4*c+3] = c115Gmul(a0,11) ^ c115Gmul(a1,13) ^ c115Gmul(a2,9)  ^ c115Gmul(a3,14);
+  }
+}
+function c115AesDecryptBlock(inBytes, w){
+  var s = new Uint8Array(inBytes), round;
+  c115AesAddRoundKey(s, w, 10);
+  for (round = 9; round >= 1; round--){
+    c115AesInvShiftRows(s); c115AesInvSubBytes(s); c115AesAddRoundKey(s, w, round); c115AesInvMixColumns(s);
+  }
+  c115AesInvShiftRows(s); c115AesInvSubBytes(s); c115AesAddRoundKey(s, w, 0);
+  return s;
+}
+function c115AesInvSubBytes(s){ for (var i = 0; i < 16; i++) s[i] = C115_AES_INV[s[i]]; }
+function c115CbcDecryptManual(key, iv, ct){
+  var w = c115AesExpandKey(key);
+  var out = new Uint8Array(ct.length);
+  var prev = new Uint8Array(iv);
+  for (var off = 0; off + 16 <= ct.length; off += 16){
+    var dec = c115AesDecryptBlock(ct.subarray(off, off + 16), w);
+    for (var i = 0; i < 16; i++) out[off + i] = dec[i] ^ prev[i];
+    prev = ct.subarray(off, off + 16);
+  }
+  return out;
 }
 function c115Lz4Decompress(src){
   var out = [], i = 0;
@@ -2630,6 +2707,11 @@ async function c115EncodeToken(t){
 }
 function c115BytesToHex(bytes){ var s = '', i; for (i = 0; i < bytes.length; i++) s += (bytes[i] < 16 ? '0' : '') + bytes[i].toString(16); return s; }
 async function c115EcdhEncrypt(str){ var v = c115EcdhVariant(); return c115AesCbc(v.key, v.iv, new TextEncoder().encode(str), true, v.name); }
+function c115LooksJson(text){ var h = text.replace(/^\s+/, '').charAt(0); return h === '{' || h === '['; }
+function c115PlainToJson(plain){
+  var len = plain[0] | (plain[1] << 8);
+  return new TextDecoder().decode(c115Lz4Decompress(plain.subarray(2, Math.min(2 + len, plain.length))));
+}
 async function c115EcdhDecrypt(bytes){
   var e = await c115EcdhGet();
   /* 服务端可能返回明文 JSON 错误（如「表单解密失败」），先按明文试读直接透出 */
@@ -2637,25 +2719,38 @@ async function c115EcdhDecrypt(bytes){
     var asText = new TextDecoder().decode(bytes);
     if (/^\s*\{/.test(asText)) return asText;
   } catch(_){ /* 二进制，继续走解密 */ }
+  /* 关键：回包长度可能不是 16 的倍数（真机实测 ctLen=156），
+     参考实现先截断到 16 的倍数再 CBC 解密（cipherText[:len-len%16]） */
+  var ct = (bytes.length % 16) ? bytes.subarray(0, bytes.length - (bytes.length % 16)) : bytes;
   var order = [e.active], i;
   for (i = 0; i < e.variants.length; i++){ if (i !== e.active) order.push(i); }
-  var lastErr = null;
+  var lastErr = null, text = null;
+  /* 主路：WebCrypto CBC（服务端为 PKCS7 填充时直接成功） */
   for (var oi = 0; oi < order.length; oi++){
-    var v = e.variants[order[oi]], plain;
-    try { plain = await c115AesCbc(v.key, v.iv, bytes, false, v.name); }
-    catch(err){ lastErr = err; continue; }
-    var len = plain[0] | (plain[1] << 8);
-    var text;
-    try { text = new TextDecoder().decode(c115Lz4Decompress(plain.subarray(2, Math.min(2 + len, plain.length)))); }
-    catch(err){ lastErr = err; continue; }
-    var head = text.replace(/^\s+/, '').charAt(0);
-    if (head === '{' || head === '['){
-      if (order[oi] !== e.active) e.active = order[oi]; /* 命中另一套派生 → 会话级切换，后续加解密沿用 */
+    var v = e.variants[order[oi]];
+    text = null;
+    try { text = c115PlainToJson(await c115AesCbc(v.key, v.iv, ct, false, v.name)); }
+    catch(err){ lastErr = err; }
+    if (text && c115LooksJson(text)){
+      if (order[oi] !== e.active) e.active = order[oi];
       return text;
     }
-    lastErr = new Error('解出非 JSON（' + v.name + '）：' + text.slice(0, 120));
+    if (text) lastErr = new Error('解出非 JSON（' + v.name + '）：' + text.slice(0, 120));
   }
-  throw new Error('initupload 回包解密失败：' + ((lastErr && lastErr.message) || '') + ' ctLen=' + bytes.length + ' ctHead=' + c115BytesToHex(bytes.subarray(0, 16)));
+  /* 兜底：subtle.decrypt 强制校验 PKCS7，服务端填充不一致时会全挂；
+     改走纯 JS CBC 裸解（不校验填充，与 Go cipher.NewCBCDecrypter 语义一致） */
+  for (var oj = 0; oj < order.length; oj++){
+    var v2 = e.variants[order[oj]];
+    text = null;
+    try { text = c115PlainToJson(c115CbcDecryptManual(v2.key, v2.iv, ct)); }
+    catch(err2){ lastErr = err2; }
+    if (text && c115LooksJson(text)){
+      if (order[oj] !== e.active) e.active = order[oj];
+      return text;
+    }
+    if (text) lastErr = new Error('解出非 JSON（' + v2.name + '）：' + text.slice(0, 120));
+  }
+  throw new Error('initupload 回包解密失败：' + ((lastErr && lastErr.message) || '') + ' ctLen=' + bytes.length + ' truncLen=' + ct.length + ' ctHead=' + c115BytesToHex(bytes.subarray(0, 16)));
 }
 /* ---- 4.0 上传流程 ---- */
 var c115UserKeyCache = null;
@@ -2751,7 +2846,7 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
 }
 function c115UploadFile(cid, fileName, bytes, mime){
   return c115UploadFileAsync(cid, fileName, bytes, mime).catch(function(e){
-    throw new Error((e && e.message ? e.message : '上传失败') + '〔v195〕');
+    throw new Error((e && e.message ? e.message : '上传失败') + '〔v196〕');
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
