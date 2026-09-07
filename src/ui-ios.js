@@ -9,6 +9,8 @@ function switchPage(page) {
   if (from && from !== 'detail' && page === 'detail') resumeDetailBgZoom(); // 返回详情页：恢复底图缓慢放大
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
+  var tb = document.getElementById('tabBar');
+  if (tb) tb.style.display = (page === 'auto') ? 'none' : ''; // 自动化页为三级页：隐藏底部 tab 栏
   if (page === 'search'){
     // 普通模式（themeHidden=false）强制只能用 TMDB，里模式保留上次源
     if (!state.themeHidden){
@@ -228,7 +230,7 @@ function ctxOutsideClose(e){
   overviewSuppressClick = true;
 }
 function closeAllSheets() {
-  // API 配置弹窗关闭前自动保存
+  // 应用配置弹窗关闭前自动保存
   var apiSheet = document.getElementById('apiSheet');
   if (apiSheet && apiSheet.classList.contains('show')) persistApiSettings(false);
   closeAllSwipes();
@@ -1080,6 +1082,7 @@ function c115ProxyFetch(targetUrl, opts){
     form += '&method=' + encodeURIComponent(opts.method.toUpperCase());
     if (opts.body != null) form += '&payload=' + encodeURIComponent(typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
     if (opts.headers && opts.headers['Content-Type']) form += '&ct=' + encodeURIComponent(opts.headers['Content-Type']);
+    if (opts.b64) form += '&b64=1'; // payload 为 base64 编码的二进制（Worker 侧解码后转发）
   }
   return fetch(proxyUrl, {
     method: 'POST',
@@ -1570,7 +1573,7 @@ function closeApiGroupHelp(){
   if (overlay) overlay.classList.add('api-group-help-hidden');
 }
 function closeApiHelp(){
-  // API 说明关闭后回到 API 配置弹窗（不关闭整个弹窗栈）
+  // API 说明关闭后回到应用配置弹窗（不关闭整个弹窗栈）
   var help = document.getElementById('apiHelpSheet');
   if (help) help.classList.remove('show');
 }
@@ -1993,10 +1996,14 @@ function auto115TaskHtml(t){
     + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
     + '</div>';
   if (expanded){
+    var upBtn = (st.cls === 'ab-ok' && (t.finalDirCid || !t.noFolder))
+      ? '<button type="button" onclick="auto115UploadNfoFiles(\'' + t.id + '\')">' + (t.nfoUploaded ? '重新上传 NFO' : '上传 NFO') + '</button>'
+      : '';
     html += '<div class="auto-steps">' + (t.steps || []).map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>'
       + '<div class="auto-task-ops">'
-      + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重跑失败步骤</button>'
-      + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除任务</button>'
+      + upBtn
+      + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重试</button>'
+      + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除</button>'
       + '</div>';
   }
   return html + '</div>';
@@ -2006,11 +2013,11 @@ function renderAuto115(){
   var emptyEl = document.getElementById('autoEmpty');
   var titleEl = document.getElementById('autoFilmTitle');
   if (!listEl || !auto115Doc) return;
-  if (titleEl) titleEl.textContent = '目标：' + (auto115Doc.filmTitle || '未命名') + (auto115Doc.dvdId ? '（' + auto115Doc.dvdId + '）' : '');
+  if (titleEl) titleEl.textContent = '目标：' + (auto115Doc.dvdId || auto115Doc.filmTitle || '未命名');
   var tasks = auto115Doc.tasks || [];
   if (emptyEl) emptyEl.style.display = tasks.length ? 'none' : '';
   var html = '';
-  if (!state.c115Cookie) html += '<div class="auto-login-tip">未登录 115，任务无法执行。请到「设置 → 115 网盘」扫码登录后回来点「重跑失败步骤」。</div>';
+  if (!state.c115Cookie) html += '<div class="auto-login-tip">未登录 115，任务无法执行。请到「设置 → 115 网盘」扫码登录后回来点「重试」。</div>';
   listEl.innerHTML = html + tasks.map(auto115TaskHtml).join('');
   var clearBtn = document.getElementById('autoClearBtn');
   if (clearBtn) clearBtn.style.display = tasks.some(function(t){ return auto115Status(t).cls === 'ab-ok'; }) ? '' : 'none';
@@ -2267,11 +2274,73 @@ function auto115DeleteBatch(parentCid, ids){
   });
   return p;
 }
+/* 并入目标：同影片下已有「完成态且有最终文件夹」的任务——多磁力同一部片 → 并入同一文件夹。
+   返回 { cid, name }；并入过的任务（finalDirCid）优先用最终文件夹，而非已删除的临时文件夹 */
+function auto115FindMergeTarget(t){
+  var ts = (auto115Doc && auto115Doc.tasks) || [];
+  for (var i = 0; i < ts.length; i++){
+    var p = ts[i];
+    if (!p || p.id === t.id) continue;
+    var dirCid = p.finalDirCid || p.offlineDirCid;
+    var dirName = p.finalDirName || p.offlineDirName || '';
+    if (p.noFolder || !dirCid || !dirName) continue;
+    if (dirCid === t.offlineDirCid || dirCid === C115_DEFAULT_DIR_CID) continue;
+    var sc = auto115GetStep(p, 'cleanup');
+    if (sc.state === 'ok' || sc.state === 'skip') return { cid: dirCid, name: dirName };
+  }
+  return null;
+}
+/* 步骤5：视频改名。
+   独立任务：番号.ext（本文件夹内）。
+   并入模式（同影片已有完成任务）：先把视频移入已有的标题文件夹，再按占用改名为 番号.ext / 番号.A.ext / 番号.B.ext… */
 function auto115StepRename(t){
   var dvd = auto115Doc.dvdId;
   if (!dvd){ auto115Set(t, 'rename', 'fail', '该影片没有番号，无法命名'); auto115Finish(t); return Promise.resolve(null); }
   if (!t.videoFid){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
   var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
+  var prev = auto115FindMergeTarget(t);
+  if (prev){
+    t.finalDirCid = prev.cid;
+    t.finalDirName = prev.name;
+    auto115Set(t, 'rename', 'running', '并入文件夹「' + prev.name + '」…');
+    var moveBody = 'fid=' + encodeURIComponent(t.videoFid) + '&pid=' + encodeURIComponent(prev.cid);
+    return auto115Post('https://webapi.115.com/files/move', moveBody).then(function(res){
+      var d = res.d || {};
+      if (!(res.ok && (d.state === true || d.errno === 0))){
+        auto115Set(t, 'rename', 'fail', auto115ErrText(d, res, '移入「' + prev.name + '」失败'));
+        auto115Finish(t); return null;
+      }
+      /* 列目标文件夹现有文件名，按「去扩展名的主名」判占用（同番号不同扩展名也算多版本），
+         选下一个未占用的后缀：番号 → 番号.A → 番号.B … */
+      return auto115ListDir(prev.cid).then(function(list){
+        var stems = {};
+        for (var i = 0; i < list.length; i++){
+          var nm = String(list[i].n || '');
+          stems[nm.replace(/\.[a-z0-9]+$/i, '').toLowerCase()] = 1;
+        }
+        var cand = dvd + ext, k = 0;
+        while (stems[cand.replace(/\.[a-z0-9]+$/i, '').toLowerCase()]){
+          k++;
+          if (k > 26){ auto115Set(t, 'rename', 'fail', 'A–Z 后缀已用尽，请手动整理'); auto115Finish(t); return null; }
+          cand = dvd + '.' + String.fromCharCode(64 + k) + ext;
+        }
+        var rb = 'fid=' + encodeURIComponent(t.videoFid) + '&file_name=' + encodeURIComponent(cand);
+        return auto115Post('https://webapi.115.com/files/edit', rb).then(function(res2){
+          var d2 = res2.d || {};
+          if (res2.ok && (d2.state === true || d2.errno === 0)){
+            t.videoName = cand;
+            auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + cand);
+            return auto115StepCleanup(t);
+          }
+          auto115Set(t, 'rename', 'fail', auto115ErrText(d2, res2, '改名失败'));
+          auto115Finish(t); return null;
+        });
+      });
+    }).catch(function(e){
+      auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误');
+      auto115Finish(t); return null;
+    });
+  }
   var newName = dvd + ext;
   auto115Set(t, 'rename', 'running', '正在改名为：' + newName);
   var body = 'fid=' + encodeURIComponent(t.videoFid) + '&file_name=' + encodeURIComponent(newName);
@@ -2288,8 +2357,26 @@ function auto115StepRename(t){
     auto115Finish(t); return null;
   });
 }
-/* 步骤6：把文件夹改名为影片标题（无标题回退番号）；单文件落地则跳过 */
+/* 步骤6：独立任务 → 文件夹改名为影片标题；
+   并入任务 → 视频已移走，删除已清空的临时文件夹（根目录双保险，绝不误删） */
 function auto115StepCleanup(t){
+  if (t.finalDirCid){
+    if (t.noFolder){ auto115Set(t, 'cleanup', 'skip', '视频已并入「' + (t.finalDirName || '') + '」，无需清理'); auto115Finish(t); return Promise.resolve(null); }
+    if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID || t.offlineDirCid === t.finalDirCid){
+      auto115Set(t, 'cleanup', 'fail', '临时文件夹定位异常，请重试'); auto115Finish(t); return Promise.resolve(null);
+    }
+    auto115Set(t, 'cleanup', 'running', '正在删除已清空的临时文件夹…');
+    var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+    return auto115Post('https://webapi.115.com/rb/delete', delBody).then(function(res){
+      var d = res.d || {};
+      if (res.ok && (d.state === true || d.errno === 0)) auto115Set(t, 'cleanup', 'ok', '已删除临时文件夹，视频在「' + t.finalDirName + '」');
+      else auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '删除临时文件夹失败'));
+      auto115Finish(t); return null;
+    }).catch(function(e){
+      auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
+      auto115Finish(t); return null;
+    });
+  }
   if (t.noFolder){ auto115Set(t, 'cleanup', 'skip', '单文件落地，无需改文件夹名'); auto115Finish(t); return Promise.resolve(null); }
   if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'cleanup', 'fail', '目录未定位或异常，请重试'); auto115Finish(t); return Promise.resolve(null); }
   var newName = ((auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || t.offlineDirName || '').trim();
@@ -2310,6 +2397,105 @@ function auto115StepCleanup(t){
     auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
     auto115Finish(t); return null;
   });
+}
+/* —— NFO/海报/剧照 上传（详情页自动化已完成项，手动触发）——
+   走 115 网页端普通上传通道（无需签名）：
+   ① POST uplb.115.com/3.0/sampleinitupload.php（userid/filename/filesize/target=U_1_<cid>）→ 返回 OSS 表单参数
+   ② POST <host> multipart/form-data（name/key/policy/OSSAccessKeyId/success_action_status/callback/signature/file）
+      → 返回 {state:true,code:0} 即成功。二进制经 /api/cloud/proxy 以 base64 透传。 */
+function c115GetUserId(){
+  var m = /(?:^|;\s*)UID=([^;]+)/.exec(state.c115Cookie || '');
+  return m ? m[1].trim() : '';
+}
+function c115UploadMultipart(host, fields, fileName, mime, bytes){
+  var boundary = '----nfo115' + auto115Now().toString(36);
+  var enc = new TextEncoder();
+  var head = '';
+  for (var i = 0; i < fields.length; i++){
+    head += '--' + boundary + '\r\nContent-Disposition: form-data; name="' + fields[i][0] + '"\r\n\r\n' + fields[i][1] + '\r\n';
+  }
+  head += '--' + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + fileName + '"\r\nContent-Type: ' + mime + '\r\n\r\n';
+  var tail = '\r\n--' + boundary + '--\r\n';
+  var hb = enc.encode(head), tb = enc.encode(tail);
+  var body = new Uint8Array(hb.length + bytes.length + tb.length);
+  body.set(hb, 0); body.set(bytes, hb.length); body.set(tb, hb.length + bytes.length);
+  var bin = '';
+  for (var j = 0; j < body.length; j += 0x8000) bin += String.fromCharCode.apply(null, body.subarray(j, Math.min(j + 0x8000, body.length)));
+  return c115ProxyFetch(host, {
+    method: 'POST',
+    body: btoa(bin),
+    b64: true,
+    headers: { 'Content-Type': 'multipart/form-data; boundary=' + boundary }
+  }).then(function(res){
+    var d = res.d || {};
+    if (d.state === true && Number(d.code) === 0) return '';
+    throw new Error(d.error || d.statusmsg || ('上传失败（state=' + d.state + ' code=' + d.code + '）'));
+  });
+}
+function c115UploadFile(cid, fileName, bytes, mime){
+  var uid = c115GetUserId();
+  if (!uid) return Promise.reject(new Error('Cookie 中没有 UID（用户 id），请重新扫码登录'));
+  var initBody = 'userid=' + encodeURIComponent(uid)
+    + '&filename=' + encodeURIComponent(fileName)
+    + '&filesize=' + bytes.length
+    + '&target=' + encodeURIComponent('U_1_' + cid);
+  return c115ProxyFetch('https://uplb.115.com/3.0/sampleinitupload.php', {
+    method: 'POST',
+    body: initBody,
+    headers: { 'X-115-Cookie': state.c115Cookie || '' }
+  }).then(function(res){
+    var d = res.d || {};
+    if (!d.host || !d.object || !d.policy){
+      throw new Error('上传初始化失败：' + (d.error || d.statusmsg || d.message || res.raw.slice(0, 120)));
+    }
+    var fields = [
+      ['name', fileName],
+      ['key', d.object],
+      ['policy', d.policy],
+      ['OSSAccessKeyId', d.accessid],
+      ['success_action_status', '200'],
+      ['callback', d.callback],
+      ['signature', d.signature]
+    ];
+    return c115UploadMultipart(d.host, fields, fileName, mime, bytes);
+  });
+}
+/* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
+function auto115UploadNfoFiles(tid){
+  var t = auto115Task(tid);
+  if (!t || !auto115Doc) return;
+  var dirCid = t.finalDirCid || t.offlineDirCid;
+  var dirName = t.finalDirName || t.offlineDirName || '';
+  if (!dirCid || dirCid === C115_DEFAULT_DIR_CID){ showToast('没有可上传的目标文件夹', 'error'); return; }
+  return ensure115Cookie().then(function(ck){
+    if (!ck){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+    return loadFilm(auto115Doc.filmId).then(function(film){
+      if (!film) throw new Error('未找到影片数据');
+      var d = film.data || {};
+      var base = auto115Doc.dvdId || sanitizeName(auto115Doc.filmTitle || '') || 'movie';
+      var files = [{ name: base + '.nfo', mime: 'application/octet-stream', bytes: new TextEncoder().encode(buildNFOMovieXml(d)) }];
+      var pb = (typeof d.poster === 'string') ? dataUrlToBytesSync(d.poster) : null;
+      if (pb) files.push({ name: base + '-poster.jpg', mime: 'image/jpeg', bytes: pb });
+      var fb = (typeof d.fanart === 'string') ? dataUrlToBytesSync(d.fanart) : null;
+      if (fb) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: fb });
+      showToast('开始上传（共 ' + files.length + ' 个文件）…');
+      var curName = '', idx = 0;
+      function next(){
+        if (idx >= files.length) return Promise.resolve();
+        var f = files[idx++];
+        curName = f.name;
+        return c115UploadFile(dirCid, f.name, f.bytes, f.mime).then(next);
+      }
+      return next().then(function(){
+        t.nfoUploaded = auto115Now();
+        auto115Save(); renderAuto115();
+        showToast('已上传 ' + files.length + ' 个文件到「' + (dirName || base) + '」', 'success');
+      }).catch(function(e){
+        auto115Save(); renderAuto115();
+        showToast('上传失败（' + curName + '）：' + ((e && e.message) || e), 'error');
+      });
+    });
+  }).catch(function(e){ showToast((e && e.message) || '上传失败', 'error'); });
 }
 /* —— 探测调度 —— */
 function stopAuto115Probe(){ if (auto115ProbeTimer){ clearTimeout(auto115ProbeTimer); auto115ProbeTimer = null; } }
@@ -2363,6 +2549,16 @@ function auto115RetryStep(tid, key){
   if (!t) return Promise.resolve(null);
   return ensure115Cookie().then(function(ck){
     if (!ck){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+    /* 有别的任务正在跑 → 本任务转为排队，等它终态后自动续跑 */
+    if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)){
+      t.queued = true;
+      var cur = auto115Task(auto115RunningId);
+      auto115Set(t, key, 'idle', '排队中：等「' + (cur.magnetTitle || '当前任务') + '」完成');
+      auto115Save(); renderAuto115(); updateAutoBadge();
+      return;
+    }
+    auto115RunningId = t.id;
+    t.queued = false;
     var idx = -1;
     for (var i = 0; i < AUTO115_STEP_DEFS.length; i++) if (AUTO115_STEP_DEFS[i].key === key) idx = i;
     if (idx < 0) return;
@@ -5229,6 +5425,8 @@ function renderFilmDetail(film){
       if (d.fanartCandidates && d.fanartCandidates.length) stills = stills.concat(d.fanartCandidates);
     }
     shots = shots.concat(stills);
+    /* 过滤太小的图（<25KB，多为缩略图/占位图）：dataURL 可同步算字节；远程 URL 在 queueShot 加载时按实际字节过滤 */
+    shots = shots.filter(function(u){ return String(u).indexOf('data:') !== 0 || dataUrlBytes(u) >= SHOT_MIN_BYTES; });
     var seen = {};
     var fullShots = shots.filter(function(s){ if (!s || seen[s]) return false; seen[s] = 1; return true; });
     detailFullShots = fullShots;
@@ -5238,6 +5436,7 @@ function renderFilmDetail(film){
       detailShotColH = [0, 0];
       detailShotRevealQueue = [];
       detailShotRevealing = false;
+      detailPlacedShotEls = [];
       var html = '<div class="detail-shots-title">剧照</div><div class="detail-shots-row"><div class="detail-shots-col" id="detailShotsCol0"></div><div class="detail-shots-col" id="detailShotsCol1"></div></div>';
       if (fullShots.length > getShotCap()){
         html += '<button class="detail-shots-more" onclick="loadMoreShots()">加载更多</button>';
@@ -5320,6 +5519,7 @@ var detailShotColW = 200;
 var detailShotQueueIndex = 0;
 var detailShotRevealQueue = [];
 var detailShotRevealing = false;
+var detailPlacedShotEls = [];   // 已放置剧照 {el, src}：dropShot 剔除小图后重排 data-idx 用（renderFilmDetail 每次重置）
 var SHOTS_BATCH = 12;
 var SHOT_REVEAL_MS = 150;
 var detailRenderSeq = 0;   // 详情页渲染代号：每次 renderFilmDetail +1，用于丢弃上一部影片的延迟 still 加载回调，防止剧照污染不同影片
@@ -5334,25 +5534,65 @@ function loadMoreShots(){
   var btn = document.querySelector('.detail-shots-more');
   if (btn) btn.style.display = (detailShotQueueIndex >= detailFullShots.length) ? 'none' : '';
 }
+/* 剧照尺寸过滤阈值：小于 25KB 视为缩略图/占位图，不进列表 */
+var SHOT_MIN_BYTES = 25 * 1024;
+function dataUrlBytes(u){
+  var i = String(u).indexOf(',');
+  if (i < 0) return 0;
+  return Math.floor(String(u).slice(i + 1).length * 3 / 4);
+}
 function queueShot(idx, src){
   // 用 Image() 预载探测尺寸，onload 后再插入最矮列，避免占位导致整体重排。
   // 捕获本次渲染代号，旧影片的延迟 onload 会因代号不匹配而被 placeShot 丢弃，杜绝跨影片污染。
   var seq = detailRenderSeq;
+  src = String(src);
+  if (src.indexOf('data:') === 0){ probeShot(seq, idx, src); return; }   // dataURL 已在列表构建期按字节过滤
+  /* 远程图：先 fetch 实测字节（走 /img 代理有 CORS；force-cache 让随后的 Image 探测复用缓存），
+     <25KB 直接丢弃（同步从列表剔除并对齐全屏预览索引），失败则不拦截按原逻辑显示 */
+  fetch(src, { cache: 'force-cache' }).then(function(r){
+    return r.ok ? r.blob() : null;
+  }).then(function(blob){
+    if (seq !== detailRenderSeq) return;
+    if (blob && blob.size < SHOT_MIN_BYTES){ dropShot(seq, src); return; }
+    probeShot(seq, idx, src);
+  }).catch(function(){
+    if (seq === detailRenderSeq) probeShot(seq, idx, src);   // 测不了大小就不拦截
+  });
+}
+function probeShot(seq, idx, src){
   var probe = new Image();
   probe.onload = function(){ placeShot(seq, idx, src, probe.naturalWidth, probe.naturalHeight); };
   probe.onerror = function(){ placeShot(seq, idx, src, 0, 0); };
   probe.src = src;
 }
+/* 远程图实测过小被过滤：从两个列表剔除，并重排已放置元素的 data-idx（全屏预览按 currentDetailShots 索引） */
+function dropShot(seq, src){
+  if (seq !== detailRenderSeq) return;
+  var arrs = [detailFullShots, currentDetailShots];
+  for (var a = 0; a < arrs.length; a++){
+    var i = arrs[a].indexOf(src);
+    if (i >= 0) arrs[a].splice(i, 1);
+  }
+  for (var j = 0; j < detailPlacedShotEls.length; j++){
+    var it = detailPlacedShotEls[j];
+    var ni = currentDetailShots.indexOf(it.src);
+    if (ni >= 0) it.el.setAttribute('data-idx', String(ni));
+  }
+}
 function placeShot(seq, idx, src, nw, nh){
   if (seq !== detailRenderSeq) return;   // 上一部影片的延迟加载回调：直接丢弃，不写入当前影片的剧照 DOM / 底图轮播池
   if (!detailShotCols.length) return;
+  src = String(src);
+  // 索引按当前列表实时对齐（远程小图被 dropShot 剔除后 idx 会偏移）
+  var di = currentDetailShots.indexOf(src);
+  var useIdx = di >= 0 ? di : idx;
   // 选当前逻辑高度最矮的列（iOS 仅两列）
   var c = 0;
   if (detailShotColH[1] < detailShotColH[0]) c = 1;
   var el = document.createElement('div');
   el.className = 'detail-shot';
-  el.setAttribute('data-idx', idx);
-  el.addEventListener('click', function(){ openFullscreenStills(idx); });
+  el.setAttribute('data-idx', String(useIdx));
+  el.addEventListener('click', function(){ openFullscreenStills(parseInt(this.getAttribute('data-idx'), 10) || 0); });
   var img = document.createElement('img');
   img.loading = 'lazy';
   img.alt = '';
@@ -5360,6 +5600,7 @@ function placeShot(seq, idx, src, nw, nh){
   img.src = src;
   el.appendChild(img);
   detailShotCols[c].appendChild(el);
+  detailPlacedShotEls.push({ el: el, src: src });
   // 累加该列逻辑高度（按列宽等比缩放），用于后续最矮列判断
   var estH = (nw && nh) ? (detailShotColW * nh / nw) : 200;
   detailShotColH[c] += estH + 10; // iOS 列间距 10

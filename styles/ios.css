@@ -1501,10 +1501,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .detail-auto-btn svg { width: 21px; height: 21px; }
 .detail-auto-btn:active { opacity: .6; }
 .auto-badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
-.auto-topbar { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; flex: 0 0 auto; }
+.auto-topbar { position: relative; display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; flex: 0 0 auto; }
 .auto-topbar button { width: 34px; height: 34px; border: none; background: transparent; color: var(--label); display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
 .auto-topbar button svg { width: 22px; height: 22px; }
-.auto-topbar-title { flex: 1; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); }
+.auto-topbar-title { position: absolute; left: 0; right: 0; pointer-events: none; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); }
 .auto-topbar-clear { width: auto !important; font-size: 13px; color: var(--accent); font-weight: 500; padding: 0 4px; }
 .auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 12px; }
