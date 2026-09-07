@@ -2763,22 +2763,27 @@ async function c115GetUserKey(){
   return c115UserKeyCache;
 }
 async function c115InitUpload(u, fileSize, fileID, fileName, target, sig, signKey, signVal){
-  for (var attempt = 0; attempt < 2; attempt++){
+  var encTried = {};
+  for (var attempt = 0; attempt < 4; attempt++){
+    var e = await c115EcdhGet();
     var t = Math.floor(Date.now() / 1000);
     var token = c115Md5(C115_MD5_SALT + fileID + fileSize + signKey + signVal + u.userID + t + c115Md5(u.userID) + C115_APPVER);
     var kEc = await c115EncodeToken(t);
     var pairs = [
       ['appid', '0'], ['appversion', C115_APPVER], ['userid', u.userID],
       ['filename', fileName], ['filesize', fileSize], ['fileid', fileID],
-      ['target', target], ['sig', sig], ['t', String(t)], ['token', token]
+      ['target', target], ['sig', sig], ['t', String(t)], ['token', token],
+      ['topupload', 'true'] /* 115driver 同款字段 */
     ];
     if (signKey){ pairs.push(['sign_key', signKey], ['sign_val', signVal]); }
     pairs.sort(function(a, b){ return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0); });
     var form = pairs.map(function(p){ return p[0] + '=' + encodeURIComponent(p[1]); }).join('&');
+    encTried[e.variants[e.active].name] = 1;
     var enc = await c115EcdhEncrypt(form);
     var res = await c115ProxyFetch('https://uplb.115.com/4.0/initupload.php?k_ec=' + encodeURIComponent(kEc), {
       method: 'POST', body: c115BytesToB64(enc), b64: true, bin: true,
-      ua: C115_UA_DISK, headers: { 'X-115-Cookie': state.c115Cookie || '' }
+      ua: C115_UA_DISK, xs: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'X-115-Cookie': state.c115Cookie || '' }
     });
     if (!res.bin || !res.bin.length) throw new Error('initupload 响应为空：HTTP ' + res.status + ' ' + (res.raw || '').slice(0, 100));
     if (!res.ok){
@@ -2789,11 +2794,19 @@ async function c115InitUpload(u, fileSize, fileID, fileName, target, sig, signKe
     var before = (await c115EcdhGet()).active;
     var text = await c115EcdhDecrypt(c115B64ToBytes(res.bin));
     var after = (await c115EcdhGet()).active;
+    var parsed;
+    try { parsed = JSON.parse(text); }
+    catch(err){ throw new Error('initupload 响应非 JSON：' + text.slice(0, 160)); }
     /* 解密侧自动纠正了 key/iv 派生方式 → 表单需以服务端认可的密钥重发一次 */
-    if (after !== before && attempt === 0) continue;
-    try { return JSON.parse(text); }
-    catch(e){ throw new Error('initupload 响应非 JSON：' + text.slice(0, 160)); }
+    if (after !== before && !encTried[e.variants[after].name]) continue;
+    /* 服务端报字段无效 → 很可能是它解表单用的派生与回包加密不一致，换另一套派生重发一次 */
+    if (Number(parsed.status) === 4 && Number(parsed.statuscode) === 402){
+      var other = 1 - after;
+      if (e.variants[other] && !encTried[e.variants[other].name]){ e.active = other; continue; }
+    }
+    return parsed;
   }
+  return null;
 }
 async function c115UploadFileAsync(cid, fileName, bytes, mime){
   var u = await c115GetUserKey();
@@ -2813,7 +2826,8 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
   }
   if (Number(res.status) === 2 && Number(res.statuscode) === 0) return ''; /* 秒传命中，文件已在 115 */
   if (!(Number(res.status) === 1 && Number(res.statuscode) === 0)){
-    throw new Error('上传初始化失败：status=' + res.status + ' statuscode=' + res.statuscode + ' ' + (res.statusmsg || ''));
+    /* 两套派生均被拒时 res=null；带出非敏感字段值便于定位（userid/target/filesize） */
+    throw new Error('上传初始化失败：status=' + (res && res.status) + ' statuscode=' + (res && res.statuscode) + ' ' + ((res && res.statusmsg) || '') + ' userid=' + u.userID + ' filesize=' + fileSize + ' target=' + target + ' file=' + fileName);
   }
   var cb = res.callback || {};
   if (!res.bucket || !res.object || !cb.callback) throw new Error('初始化响应缺少 OSS 参数：' + JSON.stringify(res).slice(0, 120));
@@ -2846,7 +2860,7 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
 }
 function c115UploadFile(cid, fileName, bytes, mime){
   return c115UploadFileAsync(cid, fileName, bytes, mime).catch(function(e){
-    throw new Error((e && e.message ? e.message : '上传失败') + '〔v196〕');
+    throw new Error((e && e.message ? e.message : '上传失败') + '〔v197〕');
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
