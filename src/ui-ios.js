@@ -1128,6 +1128,7 @@ function open115Sheet(){
   var ta = document.getElementById('c115Cookie');
   if (ta) ta.value = '';
   openSheet('sheet115');
+  refresh115OpenStatus(); // 回填开放平台授权状态（上传 NFO 走的是这条官方通道）
   // 异步读 Cookie，读完再决定是否展示二维码（避免用旧的 state.c115Cookie 误判）
   idbGet('kv', C115_COOKIE_KEY).then(function(v){
     var cookie = (typeof v === 'string') ? v : (v && v.cookie) || '';
@@ -2809,7 +2810,141 @@ async function c115InitUpload(u, fileSize, fileID, fileName, target, sig, signKe
   }
   return null;
 }
+/* ============ 115 开放平台通道（官方 OAuth，绕开逆向 4.0 的客户端指纹 403）============
+   逆向 4.0 通道（uplb.115.com）会甄别客户端指纹，从 Worker 出口（Node fetch + 海外 IP）请求长期 403；
+   开放平台（proapi.115.com）是官方给第三方应用的通道，只认 Bearer token，无指纹校验，且表单是明文
+   （不需要 ECDH/AES/LZ4/sig 那套加密）。client_id 借用社区公开 AppID，无需实名入驻。
+   token 存储：kv['c115open'] = { access, refresh, appId, exp }；access 2 小时、refresh 1 年。 */
+var C115_OPEN_KEY = 'c115open';
+function c115OpenForm(o){
+  return Object.keys(o).map(function(k){ return k + '=' + encodeURIComponent(o[k]); }).join('&');
+}
+/* 开放平台请求：envelope 为 { state, data }，出错抛 message */
+async function c115OpenReq(url, method, body, auth){
+  var opts = { method: method || 'GET', xs: auth, ua: C115_UA_DISK };
+  if (body != null){ opts.body = body; opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' }; }
+  var r = await c115ProxyFetch(url, opts);
+  var d = r.d || {};
+  if (d.state === false) throw new Error('开放平台拒绝：' + (d.message || d.error || JSON.stringify(d).slice(0, 120)));
+  return d.data || d;
+}
+/* 授权：Worker 借社区 AppID + 现有 Cookie 静默换取 token（无需扫码、无需实名申请） */
+async function c115OpenAuthorize(){
+  var base = c115ProxyBase();
+  if (!base) throw new Error('未配置代理服务地址');
+  var cookie = state.c115Cookie || '';
+  if (!cookie) throw new Error('未登录 115（无 Cookie）');
+  var r = await fetch(base + '/open115/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN) + '&ck=' + encodeURIComponent(cookie),
+    cache: 'no-store'
+  });
+  var j = {};
+  try { j = await r.json(); } catch(_){ throw new Error('授权响应解析失败（HTTP ' + r.status + '）'); }
+  if (!j.ok) throw new Error(j.error || '授权失败');
+  var rec = { access: j.access_token, refresh: j.refresh_token, appId: j.app_id || '', exp: Date.now() + 7000 * 1000 };
+  try { await idbPut('kv', C115_OPEN_KEY, rec); } catch(_){ /* 存储失败不阻断本次上传 */ }
+  state.c115Open = rec;
+  return rec;
+}
+/* 取可用 access_token：过期自动 refresh，无记录则走一次授权 */
+async function c115OpenToken(){
+  var t = state.c115Open;
+  if (!t || !t.access){
+    try { t = await idbGet('kv', C115_OPEN_KEY); } catch(_){ t = null; }
+    if (t && t.access) state.c115Open = t;
+  }
+  if (t && t.access && t.exp && Date.now() < t.exp - 60000) return t.access;
+  if (t && t.refresh){
+    try {
+      var res = await c115ProxyFetch('https://passportapi.115.com/open/refreshToken', {
+        method: 'POST', body: 'refresh_token=' + encodeURIComponent(t.refresh),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, ua: C115_UA_DISK, noRef: 1
+      });
+      var d = res.d || {}, dd = d.data || d;
+      if (dd && dd.access_token){
+        var rec = { access: dd.access_token, refresh: dd.refresh_token || t.refresh, appId: t.appId, exp: Date.now() + 7000 * 1000 };
+        try { await idbPut('kv', C115_OPEN_KEY, rec); } catch(_){}
+        state.c115Open = rec;
+        return rec.access;
+      }
+    } catch(e){ /* 续期失败 → 重新授权 */ }
+  }
+  var fresh = await c115OpenAuthorize();
+  return fresh.access;
+}
+/* 开放平台上传：init → get_token → OSS PUT（三步，全部明文表单） */
+async function c115OpenUploadFile(cid, fileName, bytes, mime){
+  var at = await c115OpenToken();
+  var auth = { 'Authorization': 'Bearer ' + at };
+  var fileID = (await c115Sha1Hex(bytes, 'file')).toUpperCase();
+  var preID = (await c115Sha1Hex(bytes.subarray(0, Math.min(bytes.length, 131072)), 'preid')).toUpperCase();
+  var payload = {
+    file_name: fileName,
+    file_size: String(bytes.length),
+    target: 'U_1_' + cid,
+    fileid: fileID,
+    preid: preID,
+    topupload: '0'
+  };
+  var d = await c115OpenReq('https://proapi.115.com/open/upload/init', 'POST', c115OpenForm(payload), auth);
+  var status = Number(d.status), code = Number(d.code || 0);
+  if ((code === 700 && status === 6) || (code === 701 && status === 7)){
+    /* 二次签名：sign_check = "start-end"（闭区间），对切片算 SHA1 后重提 */
+    var sc = String(d.sign_check || '').split('-');
+    var s0 = parseInt(sc[0], 10), s1 = parseInt(sc[1], 10);
+    if (isNaN(s0) || isNaN(s1) || s0 < 0 || s1 < s0) throw new Error('sign_check 范围异常：' + d.sign_check);
+    payload.sign_key = String(d.sign_key || '');
+    payload.sign_val = (await c115Sha1Hex(bytes.subarray(s0, s1 + 1), 'signVal')).toUpperCase();
+    d = await c115OpenReq('https://proapi.115.com/open/upload/init', 'POST', c115OpenForm(payload), auth);
+    status = Number(d.status); code = Number(d.code || 0);
+  }
+  if (code === 702 && status === 8) throw new Error('文件签名认证失败（702）');
+  if (status === 2) return ''; /* 秒传命中 */
+  if (status !== 1) throw new Error('上传初始化失败：' + (d.message || JSON.stringify(d).slice(0, 120)));
+  var bucket = d.bucket, object = d.object, cb = d.callback || {};
+  if (!bucket || !object || !cb.callback) throw new Error('初始化响应缺少 OSS 参数：' + JSON.stringify(d).slice(0, 120));
+  var sts = await c115OpenReq('https://proapi.115.com/open/upload/get_token', 'GET', null, auth);
+  if (!sts.endpoint || !sts.AccessKeyId || !sts.AccessKeySecret || !sts.SecurityToken) throw new Error('获取 OSS 临时凭证失败：' + JSON.stringify(sts).slice(0, 120));
+  /* OSS V1 签名 PUT（callback 经 x-oss-callback 头携带） */
+  mime = mime || 'application/octet-stream';
+  var date = new Date().toUTCString();
+  var xs = {
+    'x-oss-security-token': sts.SecurityToken,
+    'x-oss-callback': btoa(unescape(encodeURIComponent(cb.callback))),
+    'x-oss-callback-var': btoa(unescape(encodeURIComponent(cb.callback_var || ''))),
+    'x-oss-date': date
+  };
+  var canonical = ['x-oss-callback', 'x-oss-callback-var', 'x-oss-date', 'x-oss-security-token']
+    .map(function(k){ return k + ':' + xs[k] + '\n'; }).join('');
+  var strToSign = 'PUT\n\n' + mime + '\n' + date + '\n' + canonical + '/' + bucket + '/' + object;
+  xs['Authorization'] = 'OSS ' + sts.AccessKeyId + ':' + (await c115HmacSha1B64(sts.AccessKeySecret, strToSign));
+  var putUrl = String(sts.endpoint).replace(/\/+$/, '').replace(/^https?:\/\//, function(m){ return m; });
+  if (!/^https?:\/\//.test(putUrl)) putUrl = 'https://' + putUrl;
+  putUrl = putUrl.replace(/^(https?:\/\/)([^/]+)$/, '$1' + bucket + '.$2');
+  if (putUrl.indexOf('/' + bucket + '.') < 0 && putUrl.indexOf(bucket + '.') < 0){
+    putUrl = putUrl.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
+  }
+  putUrl = putUrl.replace(/\/+$/, '') + '/' + object;
+  var putRes = await c115ProxyFetch(putUrl, {
+    method: 'PUT', body: c115BytesToB64(bytes), b64: true, ua: C115_UA_ALI, xs: xs,
+    headers: { 'Content-Type': mime }
+  });
+  var pd = putRes.d || {};
+  if (pd.state === true || putRes.status === 200) return '';
+  throw new Error('OSS PUT 失败（HTTP ' + putRes.status + '）：' + (pd.message || pd.error || (putRes.raw || '').slice(0, 110)));
+}
+/* 上传入口：优先官方开放平台通道，失败回退逆向 4.0 通道 */
 async function c115UploadFileAsync(cid, fileName, bytes, mime){
+  var openErr = null;
+  try { return await c115OpenUploadFile(cid, fileName, bytes, mime); }
+  catch(e){ openErr = e; }
+  try { return await c115UploadFileLegacy(cid, fileName, bytes, mime); }
+  catch(e2){ throw new Error('开放平台：' + ((openErr && openErr.message) || '') + ' ｜ 4.0：' + e2.message); }
+}
+/* 逆向 4.0 通道（保留为回退）：uplb initupload(ECDH+AES) → getuploadinfo → gettoken → OSS PUT */
+async function c115UploadFileLegacy(cid, fileName, bytes, mime){
   var u = await c115GetUserKey();
   var fileID = (await c115Sha1Hex(bytes, 'file')).toUpperCase();
   var fileSize = String(bytes.length);
@@ -2874,9 +3009,36 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
   if (d.state === true) return '';
   throw new Error('OSS PUT 上传失败（HTTP ' + putRes.status + '）：' + (d.message || d.error || (d.raw || putRes.raw || '').slice(0, 110)));
 }
+/* 115 配置页「开放平台上传 → 授权」按钮：借社区 AppID + 现有 Cookie 换 token */
+async function c115OpenAuthUI(){
+  var el = document.getElementById('c115OpenStatus');
+  function set(t){ if (el) el.textContent = t; }
+  set('正在授权…');
+  try {
+    await ensure115Cookie();
+    var rec = await c115OpenAuthorize();
+    var txt = '已授权（AppID ' + (rec.appId || '-') + '）· access 约 2 小时 · refresh 1 年';
+    set(txt);
+    showToast('开放平台授权成功', 'success');
+  } catch(e){
+    var msg = (e && e.message) ? e.message : String(e);
+    set('授权失败：' + msg);
+    showToast('授权失败：' + msg, 'error');
+  }
+}
+/* 打开 115 配置页时回填开放平台授权状态 */
+function refresh115OpenStatus(){
+  var el = document.getElementById('c115OpenStatus');
+  if (!el) return;
+  idbGet('kv', C115_OPEN_KEY).then(function(v){
+    if (!v || !v.access){ el.textContent = '未授权'; return; }
+    var left = v.exp ? Math.max(0, Math.round((v.exp - Date.now()) / 60000)) : 0;
+    el.textContent = '已授权（AppID ' + (v.appId || '-') + '）· token 剩余约 ' + left + ' 分钟';
+  }).catch(function(){ el.textContent = '未授权'; });
+}
 function c115UploadFile(cid, fileName, bytes, mime){
   return c115UploadFileAsync(cid, fileName, bytes, mime).catch(function(e){
-    throw new Error((e && e.message ? e.message : '上传失败') + '〔v200〕');
+    throw new Error((e && e.message ? e.message : '上传失败') + '〔v201〕');
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
