@@ -1475,15 +1475,75 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .sub-lang-select-visible:focus { outline: none; }
 .sub-lang-arrow { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 10px; height: 10px; display: block; pointer-events: none; color: var(--label-2); }
 
-/* ===== 磁力操作蒙版（详情页磁力 & 磁力搜索共用）===== */
-.magnet-op-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 800; opacity: 0; pointer-events: none; transition: opacity .2s; }
-.magnet-op-mask.show { opacity: 1; pointer-events: auto; }
-.magnet-op-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 801; background: var(--bg, #1c1c1e); border-radius: 20px 20px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); transform: translateY(100%); transition: transform .25s cubic-bezier(.32,.72,.32,1); }
-.magnet-op-sheet.show { transform: translateY(0); }
-.magnet-op-title { font-size: 13px; color: var(--label-2); margin-bottom: 10px; }
-.magnet-op-magnet { font-size: 12px; color: var(--label-3); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; line-height: 1.5; margin-bottom: 16px; max-height: 72px; overflow: hidden; }
-.magnet-op-actions { display: flex; gap: 12px; }
-.magnet-op-actions button { flex: 1; border: none; border-radius: 980px; font-size: 15px; font-weight: 600; padding: 13px 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.magnet-op-copy { background: var(--card-fill, rgba(255,255,255,0.12)); color: var(--label); box-shadow: inset 0 0 0 1px var(--sep); }
-.magnet-op-115 { background: var(--accent); color: var(--accent-text); }
-.magnet-op-sheet button:active { opacity: .7; }
+/* ===== 磁力操作层：点击某条磁力 → 该条盖半透明蒙版 + 复制/115离线 ===== */
+.detail-magnet, .magnet-result { position: relative; overflow: hidden; }
+.magnet-inline-actions {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  background: rgba(0,0,0,0.55);
+  border-radius: inherit;
+  -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+  animation: magnetInlineFade .15s ease-out;
+}
+@keyframes magnetInlineFade { from { opacity: 0; } to { opacity: 1; } }
+.magnet-inline-actions button {
+  border: none; border-radius: 980px; font-size: 14px; font-weight: 600;
+  padding: 9px 22px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+.magnet-inline-copy { background: rgba(255,255,255,0.92); color: #000; }
+.magnet-inline-115 { background: var(--accent); color: var(--accent-text); }
+.magnet-inline-actions button:active { opacity: .7; transform: scale(.97); }
+
+/* ===== 115 自动化页 ===== */
+.detail-topbar { justify-content: space-between; }
+.detail-auto-btn { position: relative; width: 36px; height: 36px; border-radius: 18px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.28); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: none; color: #fff; -webkit-tap-highlight-color: transparent; }
+.detail-auto-btn svg { width: 21px; height: 21px; }
+.detail-auto-btn:active { opacity: .6; }
+.auto-badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.auto-topbar { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; flex: 0 0 auto; }
+.auto-topbar button { width: 34px; height: 34px; border: none; background: transparent; color: var(--label); display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+.auto-topbar button svg { width: 22px; height: 22px; }
+.auto-topbar-title { flex: 1; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); }
+.auto-topbar-clear { width: auto !important; font-size: 13px; color: var(--accent); font-weight: 500; padding: 0 4px; }
+.auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
+.auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 12px; }
+.auto-list { display: flex; flex-direction: column; gap: 10px; }
+.auto-task { background: var(--card-fill); border-radius: 14px; overflow: hidden; }
+.auto-task-head { display: flex; align-items: center; gap: 10px; padding: 13px 14px; -webkit-tap-highlight-color: transparent; }
+.auto-task-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--label); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.auto-task-badge { flex: 0 0 auto; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.auto-task-arrow { flex: 0 0 auto; width: 14px; height: 14px; color: var(--label-3); transition: transform .2s; }
+.auto-task.expanded .auto-task-arrow { transform: rotate(90deg); }
+.ab-idle { background: rgba(142,142,147,0.18); color: var(--label-2); }
+.ab-run { background: rgba(0,122,255,0.16); color: #007aff; }
+.ab-wait { background: rgba(255,149,0,0.18); color: #ff9500; }
+.ab-ok { background: rgba(52,199,89,0.18); color: #34c759; }
+.ab-fail { background: rgba(255,59,48,0.16); color: #ff3b30; }
+.ab-pause { background: rgba(255,59,48,0.12); color: #ff3b30; }
+.auto-steps { display: none; padding: 2px 14px 12px; border-top: 0.5px solid var(--sep); }
+.auto-task.expanded .auto-steps { display: block; }
+.auto-step { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0 10px 0; position: relative; }
+.auto-step:not(:last-child)::before { content: ''; position: absolute; left: 8px; top: 26px; bottom: -2px; width: 1.5px; background: var(--sep); }
+.as-dot { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%; margin-top: 1px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 1.5px solid var(--label-3); color: var(--label-3); background: var(--bg); }
+.as-dot.ok { background: #34c759; border-color: #34c759; color: #fff; }
+.as-dot.fail { background: #ff3b30; border-color: #ff3b30; color: #fff; }
+.as-dot.run { border-color: #007aff; color: #007aff; }
+.as-dot.skip { background: rgba(142,142,147,0.5); border-color: transparent; color: #fff; }
+.as-body { flex: 1; min-width: 0; }
+.as-label { font-size: 13px; font-weight: 600; color: var(--label); line-height: 1.3; }
+.as-label.dim { color: var(--label-3); font-weight: 500; }
+.as-msg { font-size: 11.5px; color: var(--label-2); margin-top: 3px; word-break: break-all; line-height: 1.45; }
+.as-msg.err { color: #ff3b30; }
+.as-time { font-size: 10.5px; color: var(--label-3); margin-top: 2px; }
+.as-ops { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.as-ops button { border: none; border-radius: 980px; font-size: 12px; font-weight: 600; padding: 6px 14px; -webkit-tap-highlight-color: transparent; }
+.as-op-retry { background: var(--accent); color: var(--accent-text); }
+.as-op-ghost { background: rgba(142,142,147,0.18); color: var(--label); }
+.as-op-danger { background: rgba(255,59,48,0.14); color: #ff3b30; }
+.auto-task-ops { display: flex; gap: 8px; padding: 0 14px 12px; }
+.auto-task-ops button { flex: 1; border: none; border-radius: 980px; font-size: 13px; font-weight: 600; padding: 9px 0; background: rgba(142,142,147,0.18); color: var(--label); -webkit-tap-highlight-color: transparent; }
+.auto-empty { padding: 60px 24px; text-align: center; }
+.auto-empty-title { font-size: 16px; font-weight: 600; color: var(--label-2); }
+.auto-empty-sub { font-size: 13px; color: var(--label-3); line-height: 1.6; margin-top: 10px; }
+.auto-login-tip { margin: 10px 0 0; background: rgba(255,149,0,0.12); color: #ff9500; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5; }

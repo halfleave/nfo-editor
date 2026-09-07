@@ -1694,7 +1694,7 @@ function renderMagnetResults(items){
     if (it.leechers) meta.push('下载 ' + it.leechers);
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
     var rawMagnet = decodeXmlEntities(it.magnet || '');
-    html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="openMagnetOp(this.dataset.magnet, this.querySelector(\'.mr-title\').textContent)">'
+    html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="openMagnetOp(this)">'
       + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
@@ -1706,10 +1706,8 @@ function renderMagnetResults(items){
   box.innerHTML = html;
 }
 function toggleMagnetActions(el){
-  // 保留兼容：改为弹蒙版
-  var magnet = el.getAttribute('data-magnet');
-  var t = el.querySelector('.mr-title');
-  openMagnetOp(decodeXmlEntities(magnet || ''), t ? t.textContent : '');
+  // 保留兼容：改为在该条上浮操作层
+  openMagnetOp(el);
 }
 function copyMagnet(el){
   var magnet = el.getAttribute('data-magnet');
@@ -1718,26 +1716,50 @@ function copyMagnet(el){
     showToast(ok ? '已复制 magnet 链接' : '复制失败，请长按链接手动复制', ok ? 'success' : 'error');
   });
 }
-/* ===== 磁力操作蒙版（详情页磁力 & 磁力搜索共用）===== */
+/* ===== 磁力操作层：点击某条磁力 → 该条覆盖半透明蒙版 + 复制/115离线；点其他处收起 ===== */
 var magnetOpCurrent = '';
-function openMagnetOp(magnet, title){
-  if (!magnet){ showToast('没有可离线的链接', 'error'); return; }
+var magnetOpRow = null;
+var magnetOpTitle = '';
+function openMagnetOp(el){
+  if (!el) return;
+  var magnet = el.getAttribute('data-magnet') || el.getAttribute('data-link') || '';
+  magnet = decodeXmlEntities(magnet || '');
+  // 再点同一条 → 收起
+  if (magnetOpRow === el && el.querySelector('.magnet-inline-actions')){ closeMagnetOp(); return; }
+  closeMagnetOp();
+  if (!magnet){ showToast('没有可操作的磁力链接', 'error'); return; }
   magnetOpCurrent = magnet;
-  var titleEl = document.getElementById('magnetOpTitle');
-  var magEl = document.getElementById('magnetOpMagnet');
-  if (titleEl) titleEl.textContent = title || '磁力链接';
-  if (magEl) magEl.textContent = magnet;
-  var mask = document.getElementById('magnetOpMask');
-  var sheet = document.getElementById('magnetOpSheet');
-  if (mask) mask.classList.add('show');
-  if (sheet) sheet.classList.add('show');
+  magnetOpRow = el;
+  var titleEl = el.querySelector('.mr-title') || el.querySelector('.dm-title');
+  magnetOpTitle = titleEl ? (titleEl.textContent || '').trim() : '';
+  // 详情页 → 走自动化流水线；其他位置（磁力搜索）→ 仅一键离线
+  var inDetail = (currentPage === 'detail');
+  var layer = document.createElement('div');
+  layer.className = 'magnet-inline-actions';
+  layer.innerHTML = '<button type="button" class="magnet-inline-copy">复制</button>'
+    + '<button type="button" class="magnet-inline-115">' + (inDetail ? '加入自动化' : '115 离线') + '</button>';
+  // 蒙版与按钮均不触发整行的 openMagnetOp
+  layer.addEventListener('click', function(ev){ ev.stopPropagation(); });
+  layer.querySelector('.magnet-inline-copy').addEventListener('click', function(ev){ ev.stopPropagation(); magnetOpCopy(); });
+  layer.querySelector('.magnet-inline-115').addEventListener('click', function(ev){
+    ev.stopPropagation();
+    if (inDetail) auto115AddFromOp(); else magnetOpOffline();
+  });
+  el.appendChild(layer);
 }
 function closeMagnetOp(){
-  var mask = document.getElementById('magnetOpMask');
-  var sheet = document.getElementById('magnetOpSheet');
-  if (mask) mask.classList.remove('show');
-  if (sheet) sheet.classList.remove('show');
+  var all = document.querySelectorAll('.magnet-inline-actions');
+  for (var i = 0; i < all.length; i++){ if (all[i].parentNode) all[i].parentNode.removeChild(all[i]); }
+  magnetOpRow = null;
+  magnetOpCurrent = '';
+  magnetOpTitle = '';
 }
+// 点击页面其他位置（含另一条磁力）时收起当前蒙版
+document.addEventListener('click', function(ev){
+  if (!magnetOpRow) return;
+  if (magnetOpRow.contains(ev.target)) return;
+  closeMagnetOp();
+}, true);
 function magnetOpCopy(){
   var m = magnetOpCurrent;
   closeMagnetOp();
@@ -1752,22 +1774,33 @@ function magnetOpOffline(){
   // 复用 c115OfflineFromMagnet 的逻辑，但直接传 magnet 字符串
   c115Offline(m);
 }
+/* 取 115 Cookie：内存没有就从 IndexedDB 读（首次打开 APP 未进过 115 配置页时内存是空的） */
+function ensure115Cookie(){
+  if (state.c115Cookie) return Promise.resolve(state.c115Cookie);
+  return idbGet('kv', C115_COOKIE_KEY).then(function(v){
+    var c = v ? ((typeof v === 'string') ? v : (v.cookie || '')) : '';
+    if (c) state.c115Cookie = c;
+    return c;
+  }).catch(function(){ return ''; });
+}
 function c115Offline(magnet){
-  var cookie = state.c115Cookie || '';
-  if (!cookie){ closeMagnetOp(); showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
   closeMagnetOp();
-  showToast('正在添加到 115 离线下载…', 'info');
-  var cid = C115_DEFAULT_DIR_CID;
-  var body = 'url=' + encodeURIComponent((magnet || '').trim()) + '&wp_path_id=' + encodeURIComponent(cid);
-  /* 网页端离线接口：115.com/web/lixian（明文表单+Cookie）。
-     注意不要用 clouddownload.115.com/lixianssp —— 那是 115 客户端加密通道接口，
-     明文参数会返回 {"state":false,"error":"decode fail!"}。 */
-  c115ProxyFetch('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', {
-    method: 'POST',
-    headers: { 'X-115-Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body
+  ensure115Cookie().then(function(cookie){
+    if (!cookie){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return null; }
+    showToast('正在添加到 115 离线下载…', 'info');
+    var cid = C115_DEFAULT_DIR_CID;
+    var body = 'url=' + encodeURIComponent((magnet || '').trim()) + '&wp_path_id=' + encodeURIComponent(cid);
+    /* 网页端离线接口：115.com/web/lixian（明文表单+Cookie）。
+       注意不要用 clouddownload.115.com/lixianssp —— 那是 115 客户端加密通道接口，
+       明文参数会返回 {"state":false,"error":"decode fail!"}。 */
+    return c115ProxyFetch('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', {
+      method: 'POST',
+      headers: { 'X-115-Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body
+    });
   })
   .then(function(res){
+    if (!res) return;
     var d = res.d || {};
     var ok = res.ok && (d.state === true || (d.data && (d.data.tid || d.data.task_id || d.data.infoid)));
     /* errcode 10008 = 任务已存在，视为成功（提示一下即可） */
@@ -1783,6 +1816,498 @@ function c115Offline(magnet){
     var detail = (e && e.body) ? e.body.slice(0, 300) : '';
     showToast('离线下载请求失败：' + (e && e.message ? e.message : '网络错误') + (detail ? ' ' + detail : ''), 'error');
   });
+}
+
+/* ===== 115 自动化：离线 → 建目录 → 移视频 → 改名 → 清理 ===== */
+var AUTO115_PREFIX = 'auto115:';
+var AUTO115_PROBE_MS = 10000;   // 每 10s 探测一次
+var AUTO115_PROBE_MAX = 3;      // 只探 3 次后转「等待中」
+var AUTO115_STEP_DEFS = [
+  { key: 'submit',  label: '提交离线' },
+  { key: 'wait',    label: '等待离线完成' },
+  { key: 'mkdir',   label: '创建新文件夹' },
+  { key: 'move',    label: '移动视频' },
+  { key: 'rename',  label: '修改视频名称' },
+  { key: 'cleanup', label: '删除磁力文件夹' }
+];
+var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
+var auto115ProbeTimer = null;
+var auto115Expanded = '';
+
+function auto115Key(filmId){ return AUTO115_PREFIX + filmId; }
+function auto115Now(){ return Date.now(); }
+function auto115Time(ts){
+  if (!ts) return '';
+  var d = new Date(ts);
+  return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+}
+function auto115Btih(magnet){
+  var m = /btih:([0-9a-fA-F]{40}|[0-9a-zA-Z]{32})/.exec(magnet || '');
+  return m ? m[1].toUpperCase() : '';
+}
+function auto115NewSteps(){
+  return AUTO115_STEP_DEFS.map(function(s){ return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
+}
+function auto115Size(n){
+  if (!n) return '0 B';
+  var u = ['B','KB','MB','GB','TB'], i = 0;
+  while (n >= 1024 && i < u.length - 1){ n /= 1024; i++; }
+  return (i ? n.toFixed(1) : n) + ' ' + u[i];
+}
+function auto115ErrText(d, res, fallback){
+  var m = (d && (d.error || d.message || d.error_msg)) || (res && res.raw ? String(res.raw).slice(0, 120) : '') || fallback || '失败';
+  return String(m).slice(0, 160);
+}
+/* 文档（每部影片一份，存 IndexedDB kv） */
+function auto115EnsureDoc(){
+  if (auto115Doc) return Promise.resolve(auto115Doc);
+  var film = currentDetailFilm;
+  if (!film) return Promise.reject(new Error('未打开影片'));
+  var d = film.data || {};
+  var dvdId = (d.dvdId || d.content_id || (d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle) ? d.originaltitle : '') || '').toString().trim();
+  auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, tasks: [] };
+  return idbGet('kv', auto115Key(film.id)).then(function(v){
+    if (v && v.tasks) auto115Doc = v;
+    return auto115Doc;
+  }).catch(function(){ return auto115Doc; });
+}
+function auto115Save(){
+  if (!auto115Doc) return Promise.resolve();
+  return idbPut('kv', auto115Key(auto115Doc.filmId), auto115Doc).catch(function(){});
+}
+function auto115Task(id){
+  if (!auto115Doc) return null;
+  var ts = auto115Doc.tasks || [];
+  for (var i = 0; i < ts.length; i++) if (ts[i].id === id) return ts[i];
+  return null;
+}
+function auto115GetStep(t, key){
+  var steps = t.steps || [];
+  for (var i = 0; i < steps.length; i++) if (steps[i].key === key) return steps[i];
+  var s = { key: key, state: 'idle', msg: '', at: 0, probes: 0 };
+  steps.push(s); t.steps = steps; return s;
+}
+function auto115Set(t, key, state, msg){
+  var s = auto115GetStep(t, key);
+  s.state = state; s.msg = msg || '';
+  if (state !== 'idle' && state !== 'running') s.at = auto115Now();
+  else if (!s.at) s.at = auto115Now();
+  renderAuto115(); auto115Save();
+  return s;
+}
+function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115Save(); updateAutoBadge(); }
+
+/* —— 大状态合成 —— */
+function auto115StepLabel(key){
+  for (var i = 0; i < AUTO115_STEP_DEFS.length; i++) if (AUTO115_STEP_DEFS[i].key === key) return AUTO115_STEP_DEFS[i].label;
+  return key;
+}
+function auto115Status(t){
+  var steps = t.steps || [];
+  for (var i = 0; i < steps.length; i++){
+    if (steps[i].state === 'fail') return { text: '失败 · ' + auto115StepLabel(steps[i].key), cls: 'ab-fail' };
+  }
+  if (t.aborted) return { text: '已中止', cls: 'ab-idle' };
+  var wait = auto115GetStep(t, 'wait');
+  if (wait.state === 'waiting') return { text: '等待中 · 已探 ' + (wait.probes || 0) + '/' + AUTO115_PROBE_MAX, cls: 'ab-wait' };
+  if (auto115GetStep(t, 'submit').state === 'running') return { text: '提交中…', cls: 'ab-run' };
+  if (wait.state === 'running') return { text: '离线中 (' + ((wait.probes || 0) + 1) + '/' + AUTO115_PROBE_MAX + ')', cls: 'ab-run' };
+  for (var j = 2; j < AUTO115_STEP_DEFS.length; j++){
+    if (auto115GetStep(t, AUTO115_STEP_DEFS[j].key).state === 'running'){
+      return { text: '整理中 · ' + AUTO115_STEP_DEFS[j].label, cls: 'ab-run' };
+    }
+  }
+  var cleanup = auto115GetStep(t, 'cleanup');
+  if (cleanup.state === 'ok' || cleanup.state === 'skip') return { text: '已完成', cls: 'ab-ok' };
+  return { text: '待提交', cls: 'ab-idle' };
+}
+/* —— 页面渲染 —— */
+function openAuto115Page(){
+  return auto115EnsureDoc().then(function(){
+    switchPage('auto');
+    renderAuto115();
+    auto115Resume();
+  }).catch(function(e){ showToast((e && e.message) || '打开自动化失败', 'error'); });
+}
+function auto115Back(){ stopAuto115Probe(); switchPage('detail'); }
+function auto115Toggle(id){ auto115Expanded = (auto115Expanded === id) ? '' : id; renderAuto115(); }
+function updateAutoBadge(){
+  var el = document.getElementById('autoBadge');
+  if (!el) return;
+  var n = 0;
+  if (auto115Doc){
+    n = (auto115Doc.tasks || []).filter(function(t){
+      var c = auto115Status(t).cls;
+      return c === 'ab-run' || c === 'ab-fail' || c === 'ab-wait';
+    }).length;
+  }
+  el.textContent = n > 99 ? '99+' : String(n);
+  el.style.display = n ? '' : 'none';
+}
+function auto115StepHtml(t, s){
+  var label = auto115StepLabel(s.key);
+  if (s.state === 'running') label += '…';
+  var dot = (s.state === 'ok') ? '✓' : (s.state === 'fail') ? '!' : (s.state === 'skip') ? '–' : '';
+  var ops = '';
+  if (s.state === 'fail') ops = '<button class="as-op-retry" onclick="auto115RetryStep(\'' + t.id + '\',\'' + s.key + '\')">重试</button>';
+  if (s.key === 'wait' && s.state === 'waiting'){
+    ops = '<button class="as-op-retry" onclick="auto115ContinueProbe(\'' + t.id + '\')">继续探测</button>'
+        + '<button class="as-op-ghost" onclick="auto115RetryStep(\'' + t.id + '\',\'submit\')">重新提交</button>';
+  }
+  if (s.key === 'wait' && s.state === 'running') ops = '<button class="as-op-ghost" onclick="auto115Abort(\'' + t.id + '\')">中止</button>';
+  return '<div class="auto-step">'
+    + '<div class="as-dot ' + s.state + '">' + dot + '</div>'
+    + '<div class="as-body">'
+    + '<div class="as-label' + (s.state === 'idle' ? ' dim' : '') + '">' + escapeHtml(label) + '</div>'
+    + (s.msg ? '<div class="as-msg' + (s.state === 'fail' ? ' err' : '') + '">' + escapeHtml(s.msg) + '</div>' : '')
+    + (s.at ? '<div class="as-time">' + auto115Time(s.at) + '</div>' : '')
+    + (ops ? '<div class="as-ops">' + ops + '</div>' : '')
+    + '</div></div>';
+}
+function auto115TaskHtml(t){
+  var st = auto115Status(t);
+  var expanded = (auto115Expanded === t.id);
+  var html = '<div class="auto-task' + (expanded ? ' expanded' : '') + '">'
+    + '<div class="auto-task-head" onclick="auto115Toggle(\'' + t.id + '\')">'
+    + '<div class="auto-task-title">' + escapeHtml(t.magnetTitle || auto115Btih(t.magnet) || '磁力任务') + '</div>'
+    + '<span class="auto-task-badge ' + st.cls + '">' + escapeHtml(st.text) + '</span>'
+    + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
+    + '</div>';
+  if (expanded){
+    html += '<div class="auto-steps">' + (t.steps || []).map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>'
+      + '<div class="auto-task-ops">'
+      + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重跑失败步骤</button>'
+      + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除任务</button>'
+      + '</div>';
+  }
+  return html + '</div>';
+}
+function renderAuto115(){
+  var listEl = document.getElementById('autoTaskList');
+  var emptyEl = document.getElementById('autoEmpty');
+  var titleEl = document.getElementById('autoFilmTitle');
+  if (!listEl || !auto115Doc) return;
+  if (titleEl) titleEl.textContent = '目标：' + (auto115Doc.filmTitle || '未命名') + (auto115Doc.dvdId ? '（' + auto115Doc.dvdId + '）' : '');
+  var tasks = auto115Doc.tasks || [];
+  if (emptyEl) emptyEl.style.display = tasks.length ? 'none' : '';
+  var html = '';
+  if (!state.c115Cookie) html += '<div class="auto-login-tip">未登录 115，任务无法执行。请到「设置 → 115 网盘」扫码登录后回来点「重跑失败步骤」。</div>';
+  listEl.innerHTML = html + tasks.map(auto115TaskHtml).join('');
+  var clearBtn = document.getElementById('autoClearBtn');
+  if (clearBtn) clearBtn.style.display = tasks.some(function(t){ return auto115Status(t).cls === 'ab-ok'; }) ? '' : 'none';
+  updateAutoBadge();
+}
+/* —— 115 接口封装 —— */
+function auto115Post(url, body){
+  return c115ProxyFetch(url, {
+    method: 'POST',
+    headers: { 'X-115-Cookie': state.c115Cookie || '', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body
+  });
+}
+function auto115ListDir(cid){
+  return c115ProxyFetch('https://webapi.115.com/files?cid=' + encodeURIComponent(cid) + '&offset=0&limit=200&show_dir=1', {
+    headers: { 'X-115-Cookie': state.c115Cookie || '' }
+  }).then(function(res){
+    var d = res.d || {};
+    var list = d.data || d.files || [];
+    return Array.isArray(list) ? list : [];
+  });
+}
+function auto115FindDir(parentCid, name){
+  return auto115ListDir(parentCid).then(function(list){
+    for (var i = 0; i < list.length; i++){
+      var it = list[i];
+      if ((it.n || it.name) === name) return { cid: (it.cid || it.fid || '').toString(), name: name };
+    }
+    return null;
+  });
+}
+function auto115ResolveOfflineDir(t){
+  if (t.offlineDirCid) return Promise.resolve(t.offlineDirCid);
+  if (t.offlineName) return auto115FindDir(C115_DEFAULT_DIR_CID, t.offlineName).then(function(dir){ return dir ? dir.cid : ''; });
+  return Promise.resolve('');
+}
+function auto115QueryTask(t){
+  return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=task_lists', 'page=1&page_row=100').then(function(res){
+    var d = res.d || {};
+    var tasks = d.tasks || (d.data && d.data.tasks) || [];
+    var hash = (t.infoHash || '').toUpperCase();
+    var found = null;
+    for (var i = 0; i < tasks.length; i++){
+      var x = tasks[i];
+      var xh = ((x.info_hash || x.infohash || x.hash || '') + '').toUpperCase();
+      if (hash && xh && xh === hash){ found = x; break; }
+      if (!found && t.offlineName && x.name === t.offlineName) found = x;
+    }
+    if (!found) return null;
+    var percent = (found.percentDone != null) ? found.percentDone : (found.percent != null ? found.percent : null);
+    var status = found.status;
+    var done = (percent === 100 || status === 2 || status === '2' || status === 'complete' || status === '已完成');
+    var failed = (status === 3 || status === '3' || status === -1 || status === '-1' || status === 'failed' || status === '失败');
+    return {
+      done: !!done, failed: !!failed, percent: percent,
+      name: found.name || '', msg: found.error_msg || found.msg || '',
+      cid: (found.cid || found.dir_id || found.wp_path_id || '').toString()
+    };
+  });
+}
+/* —— 六步执行器 —— */
+function auto115Run(t){
+  if (!t) return Promise.resolve(null);
+  return ensure115Cookie().then(function(ck){
+    if (!ck){ auto115Set(t, 'submit', 'fail', '未登录 115'); auto115Finish(t); return null; }
+    return auto115StepSubmit(t);
+  });
+}
+function auto115StepSubmit(t){
+  auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…');
+  var body = 'url=' + encodeURIComponent(t.magnet) + '&wp_path_id=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+  return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', body).then(function(res){
+    var d = res.d || {};
+    if (res.ok && (d.state === true || d.errcode === 10008 || (d.data && d.data.info_hash))){
+      t.infoHash = ((d.info_hash || (d.data && d.data.info_hash) || auto115Btih(t.magnet)) || '').toUpperCase();
+      t.offlineName = d.name || (d.data && d.data.name) || t.magnetTitle || '';
+      auto115Set(t, 'submit', 'ok', d.errcode === 10008 ? '任务已在 115 列表中（复用）' : '已提交到云下载');
+      return auto115StepWait(t, true);
+    }
+    auto115Set(t, 'submit', 'fail', auto115ErrText(d, res, '提交失败'));
+    auto115Finish(t); return null;
+  }).catch(function(e){
+    auto115Set(t, 'submit', 'fail', (e && e.message) ? e.message : '网络错误');
+    auto115Finish(t); return null;
+  });
+}
+function auto115StepWait(t, reset){
+  var s = auto115Set(t, 'wait', 'running', '正在查询离线状态…');
+  if (reset) s.probes = 0;
+  return auto115QueryTask(t).then(function(info){
+    if (!info){
+      s.probes = (s.probes || 0) + 1;
+      if (s.probes >= AUTO115_PROBE_MAX){
+        auto115Set(t, 'wait', 'waiting', '已探测 ' + s.probes + ' 次，任务暂未出现在列表');
+        auto115Finish(t); return null;
+      }
+      s.msg = '任务暂未出现（' + s.probes + '/' + AUTO115_PROBE_MAX + '）';
+      auto115Finish(t); auto115ScheduleProbe(t); return null;
+    }
+    if (info.done){
+      t.offlineName = info.name || t.offlineName;
+      if (info.cid) t.offlineDirCid = info.cid;
+      auto115Set(t, 'wait', 'ok', '离线完成' + (info.percent != null ? '（' + info.percent + '%）' : ''));
+      return auto115StepMkdir(t);
+    }
+    if (info.failed){
+      auto115Set(t, 'wait', 'fail', '115 报告下载失败' + (info.msg ? '：' + info.msg : ''));
+      auto115Finish(t); return null;
+    }
+    s.probes = (s.probes || 0) + 1;
+    if (s.probes >= AUTO115_PROBE_MAX){
+      auto115Set(t, 'wait', 'waiting', '已探测 ' + s.probes + ' 次，进度 ' + (info.percent != null ? info.percent + '%' : '未知'));
+      auto115Finish(t); return null;
+    }
+    s.msg = '离线中 ' + (info.percent != null ? info.percent + '% ' : '') + '（' + s.probes + '/' + AUTO115_PROBE_MAX + '）';
+    renderAuto115(); auto115Save();
+    auto115ScheduleProbe(t);
+    return null;
+  }).catch(function(e){
+    auto115Set(t, 'wait', 'fail', (e && e.message) ? e.message : '网络错误');
+    auto115Finish(t); return null;
+  });
+}
+function auto115StepMkdir(t){
+  var name = auto115Doc.filmTitle || auto115Doc.dvdId || '未命名';
+  auto115Set(t, 'mkdir', 'running', '正在创建「' + name + '」…');
+  var body = 'pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID) + '&cname=' + encodeURIComponent(name);
+  return auto115Post('https://webapi.115.com/files/add', body).then(function(res){
+    var d = res.d || {};
+    if (res.ok && (d.state === true || d.cid)){
+      t.newDirCid = (d.cid || (d.data && d.data.cid) || '').toString();
+      auto115Set(t, 'mkdir', 'ok', '已创建：' + name);
+      return auto115StepMove(t);
+    }
+    if (d.errno === 20004 || /已存在/.test(d.error || '')){
+      return auto115FindDir(C115_DEFAULT_DIR_CID, name).then(function(dir){
+        if (!dir){ auto115Set(t, 'mkdir', 'fail', '文件夹已存在但未能定位'); auto115Finish(t); return null; }
+        t.newDirCid = dir.cid;
+        auto115Set(t, 'mkdir', 'skip', '文件夹已存在，复用：' + name);
+        return auto115StepMove(t);
+      });
+    }
+    auto115Set(t, 'mkdir', 'fail', auto115ErrText(d, res, '创建失败'));
+    auto115Finish(t); return null;
+  }).catch(function(e){
+    auto115Set(t, 'mkdir', 'fail', (e && e.message) ? e.message : '网络错误');
+    auto115Finish(t); return null;
+  });
+}
+function auto115StepMove(t){
+  auto115Set(t, 'move', 'running', '正在扫描离线目录…');
+  return auto115ResolveOfflineDir(t).then(function(dirCid){
+    if (!dirCid){ auto115Set(t, 'move', 'fail', '未找到离线落地目录'); auto115Finish(t); return null; }
+    t.offlineDirCid = dirCid;
+    return auto115ListDir(dirCid).then(function(list){
+      var vids = list.filter(function(it){
+        var n = ((it.n || it.name) || '').toLowerCase();
+        if (/sample|预告|trailer|preview/.test(n)) return false;
+        return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm)$/.test(n);
+      });
+      if (!vids.length){ auto115Set(t, 'move', 'fail', '目录内没有视频文件'); auto115Finish(t); return null; }
+      vids.sort(function(a, b){ return (Number(b.s != null ? b.s : b.size) || 0) - (Number(a.s != null ? a.s : a.size) || 0); });
+      var v = vids[0];
+      t.videoFid = (v.fid || v.cid || '').toString();
+      t.videoName = v.n || v.name || '';
+      t.videoSize = Number(v.s != null ? v.s : v.size) || 0;
+      auto115Set(t, 'move', 'running', '正在移动：' + t.videoName + '（' + auto115Size(t.videoSize) + '）');
+      var body = 'fid=' + encodeURIComponent(t.videoFid) + '&pid=' + encodeURIComponent(t.newDirCid);
+      return auto115Post('https://webapi.115.com/files/move', body).then(function(res){
+        var d = res.d || {};
+        if (res.ok && (d.state === true || d.errno === 0)){
+          auto115Set(t, 'move', 'ok', '已移动：' + t.videoName + '（' + auto115Size(t.videoSize) + '）');
+          return auto115StepRename(t);
+        }
+        auto115Set(t, 'move', 'fail', auto115ErrText(d, res, '移动失败'));
+        auto115Finish(t); return null;
+      });
+    });
+  }).catch(function(e){
+    auto115Set(t, 'move', 'fail', (e && e.message) ? e.message : '网络错误');
+    auto115Finish(t); return null;
+  });
+}
+function auto115StepRename(t){
+  var dvd = auto115Doc.dvdId;
+  if (!dvd){ auto115Set(t, 'rename', 'fail', '该影片没有番号，无法命名'); auto115Finish(t); return Promise.resolve(null); }
+  var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
+  var newName = dvd + ext;
+  auto115Set(t, 'rename', 'running', '正在改名为：' + newName);
+  var body = 'fid=' + encodeURIComponent(t.videoFid) + '&file_name=' + encodeURIComponent(newName);
+  return auto115Post('https://webapi.115.com/files/edit', body).then(function(res){
+    var d = res.d || {};
+    if (res.ok && (d.state === true || d.errno === 0)){
+      auto115Set(t, 'rename', 'ok', '已改名为：' + newName);
+      return auto115StepCleanup(t);
+    }
+    auto115Set(t, 'rename', 'fail', auto115ErrText(d, res, '改名失败'));
+    auto115Finish(t); return null;
+  }).catch(function(e){
+    auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误');
+    auto115Finish(t); return null;
+  });
+}
+function auto115StepCleanup(t){
+  auto115Set(t, 'cleanup', 'running', '正在删除离线磁力文件夹…');
+  return auto115ResolveOfflineDir(t).then(function(dirCid){
+    if (!dirCid){ auto115Set(t, 'cleanup', 'skip', '未找到可删除的目录'); auto115Finish(t); return null; }
+    var body = 'fid=' + encodeURIComponent(dirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+    return auto115Post('https://webapi.115.com/rb/delete', body).then(function(res){
+      var d = res.d || {};
+      if (res.ok && (d.state === true || d.errno === 0)) auto115Set(t, 'cleanup', 'ok', '已删除离线文件夹');
+      else auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '删除失败'));
+      auto115Finish(t); return null;
+    });
+  }).catch(function(e){
+    auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
+    auto115Finish(t); return null;
+  });
+}
+/* —— 探测调度 —— */
+function stopAuto115Probe(){ if (auto115ProbeTimer){ clearTimeout(auto115ProbeTimer); auto115ProbeTimer = null; } }
+function auto115ScheduleProbe(t){
+  stopAuto115Probe();
+  auto115ProbeTimer = setTimeout(function(){
+    auto115ProbeTimer = null;
+    if (!auto115Doc) return;
+    var pending = (auto115Doc.tasks || []).filter(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
+    if (!pending.length) return;
+    ensure115Cookie().then(function(ck){
+      if (!ck) return;
+      pending.forEach(function(x){ auto115StepWait(x, false); });
+    });
+  }, AUTO115_PROBE_MS);
+}
+function auto115Resume(){
+  if (!auto115Doc) return;
+  var hasRunning = (auto115Doc.tasks || []).some(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
+  if (hasRunning) auto115ScheduleProbe();
+}
+/* —— 任务操作 —— */
+function auto115AddFromOp(){
+  var magnet = magnetOpCurrent;
+  var title = magnetOpTitle;
+  closeMagnetOp();
+  if (!magnet){ showToast('没有可操作的磁力链接', 'error'); return; }
+  auto115EnsureDoc().then(function(doc){
+    var t = {
+      id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
+      magnet: magnet, magnetTitle: title || auto115Btih(magnet),
+      steps: auto115NewSteps(), createdAt: auto115Now()
+    };
+    doc.tasks.unshift(t);
+    auto115Expanded = t.id;
+    return auto115Save().then(function(){
+      showToast('已加入自动化', 'success');
+      return openAuto115Page().then(function(){ return auto115Run(t); });
+    });
+  }).catch(function(e){ showToast((e && e.message) || '加入失败', 'error'); });
+}
+function auto115RetryStep(tid, key){
+  var t = auto115Task(tid);
+  if (!t) return Promise.resolve(null);
+  return ensure115Cookie().then(function(ck){
+    if (!ck){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+    var idx = -1;
+    for (var i = 0; i < AUTO115_STEP_DEFS.length; i++) if (AUTO115_STEP_DEFS[i].key === key) idx = i;
+    if (idx < 0) return;
+    for (var j = idx; j < AUTO115_STEP_DEFS.length; j++){
+      var s = auto115GetStep(t, AUTO115_STEP_DEFS[j].key);
+      s.state = 'idle'; s.msg = ''; s.probes = 0; s.at = 0;
+    }
+    t.aborted = false;
+    auto115Save(); renderAuto115();
+    if (key === 'submit') return auto115StepSubmit(t);
+    if (key === 'wait') return auto115StepWait(t, true);
+    if (key === 'mkdir') return auto115StepMkdir(t);
+    if (key === 'move') return auto115StepMove(t);
+    if (key === 'rename') return auto115StepRename(t);
+    if (key === 'cleanup') return auto115StepCleanup(t);
+  });
+}
+function auto115RetryTask(tid){
+  var t = auto115Task(tid);
+  if (!t) return;
+  var steps = t.steps || [];
+  for (var i = 0; i < steps.length; i++){
+    if (steps[i].state === 'fail') return auto115RetryStep(tid, steps[i].key);
+  }
+  showToast('没有失败的步骤', 'info');
+}
+function auto115ContinueProbe(tid){
+  var t = auto115Task(tid);
+  if (!t) return Promise.resolve(null);
+  return ensure115Cookie().then(function(ck){
+    if (!ck){ showToast('请先登录 115', 'error'); return null; }
+    return auto115StepWait(t, true);
+  });
+}
+function auto115Abort(tid){
+  var t = auto115Task(tid);
+  if (!t) return;
+  t.aborted = true;
+  var w = auto115GetStep(t, 'wait');
+  if (w.state === 'running'){ w.state = 'idle'; w.msg = '已手动中止'; }
+  stopAuto115Probe();
+  auto115Finish(t);
+}
+function auto115RemoveTask(tid){
+  if (!auto115Doc) return;
+  auto115Doc.tasks = (auto115Doc.tasks || []).filter(function(x){ return x.id !== tid; });
+  auto115Save().then(renderAuto115);
+}
+function auto115ClearDone(){
+  if (!auto115Doc) return;
+  auto115Doc.tasks = (auto115Doc.tasks || []).filter(function(t){ return auto115Status(t).cls !== 'ab-ok'; });
+  auto115Save().then(function(){ renderAuto115(); showToast('已清空已完成任务', 'success'); });
 }
 
 /* ============ 字幕搜索 / 下载 ============ */
@@ -4323,6 +4848,8 @@ function openFilmDetail(encId){
     currentDetailFilmId = film.id;
     renderFilmDetail(film);
     switchPage('detail');
+    auto115Doc = null;                 // 切影片：重置自动化文档，按新影片重新载入并刷新角标
+    auto115EnsureDoc().then(updateAutoBadge).catch(function(){});
   });
 }
 function toggleLock(id){
@@ -4421,6 +4948,10 @@ function retryTranslate(){
 }
 function renderFilmDetail(film){
   currentDetailFilm = film || null;
+  // 切换影片时重置自动化文档缓存（跨影片残留防护），并刷新角标
+  if (!auto115Doc || auto115Doc.filmId !== (film && film.id)){ auto115Doc = null; }
+  updateAutoBadge();
+  if (film){ auto115EnsureDoc().then(updateAutoBadge).catch(function(){}); }
   detailRenderSeq++;   // 本次渲染代号；任何上一部影片的延迟(still probe onload)回调都会被判定为过期而丢弃，避免污染当前影片
   var d = film.data || {};
   var adult = !!film.adult;
@@ -4563,7 +5094,7 @@ function renderFilmDetail(film){
       var total = detailMagnetItems.length;
       var itemsHtml = detailMagnetItems.map(function(m, i){
         var magTitle = stripMagnetTitle(m.title) || '磁力链接';
-        return '<div class="detail-magnet" data-idx="' + i + '" style="display:' + (i < detailMagnetVisibleCount ? '' : 'none') + '" data-link="' + escapeAttr(m.link) + '" onclick="openMagnetOp(this.dataset.link, this.querySelector(\'.dm-title\').textContent)">'
+        return '<div class="detail-magnet" data-idx="' + i + '" style="display:' + (i < detailMagnetVisibleCount ? '' : 'none') + '" data-link="' + escapeAttr(m.link) + '" onclick="openMagnetOp(this)">'
             + renderMagnetItemInner(m)
             + '</div>';
       }).join('');

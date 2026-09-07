@@ -766,6 +766,14 @@
       <button onclick="animateDetailBack()" aria-label="返回" data-page-node-id="Sqz9795PmlhD4GhJ7M7QKA">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="6l9wmzcoyhnKJTHgDXjrBq"><path d="M15 18l-6-6 6-6" data-page-node-id="JnE3DKZg2CDpFf6qM8ab3m"/></svg>
       </button>
+      <button class="detail-auto-btn" id="dtActAuto" onclick="openAuto115Page()" aria-label="115 自动化">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="18" r="2.6"/>
+          <path d="M8.6 6h4.9a2.5 2.5 0 0 1 2.5 2.5v7"/>
+          <path d="M15.4 18h-4.9a2.5 2.5 0 0 1-2.5-2.5v-3"/>
+        </svg>
+        <span class="auto-badge" id="autoBadge" style="display:none;">0</span>
+      </button>
     </div>
     <div class="detail-scroll" id="detailScroll" data-page-node-id="WsqSiq1XHzWqCh8DU3gBuW">
       <div class="detail-content" data-page-node-id="862F8YQiVl2q5yNqjuR8TW">
@@ -809,6 +817,25 @@
         <div class="detail-cast" id="detailCast" data-page-node-id="KjVqnsWOeXfaWl4hC9lpGU"></div>
         <div class="detail-magnets" id="detailMagnets" style="display:none;" data-page-node-id="MEw8x7Rxd5GSIHVUbcE3ZJ"></div>
         <div class="detail-shots" id="detailShots" data-page-node-id="UeQszoOFWEhcBRBUV3x60f"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 115 自动化：离线 → 建目录 → 移视频 → 改名 → 清理 ===== -->
+  <section class="page" id="page-auto">
+    <div class="auto-topbar">
+      <button onclick="auto115Back()" aria-label="返回">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="auto-topbar-title">自动化</div>
+      <button class="auto-topbar-clear" id="autoClearBtn" onclick="auto115ClearDone()">清空已完成</button>
+    </div>
+    <div class="auto-scroll">
+      <div class="auto-film" id="autoFilmTitle"></div>
+      <div class="auto-list" id="autoTaskList"></div>
+      <div class="auto-empty" id="autoEmpty" style="display:none;">
+        <div class="auto-empty-title">还没有自动化任务</div>
+        <div class="auto-empty-sub">回到详情页，点任意磁力 →「加入自动化」，<br/>会自动完成离线、建目录、移视频、改名、清理。</div>
       </div>
     </div>
   </section>
@@ -910,17 +937,6 @@
   </nav>
 
   <div class="toast" id="toast" data-page-node-id="kQXLVcJHmasANAWqCwvZ0s"></div>
-
-  <!-- 磁力操作蒙版：点击某条磁力浮现复制 / 115 离线两个操作 -->
-  <div class="magnet-op-mask" id="magnetOpMask" onclick="closeMagnetOp()"></div>
-  <div class="magnet-op-sheet" id="magnetOpSheet">
-    <div class="magnet-op-title" id="magnetOpTitle">磁力链接</div>
-    <div class="magnet-op-magnet" id="magnetOpMagnet"></div>
-    <div class="magnet-op-actions">
-      <button type="button" class="magnet-op-copy" onclick="magnetOpCopy()">复制</button>
-      <button type="button" class="magnet-op-115" onclick="magnetOpOffline()">115 离线</button>
-    </div>
-  </div>
 </div>
 
 <script src="src/qrcode.min.js"></script>
