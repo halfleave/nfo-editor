@@ -1348,9 +1348,17 @@ function c115OfflineFromMagnet(mrEl){
     var d = res.d || {};
     var ok = res.ok && (d.state === true || (d.data && (d.data.tid || d.data.task_id || d.data.infoid)));
     if (ok){ showToast('已发送到 115 离线下载（默认目录）', 'success'); }
-    else { showToast('离线下载失败：' + ((d.error || d.msg) ? (d.error || d.msg) : '未知错误'), 'error'); }
+    else {
+      var detail = '';
+      try { detail = JSON.stringify(d).slice(0, 400); } catch (_) {}
+      var msg = (d.error || d.msg || (d.data && (d.data.error || d.data.msg))) || ('未知错误 ' + detail);
+      showToast('离线下载失败：' + msg, 'error');
+    }
   })
-  .catch(function(e){ showToast('离线下载请求失败：' + (e && e.message ? e.message : '网络错误'), 'error'); });
+  .catch(function(e){
+    var detail = (e && e.body) ? e.body.slice(0, 300) : '';
+    showToast('离线下载请求失败：' + (e && e.message ? e.message : '网络错误') + (detail ? ' ' + detail : ''), 'error');
+  });
 }
 /* ===== 翻译配置（OpenAI 兼容，客户端直连 LLM） ===== */
 var TRANSLATE_SYSTEM_PROMPT = NfoCore.TRANSLATE_SYSTEM_PROMPT; // 翻译纯逻辑已抽至 src/core-shared.js
