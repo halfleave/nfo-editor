@@ -2404,10 +2404,6 @@ function auto115StepCleanup(t){
    ① POST uplb.115.com/3.0/sampleinitupload.php（userid/filename/filesize/target=U_1_<cid>）→ 返回 OSS 表单参数
    ② POST <host> multipart/form-data（name/key/policy/OSSAccessKeyId/success_action_status/callback/signature/file）
       → 返回 {state:true,code:0} 即成功。二进制经 /api/cloud/proxy 以 base64 透传。 */
-function c115GetUserId(){
-  var m = /(?:^|;\s*)UID=([^;]+)/.exec(state.c115Cookie || '');
-  return m ? m[1].trim() : '';
-}
 function c115UploadMultipart(host, fields, fileName, mime, bytes, dbg){
   var boundary = '----nfo115' + auto115Now().toString(36);
   var enc = new TextEncoder();
@@ -2445,39 +2441,36 @@ function c115OssCallbackField(v){
   return s;
 }
 function c115UploadFile(cid, fileName, bytes, mime){
-  var uid = c115GetUserId();
-  if (!uid) return Promise.reject(new Error('Cookie 中没有 UID（用户 id），请重新扫码登录'));
-  var initBody = 'userid=' + encodeURIComponent(uid)
-    + '&filename=' + encodeURIComponent(fileName)
-    + '&filesize=' + bytes.length
-    + '&target=' + encodeURIComponent('U_1_' + cid);
   return c115ProxyFetch('https://uplb.115.com/3.0/sampleinitupload.php', {
     method: 'POST',
-    body: initBody,
+    /* 对照近期实测可跑的实现（suileyan/xpmibackup_sly Pan115Provider）：init 只 POST filename + target，
+       多传 userid/filesize 反而得到无法注册的 callback 配置（115 回调端点回 state:false 参数错误） */
+    body: 'filename=' + encodeURIComponent(fileName) + '&target=' + encodeURIComponent('U_1_' + cid),
     headers: { 'X-115-Cookie': state.c115Cookie || '' }
   }).then(function(res){
     var d = res.d || {};
+    if (!d.host && d.data && d.data.host) d = d.data; // 兼容 {status:1,statuscode:0,data:{...}} 包裹形态
     if (!d.host || !d.object || !d.policy){
       throw new Error('上传初始化失败：' + (d.error || d.statusmsg || d.message || res.raw.slice(0, 120)));
     }
-    /* callback 兼容两种返回：字符串（老协议，已是 base64）→ 原样；
-       对象 {callback, callback_var} → 内部取值后按 OSS 规范 base64 编码（见 c115OssCallbackField） */
+    /* callback 兼容两种返回：字符串（已是 base64，官方形态 {"callbackUrl":...}）→ 原样；
+       对象 {callback, callback_var} → 取值后按 OSS 规范 base64 编码（见 c115OssCallbackField） */
     var cb = d.callback, cbVar = '';
     var cbIsObj = cb && typeof cb === 'object';
     if (cbIsObj){ cbVar = cb.callback_var || ''; cb = cb.callback || ''; }
     /* 诊断标记：init 返回的 callback 形态（none/str/obj+键名），随上传报错一起 toast */
-    var cbInfo = 'v190 cb=' + (cbIsObj ? ('obj:' + Object.keys(d.callback).join('+'))
+    var cbInfo = 'v191 cb=' + (cbIsObj ? ('obj:' + Object.keys(d.callback).join('+'))
       : (d.callback != null ? 'str:' + String(d.callback).slice(0, 14) : 'none') + ' ');
+    /* 对照可跑实现：表单精确 6 字段 key/policy/OSSAccessKeyId/signature/callback/file，
+       不带 name/success_action_status/callback_var（callback 的 base64 串内已含完整回调配置） */
     var fields = [
-      ['name', fileName],
       ['key', d.object],
       ['policy', d.policy],
       ['OSSAccessKeyId', d.accessid],
-      ['success_action_status', '200'],
+      ['signature', d.signature],
       ['callback', c115OssCallbackField(cb)]
     ];
-    if (cbVar) fields.push(['callback_var', c115OssCallbackField(cbVar)]);
-    fields.push(['signature', d.signature]);
+    if (cbIsObj && cbVar) fields.push(['callback_var', c115OssCallbackField(cbVar)]);
     return c115UploadMultipart(d.host, fields, fileName, mime, bytes, cbInfo);
   });
 }
