@@ -1031,10 +1031,12 @@ function clearApiInput(){
   var input = document.getElementById('apiKeyInput');
   if (input){ input.value = ''; toggleApiClear(); input.focus(); }
 }
-function updateSubtitleBtn(){
+function updateSubtitleBtn(dvdId){
   var btn = document.getElementById('dtActSub');
   // 有番号（如 JAV）的影片不显示字幕按钮；字幕搜索按标题匹配，仅无番号影片适用
-  var hasDvdId = !!(state.dvdId && String(state.dvdId).trim());
+  // 优先用传入的番号，回退全局 state.dvdId
+  var id = (dvdId !== undefined && dvdId !== null) ? dvdId : state.dvdId;
+  var hasDvdId = !!(id && String(id).trim());
   if (btn) btn.style.display = (state.activationCode && !hasDvdId) ? '' : 'none';
 }
 /* ===== 115 网盘配置（扫码登录 + Cookie 管理） ===== */
@@ -1334,31 +1336,7 @@ function verify115(){
 /* 磁力列表一键离线：固定离线到默认目录（不让用户选目录） */
 function c115OfflineFromMagnet(mrEl){
   var magnet = mrEl ? mrEl.getAttribute('data-magnet') : '';
-  if (!magnet){ showToast('没有可离线的链接', 'error'); return; }
-  var cookie = state.c115Cookie || '';
-  if (!cookie){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
-  showToast('正在添加到 115 离线下载…', 'info');
-  var cid = C115_DEFAULT_DIR_CID;
-  var body = 'url=' + encodeURIComponent(magnet) + '&wp_path_id=' + encodeURIComponent(cid);
-  c115ProxyFetch('https://clouddownload.115.com/lixianssp/?ac=add_task_url', {
-    method: 'POST',
-    headers: { 'X-115-Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body
-  })
-  .then(function(res){
-    var d = res.d || {};
-    var ok = res.ok && (d.state === true || (d.data && (d.data.tid || d.data.task_id || d.data.infoid)));
-    if (ok){ showToast('已发送到 115 离线下载（默认目录）', 'success'); }
-    else {
-      var msg = (d.error || d.msg || (d.data && (d.data.error || d.data.msg)));
-      if (!msg && res.raw) msg = res.raw;
-      showToast('离线下载失败：' + (msg || '未知错误'), 'error');
-    }
-  })
-  .catch(function(e){
-    var detail = (e && e.body) ? e.body.slice(0, 300) : '';
-    showToast('离线下载请求失败：' + (e && e.message ? e.message : '网络错误') + (detail ? ' ' + detail : ''), 'error');
-  });
+  c115Offline(magnet);
 }
 /* ===== 翻译配置（OpenAI 兼容，客户端直连 LLM） ===== */
 var TRANSLATE_SYSTEM_PROMPT = NfoCore.TRANSLATE_SYSTEM_PROMPT; // 翻译纯逻辑已抽至 src/core-shared.js
@@ -1715,32 +1693,95 @@ function renderMagnetResults(items){
     if (it.seeders) meta.push('做种 ' + it.seeders);
     if (it.leechers) meta.push('下载 ' + it.leechers);
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
-    html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="toggleMagnetActions(this)">'
+    var rawMagnet = decodeXmlEntities(it.magnet || '');
+    html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="openMagnetOp(this.dataset.magnet, this.querySelector(\'.mr-title\').textContent)">'
       + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
       + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + (meta.length ? '<span>' + meta.join(' · ') + '</span>' : '') + '</div>'
       + (magnet ? '<div class="mr-magnet">' + magnet + '</div>' : '')
       + '</div>'
-      + '<div class="mr-actions">'
-      + '<button type="button" class="mr-copy" onclick="event.stopPropagation(); copyMagnet(this.closest(\'.magnet-result\'))">复制</button>'
-      + '<button type="button" class="mr-115" onclick="event.stopPropagation(); c115OfflineFromMagnet(this.closest(\'.magnet-result\'))">115 离线</button>'
-      + '</div>'
       + '</div>';
   }
   box.innerHTML = html;
 }
 function toggleMagnetActions(el){
-  var wasExpanded = el.classList.contains('expanded');
-  var all = document.querySelectorAll('.magnet-result.expanded');
-  for (var i = 0; i < all.length; i++){ all[i].classList.remove('expanded'); }
-  if (!wasExpanded) el.classList.add('expanded');
+  // 保留兼容：改为弹蒙版
+  var magnet = el.getAttribute('data-magnet');
+  var t = el.querySelector('.mr-title');
+  openMagnetOp(decodeXmlEntities(magnet || ''), t ? t.textContent : '');
 }
 function copyMagnet(el){
   var magnet = el.getAttribute('data-magnet');
   if (!magnet){ showToast('没有可复制的链接', 'error'); return; }
   copyText(magnet, function(ok){
     showToast(ok ? '已复制 magnet 链接' : '复制失败，请长按链接手动复制', ok ? 'success' : 'error');
+  });
+}
+/* ===== 磁力操作蒙版（详情页磁力 & 磁力搜索共用）===== */
+var magnetOpCurrent = '';
+function openMagnetOp(magnet, title){
+  if (!magnet){ showToast('没有可离线的链接', 'error'); return; }
+  magnetOpCurrent = magnet;
+  var titleEl = document.getElementById('magnetOpTitle');
+  var magEl = document.getElementById('magnetOpMagnet');
+  if (titleEl) titleEl.textContent = title || '磁力链接';
+  if (magEl) magEl.textContent = magnet;
+  var mask = document.getElementById('magnetOpMask');
+  var sheet = document.getElementById('magnetOpSheet');
+  if (mask) mask.classList.add('show');
+  if (sheet) sheet.classList.add('show');
+}
+function closeMagnetOp(){
+  var mask = document.getElementById('magnetOpMask');
+  var sheet = document.getElementById('magnetOpSheet');
+  if (mask) mask.classList.remove('show');
+  if (sheet) sheet.classList.remove('show');
+}
+function magnetOpCopy(){
+  var m = magnetOpCurrent;
+  closeMagnetOp();
+  if (!m){ showToast('没有可复制的链接', 'error'); return; }
+  copyText(m, function(ok){
+    showToast(ok ? '已复制 magnet 链接' : '复制失败，请长按链接手动复制', ok ? 'success' : 'error');
+  });
+}
+function magnetOpOffline(){
+  var m = magnetOpCurrent;
+  if (!m){ closeMagnetOp(); showToast('没有可离线的链接', 'error'); return; }
+  // 复用 c115OfflineFromMagnet 的逻辑，但直接传 magnet 字符串
+  c115Offline(m);
+}
+function c115Offline(magnet){
+  var cookie = state.c115Cookie || '';
+  if (!cookie){ closeMagnetOp(); showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+  closeMagnetOp();
+  showToast('正在添加到 115 离线下载…', 'info');
+  var cid = C115_DEFAULT_DIR_CID;
+  var body = 'url=' + encodeURIComponent((magnet || '').trim()) + '&wp_path_id=' + encodeURIComponent(cid);
+  /* 网页端离线接口：115.com/web/lixian（明文表单+Cookie）。
+     注意不要用 clouddownload.115.com/lixianssp —— 那是 115 客户端加密通道接口，
+     明文参数会返回 {"state":false,"error":"decode fail!"}。 */
+  c115ProxyFetch('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', {
+    method: 'POST',
+    headers: { 'X-115-Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body
+  })
+  .then(function(res){
+    var d = res.d || {};
+    var ok = res.ok && (d.state === true || (d.data && (d.data.tid || d.data.task_id || d.data.infoid)));
+    /* errcode 10008 = 任务已存在，视为成功（提示一下即可） */
+    if (!ok && res.ok && d.errcode === 10008){ showToast('该任务已在 115 离线列表中', 'info'); return; }
+    if (ok){ showToast('已发送到 115 离线下载（默认目录）', 'success'); }
+    else {
+      var msg = (d.error || d.msg || (d.data && (d.data.error || d.data.msg)));
+      if (!msg && res.raw) msg = res.raw;
+      showToast('离线下载失败：' + (msg || '未知错误'), 'error');
+    }
+  })
+  .catch(function(e){
+    var detail = (e && e.body) ? e.body.slice(0, 300) : '';
+    showToast('离线下载请求失败：' + (e && e.message ? e.message : '网络错误') + (detail ? ' ' + detail : ''), 'error');
   });
 }
 
@@ -4471,8 +4512,8 @@ function renderFilmDetail(film){
   // 磁力按钮：需有激活码且 Worker 可用
   var mb = document.getElementById('dtActMagnet');
   if (mb) mb.style.display = (state.activationCode && (state.magnetWorker || DEFAULT_WORKER)) ? '' : 'none';
-  // 字幕按钮：需有激活码
-  updateSubtitleBtn();
+  // 字幕按钮：需有激活码；有番号（JAV）不显示
+  updateSubtitleBtn(d.dvdId);
   // 剧情：最前方增加 [番号 标题]；无番号则显示 [标题]
   var plotTitle = (d.title || film.id);
   var plotText = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
@@ -4521,7 +4562,8 @@ function renderFilmDetail(film){
       detailMagnetVisibleCount = Math.min(MAGNET_INITIAL, detailMagnetItems.length);
       var total = detailMagnetItems.length;
       var itemsHtml = detailMagnetItems.map(function(m, i){
-        return '<div class="detail-magnet" data-idx="' + i + '" style="display:' + (i < detailMagnetVisibleCount ? '' : 'none') + '" data-link="' + escapeAttr(m.link) + '" onclick="copyText(this.dataset.link, \'磁链\')">'
+        var magTitle = stripMagnetTitle(m.title) || '磁力链接';
+        return '<div class="detail-magnet" data-idx="' + i + '" style="display:' + (i < detailMagnetVisibleCount ? '' : 'none') + '" data-link="' + escapeAttr(m.link) + '" onclick="openMagnetOp(this.dataset.link, this.querySelector(\'.dm-title\').textContent)">'
             + renderMagnetItemInner(m)
             + '</div>';
       }).join('');

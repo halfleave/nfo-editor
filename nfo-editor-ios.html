@@ -910,6 +910,17 @@
   </nav>
 
   <div class="toast" id="toast" data-page-node-id="kQXLVcJHmasANAWqCwvZ0s"></div>
+
+  <!-- 磁力操作蒙版：点击某条磁力浮现复制 / 115 离线两个操作 -->
+  <div class="magnet-op-mask" id="magnetOpMask" onclick="closeMagnetOp()"></div>
+  <div class="magnet-op-sheet" id="magnetOpSheet">
+    <div class="magnet-op-title" id="magnetOpTitle">磁力链接</div>
+    <div class="magnet-op-magnet" id="magnetOpMagnet"></div>
+    <div class="magnet-op-actions">
+      <button type="button" class="magnet-op-copy" onclick="magnetOpCopy()">复制</button>
+      <button type="button" class="magnet-op-115" onclick="magnetOpOffline()">115 离线</button>
+    </div>
+  </div>
 </div>
 
 <script src="src/qrcode.min.js"></script>
