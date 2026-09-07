@@ -1433,6 +1433,7 @@ function startFilmTranslation(id){
             if (need.plot && newSummary && newSummary !== (getVal('plot')||'')) setFieldVal('plot', newSummary);
           }
           state.translateFailedIds.delete(id); updateTranslateRetryBtn(); finishTranslation(id); renderOverview();
+          if (currentDetailFilmId === id && typeof refreshDetailPlot === 'function') refreshDetailPlot();
         }).catch(function(){ finishTranslation(id); });
       }).catch(function(){ finishTranslation(id); });
     }).catch(function(){
@@ -2456,15 +2457,24 @@ function c115Md5(input){
 }
 var C115_CRC_TABLE = (function(){ var t = [], n, c, k; for (n = 0; n < 256; n++){ c = n; for (k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; })();
 function c115Crc32(bytes){ var c = 0xFFFFFFFF, i; for (i = 0; i < bytes.length; i++) c = C115_CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
-async function c115Sha1Hex(input){
+async function c115Sha1Hex(input, tag){
   var bytes = (typeof input === 'string') ? new TextEncoder().encode(input) : input;
-  var buf = await crypto.subtle.digest('SHA-1', bytes);
-  return Array.from(new Uint8Array(buf)).map(function(b){ return (b < 16 ? '0' : '') + b.toString(16); }).join('');
+  try {
+    var buf = await crypto.subtle.digest('SHA-1', bytes);
+    return Array.from(new Uint8Array(buf)).map(function(b){ return (b < 16 ? '0' : '') + b.toString(16); }).join('');
+  } catch(e){
+    /* WebKit 对 subtle 失败只抛 OperationError（文案「The operation failed for an operation-specific reason」），必须自己补上下文 */
+    throw new Error('SHA1' + (tag ? '(' + tag + ')' : '') + '失败：' + ((e && e.message) || e) + ' len=' + bytes.length);
+  }
 }
 async function c115HmacSha1B64(secret, msg){
-  var k = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-  var mac = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(msg));
-  return c115BytesToB64(new Uint8Array(mac));
+  try {
+    var k = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+    var mac = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(msg));
+    return c115BytesToB64(new Uint8Array(mac));
+  } catch(e){
+    throw new Error('HMAC-SHA1 失败：' + ((e && e.message) || e) + ' secretLen=' + secret.length + ' msgLen=' + msg.length);
+  }
 }
 function c115BytesToB64(bytes){ var bin = '', i; for (i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 0x8000, bytes.length))); return btoa(bin); }
 function c115B64ToBytes(b64){ var bin = atob(b64), out = new Uint8Array(bin.length), i; for (i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
@@ -2552,21 +2562,32 @@ async function c115EcdhGet(){
   d = d % (C115_P224.n - 1n) + 1n;
   var pub = c115P224Mul(d, { x: C115_P224.gx, y: C115_P224.gy });
   var sharedX = c115P224Mul(d, remote).x;
-  var sBytes = c115BigMinBytes(sharedX);
-  if (sBytes.length < 16) throw new Error('ECDH 共享密钥异常');
+  var sBytes = c115BigMinBytes(sharedX);        /* Go big.Int.Bytes() 语义：去前导零 */
+  var s28 = c115BigToFixedBytes(sharedX, 28);   /* Go crypto/ecdh 语义：固定 28 字节（保留前导零） */
   var x28 = c115BigToFixedBytes(pub.x, 28);
   var pubBuf = new Uint8Array(30);
   pubBuf[0] = 29; pubBuf[1] = ((pub.y & 1n) === 1n) ? 0x03 : 0x02;
   pubBuf.set(x28, 2);
-  c115Ecdh = { key: sBytes.slice(0, 16), iv: sBytes.slice(sBytes.length - 16), pub: pubBuf };
+  /* 双派生自愈：若真实服务端 key/iv 切法与去前导零约定不同（如固定 28 字节），
+     首次解密失败后自动切换变体（c115EcdhDecrypt），后续加解密沿用服务端认可的那套 */
+  var variants = [];
+  if (sBytes.length >= 16) variants.push({ name: 'strip', key: sBytes.slice(0, 16), iv: sBytes.slice(sBytes.length - 16) });
+  variants.push({ name: 'fixed28', key: s28.slice(0, 16), iv: s28.slice(12, 28) });
+  c115Ecdh = { pub: pubBuf, variants: variants, active: 0 };
   return c115Ecdh;
 }
-async function c115AesCbc(key, iv, data, encrypt){
-  var k = await crypto.subtle.importKey('raw', key, { name: 'AES-CBC' }, false, [encrypt ? 'encrypt' : 'decrypt']);
-  var out = encrypt
-    ? await crypto.subtle.encrypt({ name: 'AES-CBC', iv: iv }, k, data)
-    : await crypto.subtle.decrypt({ name: 'AES-CBC', iv: iv }, k, data);
-  return new Uint8Array(out);
+function c115EcdhVariant(){ return c115Ecdh.variants[c115Ecdh.active]; }
+async function c115AesCbc(key, iv, data, encrypt, tag){
+  try {
+    var k = await crypto.subtle.importKey('raw', key, { name: 'AES-CBC' }, false, [encrypt ? 'encrypt' : 'decrypt']);
+    var out = encrypt
+      ? await crypto.subtle.encrypt({ name: 'AES-CBC', iv: iv }, k, data)
+      : await crypto.subtle.decrypt({ name: 'AES-CBC', iv: iv }, k, data);
+    return new Uint8Array(out);
+  } catch(e){
+    /* WebKit OperationError 无细节，补上派生名与长度方便定位 */
+    throw new Error('AES-CBC' + (encrypt ? '加密' : '解密') + (tag ? '[' + tag + ']' : '') + '失败：' + ((e && e.message) || e) + ' keyLen=' + key.length + ' ivLen=' + iv.length + ' dataLen=' + data.length);
+  }
 }
 function c115Lz4Decompress(src){
   var out = [], i = 0;
@@ -2607,13 +2628,34 @@ async function c115EncodeToken(t){
   tmp.push(crc & 255, (crc >>> 8) & 255, (crc >>> 16) & 255, (crc >>> 24) & 255);
   return c115BytesToB64(new Uint8Array(tmp));
 }
-async function c115EcdhEncrypt(str){ var e = await c115EcdhGet(); return c115AesCbc(e.key, e.iv, new TextEncoder().encode(str), true); }
+function c115BytesToHex(bytes){ var s = '', i; for (i = 0; i < bytes.length; i++) s += (bytes[i] < 16 ? '0' : '') + bytes[i].toString(16); return s; }
+async function c115EcdhEncrypt(str){ var v = c115EcdhVariant(); return c115AesCbc(v.key, v.iv, new TextEncoder().encode(str), true, v.name); }
 async function c115EcdhDecrypt(bytes){
   var e = await c115EcdhGet();
-  var plain = await c115AesCbc(e.key, e.iv, bytes, false);
-  var len = plain[0] | (plain[1] << 8);
-  var json = c115Lz4Decompress(plain.subarray(2, Math.min(2 + len, plain.length)));
-  return new TextDecoder().decode(json);
+  /* 服务端可能返回明文 JSON 错误（如「表单解密失败」），先按明文试读直接透出 */
+  try {
+    var asText = new TextDecoder().decode(bytes);
+    if (/^\s*\{/.test(asText)) return asText;
+  } catch(_){ /* 二进制，继续走解密 */ }
+  var order = [e.active], i;
+  for (i = 0; i < e.variants.length; i++){ if (i !== e.active) order.push(i); }
+  var lastErr = null;
+  for (var oi = 0; oi < order.length; oi++){
+    var v = e.variants[order[oi]], plain;
+    try { plain = await c115AesCbc(v.key, v.iv, bytes, false, v.name); }
+    catch(err){ lastErr = err; continue; }
+    var len = plain[0] | (plain[1] << 8);
+    var text;
+    try { text = new TextDecoder().decode(c115Lz4Decompress(plain.subarray(2, Math.min(2 + len, plain.length)))); }
+    catch(err){ lastErr = err; continue; }
+    var head = text.replace(/^\s+/, '').charAt(0);
+    if (head === '{' || head === '['){
+      if (order[oi] !== e.active) e.active = order[oi]; /* 命中另一套派生 → 会话级切换，后续加解密沿用 */
+      return text;
+    }
+    lastErr = new Error('解出非 JSON（' + v.name + '）：' + text.slice(0, 120));
+  }
+  throw new Error('initupload 回包解密失败：' + ((lastErr && lastErr.message) || '') + ' ctLen=' + bytes.length + ' ctHead=' + c115BytesToHex(bytes.subarray(0, 16)));
 }
 /* ---- 4.0 上传流程 ---- */
 var c115UserKeyCache = null;
@@ -2626,40 +2668,52 @@ async function c115GetUserKey(){
   return c115UserKeyCache;
 }
 async function c115InitUpload(u, fileSize, fileID, fileName, target, sig, signKey, signVal){
-  var t = Math.floor(Date.now() / 1000);
-  var token = c115Md5(C115_MD5_SALT + fileID + fileSize + signKey + signVal + u.userID + t + c115Md5(u.userID) + C115_APPVER);
-  var kEc = await c115EncodeToken(t);
-  var pairs = [
-    ['appid', '0'], ['appversion', C115_APPVER], ['userid', u.userID],
-    ['filename', fileName], ['filesize', fileSize], ['fileid', fileID],
-    ['target', target], ['sig', sig], ['t', String(t)], ['token', token]
-  ];
-  if (signKey){ pairs.push(['sign_key', signKey], ['sign_val', signVal]); }
-  pairs.sort(function(a, b){ return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0); });
-  var form = pairs.map(function(p){ return p[0] + '=' + encodeURIComponent(p[1]); }).join('&');
-  var enc = await c115EcdhEncrypt(form);
-  var res = await c115ProxyFetch('https://uplb.115.com/4.0/initupload.php?k_ec=' + encodeURIComponent(kEc), {
-    method: 'POST', body: c115BytesToB64(enc), b64: true, bin: true,
-    ua: C115_UA_DISK, headers: { 'X-115-Cookie': state.c115Cookie || '' }
-  });
-  if (!res.bin || !res.bin.length) throw new Error('initupload 响应为空：' + (res.raw || '').slice(0, 100));
-  var text = await c115EcdhDecrypt(c115B64ToBytes(res.bin));
-  return JSON.parse(text);
+  for (var attempt = 0; attempt < 2; attempt++){
+    var t = Math.floor(Date.now() / 1000);
+    var token = c115Md5(C115_MD5_SALT + fileID + fileSize + signKey + signVal + u.userID + t + c115Md5(u.userID) + C115_APPVER);
+    var kEc = await c115EncodeToken(t);
+    var pairs = [
+      ['appid', '0'], ['appversion', C115_APPVER], ['userid', u.userID],
+      ['filename', fileName], ['filesize', fileSize], ['fileid', fileID],
+      ['target', target], ['sig', sig], ['t', String(t)], ['token', token]
+    ];
+    if (signKey){ pairs.push(['sign_key', signKey], ['sign_val', signVal]); }
+    pairs.sort(function(a, b){ return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0); });
+    var form = pairs.map(function(p){ return p[0] + '=' + encodeURIComponent(p[1]); }).join('&');
+    var enc = await c115EcdhEncrypt(form);
+    var res = await c115ProxyFetch('https://uplb.115.com/4.0/initupload.php?k_ec=' + encodeURIComponent(kEc), {
+      method: 'POST', body: c115BytesToB64(enc), b64: true, bin: true,
+      ua: C115_UA_DISK, headers: { 'X-115-Cookie': state.c115Cookie || '' }
+    });
+    if (!res.bin || !res.bin.length) throw new Error('initupload 响应为空：HTTP ' + res.status + ' ' + (res.raw || '').slice(0, 100));
+    if (!res.ok){
+      /* Worker/上游错误以明文透出（之前被当密文解密 → OperationError 无细节） */
+      var errHead = new TextDecoder().decode(c115B64ToBytes(res.bin).slice(0, 160));
+      throw new Error('initupload HTTP ' + res.status + '：' + errHead);
+    }
+    var before = (await c115EcdhGet()).active;
+    var text = await c115EcdhDecrypt(c115B64ToBytes(res.bin));
+    var after = (await c115EcdhGet()).active;
+    /* 解密侧自动纠正了 key/iv 派生方式 → 表单需以服务端认可的密钥重发一次 */
+    if (after !== before && attempt === 0) continue;
+    try { return JSON.parse(text); }
+    catch(e){ throw new Error('initupload 响应非 JSON：' + text.slice(0, 160)); }
+  }
 }
 async function c115UploadFileAsync(cid, fileName, bytes, mime){
   var u = await c115GetUserKey();
-  var fileID = (await c115Sha1Hex(bytes)).toUpperCase();
+  var fileID = (await c115Sha1Hex(bytes, 'file')).toUpperCase();
   var fileSize = String(bytes.length);
   var target = 'U_1_' + cid;
-  var inner = await c115Sha1Hex(u.userID + fileID + target + '0');
-  var sig = (await c115Sha1Hex(u.userKey + inner + '000000')).toUpperCase();
+  var inner = await c115Sha1Hex(u.userID + fileID + target + '0', 'inner');
+  var sig = (await c115Sha1Hex(u.userKey + inner + '000000', 'sig')).toUpperCase();
   var res = await c115InitUpload(u, fileSize, fileID, fileName, target, sig, '', '');
   if (Number(res.status) === 7 && Number(res.statuscode) === 701){
     /* sign 校验：sign_check = "start-end"（闭区间），对文件切片算 SHA1 大写后重提 */
     var sc = String(res.sign_check || '').split('-');
     var start = parseInt(sc[0], 10), end = parseInt(sc[1], 10);
     if (isNaN(start) || isNaN(end) || start < 0 || end < start || end >= bytes.length) throw new Error('sign_check 范围异常：' + res.sign_check);
-    var signVal = (await c115Sha1Hex(bytes.subarray(start, end + 1))).toUpperCase();
+    var signVal = (await c115Sha1Hex(bytes.subarray(start, end + 1), 'signVal')).toUpperCase();
     res = await c115InitUpload(u, fileSize, fileID, fileName, target, sig, String(res.sign_key || ''), signVal);
   }
   if (Number(res.status) === 2 && Number(res.statuscode) === 0) return ''; /* 秒传命中，文件已在 115 */
@@ -2693,11 +2747,11 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
   });
   var d = putRes.d || {};
   if (d.state === true) return '';
-  throw new Error('上传失败：' + (d.message || d.error || (putRes.raw || '').slice(0, 110)));
+  throw new Error('OSS PUT 上传失败（HTTP ' + putRes.status + '）：' + (d.message || d.error || (d.raw || putRes.raw || '').slice(0, 110)));
 }
 function c115UploadFile(cid, fileName, bytes, mime){
   return c115UploadFileAsync(cid, fileName, bytes, mime).catch(function(e){
-    throw new Error((e && e.message ? e.message : '上传失败') + '〔v193〕');
+    throw new Error((e && e.message ? e.message : '上传失败') + '〔v195〕');
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */

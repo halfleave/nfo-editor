@@ -1921,6 +1921,21 @@ function retryTranslate(){
   updateTranslateRetryBtn();
   startFilmTranslation(currentDetailFilmId);
 }
+/* 翻译完成后动态刷新详情页简介：仅当详情页正显示该影片时，从最新记录重取 plot 更新 DOM（不重渲染整页，避免底图/滚动闪烁） */
+function refreshDetailPlot(){
+  if (!currentDetailFilmId) return;
+  loadFilm(currentDetailFilmId).then(function(film){
+    if (!film || film.id !== currentDetailFilmId) return;
+    var d = film.data || {};
+    var plotText = '[' + (d.title || film.id) + ']' + (d.plot ? ' ' + d.plot : '');
+    var plotEl = document.getElementById('detailPlot');
+    if (plotEl){
+      plotEl.textContent = plotText;
+      plotEl.onclick = function(){ copyText(plotText, '简介'); };
+    }
+    updateTranslateRetryBtn();
+  }).catch(function(){});
+}
 function renderFilmDetail(film){
   stopDetailBgSlideshow();
   currentDetailFilm = film || null;

@@ -359,6 +359,7 @@ function startFilmTranslation(id){
             if (need.plot && newSummary && newSummary !== (getVal('plot')||'')) setFieldVal('plot', newSummary);
           }
           state.translateFailedIds.delete(id); if (typeof updateTranslateRetryBtn === 'function') updateTranslateRetryBtn(); finishTranslation(id); renderOverview();
+          if (currentDetailFilmId === id && typeof refreshDetailPlot === 'function') refreshDetailPlot();
         }).catch(function(){ finishTranslation(id); });
       }).catch(function(){ finishTranslation(id); });
     }).catch(function(){
