@@ -2842,7 +2842,13 @@ async function c115OpenAuthorize(){
   });
   var j = {};
   try { j = await r.json(); } catch(_){ throw new Error('授权响应解析失败（HTTP ' + r.status + '）'); }
-  if (!j.ok) throw new Error(j.error || '授权失败');
+  if (!j.ok) {
+    /* needLogin 时 Worker 已返回 hint + redirectTo，给出可执行的诊断信息而不是干瘪的「Cookie 未登录」 */
+    var extra = '';
+    if (j.hint) extra += '\n诊断：' + j.hint;
+    if (j.redirectTo) extra += '\n服务端 Location：' + j.redirectTo;
+    throw new Error((j.error || '授权失败') + extra);
+  }
   var rec = { access: j.access_token, refresh: j.refresh_token, appId: j.app_id || '', exp: Date.now() + 7000 * 1000 };
   try { await idbPut('kv', C115_OPEN_KEY, rec); } catch(_){ /* 存储失败不阻断本次上传 */ }
   state.c115Open = rec;
