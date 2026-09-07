@@ -2832,21 +2832,24 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
   }
   var cb = res.callback || {};
   if (!res.bucket || !res.object || !cb.callback) throw new Error('初始化响应缺少 OSS 参数：' + JSON.stringify(res).slice(0, 120));
-  /* STS 临时凭证：参考实现为普通 GET（UA+Cookie），403 时自动改 POST 重试一次并带端点标签 */
-  function upInfoOpts(method){ return { method: method, noRef: 1, headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK }; }
+  /* STS 临时凭证：参考实现为普通 GET（UA+Cookie）。改走 POST 减弱 115 反爬（POST 是 4.0 上传协议的标准调用方式，GET getuploadinfo 是兼容层，对 Worker 出口的甄别比 4.0 POST 严得多）。
+     Worker 已对 uplb.115.com 自动应用「上传专用」headers（UA=115disk + 无 Accept/Ref/Origin）；前端显式 ua/noRef 仅保留作 override 入口。 */
+  function upInfoOpts(method, tag){ return { method: method, noRef: 1, headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK, tag: tag }; }
   var infoRes;
-  try { infoRes = await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', upInfoOpts('GET')); }
+  try { infoRes = await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', upInfoOpts('POST', 'getuploadinfo')); }
   catch(e1){
-    try { infoRes = await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', upInfoOpts('POST')); }
-    catch(e2){ throw new Error('[getuploadinfo] GET ' + e1.message + ' / POST ' + e2.message); }
+    infoRes = await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', upInfoOpts('POST', 'getuploadinfo-retry')).catch(function(e2){
+      throw new Error('[getuploadinfo] ' + e1.message + ' | ' + e2.message);
+    });
   }
   var info = infoRes.d || {};
   if (!info.endpoint || !info.gettokenurl) throw new Error('获取上传信息失败：' + JSON.stringify(info).slice(0, 120));
   var tokRes;
-  try { tokRes = await c115ProxyFetch(info.gettokenurl, upInfoOpts('GET')); }
+  try { tokRes = await c115ProxyFetch(info.gettokenurl, upInfoOpts('POST', 'gettoken')); }
   catch(e1){
-    try { tokRes = await c115ProxyFetch(info.gettokenurl, upInfoOpts('POST')); }
-    catch(e2){ throw new Error('[gettoken] GET ' + e1.message + ' / POST ' + e2.message); }
+    tokRes = await c115ProxyFetch(info.gettokenurl, upInfoOpts('POST', 'gettoken-retry')).catch(function(e2){
+      throw new Error('[gettoken] ' + e1.message + ' | ' + e2.message);
+    });
   }
   var tok = tokRes.d || {};
   /* OSS V1 签名 PUT（callback 经 x-oss-callback 头携带） */
@@ -2873,7 +2876,7 @@ async function c115UploadFileAsync(cid, fileName, bytes, mime){
 }
 function c115UploadFile(cid, fileName, bytes, mime){
   return c115UploadFileAsync(cid, fileName, bytes, mime).catch(function(e){
-    throw new Error((e && e.message ? e.message : '上传失败') + '〔v199〕');
+    throw new Error((e && e.message ? e.message : '上传失败') + '〔v200〕');
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
