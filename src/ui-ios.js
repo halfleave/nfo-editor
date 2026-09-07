@@ -1127,7 +1127,7 @@ function open115Sheet(){
     state.c115Cookie = cookie;
     if (cookie){
       hide115QrArea(); // 已登录：不显示二维码，给「重新展示二维码」入口
-      verify115();
+      /* 不自动自检：配置页状态行仅由「自检」按钮手动触发 */
     } else {
       start115Login(); // 未登录：进入即展示二维码
     }
@@ -1324,8 +1324,9 @@ function save115Cookie(){
     verify115();
   }).catch(function(){ showToast('保存失败', 'error'); });
 }
-function verify115(){
-  var vEl = document.getElementById('c115Verify');
+/* silent=true：启动时后台自检——不写设置页状态行（那块只属于手动自检），仅确认 Cookie 失效/令牌问题时 toast；网络类错误完全静默 */
+function verify115(silent){
+  var vEl = silent ? null : document.getElementById('c115Verify');
   var ta = document.getElementById('c115Cookie');
   var cookie = (ta && ta.value) ? ta.value.trim() : (state.c115Cookie || '');
   if (!cookie){ if (vEl){ vEl.textContent = '请先填写 Cookie'; vEl.className = 'c115-verify err'; } return; }
@@ -1333,12 +1334,12 @@ function verify115(){
   c115ProxyFetch('https://webapi.115.com/files?cid=0', { headers: { 'X-115-Cookie': cookie } })
     .then(function(res){
       if (!res.ok || !res.d || res.d.state !== true){ throw new Error((res.d && (res.d.error || res.d.msg)) || 'Cookie 无效'); }
-      var user = (res.d.data && (res.d.data.user_name || res.d.data.user)) || '';
-      var msg = '✓ Cookie 有效' + (user ? '（' + user + '）' : '');
-      if (vEl){ vEl.textContent = msg; vEl.className = 'c115-verify ok'; }
+      /* 后台自检通过：静默即可，不打扰 */
     })
     .catch(function(e){
-      if (vEl){ vEl.textContent = '✗ ' + (e && e.message ? e.message : '自检失败'); vEl.className = 'c115-verify err'; }
+      var msg = (e && e.message) ? e.message : '自检失败';
+      if (vEl){ vEl.textContent = '✗ ' + msg; vEl.className = 'c115-verify err'; return; }
+      if (silent && /Cookie|失效|令牌|登录/.test(msg)) showToast('115 Cookie 已失效，请到设置重新登录', 'error');
     });
 }
 /* 磁力列表一键离线：固定离线到默认目录（不让用户选目录） */
@@ -6383,6 +6384,8 @@ function bootApp(){
     getMagnetConfig().then(function(cfg){
       if (cfg && cfg.worker) state.magnetWorker = cfg.worker;
     }).catch(function(){}),
+    /* 之前登录过 115 → 启动即后台自检 Cookie（结果写入设置页状态行；失效才 toast） */
+    ensure115Cookie().then(function(c){ if (c) verify115(true); }).catch(function(){}),
     getTranslateConfig().then(function(c){
       state.translateBaseUrl = c.baseUrl || ''; state.translateApiKey = c.apiKey || ''; state.translateModel = c.model || '';
     }).catch(function(){}),
