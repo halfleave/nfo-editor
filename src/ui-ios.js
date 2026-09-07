@@ -1078,6 +1078,7 @@ function c115ProxyFetch(targetUrl, opts){
   var proxyUrl = base + '/api/cloud/proxy';
   var form = 'url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN);
   if (opts.headers && opts.headers['X-115-Cookie']) form += '&ck=' + encodeURIComponent(opts.headers['X-115-Cookie']);
+  if (opts.ua) form += '&ua=' + encodeURIComponent(opts.ua); // UA 覆盖（浏览器 fetch 禁设 UA 头，由代理侧代设；115 上传链路需 115disk 客户端 UA）
   if (opts.method && opts.method !== 'GET'){
     form += '&method=' + encodeURIComponent(opts.method.toUpperCase());
     if (opts.body != null) form += '&payload=' + encodeURIComponent(typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
@@ -2422,14 +2423,15 @@ function c115UploadMultipart(host, fields, fileName, mime, bytes, dbg){
     method: 'POST',
     body: btoa(bin),
     b64: true,
+    ua: 'aliyun-sdk-android/2.9.1', /* OSS POST 直传：对齐 xpmibackup_sly 的 aliyun SDK UA */
     headers: { 'Content-Type': 'multipart/form-data; boundary=' + boundary }
   }).then(function(res){
     var d = res.d || {};
     if (d.state === true && Number(d.code) === 0) return '';
-    /* 自诊断：报错带 OSS 原始回包片段 + 调用方给的 callback 形态标记，用户截图一次即可定位协议差异 */
+    /* 自诊断：报错带 HTTP 状态（203 = OSS 收下文件但 115 回调注册失败）+ 调用方诊断标记 + 原始回包片段 */
     var base = d.error || d.statusmsg || d.message
       || ('上传失败（state=' + d.state + ' code=' + d.code + (d.errno != null ? ' errno=' + d.errno : '') + '）');
-    throw new Error(base + '〔' + (dbg || '') + 'oss=' + (res.raw || '').slice(0, 110) + '〕');
+    throw new Error(base + '〔' + (dbg || '') + 'http=' + res.status + ' oss=' + (res.raw || '').slice(0, 110) + '〕');
   });
 }
 /* OSS 的 callback / callback_var 表单字段按阿里云规范需为 base64(JSON)。
@@ -2446,7 +2448,8 @@ function c115UploadFile(cid, fileName, bytes, mime){
     /* 对照近期实测可跑的实现（suileyan/xpmibackup_sly Pan115Provider）：init 只 POST filename + target，
        多传 userid/filesize 反而得到无法注册的 callback 配置（115 回调端点回 state:false 参数错误） */
     body: 'filename=' + encodeURIComponent(fileName) + '&target=' + encodeURIComponent('U_1_' + cid),
-    headers: { 'X-115-Cookie': state.c115Cookie || '' }
+    headers: { 'X-115-Cookie': state.c115Cookie || '' },
+    ua: 'Mozilla/5.0 115disk/11.2.0' /* 两个可跑实现（Fake115Upload/xpmibackup_sly）均用 115 客户端 UA；浏览器 UA 会被 115 按网页端处理 */
   }).then(function(res){
     var d = res.d || {};
     if (!d.host && d.data && d.data.host) d = d.data; // 兼容 {status:1,statuscode:0,data:{...}} 包裹形态
@@ -2458,8 +2461,8 @@ function c115UploadFile(cid, fileName, bytes, mime){
     var cb = d.callback, cbVar = '';
     var cbIsObj = cb && typeof cb === 'object';
     if (cbIsObj){ cbVar = cb.callback_var || ''; cb = cb.callback || ''; }
-    /* 诊断标记：init 返回的 callback 形态（none/str/obj+键名），随上传报错一起 toast */
-    var cbInfo = 'v191 cb=' + (cbIsObj ? ('obj:' + Object.keys(d.callback).join('+'))
+    /* 诊断标记：版本 + init 的 status（1=走 OSS / 2=秒传）+ callback 形态，随上传报错一起 toast */
+    var cbInfo = 'v192 st=' + (d.status != null ? d.status : '?') + ' cb=' + (cbIsObj ? ('obj:' + Object.keys(d.callback).join('+'))
       : (d.callback != null ? 'str:' + String(d.callback).slice(0, 14) : 'none') + ' ');
     /* 对照可跑实现：表单精确 6 字段 key/policy/OSSAccessKeyId/signature/callback/file，
        不带 name/success_action_status/callback_var（callback 的 base64 串内已含完整回调配置） */
