@@ -1143,7 +1143,11 @@ function start115Login(){
   set115Status('正在生成二维码…', '');
   c115ProxyFetch('https://qrcodeapi.115.com/api/1.0/web/1.0/token/')
     .then(function(res){
-      if (!res.ok || !res.d || !res.d.data || !res.d.data.uid){ throw new Error('获取二维码失败'); }
+      if (!res.ok || !res.d || !res.d.data || !res.d.data.uid){
+        var err = new Error('获取二维码失败');
+        err.status = res && res.status; err.data = res && res.d;
+        throw err;
+      }
       var data = res.d.data;
       c115Session = { uid: data.uid, time: data.time, sign: data.sign, app: C115_APP };
       var qrText = data.qrcode || ('https://qrcodeapi.115.com/api/1.0/web/1.0/token/?uid=' + data.uid + '&time=' + data.time + '&sign=' + data.sign + '&app=' + C115_APP);
@@ -1159,6 +1163,7 @@ function start115Login(){
       var info = (e && e.message ? e.message : '网络错误');
       if (e && e.status) info += ' (HTTP ' + e.status + ')';
       if (e && e.body && e.body.length < 80) info += ' ' + e.body;
+      if (e && e.data) info += ' | ' + JSON.stringify(e.data).slice(0, 200);
       if (e && e.network){
         info = '连不上代理：' + info;
       }
