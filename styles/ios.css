@@ -1192,12 +1192,12 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #apiSheet .api-input-tag { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 600; color: var(--label-2); pointer-events: none; white-space: nowrap; }
 #apiSheet .api-input-wrap .ios-input { width: 100%; padding-left: 64px; padding-right: 42px; font-size: 15px; }
 #apiSheet .api-input-wrap .ios-input::placeholder { color: var(--label-3); }
-#apiSheet #activationCodeInput { padding-left: 12px; }
+#apiSheet #activationCodeInput { padding-left: 46px; }
 #apiSheet .activation-input-wrap .ios-input { padding-right: 110px; }
 #apiSheet .activation-input-wrap .api-clear { right: 68px; }
-#apiSheet .api-group-title-row .activation-status { font-size: 13px; color: var(--label-2); }
-#apiSheet .api-group-title-row .activation-status.ok { color: var(--accent); font-weight: 600; }
-#apiSheet .api-group-title-row .activation-status.ok::before { content: "· "; }
+#apiSheet .api-group-title .activation-status { font-size: 13px; color: var(--label-2); margin-left: 8px; }
+#apiSheet .api-group-title .activation-status.ok { color: var(--accent); font-weight: 600; }
+#apiSheet .api-group-title .activation-status.ok::before { content: "· "; }
 #apiSheet .verify-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 1; background: var(--card-fill); color: var(--accent); border: 1px solid var(--accent); font-size: 13px; padding: 4px 14px; border-radius: 980px; }
 #apiSheet .sb-pill-ghost { background: var(--card-fill); color: var(--accent); border: 1px solid var(--accent); font-size: 13px; padding: 4px 14px; border-radius: 980px; }
 /* ===== 115 网盘配置页 ===== */
