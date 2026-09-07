@@ -2726,7 +2726,7 @@ function applyOverviewPosterCrop(){
 /* —— IndexedDB（NFOEditorFS：仅 kv store，存影片与配置）—— */
 var currentFilmId = null;
 var currentFilmLocked = false;
-var DB_NAME = 'NFOEditorFS', DB_VERSION = 1;
+var DB_NAME = 'NFOEditorFS', DB_VERSION = 2;
 function openDB(){
   if (openDB._p) return openDB._p;   // 缓存 Promise，避免初始化时并发重复 open
   openDB._p = new Promise(function(res, rej){
