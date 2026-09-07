@@ -1176,7 +1176,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #listSheet .sheet-row .sr-name, #listSheet .sheet-row .check { position: relative; z-index: 1; }
 #listSheet .list-sheet-header .sheet-seg { padding-bottom: 8px; }
 
-/* API 配置弹窗：输入框浅灰底，提示语 */
+/* 应用配置弹窗：输入框浅灰底，提示语 */
 #apiSheet .ios-input,
 #apiSheet select.ios-input { background: #F2F2F7; }
 #apiSheet .api-group { margin-bottom: 18px; }

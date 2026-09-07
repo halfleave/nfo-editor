@@ -960,12 +960,16 @@ function clearReorderAnim(list, excludeRow){
   });
 }
 
-/* —— API 配置（IndexedDB 持久化） —— */
+/* —— 应用配置（IndexedDB 持久化）：合并 API 配置 + 翻译配置 —— */
 function openApiKeySheet(){
   document.getElementById('apiKeyInput').value = state.apiKey || '';
   toggleApiClear();
   document.getElementById('activationCodeInput').value = state.activationCode || '';
   toggleActivationClear();
+  document.getElementById('translateBaseUrl').value = state.translateBaseUrl || '';
+  document.getElementById('translateApiKey').value = state.translateApiKey || '';
+  document.getElementById('translateModel').value = state.translateModel || '';
+  toggleTranslateClear();
   updateActivationStatus();
   openSheet('apiSheet');
 }
@@ -1143,7 +1147,7 @@ function start115Login(){
   var sheet = document.getElementById('sheet115');
   if (!sheet || !sheet.classList.contains('show')) return; // 弹层关闭后不再刷新
   var base = c115ProxyBase();
-  if (!base){ showToast('请先在「API 配置」填写代理服务地址', 'error'); return; }
+  if (!base){ showToast('请先在「应用配置」填写代理服务地址', 'error'); return; }
   set115Status('正在生成二维码…', '');
   c115ProxyFetch('https://qrcodeapi.115.com/api/1.0/web/1.0/token/')
     .then(function(res){
@@ -1356,13 +1360,9 @@ function translateConfigReady(){
 /* 是否需要翻译 / 解析 JSON 已抽至 src/core-shared.js，此处仅转发 */
 function needsTranslation(text){ return NfoCore.needsTranslation(text); }
 function extractJsonObject(s){ return NfoCore.extractJsonObject(s); }
-/* 打开翻译配置弹窗：回填输入框 */
+/* 翻译配置已合并到应用配置（apiSheet）；保留 openTranslateSheet 作为兼容入口 */
 function openTranslateSheet(){
-  document.getElementById('translateBaseUrl').value = state.translateBaseUrl || '';
-  document.getElementById('translateApiKey').value = state.translateApiKey || '';
-  document.getElementById('translateModel').value = state.translateModel || '';
-  toggleTranslateClear();
-  openSheet('translateSheet');
+  openApiKeySheet();
 }
 function toggleTranslateClear(){
   var map = [['translateBaseUrl','translateBaseClear'],['translateApiKey','translateKeyClear'],['translateModel','translateModelClear']];
@@ -1374,17 +1374,9 @@ function toggleTranslateClear(){
 function clearTranslateBase(){ var i=document.getElementById('translateBaseUrl'); if(i){i.value='';toggleTranslateClear();i.focus();} }
 function clearTranslateKey(){ var i=document.getElementById('translateApiKey'); if(i){i.value='';toggleTranslateClear();i.focus();} }
 function clearTranslateModel(){ var i=document.getElementById('translateModel'); if(i){i.value='';toggleTranslateClear();i.focus();} }
-/* 读取翻译配置输入并持久化（静默） */
+/* 翻译配置已合并到应用配置；保留 persistTranslateConfig 作为兼容入口 */
 function persistTranslateConfig(allowClear){
-  try {
-    var base = (document.getElementById('translateBaseUrl').value||'').trim();
-    var key = (document.getElementById('translateApiKey').value||'').trim();
-    var model = (document.getElementById('translateModel').value||'').trim();
-    if (allowClear || base || !state.translateBaseUrl) state.translateBaseUrl = base;
-    if (allowClear || key || !state.translateApiKey) state.translateApiKey = key;
-    if (allowClear || model || !state.translateModel) state.translateModel = model;
-    setTranslateConfig({ baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel }).catch(function(){});
-  } catch(e){}
+  persistApiSettings(allowClear);
 }
 function saveTranslateConfig(){
   try { persistTranslateConfig(true); closeAllSheets(); showToast('已保存','success'); }
@@ -1458,22 +1450,29 @@ function flushPendingTranslate(id){
     startFilmTranslation(id); // 此时数据已加载完（silentRefresh 已补存），再翻译标题/简介
   }
 }
-/* 读取当前 API 配置输入并持久化到 state + IndexedDB（静默，不弹提示） */
+/* 读取当前应用配置输入（元数据 / 激活码 / AI 翻译）并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(allowClear){
   try {
     var apiKey = (document.getElementById('apiKeyInput').value || '').trim();
     var code = (document.getElementById('activationCodeInput').value || '').trim();
+    var tBase = (document.getElementById('translateBaseUrl').value || '').trim();
+    var tKey = (document.getElementById('translateApiKey').value || '').trim();
+    var tModel = (document.getElementById('translateModel').value || '').trim();
     // 自动保存（失焦 / 关闭面板）时，空值不覆盖已保存的非空配置，避免误清空全局设置；
     // 仅显式点「保存」(allowClear=true) 才允许用空值清空某项。
     if (allowClear || apiKey || !state.apiKey) state.apiKey = apiKey;
     var prevCode = state.activationCode;
     if (allowClear || code || !state.activationCode) state.activationCode = code;
+    if (allowClear || tBase || !state.translateBaseUrl) state.translateBaseUrl = tBase;
+    if (allowClear || tKey || !state.translateApiKey) state.translateApiKey = tKey;
+    if (allowClear || tModel || !state.translateModel) state.translateModel = tModel;
     // 激活码清空或变更（未点验证）时，档位需重验证：清空则降级，变更则待验证后再生效
     if (!code || code !== prevCode) state.tier = '';
     Promise.all([
       setTMDBKey(state.apiKey),
       setMagnetConfig({ worker: state.magnetWorker, category: 'video' }),
-      setActivationCode(state.activationCode)
+      setActivationCode(state.activationCode),
+      setTranslateConfig({ baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel })
     ]).then(function(){ updateSubtitleBtn(); updateActivationStatus(); }).catch(function(){});
   } catch(e) {}
 }
@@ -1508,7 +1507,7 @@ function verifyActivationCode(){
   var code = (document.getElementById('activationCodeInput').value || '').trim();
   if (!code){ showToast('请输入激活码', 'error'); return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
-  if (!w){ showToast('请先填写代理服务地址（设置 → API 配置）', 'error'); return; }
+  if (!w){ showToast('请先填写代理服务地址（设置 → 应用配置）', 'error'); return; }
   showToast('验证中…', 'success');
   fetch(w.replace(/\/$/, '') + '/verify?code=' + encodeURIComponent(code), { cache: 'no-store' })
     .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d || null }; }).catch(function(){ return { ok: r.ok, d: null }; }); })
@@ -1653,7 +1652,7 @@ function searchMagnet(){
   var box = document.getElementById('magnetResults');
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
-  if (!w){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → API 配置」填写代理服务地址。</div>'; return; }
+  if (!w){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → 应用配置」填写代理服务地址。</div>'; return; }
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   // 番号（如 IPX-011）不限制 category（bt4g 的 cat 过滤对番号不可靠，常返回 0 结果）；
   // 普通关键词用 cat=movie 更精准。
@@ -1729,24 +1728,28 @@ function openMagnetOp(el){
   if (magnetOpRow === el && el.querySelector('.magnet-inline-actions')){ closeMagnetOp(); return; }
   closeMagnetOp();
   if (!magnet){ showToast('没有可操作的磁力链接', 'error'); return; }
-  magnetOpCurrent = magnet;
-  magnetOpRow = el;
-  var titleEl = el.querySelector('.mr-title') || el.querySelector('.dm-title');
-  magnetOpTitle = titleEl ? (titleEl.textContent || '').trim() : '';
-  // 详情页 → 走自动化流水线；其他位置（磁力搜索）→ 仅一键离线
-  var inDetail = (currentPage === 'detail');
-  var layer = document.createElement('div');
-  layer.className = 'magnet-inline-actions';
-  layer.innerHTML = '<button type="button" class="magnet-inline-copy">复制</button>'
-    + '<button type="button" class="magnet-inline-115">' + (inDetail ? '115离线' : '115 离线') + '</button>';
-  // 蒙版与按钮均不触发整行的 openMagnetOp
-  layer.addEventListener('click', function(ev){ ev.stopPropagation(); });
-  layer.querySelector('.magnet-inline-copy').addEventListener('click', function(ev){ ev.stopPropagation(); magnetOpCopy(); });
-  layer.querySelector('.magnet-inline-115').addEventListener('click', function(ev){
-    ev.stopPropagation();
-    if (inDetail) auto115AddFromOp(); else magnetOpOffline();
+  // 未登录 115：不弹蒙版，直接复制（115 离线/加入自动化按钮只在登录后出现）
+  ensure115Cookie().then(function(ck){
+    if (!ck){ copyText(magnet, '磁力链接'); return; }
+    magnetOpCurrent = magnet;
+    magnetOpRow = el;
+    var titleEl = el.querySelector('.mr-title') || el.querySelector('.dm-title');
+    magnetOpTitle = titleEl ? (titleEl.textContent || '').trim() : '';
+    // 详情页 → 走自动化流水线；其他位置（磁力搜索）→ 仅一键离线
+    var inDetail = (currentPage === 'detail');
+    var layer = document.createElement('div');
+    layer.className = 'magnet-inline-actions';
+    layer.innerHTML = '<button type="button" class="magnet-inline-copy">复制</button>'
+      + '<button type="button" class="magnet-inline-115">' + (inDetail ? '115离线' : '115 离线') + '</button>';
+    // 蒙版与按钮均不触发整行的 openMagnetOp
+    layer.addEventListener('click', function(ev){ ev.stopPropagation(); });
+    layer.querySelector('.magnet-inline-copy').addEventListener('click', function(ev){ ev.stopPropagation(); magnetOpCopy(); });
+    layer.querySelector('.magnet-inline-115').addEventListener('click', function(ev){
+      ev.stopPropagation();
+      if (inDetail) auto115AddFromOp(); else magnetOpOffline();
+    });
+    el.appendChild(layer);
   });
-  el.appendChild(layer);
 }
 function closeMagnetOp(){
   var all = document.querySelectorAll('.magnet-inline-actions');
@@ -1911,7 +1914,7 @@ function auto115Set(t, key, state, msg){
   renderAuto115(); auto115Save();
   return s;
 }
-function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115Save(); updateAutoBadge(); }
+function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115Save(); updateAutoBadge(); auto115AdvanceQueue(t); }
 
 /* —— 大状态合成 —— */
 function auto115StepLabel(key){
@@ -2074,13 +2077,38 @@ function auto115QueryTask(t){
     };
   });
 }
-/* —— 六步执行器 —— */
+/* —— 六步执行器 ——
+   排队串行化：同一时间只跑一条任务流水线（auto115RunningId）。
+   同时点多个「115 离线」时，第一个正常跑完（含改名/并入判断），其余排队等它终态后逐个启动——
+   后跑的自然命中并入模式（移入已有标题文件夹、改名 番号.A…），也避免并发时时间窗兜底定位错文件夹。 */
+var auto115RunningId = '';
 function auto115Run(t){
   if (!t) return Promise.resolve(null);
+  if (auto115RunningId && auto115RunningId !== t.id){
+    var cur = auto115Task(auto115RunningId);
+    if (cur){
+      t.queued = true;
+      auto115Set(t, 'submit', 'idle', '排队中：等「' + (cur.magnetTitle || '当前任务') + '」完成');
+      auto115Save(); renderAuto115(); updateAutoBadge();
+      return Promise.resolve(null);
+    }
+    auto115RunningId = '';
+  }
+  auto115RunningId = t.id;
+  t.queued = false;
   return ensure115Cookie().then(function(ck){
     if (!ck){ auto115Set(t, 'submit', 'fail', '未登录 115'); auto115Finish(t); return null; }
     return auto115StepSubmit(t);
   });
+}
+/* 当前任务到达终态（成功/失败/中止）后释放队列，启动最早的排队任务 */
+function auto115AdvanceQueue(t){
+  if (auto115RunningId && (!t || t.id === auto115RunningId)) auto115RunningId = '';
+  var ts = (auto115Doc && auto115Doc.tasks) || [];
+  for (var i = ts.length - 1; i >= 0; i--){
+    var n = ts[i];
+    if (n && n.queued){ n.queued = false; auto115Run(n); break; }
+  }
 }
 function auto115StepSubmit(t){
   auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…');
@@ -2302,6 +2330,13 @@ function auto115Resume(){
   if (!auto115Doc) return;
   var hasRunning = (auto115Doc.tasks || []).some(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
   if (hasRunning) auto115ScheduleProbe();
+  /* 上次会话遗留的排队任务：没有正在跑的任务时自动接着跑 */
+  if (!auto115RunningId && !hasRunning){
+    var ts = auto115Doc.tasks || [];
+    for (var i = ts.length - 1; i >= 0; i--){
+      if (ts[i] && ts[i].queued){ ts[i].queued = false; auto115Run(ts[i]); break; }
+    }
+  }
 }
 /* —— 任务操作 —— */
 function auto115AddFromOp(){
@@ -2374,6 +2409,7 @@ function auto115Abort(tid){
 function auto115RemoveTask(tid){
   if (!auto115Doc) return;
   auto115Doc.tasks = (auto115Doc.tasks || []).filter(function(x){ return x.id !== tid; });
+  if (auto115RunningId === tid) auto115AdvanceQueue(null); // 删的是正在跑的任务 → 释放队列
   auto115Save().then(renderAuto115);
 }
 function auto115ClearDone(){
@@ -3538,7 +3574,7 @@ function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') 
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
 /* TMDB_IMG_BASE 已迁入共享核心 src/core-shared.js（经 NfoCore.tmdbImgUrl 引用）；此处不再定义本地常量 */
 /* 部署者填写的公共 Worker 地址（磁力 / 字幕 / JavBus / 图片代理通用）。
-   留空则回落到用户在「设置 → API 配置 → 代理服务」自行填写的 Worker；
+   留空则回落到用户在「设置 → 应用配置 → 代理服务」自行填写的 Worker；
    填了之后普通用户无需配置即可使用受限功能。手机端与 PC 端共用同一地址。 */
 var DEFAULT_WORKER = 'https://nfo-magnet-proxy-vercel.vercel.app';
 /* 拼 TMDB 图片地址。image.tmdb.org 自带 Access-Control-Allow-Origin:*，
@@ -3553,7 +3589,7 @@ function searchTMDB(){
   var box = document.getElementById('tmdbResults');
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   getTMDBKey().then(function(key){
-    if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → API 配置」填写 TMDB Key', 'error'); stopLoadingRotator(); return; }
+    if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → 应用配置」填写 TMDB Key', 'error'); stopLoadingRotator(); return; }
     // TMDB 成人内容：里模式解锁后包含，否则不包含
     var adult = state.themeHidden ? 'true' : 'false';
     var mt = state.tmdbMediaType;
@@ -3562,7 +3598,7 @@ function searchTMDB(){
     fetch(url)
       .then(function(r){
         if (!r.ok){
-          if (r.status === 401) throw new Error('TMDB API Key 无效或已过期，请去「设置 → API 配置」重新填写');
+          if (r.status === 401) throw new Error('TMDB API Key 无效或已过期，请去「设置 → 应用配置」重新填写');
           throw new Error('HTTP ' + r.status);
         }
         return r.json();
@@ -3714,7 +3750,7 @@ function searchJAV(){
   var box = document.getElementById('tmdbResults');
   var base = javbusApiBase();
   if (!base){
-    box.innerHTML = '<div class="tmdb-msg">未配置 Worker 代理地址，请到「设置 → API 配置」填写。</div>';
+    box.innerHTML = '<div class="tmdb-msg">未配置 Worker 代理地址，请到「设置 → 应用配置」填写。</div>';
     showToast('请先配置 Worker 代理地址', 'error');
     return;
   }
@@ -4222,7 +4258,7 @@ function refreshFromJavbus(film){
   var id = data.javbusId || state.javbusId || '';
   if (!id) return showToast('此影片未记录番号，无法从 JavBus 刷新', 'error');
   var base = javbusApiBase();
-  if (!base) return showToast('请先到「设置 → API 配置」填写 Worker 代理地址', 'error');
+  if (!base) return showToast('请先到「设置 → 应用配置」填写 Worker 代理地址', 'error');
   showToast('正在从 JavBus 刷新…', 'success');
   currentFilmId = film.id;
   currentFilmLocked = !!film.locked;

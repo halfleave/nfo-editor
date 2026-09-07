@@ -139,13 +139,13 @@
     </div>
   </div>
 
-  <!-- API 配置 -->
+  <!-- 应用配置 -->
   <div class="sheet" id="apiSheet" data-page-node-id="3n8roZL61PeOZC683D5Jza">
     <div class="sheet-bar sheet-bar-center" data-page-node-id="yV4O9RHJe2kAjsyTsrgegA">
       <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭" data-page-node-id="q6ujHybEeMCtJFxh1VtGgt">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="PTqrzS7aEB1Hm7yzb4ecX4"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="DzKw583xCt4q4HUYOMrrj3"/></svg>
       </button>
-      <span class="sb-title" data-page-node-id="yCUGqtalVOpMkxZhNzbIkH">API 配置</span>
+      <span class="sb-title" data-page-node-id="yCUGqtalVOpMkxZhNzbIkH">应用配置</span>
       <button class="sb-pill" onclick="saveApiKey()" data-page-node-id="XYXvrgoDeF9BPsPogspuTA">保存</button>
     </div>
     <div class="api-group" data-page-node-id="HUbF1xGcRFqTQoGnSUQHgJ">
@@ -179,6 +179,39 @@
         <span id="activationStatus" class="activation-status" data-page-node-id="I4Gjr5MXra8c3X4Jxe60Tn">未激活</span>
         <button class="sb-pill sb-pill-ghost" onclick="verifyActivationCode()" data-page-node-id="NHJByu2FyU4npSCtAPXiOM">验证</button>
       </div>
+    </div>
+    <div class="api-group">
+      <div class="api-group-title-row">
+        <div class="api-group-title">AI 翻译</div>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <span class="api-input-tag">地址</span>
+          <input class="ios-input" type="text" id="translateBaseUrl" placeholder="https://api.deepseek.com/v1" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+          <button class="api-clear" id="translateBaseClear" onclick="clearTranslateBase()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <span class="api-input-tag">key</span>
+          <input class="ios-input" type="password" id="translateApiKey" placeholder="粘贴 API Key" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+          <button class="api-clear" id="translateKeyClear" onclick="clearTranslateKey()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="field field-stacked no-border">
+        <div class="api-input-wrap">
+          <span class="api-input-tag">模型名</span>
+          <input class="ios-input" type="text" id="translateModel" placeholder="deepseek-chat" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
+          <button class="api-clear" id="translateModelClear" onclick="clearTranslateModel()" aria-label="清除" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="api-help-note">保存影片时，标题与简介若非中文将自动翻译为简体中文；翻译中会在首页剧照右上角显示加载图标，完成后自动覆盖更新。</div>
     </div>
   </div>
 
@@ -222,57 +255,6 @@
         <div class="c115-countdown" id="c115Countdown"></div>
         <button class="c115-login-btn" id="c115ReQrBtn" onclick="start115Login()" style="display:none;">重新展示二维码</button>
       </div>
-    </div>
-  </div>
-
-  <!-- 翻译配置 -->
-  <div class="sheet" id="translateSheet">
-    <div class="sheet-bar sheet-bar-center">
-      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-      <span class="sb-title">翻译配置</span>
-      <button class="sb-pill" onclick="saveTranslateConfig()">保存</button>
-    </div>
-    <div class="api-group">
-      <div class="api-group-title-row">
-        <div class="api-group-title">接口地址</div>
-      </div>
-      <div class="field field-stacked no-border">
-        <div class="api-input-wrap">
-          <input class="ios-input" type="text" id="translateBaseUrl" placeholder="https://api.deepseek.com/v1" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
-          <button class="api-clear" id="translateBaseClear" onclick="clearTranslateBase()" aria-label="清除" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="api-group">
-      <div class="api-group-title-row">
-        <div class="api-group-title">API Key</div>
-      </div>
-      <div class="field field-stacked no-border">
-        <div class="api-input-wrap">
-          <input class="ios-input" type="password" id="translateApiKey" placeholder="粘贴 API Key" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
-          <button class="api-clear" id="translateKeyClear" onclick="clearTranslateKey()" aria-label="清除" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="api-group">
-      <div class="api-group-title-row">
-        <div class="api-group-title">模型名称</div>
-      </div>
-      <div class="field field-stacked no-border">
-        <div class="api-input-wrap">
-          <input class="ios-input" type="text" id="translateModel" placeholder="deepseek-chat" oninput="toggleTranslateClear()" onblur="persistTranslateConfig(false)">
-          <button class="api-clear" id="translateModelClear" onclick="clearTranslateModel()" aria-label="清除" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="api-help-note">保存影片时，标题与简介若非中文将自动翻译为简体中文；翻译中会在首页剧照右上角显示加载图标，完成后自动覆盖更新。</div>
     </div>
   </div>
 
@@ -686,21 +668,16 @@
         </div>
       </div>
       <h2 class="section-heading" data-page-node-id="eraQFpSy28CiRjOold4iUX">功能设置</h2>
-      <!-- 卡片1：API 配置 + 两个标签管理 -->
+      <!-- 卡片1：应用配置 + 两个标签管理 -->
       <div class="settings-group" data-page-node-id="ovSAUvXeEzrNBHoALLuM2G">
         <button class="settings-row" onclick="openApiKeySheet()" data-page-node-id="u2tkCKmlQIHvPPseILfhFr">
           <span class="sr-icon" style="background:#FF9500;" data-page-node-id="qy4DvHmfOl38B5Y7oLCeA7"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="KOHfSSRc1WyDg1XjEzmK75"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z" data-page-node-id="4ulN5AEXnwreK48i8lMOC9"/></svg></span>
-          <span class="sr-label" data-page-node-id="T6Mzz8MejvJovKb0R5B4OW">API 配置</span>
+          <span class="sr-label" data-page-node-id="T6Mzz8MejvJovKb0R5B4OW">应用配置</span>
           <span class="sr-chevron" data-page-node-id="VRZZ70fbtdmP3AXc5pksLY"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="00pGc0fNT2IHFujZELXIRo"><path d="M9 18l6-6-6-6" data-page-node-id="viNlOcgj4Bl14P33hD6klD"/></svg></span>
         </button>
         <button class="settings-row" onclick="open115Sheet()">
           <span class="sr-icon" style="background:#FF6B00;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 3v9h16V7H4zm2 2h.01M6.5 9h5" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></span>
           <span class="sr-label">115 网盘</span>
-          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
-        </button>
-        <button class="settings-row" onclick="openTranslateSheet()">
-          <span class="sr-icon" style="background:#0A84FF;"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3a9 9 0 0 0-9 9 9 9 0 0 0 3.6 7.2L12 22l5.4-2.8A9 9 0 0 0 21 12a9 9 0 0 0-9-9Zm0 13.2a4.2 4.2 0 1 1 0-8.4 4.2 4.2 0 0 1 0 8.4Zm0-6.4a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg></span>
-          <span class="sr-label">翻译配置</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
         <button class="settings-row" onclick="openCountryManage()" data-page-node-id="dRQ0vo2QF8rdFlnaCgVEvJ">
