@@ -4119,7 +4119,14 @@ function loadPresets(){
 /* —— 影片记录（kv store，key = film:<id>） —— */
 function saveFilm(film){ return idbPut('kv', NfoCore.filmKey(film.id), film); }
 function loadFilm(id){ return idbGet('kv', NfoCore.filmKey(id)); }
-function deleteFilm(id){ return idbDelete('kv', NfoCore.filmKey(id)); }
+function deleteFilm(id){
+  /* 影片删除时一并清除其 115 自动化记录：否则记录会残留成孤儿（任务列表/已完成项仍能点开、上传 NFO 指向已删影片） */
+  if (auto115Doc && auto115Doc.filmId === id){ auto115Doc = null; auto115RunningId = null; }
+  return Promise.all([
+    idbDelete('kv', NfoCore.filmKey(id)),
+    idbDelete('kv', auto115Key(id)).catch(function(){}) // 无自动化记录时忽略
+  ]);
+}
 function listFilms(){
   return idbGetAll('kv').then(function(all){
     return (all || []).filter(function(v){ return v && typeof v === 'object' && v.__type === 'film'; })
