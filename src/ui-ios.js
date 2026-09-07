@@ -1828,7 +1828,7 @@ function c115Offline(magnet){
 
 /* ===== 115 自动化：离线 → 建目录 → 移视频 → 改名 → 清理 ===== */
 var AUTO115_PREFIX = 'auto115:';
-var AUTO115_PROBE_MS = 10000;   // 每 10s 探测一次
+var AUTO115_PROBE_GAPS = [5000, 5000, 10000]; // 探测时刻为提交后 5s / 10s / 20s（累计 20s 内探完 3 次），间隔依次 5s→5s→10s
 var AUTO115_PROBE_MAX = 3;      // 只探 3 次后转「等待中」
 var AUTO115_DIR_SLACK_MS = 10 * 60 * 1000; // 定位文件夹的时间窗宽限（任务提交前后 10 分钟内）
 var AUTO115_FLOW_VERSION = 2;   // 流程版本：v1=建新文件夹/移动/删文件夹（已废弃，存量任务自动重置）；v2=定位文件夹/清理/改名
@@ -2434,6 +2434,14 @@ function c115UploadMultipart(host, fields, fileName, mime, bytes){
       || ('上传失败（state=' + d.state + ' code=' + d.code + (d.errno != null ? ' errno=' + d.errno : '') + '）'));
   });
 }
+/* OSS 的 callback / callback_var 表单字段按阿里云规范需为 base64(JSON)。
+   init 返回对象时内部是明文 JSON → 需编码（UTF-8 安全）；返回字符串时（老协议）已是 base64 → 原样。
+   不编码直接发明文会导致 115 回调校验失败 → code=990002 参数错误。 */
+function c115OssCallbackField(v){
+  var s = String(v == null ? '' : v);
+  if (/^\s*\{/.test(s)) s = btoa(unescape(encodeURIComponent(s)));
+  return s;
+}
 function c115UploadFile(cid, fileName, bytes, mime){
   var uid = c115GetUserId();
   if (!uid) return Promise.reject(new Error('Cookie 中没有 UID（用户 id），请重新扫码登录'));
@@ -2450,18 +2458,20 @@ function c115UploadFile(cid, fileName, bytes, mime){
     if (!d.host || !d.object || !d.policy){
       throw new Error('上传初始化失败：' + (d.error || d.statusmsg || d.message || res.raw.slice(0, 120)));
     }
-    /* callback 兼容两种返回：字符串，或 {callback, callback_var} 对象（callback_var 缺失会导致 115 回调校验失败 → code=990002） */
+    /* callback 兼容两种返回：字符串（老协议，已是 base64）→ 原样；
+       对象 {callback, callback_var} → 内部为明文 JSON，取值后按 OSS 规范 base64 编码（见 c115OssCallbackField） */
     var cb = d.callback, cbVar = '';
-    if (cb && typeof cb === 'object'){ cbVar = cb.callback_var || ''; cb = cb.callback || ''; }
+    var cbIsObj = cb && typeof cb === 'object';
+    if (cbIsObj){ cbVar = cb.callback_var || ''; cb = cb.callback || ''; }
     var fields = [
       ['name', fileName],
       ['key', d.object],
       ['policy', d.policy],
       ['OSSAccessKeyId', d.accessid],
       ['success_action_status', '200'],
-      ['callback', cb]
+      ['callback', c115OssCallbackField(cb)]
     ];
-    if (cbVar) fields.push(['callback_var', cbVar]);
+    if (cbVar) fields.push(['callback_var', c115OssCallbackField(cbVar)]);
     fields.push(['signature', d.signature]);
     return c115UploadMultipart(d.host, fields, fileName, mime, bytes);
   });
@@ -2505,8 +2515,21 @@ function auto115UploadNfoFiles(tid){
 }
 /* —— 探测调度 —— */
 function stopAuto115Probe(){ if (auto115ProbeTimer){ clearTimeout(auto115ProbeTimer); auto115ProbeTimer = null; } }
+/* 已完成 probes 次探测 → 下一次探测前的等待间隔（5s/10s/20s，超出取最后一档） */
+function auto115ProbeDelay(doneProbes){
+  var i = Math.min(Math.max(doneProbes || 0, 0), AUTO115_PROBE_GAPS.length - 1);
+  return AUTO115_PROBE_GAPS[i];
+}
 function auto115ScheduleProbe(t){
   stopAuto115Probe();
+  var delay = AUTO115_PROBE_GAPS[0];
+  if (t){
+    delay = auto115ProbeDelay(auto115GetStep(t, 'wait').probes);
+  } else {
+    /* 群体调度（Resume/无具体任务）：取所有进行中任务下一次探测的最早时刻 */
+    var pend = (auto115Doc && auto115Doc.tasks || []).filter(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
+    for (var i = 0; i < pend.length; i++) delay = Math.min(delay, auto115ProbeDelay(auto115GetStep(pend[i], 'wait').probes));
+  }
   auto115ProbeTimer = setTimeout(function(){
     auto115ProbeTimer = null;
     if (!auto115Doc) return;
@@ -2516,7 +2539,7 @@ function auto115ScheduleProbe(t){
       if (!ck) return;
       pending.forEach(function(x){ auto115StepWait(x, false); });
     });
-  }, AUTO115_PROBE_MS);
+  }, delay);
 }
 function auto115Resume(){
   if (!auto115Doc) return;
