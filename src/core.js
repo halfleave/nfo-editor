@@ -310,7 +310,7 @@ function translateMeta(title, plot){
       try {
         var res = extractJsonObject(c);
         if (typeof NfoCore !== 'undefined' && NfoCore.cleanTranslatedText) {
-          if (typeof res.title === 'string') res.title = NfoCore.cleanTranslatedText(res.title);
+          if (typeof res.title === 'string') res.title = (NfoCore.stripTitleParens || function(x){ return x; })(NfoCore.cleanTranslatedText(res.title));
           if (typeof res.summary === 'string') res.summary = NfoCore.cleanTranslatedText(res.summary);
         }
         resolve(res);

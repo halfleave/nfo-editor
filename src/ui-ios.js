@@ -2051,7 +2051,7 @@ function auto115ItemTime(it){
   if (!isFinite(n) || n <= 0){ var p = Date.parse(v); return isFinite(p) ? p : 0; }
   return n < 1e12 ? n * 1000 : n;
 }
-function auto115IsVideoName(n){ return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm)$/i.test(n || ''); }
+function auto115IsVideoName(n){ return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm|iso)$/i.test(n || ''); }
 function auto115FindDir(parentCid, name){
   return auto115ListDir(parentCid).then(function(list){
     for (var i = 0; i < list.length; i++){
@@ -2408,7 +2408,7 @@ function c115GetUserId(){
   var m = /(?:^|;\s*)UID=([^;]+)/.exec(state.c115Cookie || '');
   return m ? m[1].trim() : '';
 }
-function c115UploadMultipart(host, fields, fileName, mime, bytes){
+function c115UploadMultipart(host, fields, fileName, mime, bytes, dbg){
   var boundary = '----nfo115' + auto115Now().toString(36);
   var enc = new TextEncoder();
   var head = '';
@@ -2430,15 +2430,17 @@ function c115UploadMultipart(host, fields, fileName, mime, bytes){
   }).then(function(res){
     var d = res.d || {};
     if (d.state === true && Number(d.code) === 0) return '';
-    throw new Error(d.error || d.statusmsg || d.message
-      || ('上传失败（state=' + d.state + ' code=' + d.code + (d.errno != null ? ' errno=' + d.errno : '') + '）'));
+    /* 自诊断：报错带 OSS 原始回包片段 + 调用方给的 callback 形态标记，用户截图一次即可定位协议差异 */
+    var base = d.error || d.statusmsg || d.message
+      || ('上传失败（state=' + d.state + ' code=' + d.code + (d.errno != null ? ' errno=' + d.errno : '') + '）');
+    throw new Error(base + '〔' + (dbg || '') + 'oss=' + (res.raw || '').slice(0, 110) + '〕');
   });
 }
 /* OSS 的 callback / callback_var 表单字段按阿里云规范需为 base64(JSON)。
-   init 返回对象时内部是明文 JSON → 需编码（UTF-8 安全）；返回字符串时（老协议）已是 base64 → 原样。
-   不编码直接发明文会导致 115 回调校验失败 → code=990002 参数错误。 */
+   明文 JSON（{开头）→ 需编码（UTF-8 安全）；已是 base64 字符串 → 原样；
+   对象值 → 先 JSON.stringify 再判断（防止 [object Object] 垃圾值混入表单 → 115 回调 990002）。 */
 function c115OssCallbackField(v){
-  var s = String(v == null ? '' : v);
+  var s = (v == null) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
   if (/^\s*\{/.test(s)) s = btoa(unescape(encodeURIComponent(s)));
   return s;
 }
@@ -2459,10 +2461,13 @@ function c115UploadFile(cid, fileName, bytes, mime){
       throw new Error('上传初始化失败：' + (d.error || d.statusmsg || d.message || res.raw.slice(0, 120)));
     }
     /* callback 兼容两种返回：字符串（老协议，已是 base64）→ 原样；
-       对象 {callback, callback_var} → 内部为明文 JSON，取值后按 OSS 规范 base64 编码（见 c115OssCallbackField） */
+       对象 {callback, callback_var} → 内部取值后按 OSS 规范 base64 编码（见 c115OssCallbackField） */
     var cb = d.callback, cbVar = '';
     var cbIsObj = cb && typeof cb === 'object';
     if (cbIsObj){ cbVar = cb.callback_var || ''; cb = cb.callback || ''; }
+    /* 诊断标记：init 返回的 callback 形态（none/str/obj+键名），随上传报错一起 toast */
+    var cbInfo = 'v190 cb=' + (cbIsObj ? ('obj:' + Object.keys(d.callback).join('+'))
+      : (d.callback != null ? 'str:' + String(d.callback).slice(0, 14) : 'none') + ' ');
     var fields = [
       ['name', fileName],
       ['key', d.object],
@@ -2473,7 +2478,7 @@ function c115UploadFile(cid, fileName, bytes, mime){
     ];
     if (cbVar) fields.push(['callback_var', c115OssCallbackField(cbVar)]);
     fields.push(['signature', d.signature]);
-    return c115UploadMultipart(d.host, fields, fileName, mime, bytes);
+    return c115UploadMultipart(d.host, fields, fileName, mime, bytes, cbInfo);
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */

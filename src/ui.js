@@ -526,7 +526,6 @@ function switchHomeTab(tab){
   for (var i = 0; i < bs.length; i++){
     bs[i].classList.toggle('active', bs[i].getAttribute('data-tab') === tab);
   }
-  document.getElementById('tab-poster').style.display = (tab === 'poster') ? '' : 'none';
   document.getElementById('tab-basic').style.display = (tab === 'basic') ? '' : 'none';
   document.getElementById('tab-cast').style.display  = (tab === 'cast')  ? '' : 'none';
   document.getElementById('tab-media').style.display = (tab === 'media') ? '' : 'none';

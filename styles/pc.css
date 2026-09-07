@@ -166,8 +166,21 @@ a:hover { text-decoration: underline; }
 .field-row.form-row { align-items: stretch; gap: 12px; }
 .field-row.form-row > .field { flex: 1; min-width: 0; }
 .field-row.form-row > .field.grow-3 { flex: 3; }
+.field-row.form-row > .field.grow-2 { flex: 2; }
 .field-row.form-row > .field.grow-1 { flex: 1; }
 .preset-chips { margin-top: 8px; }
+
+/* AV 字段 1:2:2:2 七等分 */
+.av-grid-seven {
+  display: grid;
+  grid-template-columns: 1fr 2fr 2fr 2fr;
+  gap: 12px;
+}
+
+/* 编辑弹窗内输入框统一小圆角（仅输入框，按钮/卡片等保持原样） */
+#page-edit .input,
+#page-edit .select,
+#page-edit .textarea { border-radius: var(--radius-xs); }
 .preset-chips .chip-add { cursor: pointer; user-select: none; }
 
 .input, .textarea, .select {
@@ -893,7 +906,7 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
 .edit-tabs .seg { margin-bottom: 0; }
 .edit-tabs .seg button { padding: 0 12px; }
 
-#tab-poster .poster-grid {
+#tab-media .poster-grid {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;
 }
 

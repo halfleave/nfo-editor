@@ -117,6 +117,17 @@
       .trim();
   }
 
+  // 去掉翻译标题里的括号注释及内容（全角（）与半角 ()）：
+  // 「泉まりん（泉玛丽恩） 日高ゆりあ（日高百合亚）」→「泉まりん 日高ゆりあ」。
+  // 仅用于 title（括号内容多为演员罗马音等注释）；简介 plot 不做此清理
+  function stripTitleParens(s) {
+    if (typeof s !== 'string' || !s) return s;
+    return s
+      .replace(/[（(][^（）()]*[）)]/g, '')   // 逐层剥最内层括号（不支持嵌套，翻译标题无此场景）
+      .replace(/[ \t\u3000]{2,}/g, ' ')      // 剥离后可能残留连续空格，收敛为一个
+      .trim();
+  }
+
   // 调用 OpenAI 兼容接口，一次请求翻译 title + plot；返回 Promise<{title, summary}>（30s 超时）
   // cfg = { baseUrl, apiKey, model } 由调用方从配置/state 传入（不读全局，便于两端复用）
   function translateMeta(title, plot, cfg) {
@@ -146,7 +157,7 @@
         if (!c) throw new Error('翻译返回为空');
         try {
           var res = extractJsonObject(c);
-          if (typeof res.title === 'string') res.title = cleanTranslatedText(res.title);
+          if (typeof res.title === 'string') res.title = stripTitleParens(cleanTranslatedText(res.title));
           if (typeof res.summary === 'string') res.summary = cleanTranslatedText(res.summary);
           resolve(res);
         }
@@ -559,6 +570,7 @@ function normalizeJavbusFilm(d, opts){
     computeTranslateNeed: computeTranslateNeed,
     translateMeta: translateMeta,
     cleanTranslatedText: cleanTranslatedText,
+    stripTitleParens: stripTitleParens,
     javStr: javStr,
     javName: javName,
     mapGenreEnToZh: mapGenreEnToZh,
