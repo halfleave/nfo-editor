@@ -1084,7 +1084,9 @@ function c115ProxyFetch(targetUrl, opts){
       var d = {};
       try { d = JSON.parse(txt); } catch(_){ d = { raw: txt.slice(0, 300) }; }
       if (!r.ok){
-        var err = new Error(d && d.error ? d.error : ('HTTP ' + r.status));
+        var errMsg = d && d.error ? d.error : ('HTTP ' + r.status);
+        if (d && d.debug) errMsg += ' | ' + JSON.stringify(d.debug);
+        var err = new Error(errMsg);
         err.status = r.status; err.body = txt.slice(0, 300); err.data = d;
         throw err;
       }
