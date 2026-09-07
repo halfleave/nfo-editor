@@ -5,7 +5,8 @@ var currentPage = '';
 function switchPage(page) {
   var from = currentPage;
   currentPage = page;
-  if (from === 'detail' && page !== 'detail') stopDetailBgSlideshow(); // 离开详情页：停掉底图轮播，释放定时器
+  if (from === 'detail' && page !== 'detail') stopDetailBgSlideshow(); // 离开详情页：停掉底图轮播，释放定时器（底图本身保留）
+  if (from && from !== 'detail' && page === 'detail') resumeDetailBgZoom(); // 返回详情页：恢复底图缓慢放大
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
   if (page === 'search'){
@@ -1737,7 +1738,7 @@ function openMagnetOp(el){
   var layer = document.createElement('div');
   layer.className = 'magnet-inline-actions';
   layer.innerHTML = '<button type="button" class="magnet-inline-copy">复制</button>'
-    + '<button type="button" class="magnet-inline-115">' + (inDetail ? '加入自动化' : '115 离线') + '</button>';
+    + '<button type="button" class="magnet-inline-115">' + (inDetail ? '115离线' : '115 离线') + '</button>';
   // 蒙版与按钮均不触发整行的 openMagnetOp
   layer.addEventListener('click', function(ev){ ev.stopPropagation(); });
   layer.querySelector('.magnet-inline-copy').addEventListener('click', function(ev){ ev.stopPropagation(); magnetOpCopy(); });
@@ -1822,13 +1823,15 @@ function c115Offline(magnet){
 var AUTO115_PREFIX = 'auto115:';
 var AUTO115_PROBE_MS = 10000;   // 每 10s 探测一次
 var AUTO115_PROBE_MAX = 3;      // 只探 3 次后转「等待中」
+var AUTO115_DIR_SLACK_MS = 10 * 60 * 1000; // 定位文件夹的时间窗宽限（任务提交前后 10 分钟内）
+var AUTO115_FLOW_VERSION = 2;   // 流程版本：v1=建新文件夹/移动/删文件夹（已废弃，存量任务自动重置）；v2=定位文件夹/清理/改名
 var AUTO115_STEP_DEFS = [
   { key: 'submit',  label: '提交离线' },
   { key: 'wait',    label: '等待离线完成' },
-  { key: 'mkdir',   label: '创建新文件夹' },
-  { key: 'move',    label: '移动视频' },
+  { key: 'mkdir',   label: '定位文件夹' },
+  { key: 'move',    label: '清理文件' },
   { key: 'rename',  label: '修改视频名称' },
-  { key: 'cleanup', label: '删除磁力文件夹' }
+  { key: 'cleanup', label: '修改文件夹名称' }
 ];
 var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
 var auto115ProbeTimer = null;
@@ -1867,7 +1870,20 @@ function auto115EnsureDoc(){
   var dvdId = (d.dvdId || d.content_id || (d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle) ? d.originaltitle : '') || '').toString().trim();
   auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, tasks: [] };
   return idbGet('kv', auto115Key(film.id)).then(function(v){
-    if (v && v.tasks) auto115Doc = v;
+    if (v && v.tasks){
+      // 旧流程（v1：建新文件夹/移动/删文件夹）任务整体重置——旧 offlineDirCid 语义已废弃且可能指向云下载根目录，绝不能沿用
+      for (var i = 0; i < v.tasks.length; i++){
+        var tt = v.tasks[i];
+        if (tt.fv !== AUTO115_FLOW_VERSION){
+          tt.fv = AUTO115_FLOW_VERSION;
+          tt.steps = auto115NewSteps();
+          delete tt.offlineDirCid; delete tt.offlineDirName;
+          delete tt.videoFid; delete tt.videoName; delete tt.videoSize; delete tt.noFolder;
+          tt.aborted = false;
+        }
+      }
+      auto115Doc = v;
+    }
     return auto115Doc;
   }).catch(function(){ return auto115Doc; });
 }
@@ -2005,8 +2021,10 @@ function auto115Post(url, body){
     body: body
   });
 }
-function auto115ListDir(cid){
-  return c115ProxyFetch('https://webapi.115.com/files?cid=' + encodeURIComponent(cid) + '&offset=0&limit=200&show_dir=1', {
+function auto115ListDir(cid, sort){
+  var url = 'https://webapi.115.com/files?cid=' + encodeURIComponent(cid) + '&offset=0&limit=200&show_dir=1';
+  if (sort) url += '&o=' + sort + '&asc=0';   // asc=0 倒序：最新的在前
+  return c115ProxyFetch(url, {
     headers: { 'X-115-Cookie': state.c115Cookie || '' }
   }).then(function(res){
     var d = res.d || {};
@@ -2014,6 +2032,15 @@ function auto115ListDir(cid){
     return Array.isArray(list) ? list : [];
   });
 }
+/* 条目时间（秒时间戳/毫秒/日期字符串均兼容）→ 毫秒 */
+function auto115ItemTime(it){
+  var v = it && (it.t != null ? it.t : (it.pt != null ? it.pt : ''));
+  if (Array.isArray(v)) v = v[0];
+  var n = Number(v);
+  if (!isFinite(n) || n <= 0){ var p = Date.parse(v); return isFinite(p) ? p : 0; }
+  return n < 1e12 ? n * 1000 : n;
+}
+function auto115IsVideoName(n){ return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm)$/i.test(n || ''); }
 function auto115FindDir(parentCid, name){
   return auto115ListDir(parentCid).then(function(list){
     for (var i = 0; i < list.length; i++){
@@ -2022,11 +2049,6 @@ function auto115FindDir(parentCid, name){
     }
     return null;
   });
-}
-function auto115ResolveOfflineDir(t){
-  if (t.offlineDirCid) return Promise.resolve(t.offlineDirCid);
-  if (t.offlineName) return auto115FindDir(C115_DEFAULT_DIR_CID, t.offlineName).then(function(dir){ return dir ? dir.cid : ''; });
-  return Promise.resolve('');
 }
 function auto115QueryTask(t){
   return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=task_lists', 'page=1&page_row=100').then(function(res){
@@ -2093,7 +2115,8 @@ function auto115StepWait(t, reset){
     }
     if (info.done){
       t.offlineName = info.name || t.offlineName;
-      if (info.cid) t.offlineDirCid = info.cid;
+      /* 注意：任务列表返回的 cid/wp_path_id 是「下载目标目录」（即云下载根目录），
+         不是本任务独立的落地文件夹，绝不能拿来当删除目标。落地文件夹由步骤3 现场定位。 */
       auto115Set(t, 'wait', 'ok', '离线完成' + (info.percent != null ? '（' + info.percent + '%）' : ''));
       return auto115StepMkdir(t);
     }
@@ -2115,69 +2138,111 @@ function auto115StepWait(t, reset){
     auto115Finish(t); return null;
   });
 }
+/* 步骤3：定位离线落地的文件夹（云下载目录里本次任务产生的文件夹）。
+   结构字段区分：文件夹条目有 cid（自身id）无 fid；文件条目有 fid。
+   绝不按扩展名判断——磁力文件夹名可能形如 xxx.mp4（种子名带扩展名）。 */
 function auto115StepMkdir(t){
-  var name = auto115Doc.filmTitle || auto115Doc.dvdId || '未命名';
-  auto115Set(t, 'mkdir', 'running', '正在创建「' + name + '」…');
-  var body = 'pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID) + '&cname=' + encodeURIComponent(name);
-  return auto115Post('https://webapi.115.com/files/add', body).then(function(res){
-    var d = res.d || {};
-    if (res.ok && (d.state === true || d.cid)){
-      t.newDirCid = (d.cid || (d.data && d.data.cid) || '').toString();
-      auto115Set(t, 'mkdir', 'ok', '已创建：' + name);
+  auto115Set(t, 'mkdir', 'running', '正在定位离线落地的文件夹…');
+  return auto115ListDir(C115_DEFAULT_DIR_CID, 'user_ptime').then(function(list){
+    var folders = list.filter(function(it){ return it && it.cid && !it.fid; });
+    var files = list.filter(function(it){ return it && it.fid; });
+    var dir = null, f = null, i;
+    // ① 名称精确匹配（115 BT 离线通常落地为以种子名命名的文件夹，名字可能带 .mp4）
+    if (t.offlineName){
+      for (i = 0; i < folders.length; i++){ if ((folders[i].n || '') === t.offlineName){ dir = folders[i]; break; } }
+    }
+    // ② 兜底：任务提交时间窗内最新的文件夹（列表已按时间倒序）
+    if (!dir){
+      for (i = 0; i < folders.length; i++){
+        if (auto115ItemTime(folders[i]) >= t.createdAt - AUTO115_DIR_SLACK_MS){ dir = folders[i]; break; }
+      }
+    }
+    if (dir){
+      var cid = String(dir.cid);
+      if (cid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'mkdir', 'fail', '定位异常：目标不能是云下载根目录'); auto115Finish(t); return null; }
+      t.offlineDirCid = cid; t.offlineDirName = dir.n || '';
+      auto115Set(t, 'mkdir', 'ok', '已定位文件夹：' + (dir.n || ''));
       return auto115StepMove(t);
     }
-    if (d.errno === 20004 || /已存在/.test(d.error || '')){
-      return auto115FindDir(C115_DEFAULT_DIR_CID, name).then(function(dir){
-        if (!dir){ auto115Set(t, 'mkdir', 'fail', '文件夹已存在但未能定位'); auto115Finish(t); return null; }
-        t.newDirCid = dir.cid;
-        auto115Set(t, 'mkdir', 'skip', '文件夹已存在，复用：' + name);
-        return auto115StepMove(t);
-      });
+    // ③ 单文件磁力：不落文件夹、直接落地为文件
+    if (t.offlineName){
+      for (i = 0; i < files.length; i++){ if ((files[i].n || '') === t.offlineName){ f = files[i]; break; } }
     }
-    auto115Set(t, 'mkdir', 'fail', auto115ErrText(d, res, '创建失败'));
-    auto115Finish(t); return null;
+    if (!f){
+      for (i = 0; i < files.length; i++){
+        if (auto115ItemTime(files[i]) >= t.createdAt - AUTO115_DIR_SLACK_MS){ f = files[i]; break; }
+      }
+    }
+    if (f){
+      t.noFolder = true;
+      t.videoFid = String(f.fid); t.videoName = f.n || ''; t.videoSize = Number(f.s) || 0;
+      auto115Set(t, 'mkdir', 'ok', '单文件落地（无文件夹）：' + t.videoName);
+      return auto115StepMove(t); // 清理步骤会自动跳过
+    }
+    auto115Set(t, 'mkdir', 'fail', '云下载目录未找到本次离线产生的内容'); auto115Finish(t); return null;
   }).catch(function(e){
     auto115Set(t, 'mkdir', 'fail', (e && e.message) ? e.message : '网络错误');
     auto115Finish(t); return null;
   });
 }
+/* 步骤4：清理文件夹内容——保留最大视频，删除其余全部（含 sample/子文件夹）。
+   只对该文件夹的「子项」发起删除，绝不删除文件夹本身；根目录保护双保险。 */
 function auto115StepMove(t){
-  auto115Set(t, 'move', 'running', '正在扫描离线目录…');
-  return auto115ResolveOfflineDir(t).then(function(dirCid){
-    if (!dirCid){ auto115Set(t, 'move', 'fail', '未找到离线落地目录'); auto115Finish(t); return null; }
-    t.offlineDirCid = dirCid;
-    return auto115ListDir(dirCid).then(function(list){
-      var vids = list.filter(function(it){
-        var n = ((it.n || it.name) || '').toLowerCase();
-        if (/sample|预告|trailer|preview/.test(n)) return false;
-        return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm)$/.test(n);
-      });
-      if (!vids.length){ auto115Set(t, 'move', 'fail', '目录内没有视频文件'); auto115Finish(t); return null; }
-      vids.sort(function(a, b){ return (Number(b.s != null ? b.s : b.size) || 0) - (Number(a.s != null ? a.s : a.size) || 0); });
-      var v = vids[0];
-      t.videoFid = (v.fid || v.cid || '').toString();
-      t.videoName = v.n || v.name || '';
-      t.videoSize = Number(v.s != null ? v.s : v.size) || 0;
-      auto115Set(t, 'move', 'running', '正在移动：' + t.videoName + '（' + auto115Size(t.videoSize) + '）');
-      var body = 'fid=' + encodeURIComponent(t.videoFid) + '&pid=' + encodeURIComponent(t.newDirCid);
-      return auto115Post('https://webapi.115.com/files/move', body).then(function(res){
-        var d = res.d || {};
-        if (res.ok && (d.state === true || d.errno === 0)){
-          auto115Set(t, 'move', 'ok', '已移动：' + t.videoName + '（' + auto115Size(t.videoSize) + '）');
-          return auto115StepRename(t);
-        }
-        auto115Set(t, 'move', 'fail', auto115ErrText(d, res, '移动失败'));
-        auto115Finish(t); return null;
-      });
+  if (t.noFolder){ auto115Set(t, 'move', 'skip', '单文件落地，无需清理'); return auto115StepRename(t); }
+  if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'move', 'fail', '目录未定位或异常，请重试'); auto115Finish(t); return Promise.resolve(null); }
+  auto115Set(t, 'move', 'running', '正在扫描文件夹内容…');
+  return auto115ListDir(t.offlineDirCid).then(function(list){
+    var vids = list.filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
+    if (!vids.length){ auto115Set(t, 'move', 'fail', '文件夹内没有视频文件'); auto115Finish(t); return null; }
+    // 保留对象优先选非 sample/预告的主视频（sample 偶尔比正片大）；全是 sample 时才兜底选最大
+    var mainVids = vids.filter(function(it){ return !/sample|预告|trailer|preview/i.test(it.n || it.name || ''); });
+    var pool = mainVids.length ? mainVids : vids;
+    pool.sort(function(a, b){ return (Number((b.s != null) ? b.s : b.size) || 0) - (Number((a.s != null) ? a.s : a.size) || 0); });
+    var v = pool[0];
+    t.videoFid = String(v.fid); t.videoName = v.n || v.name || ''; t.videoSize = Number(v.s != null ? v.s : v.size) || 0;
+    // 除最大视频外全部删除：文件按 fid、子文件夹按 cid（自身id）
+    var delIds = [];
+    for (var i = 0; i < list.length; i++){
+      var it = list[i];
+      if (!it) continue;
+      if (it.fid){ if (String(it.fid) !== t.videoFid) delIds.push(String(it.fid)); }
+      else if (it.cid){ if (String(it.cid) !== C115_DEFAULT_DIR_CID) delIds.push(String(it.cid)); }
+    }
+    if (!delIds.length){ auto115Set(t, 'move', 'ok', '只有最大视频，无需清理'); return auto115StepRename(t); }
+    auto115Set(t, 'move', 'running', '保留：' + t.videoName + '，正在删除其余 ' + delIds.length + ' 项…');
+    return auto115DeleteBatch(t.offlineDirCid, delIds).then(function(errMsg){
+      if (errMsg){ auto115Set(t, 'move', 'fail', errMsg); auto115Finish(t); return null; }
+      auto115Set(t, 'move', 'ok', '已清理 ' + delIds.length + ' 项，保留：' + t.videoName + '（' + auto115Size(t.videoSize) + '）');
+      return auto115StepRename(t);
     });
   }).catch(function(e){
     auto115Set(t, 'move', 'fail', (e && e.message) ? e.message : '网络错误');
     auto115Finish(t); return null;
   });
 }
+/* 批量进回收站：fid[i] 数组形式，分批每批 50 个；pid=所在父目录 */
+function auto115DeleteBatch(parentCid, ids){
+  var chunks = [];
+  for (var i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+  var p = Promise.resolve('');
+  chunks.forEach(function(chunk){
+    p = p.then(function(err){
+      if (err) return err;
+      var parts = [];
+      for (var k = 0; k < chunk.length; k++) parts.push('fid[' + k + ']=' + encodeURIComponent(chunk[k]));
+      parts.push('pid=' + encodeURIComponent(parentCid));
+      return auto115Post('https://webapi.115.com/rb/delete', parts.join('&')).then(function(res){
+        var d = res.d || {};
+        return (res.ok && (d.state === true || d.errno === 0)) ? '' : auto115ErrText(d, res, '删除失败');
+      });
+    });
+  });
+  return p;
+}
 function auto115StepRename(t){
   var dvd = auto115Doc.dvdId;
   if (!dvd){ auto115Set(t, 'rename', 'fail', '该影片没有番号，无法命名'); auto115Finish(t); return Promise.resolve(null); }
+  if (!t.videoFid){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
   var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
   var newName = dvd + ext;
   auto115Set(t, 'rename', 'running', '正在改名为：' + newName);
@@ -2195,17 +2260,24 @@ function auto115StepRename(t){
     auto115Finish(t); return null;
   });
 }
+/* 步骤6：把文件夹改名为影片标题（无标题回退番号）；单文件落地则跳过 */
 function auto115StepCleanup(t){
-  auto115Set(t, 'cleanup', 'running', '正在删除离线磁力文件夹…');
-  return auto115ResolveOfflineDir(t).then(function(dirCid){
-    if (!dirCid){ auto115Set(t, 'cleanup', 'skip', '未找到可删除的目录'); auto115Finish(t); return null; }
-    var body = 'fid=' + encodeURIComponent(dirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
-    return auto115Post('https://webapi.115.com/rb/delete', body).then(function(res){
-      var d = res.d || {};
-      if (res.ok && (d.state === true || d.errno === 0)) auto115Set(t, 'cleanup', 'ok', '已删除离线文件夹');
-      else auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '删除失败'));
-      auto115Finish(t); return null;
-    });
+  if (t.noFolder){ auto115Set(t, 'cleanup', 'skip', '单文件落地，无需改文件夹名'); auto115Finish(t); return Promise.resolve(null); }
+  if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'cleanup', 'fail', '目录未定位或异常，请重试'); auto115Finish(t); return Promise.resolve(null); }
+  var newName = ((auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || t.offlineDirName || '').trim();
+  if (!newName){ auto115Set(t, 'cleanup', 'fail', '没有可用的名称（标题/番号均为空）'); auto115Finish(t); return Promise.resolve(null); }
+  if (newName === t.offlineDirName){ auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改'); auto115Finish(t); return Promise.resolve(null); }
+  auto115Set(t, 'cleanup', 'running', '正在把文件夹改名为「' + newName + '」…');
+  var body = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&file_name=' + encodeURIComponent(newName);
+  return auto115Post('https://webapi.115.com/files/edit', body).then(function(res){
+    var d = res.d || {};
+    if (res.ok && (d.state === true || d.errno === 0)){
+      t.offlineDirName = newName;
+      auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + newName);
+    } else {
+      auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '文件夹改名失败'));
+    }
+    auto115Finish(t); return null;
   }).catch(function(e){
     auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
     auto115Finish(t); return null;
@@ -2241,7 +2313,7 @@ function auto115AddFromOp(){
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
       magnet: magnet, magnetTitle: title || auto115Btih(magnet),
-      steps: auto115NewSteps(), createdAt: auto115Now()
+      steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
     };
     doc.tasks.unshift(t);
     auto115Expanded = t.id;
@@ -5816,7 +5888,9 @@ var detailBgCurrentUrl = '';
 var detailBgPool = [];         /* 底图轮播候选池：所有已显示剧照（含真实尺寸 w/h 与横/竖标记） */
 var detailVisibleShots = [];    /* 当前已显示的剧照（含真实尺寸 w/h），作为底图轮播候选池 */
 
-/* 停止轮播并复位两层 */
+/* 停止轮播并复位两层。注意：活动层(#detailPoster)的 backgroundImage 保留不清——
+   离开详情页（如进自动化页）再返回时页面不重渲染，清了底图就会消失；
+   换影片时 renderFilmDetail 会立即重设新图，故保留无副作用。 */
 function stopDetailBgSlideshow(){
   if (detailBgTimer){ clearInterval(detailBgTimer); detailBgTimer = null; }
   detailBgPool = [];
@@ -5825,8 +5899,18 @@ function stopDetailBgSlideshow(){
   detailBgActiveLayer = 0;
   var p1 = document.getElementById('detailPoster');
   var p2 = document.getElementById('detailPoster2');
-  if (p1){ p1.style.transition = 'none'; p1.style.transform = 'scale(1)'; p1.style.opacity = '1'; p1.style.backgroundImage = ''; }
+  if (p1){ p1.style.transition = 'none'; p1.style.transform = 'scale(1)'; p1.style.opacity = '1'; }
   if (p2){ p2.style.transition = 'none'; p2.style.transform = 'scale(1)'; p2.style.opacity = '0'; p2.style.backgroundImage = ''; }
+}
+
+/* 返回详情页：对保留的底图恢复缓慢放大动画（切换页面时被 stop 复位过） */
+function resumeDetailBgZoom(){
+  var p1 = document.getElementById('detailPoster');
+  if (p1 && p1.style.backgroundImage){
+    void p1.offsetWidth;   /* 与上次 scale(1) 隔一次重排，确保过渡生效 */
+    p1.style.transition = 'opacity .9s ease, transform 5s ease-out, filter .15s linear';
+    p1.style.transform = 'scale(1.1)';
+  }
 }
 
 /* 把所有「当前已显示的剧照」纳入底图轮播候选池（横版、竖版都参与切换，不只横版）。
