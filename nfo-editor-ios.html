@@ -194,6 +194,15 @@
     <div class="sheet-list c115-list">
       <div class="api-group">
         <div class="api-group-title-row">
+          <div class="api-group-title">代理令牌</div>
+          <button class="api-help-q-sm" onclick="showToast('需与 Vercel Worker 的 C115_TOKEN 环境变量一致；默认已预填，若你在部署时改过令牌请填你自己的','info')" aria-label="关于">?</button>
+        </div>
+        <div class="field field-stacked no-border">
+          <input class="ios-input" type="text" id="c115TokenInput" placeholder="C115PX_..." oninput="on115TokenInput()">
+        </div>
+      </div>
+      <div class="api-group">
+        <div class="api-group-title-row">
           <div class="api-group-title">Cookie</div>
           <button class="api-help-q-sm" onclick="showToast('登录成功后 Cookie 自动保存；也可手动粘贴','info')" aria-label="关于">?</button>
         </div>

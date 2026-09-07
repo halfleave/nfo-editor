@@ -348,6 +348,7 @@ var MPAA_LIST = ['G','PG','PG-13','R','NC-17','NR'];
 var state = {
   year: '', mpaa: '', countries: [], genres: [], apiKey: '',
   magnetWorker: '',
+  c115ProxyToken: '', // 115 代理令牌（应用内可配，默认回落 C115_PROXY_TOKEN）
   countryPresets: COUNTRY_DEFAULT.slice(),
   genreNormal: GENRE_NORMAL.slice(),
   genreAdult: GENRE_ADULT.slice(),
@@ -1040,6 +1041,7 @@ function updateSubtitleBtn(){
 var C115_PROXY_TOKEN = 'C115PX_7d3k9f2m5q8x1a4t'; // 与 Vercel 代理 C115_TOKEN 约定一致（可被环境变量覆盖）
 var C115_APP = 'web'; // 扫码/兑换所用的 115 app 标识（与 P0 实测一致）
 var C115_COOKIE_KEY = 'c115cookie'; // IndexedDB(kv) 存储键
+var C115_TOKEN_KEY = 'c115token';   // IndexedDB(kv) 存储键：115 代理令牌（与 Vercel C115_TOKEN 一致，可应用内改）
 var C115_DEFAULT_DIR_CID = '3311283881428122938'; // P0 实测「云下载」目录（离线下载固定到此，不让用户选）
 var c115QrInstance = null;
 var c115Polling = false;
@@ -1065,8 +1067,8 @@ function c115ProxyFetch(targetUrl, opts){
     err.status = 0; err.body = '';
     return Promise.reject(err);
   }
-  // Token 放 URL，避免触发预检
-  var full = base + '/api/115/proxy?url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(C115_PROXY_TOKEN);
+  // Token 放 URL，避免触发预检；token 取应用内可配值，回落硬编码默认串
+  var full = base + '/api/115/proxy?url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN);
   return fetch(full, opts).then(function(r){
     return r.text().then(function(txt){
       var d = {};
@@ -1101,6 +1103,14 @@ function open115Sheet(){
       state.c115Cookie = ta.value;
     }
   }).catch(function(){});
+  // 载入 115 代理令牌（应用内可配，默认回落硬编码串）
+  var tk = document.getElementById('c115TokenInput');
+  if (tk) tk.value = '';
+  idbGet('kv', C115_TOKEN_KEY).then(function(v){
+    var t = (typeof v === 'string') ? v : (v && v.token) || '';
+    if (tk && t) tk.value = t;
+    state.c115ProxyToken = t || C115_PROXY_TOKEN;
+  }).catch(function(){ state.c115ProxyToken = C115_PROXY_TOKEN; });
   var vEl = document.getElementById('c115Verify');
   if (vEl){ vEl.textContent = ''; vEl.className = 'c115-verify'; }
   openSheet('sheet115');
@@ -1269,6 +1279,12 @@ function exchange115Cookie(uid){
       set115Status('换取 Cookie 失败：' + info, 'err');
       if (btn) btn.disabled = false;
     });
+}
+function on115TokenInput(){
+  var tk = document.getElementById('c115TokenInput');
+  var t = tk ? tk.value.trim() : '';
+  state.c115ProxyToken = t || C115_PROXY_TOKEN;
+  idbPut('kv', C115_TOKEN_KEY, t).catch(function(){});
 }
 function save115Cookie(){
   var ta = document.getElementById('c115Cookie');
