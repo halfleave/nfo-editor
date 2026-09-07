@@ -1079,6 +1079,7 @@ function c115ProxyFetch(targetUrl, opts){
   var form = 'url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN);
   if (opts.headers && opts.headers['X-115-Cookie']) form += '&ck=' + encodeURIComponent(opts.headers['X-115-Cookie']);
   if (opts.ua) form += '&ua=' + encodeURIComponent(opts.ua); // UA 覆盖（浏览器 fetch 禁设 UA 头，由代理侧代设；115 上传链路需 115disk 客户端 UA）
+  if (opts.xs) form += '&xs=' + encodeURIComponent(JSON.stringify(opts.xs)); // 附加请求头（OSS PUT 的 x-oss-* 签名头等，浏览器禁设的名字由代理代设）
   if (opts.method && opts.method !== 'GET'){
     form += '&method=' + encodeURIComponent(opts.method.toUpperCase());
     if (opts.body != null) form += '&payload=' + encodeURIComponent(typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
@@ -1091,6 +1092,11 @@ function c115ProxyFetch(targetUrl, opts){
     body: form,
     cache: 'no-store'
   }).then(function(r){
+    if (opts.bin){ /* 二进制响应（115 4.0 加密回包）：以 base64 转交，避免 r.text() 损坏字节 */
+      return r.arrayBuffer().then(function(buf){
+        return { ok: r.ok, status: r.status, d: {}, raw: '', bin: c115BytesToB64(new Uint8Array(buf)) };
+      });
+    }
     return r.text().then(function(txt){
       var d = {};
       try { d = JSON.parse(txt); } catch(_){ d = { raw: txt.slice(0, 300) }; }
@@ -2400,81 +2406,298 @@ function auto115StepCleanup(t){
     auto115Finish(t); return null;
   });
 }
-/* —— NFO/海报/剧照 上传（详情页自动化已完成项，手动触发）——
-   走 115 网页端普通上传通道（无需签名）：
-   ① POST uplb.115.com/3.0/sampleinitupload.php（userid/filename/filesize/target=U_1_<cid>）→ 返回 OSS 表单参数
-   ② POST <host> multipart/form-data（name/key/policy/OSSAccessKeyId/success_action_status/callback/signature/file）
-      → 返回 {state:true,code:0} 即成功。二进制经 /api/cloud/proxy 以 base64 透传。 */
-function c115UploadMultipart(host, fields, fileName, mime, bytes, dbg){
-  var boundary = '----nfo115' + auto115Now().toString(36);
-  var enc = new TextEncoder();
-  var head = '';
-  for (var i = 0; i < fields.length; i++){
-    head += '--' + boundary + '\r\nContent-Disposition: form-data; name="' + fields[i][0] + '"\r\n\r\n' + fields[i][1] + '\r\n';
+/* —— NFO/海报/剧照 上传（详情页自动化已完成项，手动触发）—— 115 4.0 上传协议 ——
+   3.0 sampleinitupload 老通道已被 115 废弃（OSS 收下文件但回调注册端点永远回 state:false「参数错误」，
+   v188-v192 四轮实测确认；T3rry7f/Fake115Upload issue#25 证实 115 强制升级 4.0）。
+   参照维护中的 orzogc/fake115uploader（Go）逐行移植 4.0 流程：
+   ① GET proapi.115.com/app/uploadinfo → user_id / userkey
+   ② SHA1(文件)=fileID → sig=SHA1(userkey+SHA1(userID+fileID+target+"0")+"000000") 大写
+      token=MD5(盐+fileID+fileSize+signKey+signVal+userID+t+MD5(userID)+appVer)
+      → 表单经 ECDH P-224(115 固定公钥)+AES-CBC 加密 → POST uplb.115.com/4.0/initupload.php?k_ec=<EncodeToken>
+      → 响应为 AES-CBC 密文 → LZ4 解压 → JSON
+   ③ status=2 秒传命中；status=7/701 按 sign_check("start-end" 闭区间) 对文件切片补 SHA1 重提；
+      status=1 → getuploadinfo → gettokenurl 取阿里云 STS →
+      PUT {endpoint}/{bucket}/{object}，带 x-oss-security-token + x-oss-callback(-var) 头 + OSS V1 签名 */
+/* ---- 4.0 加密层基础（MD5 / CRC32 / SHA1 / 字节工具）---- */
+var C115_MD5_SALT = 'Qclm8MGWUv59TnrR0XPg';
+var C115_CRC_SALT = '^j>WD3Kr?J2gLFjD4W2y@';
+var C115_APPVER = '30.5.1';
+var C115_UA_DISK = 'Mozilla/5.0 115disk/' + C115_APPVER;
+var C115_UA_ALI = 'aliyun-sdk-android/2.9.1';
+var C115_MD5_K = (function(){ var K = [], i; for (i = 0; i < 64; i++) K.push(Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) | 0); return K; })();
+function c115Md5(input){
+  var msg = (typeof input === 'string') ? new TextEncoder().encode(input) : new Uint8Array(input);
+  var bitLen = msg.length * 8;
+  var M = new Int32Array((((msg.length + 8) >> 6) + 1) << 4); /* 每块 64 字节 = 16 个 32 位字 */
+  var i;
+  for (i = 0; i < msg.length; i++) M[i >> 2] |= msg[i] << ((i % 4) * 8);
+  M[msg.length >> 2] |= 0x80 << ((msg.length % 4) * 8);
+  M[M.length - 2] = bitLen | 0;
+  M[M.length - 1] = Math.floor(bitLen / 4294967296) | 0;
+  var S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+  var a0 = 0x67452301 | 0, b0 = 0xefcdab89 | 0, c0 = 0x98badcfe | 0, d0 = 0x10325476 | 0;
+  function rotl(x, c){ return (x << c) | (x >>> (32 - c)); }
+  for (var ch = 0; ch < M.length; ch += 16){
+    var A = a0, B = b0, C = c0, D = d0;
+    for (var j = 0; j < 64; j++){
+      var F, g;
+      if (j < 16){ F = (B & C) | (~B & D); g = j; }
+      else if (j < 32){ F = (D & B) | (~D & C); g = (5 * j + 1) % 16; }
+      else if (j < 48){ F = B ^ C ^ D; g = (3 * j + 5) % 16; }
+      else { F = C ^ (B | ~D); g = (7 * j) % 16; }
+      F = (F + A + C115_MD5_K[j] + M[ch + g]) | 0;
+      A = D; D = C; C = B;
+      B = (B + rotl(F, S[j])) | 0;
+    }
+    a0 = (a0 + A) | 0; b0 = (b0 + B) | 0; c0 = (c0 + C) | 0; d0 = (d0 + D) | 0;
   }
-  head += '--' + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + fileName + '"\r\nContent-Type: ' + mime + '\r\n\r\n';
-  var tail = '\r\n--' + boundary + '--\r\n';
-  var hb = enc.encode(head), tb = enc.encode(tail);
-  var body = new Uint8Array(hb.length + bytes.length + tb.length);
-  body.set(hb, 0); body.set(bytes, hb.length); body.set(tb, hb.length + bytes.length);
-  var bin = '';
-  for (var j = 0; j < body.length; j += 0x8000) bin += String.fromCharCode.apply(null, body.subarray(j, Math.min(j + 0x8000, body.length)));
-  return c115ProxyFetch(host, {
-    method: 'POST',
-    body: btoa(bin),
-    b64: true,
-    ua: 'aliyun-sdk-android/2.9.1', /* OSS POST 直传：对齐 xpmibackup_sly 的 aliyun SDK UA */
-    headers: { 'Content-Type': 'multipart/form-data; boundary=' + boundary }
-  }).then(function(res){
-    var d = res.d || {};
-    if (d.state === true && Number(d.code) === 0) return '';
-    /* 自诊断：报错带 HTTP 状态（203 = OSS 收下文件但 115 回调注册失败）+ 调用方诊断标记 + 原始回包片段 */
-    var base = d.error || d.statusmsg || d.message
-      || ('上传失败（state=' + d.state + ' code=' + d.code + (d.errno != null ? ' errno=' + d.errno : '') + '）');
-    throw new Error(base + '〔' + (dbg || '') + 'http=' + res.status + ' oss=' + (res.raw || '').slice(0, 110) + '〕');
-  });
+  function hx(x){ var s = ''; for (var k = 0; k < 4; k++){ var by = (x >>> (k * 8)) & 0xFF; s += (by < 16 ? '0' : '') + by.toString(16); } return s; }
+  return hx(a0) + hx(b0) + hx(c0) + hx(d0);
 }
-/* OSS 的 callback / callback_var 表单字段按阿里云规范需为 base64(JSON)。
-   明文 JSON（{开头）→ 需编码（UTF-8 安全）；已是 base64 字符串 → 原样；
-   对象值 → 先 JSON.stringify 再判断（防止 [object Object] 垃圾值混入表单 → 115 回调 990002）。 */
-function c115OssCallbackField(v){
-  var s = (v == null) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
-  if (/^\s*\{/.test(s)) s = btoa(unescape(encodeURIComponent(s)));
-  return s;
+var C115_CRC_TABLE = (function(){ var t = [], n, c, k; for (n = 0; n < 256; n++){ c = n; for (k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; })();
+function c115Crc32(bytes){ var c = 0xFFFFFFFF, i; for (i = 0; i < bytes.length; i++) c = C115_CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+async function c115Sha1Hex(input){
+  var bytes = (typeof input === 'string') ? new TextEncoder().encode(input) : input;
+  var buf = await crypto.subtle.digest('SHA-1', bytes);
+  return Array.from(new Uint8Array(buf)).map(function(b){ return (b < 16 ? '0' : '') + b.toString(16); }).join('');
+}
+async function c115HmacSha1B64(secret, msg){
+  var k = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  var mac = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(msg));
+  return c115BytesToB64(new Uint8Array(mac));
+}
+function c115BytesToB64(bytes){ var bin = '', i; for (i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 0x8000, bytes.length))); return btoa(bin); }
+function c115B64ToBytes(b64){ var bin = atob(b64), out = new Uint8Array(bin.length), i; for (i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+/* ---- secp224r1 ECDH（纯 BigInt 仿射坐标；共享密钥按 Go big.Int.Bytes() 语义去前导零）---- */
+var C115_P224 = {
+  p: (1n << 224n) - (1n << 96n) + 1n,
+  n: 0xffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3dn,
+  b: 0xb4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4n,
+  gx: 0xb70e0cbd6bb4bf7f321390b94a03c1d356c21122343280d6115c1d21n,
+  gy: 0xbd376388b5f723fb4c22dfe6cd4375a05a07476444d5819985007e34n
+};
+/* 115 固定 ECDH 远端公钥（X||Y 各 28 字节，来自 fake115uploader cipher.go） */
+var C115_REMOTE_PUB = [0x57,0xA2,0x92,0x57,0xCD,0x23,0x20,0xE5,0xD6,0xD1,0x43,0x32,0x2F,0xA4,0xBB,0x8A,0x3C,0xF9,0xD3,0xCC,0x62,0x3E,0xF5,0xED,0xAC,0x62,0xB7,0x67,0x8A,0x89,0xC9,0x1A,0x83,0xBA,0x80,0x0D,0x61,0x29,0xF5,0x22,0xD0,0x34,0xC8,0x95,0xDD,0x24,0x65,0x24,0x3A,0xDD,0xC2,0x50,0x95,0x3B,0xEE,0xBA];
+function c115ModInv(a, m){
+  var oldR = ((a % m) + m) % m, r = m, oldS = 1n, s = 0n, q, tmp;
+  while (r !== 0n){
+    q = oldR / r;
+    tmp = oldR - q * r; oldR = r; r = tmp;
+    tmp = oldS - q * s; oldS = s; s = tmp;
+  }
+  return ((oldS % m) + m) % m;
+}
+function c115P224IsOnCurve(P){
+  if (!P) return true;
+  var p = C115_P224.p;
+  var y2 = (P.y * P.y) % p;
+  var rhs = ((P.x * P.x % p) * P.x - 3n * P.x + C115_P224.b) % p;
+  return ((y2 - rhs) % p + p) % p === 0n;
+}
+function c115P224Double(P){
+  if (!P || P.y === 0n) return null;
+  var p = C115_P224.p;
+  var l = (3n * P.x % p * P.x + (p - 3n)) % p * c115ModInv(2n * P.y % p, p) % p;
+  var x = (l * l - 2n * P.x) % p;
+  var y = (l * (P.x - x) - P.y) % p;
+  return { x: (x % p + p) % p, y: (y % p + p) % p };
+}
+function c115P224Add(P, Q){
+  if (!P) return Q;
+  if (!Q) return P;
+  var p = C115_P224.p;
+  if (P.x === Q.x){
+    if ((P.y + Q.y) % p === 0n) return null;
+    return c115P224Double(P);
+  }
+  var l = ((Q.y - P.y) % p) * c115ModInv((Q.x - P.x) % p, p) % p;
+  var x = (l * l - P.x - Q.x) % p;
+  var y = (l * (P.x - x) - P.y) % p;
+  return { x: (x % p + p) % p, y: (y % p + p) % p };
+}
+function c115P224Mul(k, P){
+  var R = null, Q = P;
+  while (k > 0n){
+    if (k & 1n) R = c115P224Add(R, Q);
+    Q = c115P224Double(Q);
+    k >>= 1n;
+  }
+  return R;
+}
+function c115BigToFixedBytes(x, len){
+  var hex = x.toString(16);
+  while (hex.length < len * 2) hex = '0' + hex;
+  var out = new Uint8Array(len), i;
+  for (i = 0; i < len; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function c115BigMinBytes(x){ /* Go big.Int.Bytes()：去前导零 */
+  if (x === 0n) return new Uint8Array(0);
+  var hex = x.toString(16);
+  if (hex.length % 2) hex = '0' + hex;
+  var out = new Uint8Array(hex.length / 2), i;
+  for (i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+var c115Ecdh = null; /* 会话级复用（与 Go 版一致：一次会话一组 key/iv） */
+async function c115EcdhGet(){
+  if (c115Ecdh) return c115Ecdh;
+  var remote = { x: 0n, y: 0n }, i;
+  for (i = 0; i < 28; i++) remote.x = remote.x * 256n + BigInt(C115_REMOTE_PUB[i]);
+  for (i = 28; i < 56; i++) remote.y = remote.y * 256n + BigInt(C115_REMOTE_PUB[i]);
+  if (!c115P224IsOnCurve(remote)) throw new Error('ECDH 远端公钥不在曲线上');
+  var rand = new Uint8Array(28), d = 0n;
+  crypto.getRandomValues(rand);
+  for (i = 0; i < 28; i++) d = d * 256n + BigInt(rand[i]);
+  d = d % (C115_P224.n - 1n) + 1n;
+  var pub = c115P224Mul(d, { x: C115_P224.gx, y: C115_P224.gy });
+  var sharedX = c115P224Mul(d, remote).x;
+  var sBytes = c115BigMinBytes(sharedX);
+  if (sBytes.length < 16) throw new Error('ECDH 共享密钥异常');
+  var x28 = c115BigToFixedBytes(pub.x, 28);
+  var pubBuf = new Uint8Array(30);
+  pubBuf[0] = 29; pubBuf[1] = ((pub.y & 1n) === 1n) ? 0x03 : 0x02;
+  pubBuf.set(x28, 2);
+  c115Ecdh = { key: sBytes.slice(0, 16), iv: sBytes.slice(sBytes.length - 16), pub: pubBuf };
+  return c115Ecdh;
+}
+async function c115AesCbc(key, iv, data, encrypt){
+  var k = await crypto.subtle.importKey('raw', key, { name: 'AES-CBC' }, false, [encrypt ? 'encrypt' : 'decrypt']);
+  var out = encrypt
+    ? await crypto.subtle.encrypt({ name: 'AES-CBC', iv: iv }, k, data)
+    : await crypto.subtle.decrypt({ name: 'AES-CBC', iv: iv }, k, data);
+  return new Uint8Array(out);
+}
+function c115Lz4Decompress(src){
+  var out = [], i = 0;
+  while (i < src.length){
+    var token = src[i++];
+    var litLen = token >> 4;
+    if (litLen === 15){ var b; do { b = src[i++]; litLen += b; } while (b === 255); }
+    for (var l = 0; l < litLen && i < src.length; l++) out.push(src[i++]);
+    if (i >= src.length) break;
+    var offset = src[i] | (src[i + 1] << 8); i += 2;
+    var mLen = token & 0xF;
+    if (mLen === 15){ var b2; do { b2 = src[i++]; mLen += b2; } while (b2 === 255); }
+    mLen += 4;
+    var ref = out.length - offset;
+    if (ref < 0) throw new Error('LZ4 偏移越界');
+    for (var m = 0; m < mLen; m++) out.push(out[ref++]);
+  }
+  return Uint8Array.from(out);
+}
+/* EncodeToken：k_ec 参数（pubKey 变换 + 时间戳 + CRC32，共 48 字节 base64） */
+async function c115EncodeToken(t){
+  var e = await c115EcdhGet();
+  var r1 = Math.floor(Math.random() * 256), r2 = Math.floor(Math.random() * 256);
+  var tmp = [], i;
+  for (i = 0; i < 15; i++) tmp.push(e.pub[i] ^ r1);
+  tmp.push(r1, 0x73 ^ r1);
+  for (i = 0; i < 3; i++) tmp.push(r1);
+  var time = [(t >>> 24) & 255, (t >>> 16) & 255, (t >>> 8) & 255, t & 255];
+  for (i = 0; i < 4; i++) tmp.push(r1 ^ time[3 - i]);
+  for (i = 15; i < e.pub.length; i++) tmp.push(e.pub[i] ^ r2);
+  tmp.push(r2, 0x01 ^ r2);
+  for (i = 0; i < 3; i++) tmp.push(r2);
+  var salt = new TextEncoder().encode(C115_CRC_SALT);
+  var crcIn = new Uint8Array(salt.length + tmp.length);
+  crcIn.set(salt, 0);
+  for (i = 0; i < tmp.length; i++) crcIn[salt.length + i] = tmp[i] & 255;
+  var crc = c115Crc32(crcIn);
+  tmp.push(crc & 255, (crc >>> 8) & 255, (crc >>> 16) & 255, (crc >>> 24) & 255);
+  return c115BytesToB64(new Uint8Array(tmp));
+}
+async function c115EcdhEncrypt(str){ var e = await c115EcdhGet(); return c115AesCbc(e.key, e.iv, new TextEncoder().encode(str), true); }
+async function c115EcdhDecrypt(bytes){
+  var e = await c115EcdhGet();
+  var plain = await c115AesCbc(e.key, e.iv, bytes, false);
+  var len = plain[0] | (plain[1] << 8);
+  var json = c115Lz4Decompress(plain.subarray(2, Math.min(2 + len, plain.length)));
+  return new TextDecoder().decode(json);
+}
+/* ---- 4.0 上传流程 ---- */
+var c115UserKeyCache = null;
+async function c115GetUserKey(){
+  if (c115UserKeyCache) return c115UserKeyCache;
+  var res = await c115ProxyFetch('https://proapi.115.com/app/uploadinfo', { headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK });
+  var d = res.d || {};
+  if (!d.user_id || !d.userkey) throw new Error('获取 userkey 失败（Cookie 可能失效）：' + (res.raw || '').slice(0, 80));
+  c115UserKeyCache = { userID: String(d.user_id), userKey: String(d.userkey) };
+  return c115UserKeyCache;
+}
+async function c115InitUpload(u, fileSize, fileID, fileName, target, sig, signKey, signVal){
+  var t = Math.floor(Date.now() / 1000);
+  var token = c115Md5(C115_MD5_SALT + fileID + fileSize + signKey + signVal + u.userID + t + c115Md5(u.userID) + C115_APPVER);
+  var kEc = await c115EncodeToken(t);
+  var pairs = [
+    ['appid', '0'], ['appversion', C115_APPVER], ['userid', u.userID],
+    ['filename', fileName], ['filesize', fileSize], ['fileid', fileID],
+    ['target', target], ['sig', sig], ['t', String(t)], ['token', token]
+  ];
+  if (signKey){ pairs.push(['sign_key', signKey], ['sign_val', signVal]); }
+  pairs.sort(function(a, b){ return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0); });
+  var form = pairs.map(function(p){ return p[0] + '=' + encodeURIComponent(p[1]); }).join('&');
+  var enc = await c115EcdhEncrypt(form);
+  var res = await c115ProxyFetch('https://uplb.115.com/4.0/initupload.php?k_ec=' + encodeURIComponent(kEc), {
+    method: 'POST', body: c115BytesToB64(enc), b64: true, bin: true,
+    ua: C115_UA_DISK, headers: { 'X-115-Cookie': state.c115Cookie || '' }
+  });
+  if (!res.bin || !res.bin.length) throw new Error('initupload 响应为空：' + (res.raw || '').slice(0, 100));
+  var text = await c115EcdhDecrypt(c115B64ToBytes(res.bin));
+  return JSON.parse(text);
+}
+async function c115UploadFileAsync(cid, fileName, bytes, mime){
+  var u = await c115GetUserKey();
+  var fileID = (await c115Sha1Hex(bytes)).toUpperCase();
+  var fileSize = String(bytes.length);
+  var target = 'U_1_' + cid;
+  var inner = await c115Sha1Hex(u.userID + fileID + target + '0');
+  var sig = (await c115Sha1Hex(u.userKey + inner + '000000')).toUpperCase();
+  var res = await c115InitUpload(u, fileSize, fileID, fileName, target, sig, '', '');
+  if (Number(res.status) === 7 && Number(res.statuscode) === 701){
+    /* sign 校验：sign_check = "start-end"（闭区间），对文件切片算 SHA1 大写后重提 */
+    var sc = String(res.sign_check || '').split('-');
+    var start = parseInt(sc[0], 10), end = parseInt(sc[1], 10);
+    if (isNaN(start) || isNaN(end) || start < 0 || end < start || end >= bytes.length) throw new Error('sign_check 范围异常：' + res.sign_check);
+    var signVal = (await c115Sha1Hex(bytes.subarray(start, end + 1))).toUpperCase();
+    res = await c115InitUpload(u, fileSize, fileID, fileName, target, sig, String(res.sign_key || ''), signVal);
+  }
+  if (Number(res.status) === 2 && Number(res.statuscode) === 0) return ''; /* 秒传命中，文件已在 115 */
+  if (!(Number(res.status) === 1 && Number(res.statuscode) === 0)){
+    throw new Error('上传初始化失败：status=' + res.status + ' statuscode=' + res.statuscode + ' ' + (res.statusmsg || ''));
+  }
+  var cb = res.callback || {};
+  if (!res.bucket || !res.object || !cb.callback) throw new Error('初始化响应缺少 OSS 参数：' + JSON.stringify(res).slice(0, 120));
+  /* STS 临时凭证 */
+  var info = (await c115ProxyFetch('https://uplb.115.com/3.0/getuploadinfo.php', { headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK })).d || {};
+  if (!info.endpoint || !info.gettokenurl) throw new Error('获取上传信息失败：' + JSON.stringify(info).slice(0, 120));
+  var tok = (await c115ProxyFetch(info.gettokenurl, { headers: { 'X-115-Cookie': state.c115Cookie || '' }, ua: C115_UA_DISK })).d || {};
+  if (!tok.SecurityToken || !tok.AccessKeyId || !tok.AccessKeySecret) throw new Error('获取 OSS 临时凭证失败：' + JSON.stringify(tok).slice(0, 120));
+  /* OSS V1 签名 PUT（callback 经 x-oss-callback 头携带） */
+  mime = mime || 'application/octet-stream';
+  var date = new Date().toUTCString();
+  var xs = {
+    'x-oss-security-token': tok.SecurityToken,
+    'x-oss-callback': btoa(unescape(encodeURIComponent(cb.callback))),
+    'x-oss-callback-var': btoa(unescape(encodeURIComponent(cb.callback_var || ''))),
+    'x-oss-date': date
+  };
+  var canonical = ['x-oss-callback', 'x-oss-callback-var', 'x-oss-date', 'x-oss-security-token']
+    .map(function(k){ return k + ':' + xs[k] + '\n'; }).join('');
+  var strToSign = 'PUT\n\n' + mime + '\n\n' + canonical + '/' + res.bucket + '/' + res.object;
+  xs['Authorization'] = 'OSS ' + tok.AccessKeyId + ':' + (await c115HmacSha1B64(tok.AccessKeySecret, strToSign));
+  var putUrl = info.endpoint.replace(/\/+$/, '') + '/' + res.bucket + '/' + res.object;
+  var putRes = await c115ProxyFetch(putUrl, {
+    method: 'PUT', body: c115BytesToB64(bytes), b64: true, ua: C115_UA_ALI, xs: xs,
+    headers: { 'X-115-Cookie': state.c115Cookie || '', 'Content-Type': mime }
+  });
+  var d = putRes.d || {};
+  if (d.state === true) return '';
+  throw new Error('上传失败：' + (d.message || d.error || (putRes.raw || '').slice(0, 110)));
 }
 function c115UploadFile(cid, fileName, bytes, mime){
-  return c115ProxyFetch('https://uplb.115.com/3.0/sampleinitupload.php', {
-    method: 'POST',
-    /* 对照近期实测可跑的实现（suileyan/xpmibackup_sly Pan115Provider）：init 只 POST filename + target，
-       多传 userid/filesize 反而得到无法注册的 callback 配置（115 回调端点回 state:false 参数错误） */
-    body: 'filename=' + encodeURIComponent(fileName) + '&target=' + encodeURIComponent('U_1_' + cid),
-    headers: { 'X-115-Cookie': state.c115Cookie || '' },
-    ua: 'Mozilla/5.0 115disk/11.2.0' /* 两个可跑实现（Fake115Upload/xpmibackup_sly）均用 115 客户端 UA；浏览器 UA 会被 115 按网页端处理 */
-  }).then(function(res){
-    var d = res.d || {};
-    if (!d.host && d.data && d.data.host) d = d.data; // 兼容 {status:1,statuscode:0,data:{...}} 包裹形态
-    if (!d.host || !d.object || !d.policy){
-      throw new Error('上传初始化失败：' + (d.error || d.statusmsg || d.message || res.raw.slice(0, 120)));
-    }
-    /* callback 兼容两种返回：字符串（已是 base64，官方形态 {"callbackUrl":...}）→ 原样；
-       对象 {callback, callback_var} → 取值后按 OSS 规范 base64 编码（见 c115OssCallbackField） */
-    var cb = d.callback, cbVar = '';
-    var cbIsObj = cb && typeof cb === 'object';
-    if (cbIsObj){ cbVar = cb.callback_var || ''; cb = cb.callback || ''; }
-    /* 诊断标记：版本 + init 的 status（1=走 OSS / 2=秒传）+ callback 形态，随上传报错一起 toast */
-    var cbInfo = 'v192 st=' + (d.status != null ? d.status : '?') + ' cb=' + (cbIsObj ? ('obj:' + Object.keys(d.callback).join('+'))
-      : (d.callback != null ? 'str:' + String(d.callback).slice(0, 14) : 'none') + ' ');
-    /* 对照可跑实现：表单精确 6 字段 key/policy/OSSAccessKeyId/signature/callback/file，
-       不带 name/success_action_status/callback_var（callback 的 base64 串内已含完整回调配置） */
-    var fields = [
-      ['key', d.object],
-      ['policy', d.policy],
-      ['OSSAccessKeyId', d.accessid],
-      ['signature', d.signature],
-      ['callback', c115OssCallbackField(cb)]
-    ];
-    if (cbIsObj && cbVar) fields.push(['callback_var', c115OssCallbackField(cbVar)]);
-    return c115UploadMultipart(d.host, fields, fileName, mime, bytes, cbInfo);
+  return c115UploadFileAsync(cid, fileName, bytes, mime).catch(function(e){
+    throw new Error((e && e.message ? e.message : '上传失败') + '〔v193〕');
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
