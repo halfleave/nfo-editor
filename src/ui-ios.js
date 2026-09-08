@@ -1040,9 +1040,9 @@ function clearApiInput(){
 function updateSubtitleBtn(dvdId){
   var btn = document.getElementById('dtActSub');
   // 有番号（如 JAV）的影片不显示字幕按钮；字幕搜索按标题匹配，仅无番号影片适用
-  // 优先用传入的番号，回退全局 state.dvdId
-  var id = (dvdId !== undefined && dvdId !== null) ? dvdId : state.dvdId;
-  var hasDvdId = !!(id && String(id).trim());
+  // 仅依据当前影片自身的番号判断，不再回退全局编辑态 state.dvdId（否则会污染详情页判定：
+  // 编辑/看过任意一部 AV 后 state.dvdId 残留，导致所有影片详情页字幕按钮被误隐藏）
+  var hasDvdId = !!(dvdId && String(dvdId).trim());
   if (btn) btn.style.display = (state.activationCode && !hasDvdId) ? '' : 'none';
 }
 /* ===== 115 网盘配置（扫码登录 + Cookie 管理） ===== */
