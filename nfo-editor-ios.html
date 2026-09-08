@@ -816,12 +816,32 @@
     <div class="auto-scroll">
       <div class="auto-film" id="autoFilmTitle"></div>
       <div class="auto-list" id="autoTaskList"></div>
-      <button class="auto-upload-btn" id="autoUploadBtn" onclick="auto115AddUploadTask()">上传元数据</button>
+      <div class="auto-actions">
+        <button class="auto-action-btn" id="autoAddMagnetBtn" onclick="auto115OpenMagnetModal()">添加磁力</button>
+        <button class="auto-action-btn" id="autoUploadBtn" onclick="auto115AddUploadTask()">上传元数据</button>
+      </div>
       <div class="auto-empty" id="autoEmpty" style="display:none;">
         <div class="auto-empty-title">还没有自动化任务</div>
       </div>
     </div>
   </section>
+
+  <!-- 添加磁力 弹窗 -->
+  <div class="sheet-mask" id="magnetMask" onclick="auto115CloseMagnetModal()"></div>
+  <div class="sheet" id="magnetSheet">
+    <div class="magnet-sheet-head">添加磁力</div>
+    <div class="magnet-sheet-body">
+      <div class="magnet-input-bar">
+        <textarea id="magnetInput" class="magnet-input" rows="3" placeholder="粘贴磁力链接：magnet:?xt=urn:btih:..."></textarea>
+        <button class="magnet-paste" id="magnetPasteBtn" onclick="auto115PasteMagnet()">粘贴</button>
+      </div>
+      <input id="magnetNameInput" class="magnet-name" type="text" placeholder="目标名称（选填：填番号按番号改名，填标题按标题改名，留空只离线不改名）" />
+    </div>
+    <div class="magnet-sheet-ops">
+      <button class="sheet-btn sheet-cancel" onclick="auto115CloseMagnetModal()">取消</button>
+      <button class="sheet-btn sheet-confirm" onclick="auto115AddMagnetTask()">确定</button>
+    </div>
+  </div>
 
   <!-- 预告片播放弹窗 -->
   <div class="trailer-mask" id="trailerMask" onclick="closeTrailer()" data-page-node-id="GP8sRGE2ss19IBFxf9zuI3"></div>

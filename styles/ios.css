@@ -1516,9 +1516,24 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; }
 /* 上传入口：常驻在任务列表上方，不依赖任何离线任务 */
-.auto-upload-btn { display: block; width: 70%; margin: 14px auto 16px; border: none; border-radius: 980px; background: var(--accent); color: var(--accent-text); font-size: 14px; font-weight: 600; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
-.auto-upload-btn:active { opacity: .75; }
+.auto-actions { display: flex; gap: 10px; width: 92%; margin: 14px auto 16px; }
+.auto-action-btn { flex: 1; border: none; border-radius: 980px; background: var(--accent); color: var(--accent-text); font-size: 14px; font-weight: 600; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
+.auto-action-btn:active { opacity: .75; }
 .auto-list { display: flex; flex-direction: column; gap: 12px; }
+/* 添加磁力 弹窗 */
+.magnet-sheet-head { font-size: 16px; font-weight: 600; text-align: center; color: var(--label); margin: 4px 0 14px; }
+.magnet-sheet-body { display: flex; flex-direction: column; gap: 12px; }
+.magnet-input-bar { position: relative; }
+.magnet-input { width: 100%; box-sizing: border-box; border: 1px solid var(--sep); border-radius: 12px; background: var(--gray-fill); color: var(--label); font-size: 14px; line-height: 1.5; padding: 10px 12px; resize: none; -webkit-tap-highlight-color: transparent; }
+.magnet-paste { position: absolute; right: 8px; bottom: 8px; border: none; border-radius: 8px; background: var(--label); color: #fff; font-size: 12px; font-weight: 600; padding: 5px 12px; -webkit-tap-highlight-color: transparent; }
+.magnet-paste:active { opacity: .8; }
+.magnet-name { width: 100%; box-sizing: border-box; border: 1px solid var(--sep); border-radius: 12px; background: var(--gray-fill); color: var(--label); font-size: 14px; padding: 10px 12px; -webkit-tap-highlight-color: transparent; }
+.magnet-name::placeholder, .magnet-input::placeholder { color: var(--label-2); }
+.magnet-sheet-ops { display: flex; gap: 10px; margin-top: 18px; }
+.sheet-btn { flex: 1; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; padding: 12px 0; -webkit-tap-highlight-color: transparent; }
+.sheet-cancel { background: var(--gray-fill); color: var(--label); }
+.sheet-confirm { background: var(--accent); color: var(--accent-text); }
+.sheet-btn:active { opacity: .8; }
 .auto-task { background: var(--card-fill); border-radius: 14px; overflow: hidden; }
 .auto-task-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; -webkit-tap-highlight-color: transparent; }
 .auto-task-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--label); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
