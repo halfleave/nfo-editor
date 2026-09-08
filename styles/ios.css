@@ -1510,7 +1510,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-topbar-title { position: absolute; left: 0; right: 0; pointer-events: none; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); }
 .auto-topbar-clear { width: auto !important; font-size: 13px; color: var(--accent); font-weight: 500; padding: 0 4px; margin-left: auto; }
 .auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
-.auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 12px; }
+.auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; }
+/* 上传入口：常驻在任务列表上方，不依赖任何离线任务 */
+.auto-upload-btn { display: block; width: calc(100% - 28px); margin: 0 14px 10px; border: none; border-radius: 980px; background: var(--accent); color: var(--accent-text); font-size: 14px; font-weight: 600; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
+.auto-upload-btn:active { opacity: .75; }
 .auto-list { display: flex; flex-direction: column; gap: 10px; }
 .auto-task { background: var(--card-fill); border-radius: 14px; overflow: hidden; }
 .auto-task-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; -webkit-tap-highlight-color: transparent; }

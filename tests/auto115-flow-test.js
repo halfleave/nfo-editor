@@ -184,6 +184,10 @@ const lz4LiteralForTest = (bytes) => {
   /* 6. 上传 NFO/海报/剧照 链路（115 4.0 加密通道：uploadinfo → initupload(ECDH+AES) → getuploadinfo → gettoken → OSS PUT） */
   ctx.dataUrlToBytesSync = (u) => (typeof u === 'string' && u.indexOf('data:') === 0) ? new Uint8Array([1, 2, 3]) : null;
   ctx.loadFilm = () => Promise.resolve({ id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486', poster: 'data:image/jpeg;base64,AA', fanart: 'data:image/jpeg;base64,AA' } });
+  /* ui-ios.js:5526 是 `var sanitizeName = NfoCore.sanitizeName`，而 NfoCore 被桩成一律返回 {} 的 noop，
+     不补这个桩的话 sanitizeName(标题) 会返回空对象（上传任务据此定文件夹名，会永远匹配不上）。
+     此处按 core-shared.js:19 的真实实现补桩。 */
+  ctx.sanitizeName = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie';
   ctx.buildNFOMovieXml = () => '<movie><title>测试影片</title></movie>';
 
   /* 6a. 加密层单元断言 */
@@ -240,30 +244,40 @@ const lz4LiteralForTest = (bytes) => {
     assert(JSON.parse(decText).status === 1, '回包长度非 16 倍数 → 截断后解密成功');
   }
 
-  /* 6b. 开放平台上传全链路（2026-09-08 起：4.0 逆向回退已停用，上传只走官方开放平台通道） */
+  /* 6b. 上传任务（type=upload，2026-09-08：上传独立成任务，不再挂在离线任务上）
+         准备文件夹（按影片标题在云下载目录查找 → 没有才创建）→ 逐个上传并刷新进度 */
   ctx.state.c115Open = { access: 'TEST_OPEN_TOKEN', exp: Date.now() + 3600000 }; // 有效 token，避免触发 refreshToken
-  const initCalls = [];
-  const putCalls = [];
-  const legacyCalls = []; // 4.0 逆向通道调用次数，应恒为 0
-  script = {
-    'open/upload/init': (n, url, opts) => {
-      initCalls.push({ url, body: opts && opts.body, xs: opts && opts.xs });
-      return { state: true, code: 0, data: { status: 1, code: 0, pick_code: 'PC', bucket: 'BKT115', object: 'OBJ/123',
-        callback: { callback: '{"callbackUrl":"http://uplb.115.com/3.0/completeupload.php"}', callback_var: '{"x:pick_code":"PC"}' } } };
-    },
-    'open/upload/get_token': { state: true, code: 0, data: {
-      endpoint: 'https://oss-cn-test.aliyuncs.com', AccessKeyId: 'AKID', AccessKeySecret: 'AKSEC', SecurityToken: 'STSTOK' } },
-    'oss-cn-test': (n, url, opts) => { putCalls.push({ url, method: opts.method, xs: opts.xs, body: opts.body }); return { state: true, code: 0 }; },
-    '4.0/initupload': (n, url) => { legacyCalls.push(url); return { state: true }; }
+  let initCalls, putCalls, legacyCalls, mkdirCalls, listCalls;
+  const mkUploadScript = (dirList) => {
+    initCalls = []; putCalls = []; legacyCalls = []; mkdirCalls = []; listCalls = [];
+    return {
+      'files?cid=': () => { listCalls.push(1); return { state: true, data: dirList }; },
+      'files/add': () => { mkdirCalls.push(1); return { state: true, data: { cid: 'NEWDIR' } }; },
+      'open/upload/init': (n, url, opts) => {
+        initCalls.push({ url, body: opts && opts.body, xs: opts && opts.xs });
+        return { state: true, code: 0, data: { status: 1, code: 0, pick_code: 'PC', bucket: 'BKT115', object: 'OBJ/123',
+          callback: { callback: '{"callbackUrl":"http://uplb.115.com/3.0/completeupload.php"}', callback_var: '{"x:pick_code":"PC"}' } } };
+      },
+      'open/upload/get_token': { state: true, code: 0, data: {
+        endpoint: 'https://oss-cn-test.aliyuncs.com', AccessKeyId: 'AKID', AccessKeySecret: 'AKSEC', SecurityToken: 'STSTOK' } },
+      'oss-cn-test': (n, url, opts) => { putCalls.push({ url, method: opts.method, xs: opts.xs, body: opts.body }); return { state: true, code: 0 }; },
+      '4.0/initupload': (n, url) => { legacyCalls.push(url); return { state: true }; }
+    };
   };
-  const tu = { id: 'tu1', magnet: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01', magnetTitle: '上传测试', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIR888', offlineDirName: '测试影片', fv: 2 };
-  for (let i = 0; i < tu.steps.length; i++){ tu.steps[i].state = 'ok'; }
+  const mkUploadTask = (id) => ({ id, type: 'upload', steps: ctx.auto115NewSteps('upload'), createdAt: Date.now(), fv: 2 });
+
+  // A. 云下载目录里没有同名文件夹 → 创建后上传
+  script = mkUploadScript([{ cid: 'OTHERDIR', n: '别的文件夹' }]);
+  const tu = mkUploadTask('tu1');
   doc.tasks.unshift(tu);
-  calls.length = 0;
-  await ctx.auto115UploadNfoFiles('tu1');
-  assert(initCalls.length === 3, '开放平台 init 请求 3 次（nfo/poster/fanart），实际=' + initCalls.length);
+  await ctx.auto115StepUploadDir(tu);
+  assert(listCalls.length === 1, '先列一次云下载目录，实际=' + listCalls.length);
+  assert(mkdirCalls.length === 1, '没找到同名文件夹 → 创建 1 次，实际=' + mkdirCalls.length);
+  assert(tu.uploadDirCid === 'NEWDIR', '用新建文件夹的 cid，实际=' + tu.uploadDirCid);
+  assert(ctx.auto115GetStep(tu, 'dir').state === 'ok', 'dir 步 = ok');
+  assert(initCalls.length === 3, '开放平台 init 3 次（nfo/poster/fanart），实际=' + initCalls.length);
   assert(initCalls[0].body.indexOf('file_name=IPX-486.nfo') >= 0, 'init 表单含 file_name=番号.nfo');
-  assert(initCalls[0].body.indexOf('target=U_1_DIR888') >= 0, 'init 表单含 target=U_1_DIR888');
+  assert(initCalls[0].body.indexOf('target=U_1_NEWDIR') >= 0, 'init 表单 target=U_1_新建目录');
   assert(initCalls[0].body.indexOf('fileid=') >= 0 && initCalls[0].body.indexOf('preid=') >= 0, 'init 表单含 fileid/preid（SHA1 秒传签名）');
   assert(initCalls[0].xs && initCalls[0].xs.Authorization === 'Bearer TEST_OPEN_TOKEN', 'init 带 Bearer access_token');
   assert(legacyCalls.length === 0, '未回退 4.0 逆向通道（实际调用 ' + legacyCalls.length + ' 次）');
@@ -274,7 +288,18 @@ const lz4LiteralForTest = (bytes) => {
   assert(pu.xs && pu.xs.Authorization && pu.xs.Authorization.indexOf('OSS AKID:') === 0, 'PUT 带 OSS V1 签名 Authorization');
   assert(pu.xs['x-oss-security-token'] === 'STSTOK' && pu.xs['x-oss-callback'] && pu.xs['x-oss-callback-var'], 'PUT 带 security-token/callback/callback-var 头');
   assert(tu.nfoUploaded > 0, '上传成功后任务标记 nfoUploaded');
+  assert(ctx.auto115Status(tu).text === '已完成', '上传完成 → 大状态「已完成」，实际=' + ctx.auto115Status(tu).text);
   assert(toasts.some(m => m.indexOf('已上传 3 个文件') >= 0), 'toast 提示已上传 3 个文件');
+
+  // B. 已有同名文件夹 → 直接复用，不再创建
+  script = mkUploadScript([{ cid: 'EXISTDIR', n: '测试影片' }]);
+  const tu2 = mkUploadTask('tu2');
+  doc.tasks.unshift(tu2);
+  await ctx.auto115StepUploadDir(tu2);
+  assert(mkdirCalls.length === 0, '已有同名文件夹 → 不创建，实际=' + mkdirCalls.length);
+  assert(tu2.uploadDirCid === 'EXISTDIR', '复用已有文件夹 cid，实际=' + tu2.uploadDirCid);
+  assert(initCalls.length === 3 && initCalls[0].body.indexOf('target=U_1_EXISTDIR') >= 0, '复用时上传到已有目录');
+  assert(putCalls.length === 3, '复用时也上传 3 个文件');
 
   /* 7. 并入模式：同影片第二个磁力 → 移入已有标题文件夹，改名 番号.A.ext，删除临时文件夹 */
   script = {

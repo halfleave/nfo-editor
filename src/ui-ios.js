@@ -1870,7 +1870,7 @@ var AUTO115_PROBE_GAPS = [5000, 5000, 10000]; // 探测时刻为提交后 5s / 1
 var AUTO115_PROBE_MAX = 3;      // 只探 3 次后转「等待中」
 var AUTO115_DIR_SLACK_MS = 10 * 60 * 1000; // 定位文件夹的时间窗宽限（任务提交前后 10 分钟内）
 var AUTO115_FLOW_VERSION = 2;   // 流程版本：v1=建新文件夹/移动/删文件夹（已废弃，存量任务自动重置）；v2=定位文件夹/清理/改名
-var AUTO115_STEP_DEFS = [
+var AUTO115_STEP_DEFS = [   // offline：115 离线六步
   { key: 'submit',  label: '提交离线' },
   { key: 'wait',    label: '等待离线完成' },
   { key: 'mkdir',   label: '定位文件夹' },
@@ -1878,6 +1878,19 @@ var AUTO115_STEP_DEFS = [
   { key: 'rename',  label: '修改视频名称' },
   { key: 'cleanup', label: '修改文件夹名称' }
 ];
+var AUTO115_STEPS_UPLOAD = [ // upload：上传 NFO 两步
+  { key: 'dir',    label: '准备文件夹' },
+  { key: 'upload', label: '上传文件' }
+];
+/* 步骤表按任务类型取；旧任务没有 type 一律按 offline 处理（兼容存量数据） */
+var AUTO115_STEP_TABLE = { offline: AUTO115_STEP_DEFS, upload: AUTO115_STEPS_UPLOAD };
+function auto115TaskType(t){ return (t && t.type === 'upload') ? 'upload' : 'offline'; }
+function auto115StepDefs(t){ return AUTO115_STEP_TABLE[auto115TaskType(t)] || AUTO115_STEP_DEFS; }
+/* 任务卡标题：上传任务没有磁力名，统一显示「上传 NFO」 */
+function auto115TaskTitle(t){
+  if (auto115TaskType(t) === 'upload') return '上传 NFO';
+  return (t && (t.magnetTitle || auto115Btih(t && t.magnet))) || '磁力任务';
+}
 var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
 var auto115ProbeTimer = null;
 var auto115Expanded = '';
@@ -1893,8 +1906,8 @@ function auto115Btih(magnet){
   var m = /btih:([0-9a-fA-F]{40}|[0-9a-zA-Z]{32})/.exec(magnet || '');
   return m ? m[1].toUpperCase() : '';
 }
-function auto115NewSteps(){
-  return AUTO115_STEP_DEFS.map(function(s){ return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
+function auto115NewSteps(type){
+  return (AUTO115_STEP_TABLE[type] || AUTO115_STEP_DEFS).map(function(s){ return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
 }
 function auto115Size(n){
   if (!n) return '0 B';
@@ -1960,7 +1973,9 @@ function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115S
 
 /* —— 大状态合成 —— */
 function auto115StepLabel(key){
-  for (var i = 0; i < AUTO115_STEP_DEFS.length; i++) if (AUTO115_STEP_DEFS[i].key === key) return AUTO115_STEP_DEFS[i].label;
+  /* 两张步骤表都要查（上传任务用的是 upload 表的 key） */
+  var all = AUTO115_STEP_DEFS.concat(AUTO115_STEPS_UPLOAD);
+  for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i].label;
   return key;
 }
 function auto115Status(t){
@@ -1969,6 +1984,14 @@ function auto115Status(t){
     if (steps[i].state === 'fail') return { text: '失败 · ' + auto115StepLabel(steps[i].key), cls: 'ab-fail' };
   }
   if (t.aborted) return { text: '已中止', cls: 'ab-idle' };
+  if (auto115TaskType(t) === 'upload'){
+    /* 上传任务只有两步；具体进度（上传中 (2/3)：xxx.jpg）写在步骤 msg 里，大状态只给粗粒度 */
+    var up = auto115GetStep(t, 'upload');
+    if (up.state === 'running') return { text: '上传中', cls: 'ab-run' };
+    if (auto115GetStep(t, 'dir').state === 'running') return { text: '准备中…', cls: 'ab-run' };
+    if (up.state === 'ok') return { text: '已完成', cls: 'ab-ok' };
+    return { text: '待上传', cls: 'ab-idle' };
+  }
   var wait = auto115GetStep(t, 'wait');
   if (wait.state === 'waiting') return { text: '等待中 · 已探 ' + (wait.probes || 0) + '/' + AUTO115_PROBE_MAX, cls: 'ab-wait' };
   if (auto115GetStep(t, 'submit').state === 'running') return { text: '提交中…', cls: 'ab-run' };
@@ -2030,17 +2053,14 @@ function auto115TaskHtml(t){
   var expanded = (auto115Expanded === t.id);
   var html = '<div class="auto-task' + (expanded ? ' expanded' : '') + '">'
     + '<div class="auto-task-head" onclick="auto115Toggle(\'' + t.id + '\')">'
-    + '<div class="auto-task-title">' + escapeHtml(t.magnetTitle || auto115Btih(t.magnet) || '磁力任务') + '</div>'
+    + '<div class="auto-task-title">' + escapeHtml(auto115TaskTitle(t)) + '</div>'
     + '<span class="auto-task-badge ' + st.cls + '">' + escapeHtml(st.text) + '</span>'
     + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
     + '</div>';
   if (expanded){
-    var upBtn = (st.cls === 'ab-ok' && (t.finalDirCid || !t.noFolder))
-      ? '<button type="button" onclick="auto115UploadNfoFiles(\'' + t.id + '\')">' + (t.nfoUploaded ? '重新上传 NFO' : '上传 NFO') + '</button>'
-      : '';
+    /* 上传已独立成任务（顶部「上传 NFO 到 115」入口），不再挂在离线任务卡片上 */
     html += '<div class="auto-steps">' + (t.steps || []).map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>'
       + '<div class="auto-task-ops">'
-      + upBtn
       + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重试</button>'
       + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除</button>'
       + '</div>';
@@ -2143,8 +2163,11 @@ function auto115Run(t){
   auto115RunningId = t.id;
   t.queued = false;
   return ensure115Cookie().then(function(ck){
-    if (!ck){ auto115Set(t, 'submit', 'fail', '未登录 115'); auto115Finish(t); return null; }
-    return auto115StepSubmit(t);
+    if (!ck){
+      auto115Set(t, auto115StepDefs(t)[0].key, 'fail', '还没登录 115');
+      auto115Finish(t); return null;
+    }
+    return (auto115TaskType(t) === 'upload') ? auto115StepUploadDir(t) : auto115StepSubmit(t);
   });
 }
 /* 当前任务到达终态（成功/失败/中止）后释放队列，启动最早的排队任务 */
@@ -3078,41 +3101,112 @@ function c115UploadFile(cid, fileName, bytes, mime){
   });
 }
 /* 已完成任务 → 把 NFO + 海报 + 剧照上传到最终文件夹（并入任务用 finalDirCid；独立任务即改名后的落地文件夹，cid 不变） */
-function auto115UploadNfoFiles(tid){
-  var t = auto115Task(tid);
-  if (!t || !auto115Doc) return;
-  var dirCid = t.finalDirCid || t.offlineDirCid;
-  var dirName = t.finalDirName || t.offlineDirName || '';
-  if (!dirCid || dirCid === C115_DEFAULT_DIR_CID){ showToast('没有可上传的目标文件夹', 'error'); return; }
-  return ensure115Cookie().then(function(ck){
-    if (!ck){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
-    return loadFilm(auto115Doc.filmId).then(function(film){
-      if (!film) throw new Error('未找到影片数据');
-      var d = film.data || {};
-      var base = auto115Doc.dvdId || sanitizeName(auto115Doc.filmTitle || '') || 'movie';
-      var files = [{ name: base + '.nfo', mime: 'application/octet-stream', bytes: new TextEncoder().encode(buildNFOMovieXml(d)) }];
-      var pb = (typeof d.poster === 'string') ? dataUrlToBytesSync(d.poster) : null;
-      if (pb) files.push({ name: base + '-poster.jpg', mime: 'image/jpeg', bytes: pb });
-      var fb = (typeof d.fanart === 'string') ? dataUrlToBytesSync(d.fanart) : null;
-      if (fb) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: fb });
-      showToast('开始上传（共 ' + files.length + ' 个文件）…');
-      var curName = '', idx = 0;
-      function next(){
-        if (idx >= files.length) return Promise.resolve();
-        var f = files[idx++];
-        curName = f.name;
-        return c115UploadFile(dirCid, f.name, f.bytes, f.mime).then(next);
+/* ===== 上传任务（type=upload）：独立于离线，随时可传 =====
+   文件夹：统一用影片标题，且只在云下载目录里操作——先找同名文件夹，没有才创建。
+   文件名：沿用番号优先（番号.nfo / 番号-poster.jpg），与 NFO 命名惯例一致。 */
+function auto115UploadDirName(){
+  return sanitizeName((auto115Doc && auto115Doc.filmTitle) || '') || '';
+}
+/* 在云下载目录下建文件夹，返回新目录 cid */
+function auto115Mkdir(name){
+  return auto115Post('https://webapi.115.com/files/add',
+    'pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID) + '&cname=' + encodeURIComponent(name)
+  ).then(function(res){
+    var d = res.d || {}, dd = d.data || d;
+    var cid = String((dd && (dd.cid || dd.file_id || dd.id)) || '');
+    if (!cid) throw new Error('建文件夹没成功');
+    return cid;
+  });
+}
+/* 步骤1：准备文件夹（按标题查找 → 没有则创建） */
+function auto115StepUploadDir(t){
+  var name = auto115UploadDirName();
+  if (!name){
+    auto115Set(t, 'dir', 'fail', '这部影片没有标题，不知道传到哪儿');
+    auto115Finish(t); return Promise.resolve(null);
+  }
+  auto115Set(t, 'dir', 'running', '正在 115 里找「' + name + '」…');
+  renderAuto115();
+  return auto115ListDir(C115_DEFAULT_DIR_CID).then(function(list){
+    var folders = list.filter(function(it){ return it && it.cid && !it.fid; });
+    for (var i = 0; i < folders.length; i++){
+      if ((folders[i].n || '') === name){
+        t.uploadDirCid = String(folders[i].cid); t.uploadDirName = name;
+        auto115Set(t, 'dir', 'ok', '已找到「' + name + '」');
+        return auto115StepUploadFiles(t);
       }
-      return next().then(function(){
-        t.nfoUploaded = auto115Now();
-        auto115Save(); renderAuto115();
-        showToast('已上传 ' + files.length + ' 个文件到「' + (dirName || base) + '」', 'success');
-      }).catch(function(e){
-        auto115Save(); renderAuto115();
-        console.warn('[115上传]', curName, e); showToast('上传没成功，稍后再试', 'error');
-      });
+    }
+    auto115Set(t, 'dir', 'running', '没找到，正在创建「' + name + '」…');
+    renderAuto115();
+    return auto115Mkdir(name).then(function(cid){
+      t.uploadDirCid = cid; t.uploadDirName = name;
+      auto115Set(t, 'dir', 'ok', '已创建「' + name + '」');
+      return auto115StepUploadFiles(t);
     });
-  }).catch(function(e){ showToast((e && e.message) || '上传失败', 'error'); });
+  }).catch(function(e){
+    console.warn('[115上传]', e);
+    auto115Set(t, 'dir', 'fail', '文件夹没准备好，点「重试」再来一次');
+    auto115Finish(t); return null;
+  });
+}
+/* 步骤2：逐个上传（nfo / poster / fanart），每传完一个刷新进度，慢也能看到在动 */
+function auto115StepUploadFiles(t){
+  if (!t.uploadDirCid){
+    auto115Set(t, 'upload', 'fail', '还没确定传到哪个文件夹');
+    auto115Finish(t); return Promise.resolve(null);
+  }
+  auto115Set(t, 'upload', 'running', '正在准备文件…');
+  renderAuto115();
+  return loadFilm(auto115Doc.filmId).then(function(film){
+    if (!film) throw new Error('没找到影片信息');
+    var d = film.data || {};
+    var base = auto115Doc.dvdId || sanitizeName(auto115Doc.filmTitle || '') || 'movie';
+    var files = [{ name: base + '.nfo', mime: 'application/octet-stream', bytes: new TextEncoder().encode(buildNFOMovieXml(d)) }];
+    var pb = (typeof d.poster === 'string') ? dataUrlToBytesSync(d.poster) : null;
+    if (pb) files.push({ name: base + '-poster.jpg', mime: 'image/jpeg', bytes: pb });
+    var fb = (typeof d.fanart === 'string') ? dataUrlToBytesSync(d.fanart) : null;
+    if (fb) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: fb });
+    var total = files.length, idx = 0;
+    function next(){
+      if (idx >= total) return Promise.resolve();
+      var f = files[idx];
+      auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
+      renderAuto115();
+      return c115UploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function(){
+        idx++; return next();
+      });
+    }
+    return next().then(function(){
+      t.nfoUploaded = auto115Now();
+      auto115Set(t, 'upload', 'ok', '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」');
+      auto115Finish(t);
+      showToast('已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」', 'success');
+    });
+  }).catch(function(e){
+    console.warn('[115上传]', e);
+    auto115Set(t, 'upload', 'fail', '没传成功，点「重试」再来一次');
+    auto115Finish(t);
+  });
+}
+/* 入口：新建一个上传任务（不依赖离线，随时可传） */
+function auto115AddUploadTask(){
+  auto115EnsureDoc().then(function(doc){
+    var ts = doc.tasks || [];
+    for (var i = 0; i < ts.length; i++){
+      if (auto115TaskType(ts[i]) === 'upload' && auto115Status(ts[i]).cls === 'ab-run'){
+        showToast('正在上传中，等一下就好', 'info'); return null;
+      }
+    }
+    var t = {
+      id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
+      type: 'upload', steps: auto115NewSteps('upload'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
+    };
+    ts.unshift(t); doc.tasks = ts;
+    auto115Expanded = t.id;
+    return auto115Save().then(function(){
+      return openAuto115Page().then(function(){ return auto115Run(t); });
+    });
+  }).catch(function(e){ showToast((e && e.message) || '没能开始上传', 'error'); });
 }
 /* —— 探测调度 —— */
 function stopAuto115Probe(){ if (auto115ProbeTimer){ clearTimeout(auto115ProbeTimer); auto115ProbeTimer = null; } }
@@ -3183,21 +3277,24 @@ function auto115RetryStep(tid, key){
     if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)){
       t.queued = true;
       var cur = auto115Task(auto115RunningId);
-      auto115Set(t, key, 'idle', '排队中：等「' + (cur.magnetTitle || '当前任务') + '」完成');
+      auto115Set(t, key, 'idle', '排队中：等「' + auto115TaskTitle(cur) + '」完成');
       auto115Save(); renderAuto115(); updateAutoBadge();
       return;
     }
     auto115RunningId = t.id;
     t.queued = false;
+    var defs = auto115StepDefs(t); /* 按任务类型取步骤表：上传任务是 dir/upload，不是离线六步 */
     var idx = -1;
-    for (var i = 0; i < AUTO115_STEP_DEFS.length; i++) if (AUTO115_STEP_DEFS[i].key === key) idx = i;
+    for (var i = 0; i < defs.length; i++) if (defs[i].key === key) idx = i;
     if (idx < 0) return;
-    for (var j = idx; j < AUTO115_STEP_DEFS.length; j++){
-      var s = auto115GetStep(t, AUTO115_STEP_DEFS[j].key);
+    for (var j = idx; j < defs.length; j++){
+      var s = auto115GetStep(t, defs[j].key);
       s.state = 'idle'; s.msg = ''; s.probes = 0; s.at = 0;
     }
     t.aborted = false;
     auto115Save(); renderAuto115();
+    if (key === 'dir') return auto115StepUploadDir(t);
+    if (key === 'upload') return auto115StepUploadFiles(t);
     if (key === 'submit') return auto115StepSubmit(t);
     if (key === 'wait') return auto115StepWait(t, true);
     if (key === 'mkdir') return auto115StepMkdir(t);
