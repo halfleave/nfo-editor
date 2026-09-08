@@ -1224,6 +1224,7 @@ function searchSubtitles(){
   var rawQ = (document.getElementById('subQueryInput').value || '').trim();
   var box = document.getElementById('subResults');
   if (!rawQ){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
+  if ((state.tier || '') !== 'full'){ box.innerHTML = '<div class="tmdb-msg">字幕功能仅满级可用。</div>'; return; }
   if (!state.activationCode){ box.innerHTML = '<div class="tmdb-msg">字幕功能暂不可用，请稍后再试。</div>'; return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
   if (!w){ box.innerHTML = '<div class="tmdb-msg">未填写磁力 Worker 地址（设置 → API 配置）</div>'; return; }

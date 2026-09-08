@@ -1860,7 +1860,8 @@ function updateSubtitleBtn(){
   var b = document.getElementById('dtActSub');
   // 有番号（如 JAV）的影片不显示字幕按钮；字幕搜索按标题匹配，仅无番号影片适用
   var hasDvdId = !!(state.dvdId && String(state.dvdId).trim());
-  if (b) b.style.display = (state.activationCode && !hasDvdId) ? '' : 'none';
+  // 对齐手机端 v212：字幕按钮仅满级显示；有番号（AV）影片不显示（字幕按标题匹配）
+  if (b) b.style.display = ((state.tier || '') === 'full' && !hasDvdId) ? '' : 'none';
 }
 function updateAdultPhraseCount(){
   var ta = document.getElementById('adultPhraseInput');
@@ -2447,6 +2448,8 @@ function renderMagnetResults(items){
    字幕搜索
    =================================================================== */
 function openSubtitleSheet(){
+  // 对齐手机端 v212：字幕入口仅满级可用
+  if ((state.tier || '') !== 'full'){ showToast('字幕功能仅满级可用'); return; }
   var f = currentDetailFilm;
   var d = (f && f.data) || {};
   var inp = document.getElementById('subQueryInput');
