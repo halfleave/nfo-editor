@@ -474,35 +474,44 @@ const lz4LiteralForTest = (bytes) => {
   assert(planCn.renames.find(x => x.fid === 'B').name === '老剧.S01E02.mp4', 'TV plan 第二集 → S01E02');
   assert(planCn.renames.find(x => x.fid === 'C').name === '老剧.S01E03.mp4', 'TV plan 第三集 → S01E03');
 
-  // 9g. 集成：auto115StepTvDistribute 端到端（建根 → 建 S01 → 改名移入 → 删非中文字幕/sample → 删临时文件夹）
+  // 9g. 集成：剧集离线新流程端到端（清除无关文件 → 改名 → 建 S01 → 移入 → 改标题文件夹）
   ctx.auto115Doc.type = 'tv'; ctx.auto115Doc.filmTitle = '权力的游戏'; ctx.auto115Doc.dvdId = '';
+  let listTvCalls = 0;
   script = {
     'ac=add_task_url': { state: true, name: '剧集磁力' },
-    'files?cid=3311283881428122938': { state: true, data: [] },   // 根目录列表：无「权力的游戏」→ 建
-    'files?cid=DIRTV': { state: true, data: [
-      { fid: 'V1', n: 'GoT.S01E01.mkv', s: 900 },
-      { fid: 'V2', n: 'GoT.S01E02.mkv', s: 900 },
-      { fid: 'SU1', n: 'GoT.S01E01.chs.srt', s: 10 },
-      { fid: 'SU2', n: 'GoT.S01E02.eng.srt', s: 10 },
-      { fid: 'J1', n: 'sample.mp4', s: 5000 }
-    ] },
-    'files?cid=NEWROOT': { state: true, data: [] },               // 季文件夹列表：空 → 建 S01
-    'files/add': { state: true, data: { cid: 'NEWNODE' } },
+    'files?cid=DIRTV': function(){
+      listTvCalls++;
+      if (listTvCalls === 1){
+        return { state: true, data: [
+          { fid: 'V1', n: 'GoT.S01E01.mkv', s: 900 },
+          { fid: 'V2', n: 'GoT.S01E02.mkv', s: 900 },
+          { fid: 'SU1', n: 'GoT.S01E01.chs.srt', s: 10 },
+          { fid: 'SU2', n: 'GoT.S01E02.eng.srt', s: 10 },
+          { fid: 'J1', n: 'sample.mp4', s: 5000 }
+        ] };
+      }
+      return { state: true, data: [] };   // 第二次：检查 S01 是否存在，返回空
+    },
+    'files/add': { state: true, data: { cid: 'SEASON01' } },
     'files/move': { state: true },
     'files/edit': { state: true },
     'rb/delete': { state: true }
   };
   const ttv = { id: 'ttv', magnet: 'magnet:?xt=urn:btih:tv1111111111111111111111111111111111111', magnetTitle: '剧集磁力', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIRTV', offlineDirName: 'GoT', fv: 2 };
   calls.length = 0;
-  await ctx.auto115StepTvDistribute(ttv);
-  assert(ctx.auto115GetStep(ttv, 'move').state === 'ok', 'TV 分发 move = ok');
-  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 分发 rename = ok');
-  assert(ctx.auto115GetStep(ttv, 'cleanup').state === 'skip', 'TV 分发 cleanup = skip（已在分发步骤完成）');
-  assert(ctx.auto115GetStep(ttv, 'move').msg.indexOf('季文件夹') >= 0, 'TV 分发提示含季文件夹：' + ctx.auto115GetStep(ttv, 'move').msg);
+  await ctx.auto115StepTvCleanupFiles(ttv);
+  assert(ctx.auto115GetStep(ttv, 'move').state === 'ok', 'TV 清除无关文件 move = ok');
+  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 修改视频名称 rename = ok');
+  assert(ctx.auto115GetStep(ttv, 'mkdir2').state === 'ok', 'TV 新建季文件夹 mkdir2 = ok');
+  assert(ctx.auto115GetStep(ttv, 'move2').state === 'ok', 'TV 移入对应视频 move2 = ok');
+  assert(ctx.auto115GetStep(ttv, 'cleanup').state === 'ok', 'TV 修改标题文件夹 cleanup = ok');
   const editBodies = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.mkv') >= 0), '改名含 权力的游戏.S01E01.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.mkv') >= 0), '改名含 权力的游戏.S01E02.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.zh.srt') >= 0), '简中字幕重命名为 权力的游戏.S01E01.zh.srt');
+  assert(editBodies.some(b => b.indexOf('file_name=权力的游戏') >= 0), '标题文件夹改名为 权力的游戏');
+  const moveBodies = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(moveBodies.some(b => b.indexOf('pid=SEASON01') >= 0), '移入 S01 文件夹');
   const delBodies = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(delBodies.some(b => b.indexOf('SU2') >= 0), '删除英文字幕 SU2');
   assert(delBodies.some(b => b.indexOf('J1') >= 0), '删除 sample J1');
