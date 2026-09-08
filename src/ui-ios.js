@@ -3728,7 +3728,7 @@ function auto115OpenMagnetModal(){
   var sheet = document.getElementById('addMagnetSheet');
   if (!mask || !sheet) return;
   var inp = document.getElementById('magnetInput');
-  if (inp) inp.value = '';
+  if (inp){ inp.value = ''; inp.readOnly = true; }
   mask.classList.add('show');
   sheet.classList.add('show');
 }
@@ -3743,11 +3743,24 @@ function auto115PasteMagnet(){
   if (!inp) return;
   if (navigator.clipboard && navigator.clipboard.readText){
     navigator.clipboard.readText().then(function(txt){
-      inp.value = (txt || '').trim();
-      inp.focus();
-    }).catch(function(){ showToast('读取剪贴板失败，请手动长按粘贴', 'error'); });
+      var val = (txt || '').trim();
+      if (!val){
+        showToast('剪贴板为空，请手动长按文本框粘贴', 'info');
+        inp.readOnly = false;
+        setTimeout(function(){ inp.focus(); }, 50);
+        return;
+      }
+      inp.value = val;
+      showToast('已粘贴', 'success');
+    }).catch(function(){
+      showToast('无法自动读取剪贴板，请手动长按文本框粘贴', 'info');
+      inp.readOnly = false;
+      setTimeout(function(){ inp.focus(); }, 50);
+    });
   } else {
     showToast('当前环境不支持自动粘贴，请手动长按文本框粘贴', 'info');
+    inp.readOnly = false;
+    setTimeout(function(){ inp.focus(); }, 50);
   }
 }
 function auto115AddMagnetTask(){

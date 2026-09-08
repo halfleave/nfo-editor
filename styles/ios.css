@@ -1106,7 +1106,7 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .sheet-row.add-custom { justify-content: center; color: var(--label-2); font-size: 15px; padding: 18px 4px; border-bottom: none; }
 .sheet-row.add-custom .accent { color: var(--accent-fg); }
 .sheet-row.add-custom:active { background: var(--gray-fill); }
-.sheet-confirm { display: flex; justify-content: center; margin-top: 14px; margin-bottom: 6px; }
+.sheet-confirm-row { display: flex; justify-content: center; margin-top: 14px; margin-bottom: 6px; }
 .check { width: 22px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; opacity: 0; }
 .check.on { opacity: 1; }
 .check.on::after { content: ""; width: 8px; height: 14px; border: solid var(--accent-fg); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); margin-top: -3px; }
@@ -1525,11 +1525,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-sheet-body { display: flex; flex-direction: column; gap: 12px; }
 .magnet-input { width: 100%; box-sizing: border-box; border: 1px solid var(--sep); border-radius: 12px; background: var(--gray-fill); color: var(--label); font-size: 14px; line-height: 1.5; padding: 10px 12px; resize: none; -webkit-tap-highlight-color: transparent; }
 .magnet-input::placeholder { color: var(--label-2); }
-.magnet-sheet-ops { display: flex; gap: 10px; margin-top: 18px; }
-.sheet-btn { flex: 1; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; padding: 12px 0; -webkit-tap-highlight-color: transparent; }
+.magnet-sheet-ops { display: flex; align-items: stretch; gap: 10px; margin-top: 18px; }
+.sheet-btn { flex: 1; display: flex; align-items: center; justify-content: center; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; padding: 12px 0; min-height: 48px; line-height: 1.2; -webkit-tap-highlight-color: transparent; }
 .magnet-paste-btn { background: var(--label); color: #fff; }
 .magnet-paste-btn:active { opacity: .8; }
-.sheet-confirm { background: var(--accent); color: var(--accent-text); }
+.magnet-confirm-btn { background: var(--accent); color: var(--accent-text); }
+.magnet-confirm-btn:active { opacity: .8; }
 .sheet-btn:active { opacity: .8; }
 .auto-task { background: var(--card-fill); border-radius: 14px; overflow: hidden; }
 .auto-task-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; -webkit-tap-highlight-color: transparent; }
