@@ -1513,7 +1513,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 12px; }
 .auto-list { display: flex; flex-direction: column; gap: 10px; }
 .auto-task { background: var(--card-fill); border-radius: 14px; overflow: hidden; }
-.auto-task-head { display: flex; align-items: center; gap: 10px; padding: 13px 14px; -webkit-tap-highlight-color: transparent; }
+.auto-task-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; -webkit-tap-highlight-color: transparent; }
 .auto-task-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--label); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .auto-task-badge { flex: 0 0 auto; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .auto-task-arrow { flex: 0 0 auto; width: 14px; height: 14px; color: var(--label-3); transition: transform .2s; }
@@ -1524,10 +1524,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .ab-ok { background: rgba(52,199,89,0.18); color: #34c759; }
 .ab-fail { background: rgba(255,59,48,0.16); color: #ff3b30; }
 .ab-pause { background: rgba(255,59,48,0.12); color: #ff3b30; }
-.auto-steps { display: none; padding: 2px 14px 12px; border-top: 0.5px solid var(--sep); }
+.auto-steps { display: none; padding: 0 14px 8px; border-top: 0.5px solid var(--sep); }
 .auto-task.expanded .auto-steps { display: block; }
-.auto-step { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0 10px 0; position: relative; }
-.auto-step:not(:last-child)::before { content: ''; position: absolute; left: 8px; top: 26px; bottom: -2px; width: 1.5px; background: var(--sep); }
+.auto-step { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; position: relative; }
+.auto-step:not(:last-child)::before { content: ''; position: absolute; left: 8px; top: 22px; bottom: -2px; width: 1.5px; background: var(--sep); }
 .as-dot { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%; margin-top: 1px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 1.5px solid var(--label-3); color: var(--label-3); background: var(--bg); }
 .as-dot.ok { background: #34c759; border-color: #34c759; color: #fff; }
 .as-dot.fail { background: #ff3b30; border-color: #ff3b30; color: #fff; }
@@ -1536,16 +1536,17 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .as-body { flex: 1; min-width: 0; }
 .as-label { font-size: 13px; font-weight: 600; color: var(--label); line-height: 1.3; }
 .as-label.dim { color: var(--label-3); font-weight: 500; }
-.as-msg { font-size: 11.5px; color: var(--label-2); margin-top: 3px; word-break: break-all; line-height: 1.45; }
+.as-msg { font-size: 11.5px; color: var(--label-2); margin-top: 2px; word-break: break-all; line-height: 1.4; }
 .as-msg.err { color: #ff3b30; }
-.as-time { font-size: 10.5px; color: var(--label-3); margin-top: 2px; }
-.as-ops { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+/* 时间不再单独占一行，跟在步骤名后（如「提交离线 08:31:21」），压缩卡片高度 */
+.as-time { display: inline; font-size: 10.5px; color: var(--label-3); font-weight: 500; margin-left: 6px; }
+.as-ops { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .as-ops button { border: none; border-radius: 980px; font-size: 12px; font-weight: 600; padding: 6px 14px; -webkit-tap-highlight-color: transparent; }
 .as-op-retry { background: var(--accent); color: var(--accent-text); }
 .as-op-ghost { background: rgba(142,142,147,0.18); color: var(--label); }
 .as-op-danger { background: rgba(255,59,48,0.14); color: #ff3b30; }
-.auto-task-ops { display: flex; gap: 8px; padding: 0 14px 12px; }
-.auto-task-ops button { flex: 1; border: none; border-radius: 980px; font-size: 13px; font-weight: 600; padding: 9px 0; background: rgba(142,142,147,0.18); color: var(--label); -webkit-tap-highlight-color: transparent; }
+.auto-task-ops { display: flex; gap: 8px; padding: 0 14px 10px; }
+.auto-task-ops button { flex: 1; border: none; border-radius: 980px; font-size: 13px; font-weight: 600; padding: 8px 0; background: rgba(142,142,147,0.18); color: var(--label); -webkit-tap-highlight-color: transparent; }
 .auto-empty { padding: 60px 24px; text-align: center; }
 .auto-empty-title { font-size: 16px; font-weight: 600; color: var(--label-2); }
 .auto-empty-sub { font-size: 13px; color: var(--label-3); line-height: 1.6; margin-top: 10px; }

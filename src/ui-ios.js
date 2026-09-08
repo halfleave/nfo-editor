@@ -1175,7 +1175,7 @@ function start115Login(){
   var sheet = document.getElementById('sheet115');
   if (!sheet || !sheet.classList.contains('show')) return; // 弹层关闭后不再刷新
   var base = c115ProxyBase();
-  if (!base){ showToast('请先在「应用配置」填写代理服务地址', 'error'); return; }
+  if (!base){ showToast('还没设置网络服务，去「设置 → 应用配置」填一下', 'error'); return; }
   set115Status('正在生成二维码…', '');
   c115ProxyFetch('https://qrcodeapi.115.com/api/1.0/web/1.0/token/')
     .then(function(res){
@@ -1342,7 +1342,7 @@ function on115TokenInput(){
 function save115Cookie(){
   var ta = document.getElementById('c115Cookie');
   var v = ta ? ta.value.trim() : '';
-  if (!v){ showToast('Cookie 不能为空', 'error'); return; }
+  if (!v){ showToast('登录信息还没填', 'error'); return; }
   state.c115Cookie = v;
   idbPut('kv', C115_COOKIE_KEY, v).then(function(){
     showToast('已保存 Cookie', 'success');
@@ -1354,13 +1354,13 @@ function verify115(silent){
   var vEl = silent ? null : document.getElementById('c115Verify');
   var ta = document.getElementById('c115Cookie');
   var cookie = (ta && ta.value) ? ta.value.trim() : (state.c115Cookie || '');
-  if (!cookie){ if (vEl){ vEl.textContent = '请先填写 Cookie'; vEl.className = 'c115-verify err'; } return; }
-  if (vEl){ vEl.textContent = '连通性自检中…'; vEl.className = 'c115-verify'; }
+  if (!cookie){ if (vEl){ vEl.textContent = '请先填写登录信息'; vEl.className = 'c115-verify err'; } return; }
+  if (vEl){ vEl.textContent = '正在检查…'; vEl.className = 'c115-verify'; }
   /* 超时兜底：代理无响应时 Promise 会永久挂起，状态行将一直停在「自检中…」 */
   var timedOut = false;
   var timer = setTimeout(function(){
     timedOut = true;
-    if (vEl){ vEl.textContent = '✗ 自检超时（代理无响应）'; vEl.className = 'c115-verify err'; }
+    if (vEl){ vEl.textContent = '✗ 没连上，稍后再试'; vEl.className = 'c115-verify err'; }
   }, 15000);
   var done = function(){ clearTimeout(timer); };
   c115ProxyFetch('https://webapi.115.com/files?cid=0', { headers: { 'X-115-Cookie': cookie } })
@@ -1375,8 +1375,8 @@ function verify115(silent){
       done();
       if (timedOut) return;
       var msg = (e && e.message) ? e.message : '自检失败';
-      if (vEl){ vEl.textContent = '✗ ' + msg; vEl.className = 'c115-verify err'; return; }
-      if (silent && /Cookie|失效|令牌|登录/.test(msg)) showToast('115 Cookie 已失效，请到设置重新登录', 'error');
+      if (vEl){ vEl.textContent = '✗ 没能连上，稍后再试'; vEl.className = 'c115-verify err'; return; }
+      if (silent && /Cookie|失效|令牌|登录/.test(msg)) showToast('115 登录过期了，去设置里重新登录一下', 'error');
     });
 }
 /* 磁力列表一键离线：固定离线到默认目录（不让用户选目录） */
@@ -1549,7 +1549,7 @@ function verifyActivationCode(){
   var code = (document.getElementById('activationCodeInput').value || '').trim();
   if (!code){ showToast('请输入激活码', 'error'); return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
-  if (!w){ showToast('请先填写代理服务地址（设置 → 应用配置）', 'error'); return; }
+  if (!w){ showToast('还没设置网络服务，去「设置 → 应用配置」填一下', 'error'); return; }
   showToast('验证中…', 'success');
   fetch(w.replace(/\/$/, '') + '/verify?code=' + encodeURIComponent(code), { cache: 'no-store' })
     .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d || null }; }).catch(function(){ return { ok: r.ok, d: null }; }); })
@@ -1855,12 +1855,12 @@ function c115Offline(magnet){
     else {
       var msg = (d.error || d.msg || (d.data && (d.data.error || d.data.msg)));
       if (!msg && res.raw) msg = res.raw;
-      showToast('离线下载失败：' + (msg || '未知错误'), 'error');
+      console.warn('[115离线]', msg); showToast('没能加到离线，稍后再试', 'error');
     }
   })
   .catch(function(e){
     var detail = (e && e.body) ? e.body.slice(0, 300) : '';
-    showToast('离线下载请求失败：' + (e && e.message ? e.message : '网络错误') + (detail ? ' ' + detail : ''), 'error');
+    console.warn('[115离线]', e, detail); showToast('网络不太顺，稍后再试', 'error');
   });
 }
 
@@ -2019,9 +2019,9 @@ function auto115StepHtml(t, s){
   return '<div class="auto-step">'
     + '<div class="as-dot ' + s.state + '">' + dot + '</div>'
     + '<div class="as-body">'
-    + '<div class="as-label' + (s.state === 'idle' ? ' dim' : '') + '">' + escapeHtml(label) + '</div>'
+    + '<div class="as-label' + (s.state === 'idle' ? ' dim' : '') + '">' + escapeHtml(label)
+    + (s.at ? '<span class="as-time">' + auto115Time(s.at) + '</span>' : '') + '</div>'
     + (s.msg ? '<div class="as-msg' + (s.state === 'fail' ? ' err' : '') + '">' + escapeHtml(s.msg) + '</div>' : '')
-    + (s.at ? '<div class="as-time">' + auto115Time(s.at) + '</div>' : '')
     + (ops ? '<div class="as-ops">' + ops + '</div>' : '')
     + '</div></div>';
 }
@@ -2056,7 +2056,7 @@ function renderAuto115(){
   var tasks = auto115Doc.tasks || [];
   if (emptyEl) emptyEl.style.display = tasks.length ? 'none' : '';
   var html = '';
-  if (!state.c115Cookie) html += '<div class="auto-login-tip">未登录 115，任务无法执行。请到「设置 → 115 网盘」扫码登录后回来点「重试」。</div>';
+  if (!state.c115Cookie) html += '<div class="auto-login-tip">还没登录 115，去「设置 → 115 网盘」登录后回来点「重试」</div>';
   listEl.innerHTML = html + tasks.map(auto115TaskHtml).join('');
   var clearBtn = document.getElementById('autoClearBtn');
   if (clearBtn) clearBtn.style.display = tasks.some(function(t){ return auto115Status(t).cls === 'ab-ok'; }) ? '' : 'none';
@@ -2195,7 +2195,8 @@ function auto115StepWait(t, reset){
       return auto115StepMkdir(t);
     }
     if (info.failed){
-      auto115Set(t, 'wait', 'fail', '115 报告下载失败' + (info.msg ? '：' + info.msg : ''));
+      console.warn('[115离线]', info.msg);
+      auto115Set(t, 'wait', 'fail', '115 那边下载失败了');
       auto115Finish(t); return null;
     }
     s.probes = (s.probes || 0) + 1;
@@ -2233,7 +2234,7 @@ function auto115StepMkdir(t){
     }
     if (dir){
       var cid = String(dir.cid);
-      if (cid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'mkdir', 'fail', '定位异常：目标不能是云下载根目录'); auto115Finish(t); return null; }
+      if (cid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'mkdir', 'fail', '没找到合适的文件夹'); auto115Finish(t); return null; }
       t.offlineDirCid = cid; t.offlineDirName = dir.n || '';
       auto115Set(t, 'mkdir', 'ok', '已定位文件夹：' + (dir.n || ''));
       return auto115StepMove(t);
@@ -2253,7 +2254,7 @@ function auto115StepMkdir(t){
       auto115Set(t, 'mkdir', 'ok', '单文件落地（无文件夹）：' + t.videoName);
       return auto115StepMove(t); // 清理步骤会自动跳过
     }
-    auto115Set(t, 'mkdir', 'fail', '云下载目录未找到本次离线产生的内容'); auto115Finish(t); return null;
+    auto115Set(t, 'mkdir', 'fail', '还没找到刚下载的内容，稍等再看看'); auto115Finish(t); return null;
   }).catch(function(e){
     auto115Set(t, 'mkdir', 'fail', (e && e.message) ? e.message : '网络错误');
     auto115Finish(t); return null;
@@ -2263,11 +2264,11 @@ function auto115StepMkdir(t){
    只对该文件夹的「子项」发起删除，绝不删除文件夹本身；根目录保护双保险。 */
 function auto115StepMove(t){
   if (t.noFolder){ auto115Set(t, 'move', 'skip', '单文件落地，无需清理'); return auto115StepRename(t); }
-  if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'move', 'fail', '目录未定位或异常，请重试'); auto115Finish(t); return Promise.resolve(null); }
+  if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
   auto115Set(t, 'move', 'running', '正在扫描文件夹内容…');
   return auto115ListDir(t.offlineDirCid).then(function(list){
     var vids = list.filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
-    if (!vids.length){ auto115Set(t, 'move', 'fail', '文件夹内没有视频文件'); auto115Finish(t); return null; }
+    if (!vids.length){ auto115Set(t, 'move', 'fail', '这个文件夹里没有视频'); auto115Finish(t); return null; }
     // 保留对象优先选非 sample/预告的主视频（sample 偶尔比正片大）；全是 sample 时才兜底选最大
     var mainVids = vids.filter(function(it){ return !/sample|预告|trailer|preview/i.test(it.n || it.name || ''); });
     var pool = mainVids.length ? mainVids : vids;
@@ -2334,7 +2335,7 @@ function auto115FindMergeTarget(t){
    并入模式（同影片已有完成任务）：先把视频移入已有的标题文件夹，再按占用改名为 番号.ext / 番号.A.ext / 番号.B.ext… */
 function auto115StepRename(t){
   var dvd = auto115Doc.dvdId;
-  if (!dvd){ auto115Set(t, 'rename', 'fail', '该影片没有番号，无法命名'); auto115Finish(t); return Promise.resolve(null); }
+  if (!dvd){ auto115Set(t, 'rename', 'fail', '这部没有番号，暂时没法自动改名'); auto115Finish(t); return Promise.resolve(null); }
   if (!t.videoFid){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
   var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
   var prev = auto115FindMergeTarget(t);
@@ -2360,7 +2361,7 @@ function auto115StepRename(t){
         var cand = dvd + ext, k = 0;
         while (stems[cand.replace(/\.[a-z0-9]+$/i, '').toLowerCase()]){
           k++;
-          if (k > 26){ auto115Set(t, 'rename', 'fail', 'A–Z 后缀已用尽，请手动整理'); auto115Finish(t); return null; }
+          if (k > 26){ auto115Set(t, 'rename', 'fail', '同名文件太多啦，去 115 手动整理一下'); auto115Finish(t); return null; }
           cand = dvd + '.' + String.fromCharCode(64 + k) + ext;
         }
         var rb = 'fid=' + encodeURIComponent(t.videoFid) + '&file_name=' + encodeURIComponent(cand);
@@ -2402,7 +2403,7 @@ function auto115StepCleanup(t){
   if (t.finalDirCid){
     if (t.noFolder){ auto115Set(t, 'cleanup', 'skip', '视频已并入「' + (t.finalDirName || '') + '」，无需清理'); auto115Finish(t); return Promise.resolve(null); }
     if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID || t.offlineDirCid === t.finalDirCid){
-      auto115Set(t, 'cleanup', 'fail', '临时文件夹定位异常，请重试'); auto115Finish(t); return Promise.resolve(null);
+      auto115Set(t, 'cleanup', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null);
     }
     auto115Set(t, 'cleanup', 'running', '正在删除已清空的临时文件夹…');
     var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
@@ -2417,9 +2418,9 @@ function auto115StepCleanup(t){
     });
   }
   if (t.noFolder){ auto115Set(t, 'cleanup', 'skip', '单文件落地，无需改文件夹名'); auto115Finish(t); return Promise.resolve(null); }
-  if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'cleanup', 'fail', '目录未定位或异常，请重试'); auto115Finish(t); return Promise.resolve(null); }
+  if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'cleanup', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
   var newName = ((auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || t.offlineDirName || '').trim();
-  if (!newName){ auto115Set(t, 'cleanup', 'fail', '没有可用的名称（标题/番号均为空）'); auto115Finish(t); return Promise.resolve(null); }
+  if (!newName){ auto115Set(t, 'cleanup', 'fail', '缺少名称信息，没法改名'); auto115Finish(t); return Promise.resolve(null); }
   if (newName === t.offlineDirName){ auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改'); auto115Finish(t); return Promise.resolve(null); }
   auto115Set(t, 'cleanup', 'running', '正在把文件夹改名为「' + newName + '」…');
   var body = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&file_name=' + encodeURIComponent(newName);
@@ -3058,7 +3059,7 @@ async function c115OpenAuthUI(){
   } catch(e){
     var msg = (e && e.message) ? e.message : String(e);
     set('授权失败：' + msg);
-    showToast('授权失败：' + msg, 'error');
+    console.warn('[115授权]', msg); showToast('115 授权没成功，稍后再试一次', 'error');
   }
 }
 /* 打开 115 配置页时回填开放平台授权状态 */
@@ -3108,7 +3109,7 @@ function auto115UploadNfoFiles(tid){
         showToast('已上传 ' + files.length + ' 个文件到「' + (dirName || base) + '」', 'success');
       }).catch(function(e){
         auto115Save(); renderAuto115();
-        showToast('上传失败（' + curName + '）：' + ((e && e.message) || e), 'error');
+        console.warn('[115上传]', curName, e); showToast('上传没成功，稍后再试', 'error');
       });
     });
   }).catch(function(e){ showToast((e && e.message) || '上传失败', 'error'); });
@@ -4582,8 +4583,8 @@ function searchJAV(){
   var box = document.getElementById('tmdbResults');
   var base = javbusApiBase();
   if (!base){
-    box.innerHTML = '<div class="tmdb-msg">未配置 Worker 代理地址，请到「设置 → 应用配置」填写。</div>';
-    showToast('请先配置 Worker 代理地址', 'error');
+    box.innerHTML = '<div class="tmdb-msg">先去「设置 → 应用配置」填一下网络服务地址</div>';
+    showToast('先去「设置 → 应用配置」填网络服务地址', 'error');
     return;
   }
   // 仅走 JavBus（已去掉 R18 兜底，便于单独验证 JavBus 搜索）
@@ -5090,7 +5091,7 @@ function refreshFromJavbus(film){
   var id = data.javbusId || state.javbusId || '';
   if (!id) return showToast('此影片未记录番号，无法从 JavBus 刷新', 'error');
   var base = javbusApiBase();
-  if (!base) return showToast('请先到「设置 → 应用配置」填写 Worker 代理地址', 'error');
+  if (!base) return showToast('先去「设置 → 应用配置」填网络服务地址', 'error');
   showToast('正在从 JavBus 刷新…', 'success');
   currentFilmId = film.id;
   currentFilmLocked = !!film.locked;
