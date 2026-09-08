@@ -1523,15 +1523,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* 添加磁力 弹窗 */
 .magnet-sheet-head { font-size: 16px; font-weight: 600; text-align: center; color: var(--label); margin: 4px 0 14px; }
 .magnet-sheet-body { display: flex; flex-direction: column; gap: 12px; }
-.magnet-input-bar { position: relative; }
 .magnet-input { width: 100%; box-sizing: border-box; border: 1px solid var(--sep); border-radius: 12px; background: var(--gray-fill); color: var(--label); font-size: 14px; line-height: 1.5; padding: 10px 12px; resize: none; -webkit-tap-highlight-color: transparent; }
-.magnet-paste { position: absolute; right: 8px; bottom: 8px; border: none; border-radius: 8px; background: var(--label); color: #fff; font-size: 12px; font-weight: 600; padding: 5px 12px; -webkit-tap-highlight-color: transparent; }
-.magnet-paste:active { opacity: .8; }
-.magnet-name { width: 100%; box-sizing: border-box; border: 1px solid var(--sep); border-radius: 12px; background: var(--gray-fill); color: var(--label); font-size: 14px; padding: 10px 12px; -webkit-tap-highlight-color: transparent; }
-.magnet-name::placeholder, .magnet-input::placeholder { color: var(--label-2); }
+.magnet-input::placeholder { color: var(--label-2); }
 .magnet-sheet-ops { display: flex; gap: 10px; margin-top: 18px; }
 .sheet-btn { flex: 1; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; padding: 12px 0; -webkit-tap-highlight-color: transparent; }
-.sheet-cancel { background: var(--gray-fill); color: var(--label); }
+.magnet-paste-btn { background: var(--label); color: #fff; }
+.magnet-paste-btn:active { opacity: .8; }
 .sheet-confirm { background: var(--accent); color: var(--accent-text); }
 .sheet-btn:active { opacity: .8; }
 .auto-task { background: var(--card-fill); border-radius: 14px; overflow: hidden; }

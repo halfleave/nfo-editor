@@ -3346,15 +3346,13 @@ function auto115AddFromOp(){
     });
   }).catch(function(e){ showToast((e && e.message) || '加入失败', 'error'); });
 }
-/* 添加磁力 弹窗：手动粘贴外部磁力做 115 离线（独立任务，不绑定当前影片） */
+/* 添加磁力 弹窗：手动粘贴磁力链做 115 离线——与「115 离线」入口等价，只是磁力来源是用户粘贴而非数据源；绑定当前影片，改名/整理按详情页标题·番号 */
 function auto115OpenMagnetModal(){
   var mask = document.getElementById('addMagnetMask');
   var sheet = document.getElementById('addMagnetSheet');
   if (!mask || !sheet) return;
   var inp = document.getElementById('magnetInput');
-  var nm = document.getElementById('magnetNameInput');
   if (inp) inp.value = '';
-  if (nm) nm.value = '';
   mask.classList.add('show');
   sheet.classList.add('show');
 }
@@ -3378,9 +3376,7 @@ function auto115PasteMagnet(){
 }
 function auto115AddMagnetTask(){
   var inp = document.getElementById('magnetInput');
-  var nm = document.getElementById('magnetNameInput');
   var magnet = (inp && inp.value || '').trim();
-  var name = (nm && nm.value || '').trim();
   if (!/^magnet:\?/i.test(magnet)){
     showToast('请粘贴有效的磁力链接（以 magnet:? 开头）', 'error');
     return;
@@ -3389,9 +3385,8 @@ function auto115AddMagnetTask(){
   auto115EnsureDoc().then(function(doc){
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
-      type: 'offline', external: true,
-      magnet: magnet, magnetTitle: name || auto115Btih(magnet),
-      targetName: name,
+      type: 'offline',
+      magnet: magnet, magnetTitle: auto115Btih(magnet),
       steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
     };
     doc.tasks.unshift(t);

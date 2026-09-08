@@ -1201,22 +1201,19 @@
   }
   function pc115SubmitAddMagnet() {
     var inp = document.getElementById('pcMagnetInput');
-    var nm = document.getElementById('pcMagnetName');
     var magnet = (inp && inp.value || '').trim();
-    var name = (nm && nm.value || '').trim();
     if (!/^magnet:\?/i.test(magnet)) { showToast('请粘贴有效的磁力链接（以 magnet:? 开头）', 'error'); return; }
     auto115EnsureDoc().then(function (doc) {
       var t = {
         id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
-        type: 'offline', external: true,
-        magnet: magnet, magnetTitle: name || auto115Btih(magnet),
-        targetName: name,
+        type: 'offline',
+        magnet: magnet, magnetTitle: auto115Btih(magnet),
         steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
       };
       doc.tasks.unshift(t);
       auto115Expanded[t.id] = true;
       return auto115Save().then(function () {
-        if (inp) inp.value = ''; if (nm) nm.value = '';
+        if (inp) inp.value = '';
         showToast('已加入自动化', 'success');
         pc115OpenAutoPanel().then(function () { return auto115Run(t); });
       });

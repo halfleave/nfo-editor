@@ -1796,11 +1796,11 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
   color: #B45309; background: rgba(245,158,11,.14); border: 1px solid rgba(245,158,11,.3);
 }
 .auto-add-magnet { flex: 0 0 auto; padding: 8px 12px 4px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
-.auto-magnet-input, .auto-magnet-name {
+.auto-magnet-input {
   width: 100%; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px;
   background: var(--surface); color: var(--text); border: 1px solid var(--border); outline: none;
 }
-.auto-magnet-input:focus, .auto-magnet-name:focus { border-color: var(--accent); }
+.auto-magnet-input:focus { border-color: var(--accent); }
 .auto-add-row { display: flex; gap: 6px; }
 .auto-add-row .auto-paste { flex: 0 0 auto; padding: 0 12px; height: 30px; border-radius: 8px; background: var(--surface-hover); color: var(--text-2); font-size: 12px; font-weight: 500; }
 .auto-add-row .auto-add-btn { flex: 1; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; }
