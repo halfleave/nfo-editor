@@ -810,7 +810,7 @@
       <button onclick="auto115Back()" aria-label="返回">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <div class="auto-topbar-title">自动化</div>
+      <div class="auto-topbar-title" id="autoTopTitle">自动化</div>
       <button class="auto-topbar-clear" id="autoClearBtn" onclick="auto115ClearDone()">清空</button>
     </div>
     <div class="auto-scroll">
@@ -831,7 +831,7 @@
   <div class="sheet" id="addMagnetSheet">
     <div class="magnet-sheet-head">添加磁力</div>
     <div class="magnet-sheet-body">
-      <textarea id="magnetInput" class="magnet-input" rows="5" placeholder="粘贴磁力链接：magnet:?xt=urn:btih:..."></textarea>
+      <textarea id="magnetInput" class="magnet-input" rows="5" readonly onclick="auto115PasteMagnet()" placeholder="点击此处粘贴磁力链接（magnet:?...）" style="-webkit-user-select:text;"></textarea>
     </div>
     <div class="magnet-sheet-ops">
       <button class="sheet-btn magnet-paste-btn" id="magnetPasteBtn" onclick="auto115PasteMagnet()">粘贴</button>

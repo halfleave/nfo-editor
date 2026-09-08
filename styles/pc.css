@@ -1784,7 +1784,8 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .auto-popover.show { display: flex; animation: autoPopIn .26s var(--ease-spring, cubic-bezier(.2,.9,.25,1)) both; }
 @keyframes autoPopIn { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .auto-pop-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 11px 12px; border-bottom: 1px solid var(--border); }
-.auto-pop-title { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; }
+.auto-pop-title { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.auto-tv-tag { font-size: 10.5px; font-weight: 700; line-height: 1; padding: 2px 6px; border-radius: 6px; color: #fff; background: var(--accent); letter-spacing: .3px; }
 .auto-pop-close { width: 24px; height: 24px; border-radius: var(--radius-pill); color: var(--text-2); display: flex; align-items: center; justify-content: center; }
 .auto-pop-close:hover { background: var(--surface-hover); color: var(--text); }
 .auto-pop-close svg { width: 14px; height: 14px; }

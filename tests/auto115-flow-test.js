@@ -410,6 +410,105 @@ const lz4LiteralForTest = (bytes) => {
   await Promise.resolve();   // 等 ensure115Cookie 的 .then 微任务（不引入宏任务，避免唤醒桩 DOM 的启动定时器）
   assert(ctx.auto115GetStep(tq, 'submit').state === 'running', '排队任务自动开始提交离线');
 
+  /* 9. 剧集（TV）离线分支：判定 / 中文数字解析 / 集数标记（含中文数字）/ 字幕语言取舍 / 命名 / 分发 */
+  assert(ctx.auto115Doc.type === 'movie' || ctx.auto115Doc.type === 'tv', 'auto115Doc.type 字段存在（默认 movie/tv 二选一）');
+  // 9a. 中文数字 → 阿拉伯
+  assert(ctx.auto115CnNum('一') === 1, 'CnNum 一=1');
+  assert(ctx.auto115CnNum('十') === 10, 'CnNum 十=10');
+  assert(ctx.auto115CnNum('十二') === 12, 'CnNum 十二=12');
+  assert(ctx.auto115CnNum('二十一') === 21, 'CnNum 二十一=21');
+  assert(ctx.auto115CnNum('二十三') === 23, 'CnNum 二十三=23');
+  assert(ctx.auto115CnNum('九十九') === 99, 'CnNum 九十九=99');
+  assert(ctx.auto115CnNum('100') === 100, 'CnNum 阿拉伯 100=100');
+  assert(ctx.auto115CnNum('abc') === null, 'CnNum 非数字=null');
+
+  // 9b. 集数标记解析（含大陆老剧「第一集」「第一季」）
+  let ep;
+  ep = ctx.auto115EpisodeOf('Game.of.Thrones.S01E01.mkv'); assert(ep && ep.season === 1 && ep.episode === 1, 'Ep S01E01 → 1/1');
+  ep = ctx.auto115EpisodeOf('Show.1x03.mkv'); assert(ep && ep.season === 1 && ep.episode === 3, 'Ep 1x03 → 1/3');
+  ep = ctx.auto115EpisodeOf('[05] Something.mkv'); assert(ep && ep.season === 1 && ep.episode === 5, 'Ep [05] → 1/5');
+  ep = ctx.auto115EpisodeOf('EP07.mkv'); assert(ep && ep.season === 1 && ep.episode === 7, 'Ep EP07 → 1/7');
+  ep = ctx.auto115EpisodeOf('第一集.mp4'); assert(ep && ep.season === 1 && ep.episode === 1, 'Ep 第一集 → 1/1');
+  ep = ctx.auto115EpisodeOf('第十二集.mp4'); assert(ep && ep.season === 1 && ep.episode === 12, 'Ep 第十二集 → 1/12');
+  ep = ctx.auto115EpisodeOf('第二十三集.mp4'); assert(ep && ep.season === 1 && ep.episode === 23, 'Ep 第二十三集 → 1/23');
+  ep = ctx.auto115EpisodeOf('权力的游戏.第一季.第三集.mkv'); assert(ep && ep.season === 1 && ep.episode === 3, 'Ep 第一季第三集 → 1/3');
+  ep = ctx.auto115EpisodeOf('第2季第5集.mkv'); assert(ep && ep.season === 2 && ep.episode === 5, 'Ep 第2季第5集 → 2/5');
+  ep = ctx.auto115EpisodeOf('第一季.mkv'); assert(ep && ep.season === 1 && ep.episode === null, 'Ep 仅季号 → 1/null');
+  ep = ctx.auto115EpisodeOf('random.mkv'); assert(ep === null, 'Ep 无标记 → null（留给顺序兜底）');
+
+  // 9c. 字幕语言：仅中文保留
+  assert(ctx.auto115SubLang('Show.S01E01.chs.srt') === 'zh', 'Sub 简中 chs → zh');
+  assert(ctx.auto115SubLang('Show.S01E01.zh.srt') === 'zh', 'Sub .zh → zh');
+  assert(ctx.auto115SubLang('Show.S01E01.cht.srt') === 'zt', 'Sub 繁中 cht → zt');
+  assert(ctx.auto115SubLang('Show.S01E01.zt.srt') === 'zt', 'Sub .zt → zt');
+  assert(ctx.auto115SubLang('Show.S01E01.eng.srt') === null, 'Sub 英文 → null（不保留）');
+  assert(ctx.auto115SubLang('Show.S01E01.jp.srt') === null, 'Sub 日文字幕 → null（不保留）');
+
+  // 9d. 命名格式
+  assert(ctx.auto115TvVideoName('权力的游戏', 1, 1, '.mkv') === '权力的游戏.S01E01.mkv', 'TV 视频名 = 标题.S01E01.ext');
+  assert(ctx.auto115TvSubName('权力的游戏', 1, 3, 'zh', '.srt') === '权力的游戏.S01E03.zh.srt', 'TV 字幕名 = 标题.S01E03.zh.srt');
+
+  // 9e. 纯函数规划：标记优先 + 简中保留/英文删除
+  const planTv = ctx.auto115TvPlan('Show', [
+    { fid: 'V1', name: 'Show.S01E01.mkv' },
+    { fid: 'V2', name: 'Show.S01E02.mkv' },
+    { fid: 'SU1', name: 'Show.S01E01.chs.srt' },
+    { fid: 'SU2', name: 'Show.S01E02.eng.srt' },
+    { fid: 'J1', name: 'sample.mp4' }
+  ]);
+  const rn = (fid) => { const r = planTv.renames.find(x => x.fid === fid); return r ? r.name : null; };
+  assert(rn('V1') === 'Show.S01E01.mkv', 'TV plan V1 → Show.S01E01.mkv');
+  assert(rn('V2') === 'Show.S01E02.mkv', 'TV plan V2 → Show.S01E02.mkv');
+  assert(rn('SU1') === 'Show.S01E01.zh.srt', 'TV plan 简中字幕保留并重命名');
+  assert(planTv.deleteFids.indexOf('SU2') >= 0, 'TV plan 英文字幕进删除列表');
+  assert(planTv.deleteFids.indexOf('J1') >= 0, 'TV plan sample 进删除列表');
+  assert(planTv.deleteFids.indexOf('SU1') < 0, 'TV plan 简中字幕不删除');
+
+  // 9f. 中文数字集号 + 无标记顺序兜底
+  const planCn = ctx.auto115TvPlan('老剧', [
+    { fid: 'A', name: '老剧.第一集.mp4' },
+    { fid: 'B', name: '老剧.第二集.mp4' },
+    { fid: 'C', name: '老剧.第三集.mp4' }
+  ]);
+  assert(planCn.renames.find(x => x.fid === 'A').name === '老剧.S01E01.mp4', 'TV plan 第一集 → S01E01');
+  assert(planCn.renames.find(x => x.fid === 'B').name === '老剧.S01E02.mp4', 'TV plan 第二集 → S01E02');
+  assert(planCn.renames.find(x => x.fid === 'C').name === '老剧.S01E03.mp4', 'TV plan 第三集 → S01E03');
+
+  // 9g. 集成：auto115StepTvDistribute 端到端（建根 → 建 S01 → 改名移入 → 删非中文字幕/sample → 删临时文件夹）
+  ctx.auto115Doc.type = 'tv'; ctx.auto115Doc.filmTitle = '权力的游戏'; ctx.auto115Doc.dvdId = '';
+  script = {
+    'ac=add_task_url': { state: true, name: '剧集磁力' },
+    'files?cid=3311283881428122938': { state: true, data: [] },   // 根目录列表：无「权力的游戏」→ 建
+    'files?cid=DIRTV': { state: true, data: [
+      { fid: 'V1', n: 'GoT.S01E01.mkv', s: 900 },
+      { fid: 'V2', n: 'GoT.S01E02.mkv', s: 900 },
+      { fid: 'SU1', n: 'GoT.S01E01.chs.srt', s: 10 },
+      { fid: 'SU2', n: 'GoT.S01E02.eng.srt', s: 10 },
+      { fid: 'J1', n: 'sample.mp4', s: 5000 }
+    ] },
+    'files?cid=NEWROOT': { state: true, data: [] },               // 季文件夹列表：空 → 建 S01
+    'files/add': { state: true, data: { cid: 'NEWNODE' } },
+    'files/move': { state: true },
+    'files/edit': { state: true },
+    'rb/delete': { state: true }
+  };
+  const ttv = { id: 'ttv', magnet: 'magnet:?xt=urn:btih:tv1111111111111111111111111111111111111', magnetTitle: '剧集磁力', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIRTV', offlineDirName: 'GoT', fv: 2 };
+  calls.length = 0;
+  await ctx.auto115StepTvDistribute(ttv);
+  assert(ctx.auto115GetStep(ttv, 'move').state === 'ok', 'TV 分发 move = ok');
+  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 分发 rename = ok');
+  assert(ctx.auto115GetStep(ttv, 'cleanup').state === 'skip', 'TV 分发 cleanup = skip（已在分发步骤完成）');
+  assert(ctx.auto115GetStep(ttv, 'move').msg.indexOf('季文件夹') >= 0, 'TV 分发提示含季文件夹：' + ctx.auto115GetStep(ttv, 'move').msg);
+  const editBodies = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.mkv') >= 0), '改名含 权力的游戏.S01E01.mkv');
+  assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.mkv') >= 0), '改名含 权力的游戏.S01E02.mkv');
+  assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.zh.srt') >= 0), '简中字幕重命名为 权力的游戏.S01E01.zh.srt');
+  const delBodies = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(delBodies.some(b => b.indexOf('SU2') >= 0), '删除英文字幕 SU2');
+  assert(delBodies.some(b => b.indexOf('J1') >= 0), '删除 sample J1');
+  assert(!delBodies.some(b => b.indexOf('SU1') >= 0), '不删除简中字幕 SU1');
+  ctx.auto115Doc.type = 'movie'; ctx.auto115Doc.filmTitle = '测试影片'; ctx.auto115Doc.dvdId = 'IPX-486';
+
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');
   process.exit(process.exitCode || 0);
