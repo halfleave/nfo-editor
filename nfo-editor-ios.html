@@ -234,18 +234,18 @@
         <div class="api-group-title-row">
           <div class="api-group-title">登录信息</div>
         </div>
-        <div class="field field-stacked no-border">
-          <textarea class="ios-input c115-cookie" id="c115Cookie" rows="3" placeholder="UID=...; CID=...; SEID=...; KID=..."></textarea>
+        <div class="c115-cookie-row">
+          <input class="ios-input c115-cookie-input" type="text" id="c115Cookie" placeholder="UID=...; CID=...; SEID=...; KID=...">
+          <button type="button" class="c115-copy-btn" onclick="copy115Cookie()">复制</button>
         </div>
         <div class="c115-row">
-          <button onclick="save115Cookie()">保存</button>
-          <button onclick="verify115()">检查连接</button>
+          <button onclick="verify115()">自检</button>
         </div>
         <div class="c115-verify" id="c115Verify"></div>
       </div>
       <div class="api-group">
         <div class="api-group-title-row">
-          <div class="api-group-title">开放平台上传</div>
+          <div class="api-group-title">上传授权</div>
         </div>
         <div class="c115-row">
           <button onclick="c115OpenAuthUI()">授权</button>
@@ -256,10 +256,10 @@
         <div class="api-group-title-row">
           <div class="api-group-title">扫码登录</div>
         </div>
-        <div class="c115-qr-wrap" id="c115QrWrap"><div id="c115Qr"></div></div>
-        <div class="c115-status" id="c115Status">正在生成二维码…</div>
-        <div class="c115-countdown" id="c115Countdown"></div>
-        <button class="c115-login-btn" id="c115ReQrBtn" onclick="start115Login()" style="display:none;">重新展示二维码</button>
+        <div class="c115-qr-wrap" id="c115QrWrap" style="display:none;"><div id="c115Qr"></div></div>
+        <div class="c115-status" id="c115Status" style="display:none;"></div>
+        <div class="c115-countdown" id="c115Countdown" style="display:none;"></div>
+        <button class="c115-login-btn" id="c115ShowQrBtn" onclick="start115Login()">展示二维码</button>
       </div>
     </div>
   </div>

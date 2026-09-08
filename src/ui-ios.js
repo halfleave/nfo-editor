@@ -1150,13 +1150,8 @@ function open115Sheet(){
     var cookie = (typeof v === 'string') ? v : (v && v.cookie) || '';
     if (ta && cookie) ta.value = cookie;
     state.c115Cookie = cookie;
-    if (cookie){
-      hide115QrArea(); // 已登录：不显示二维码，给「重新展示二维码」入口
-      /* 不自动自检：配置页状态行仅由「自检」按钮手动触发 */
-    } else {
-      start115Login(); // 未登录：进入即展示二维码
-    }
-  }).catch(function(){ start115Login(); });
+    reset115QrButton(); // 始终显示【展示二维码】按钮，进入时不自动生成二维码
+  }).catch(function(){ reset115QrButton(); });
   // 载入 115 代理令牌（应用内可配，默认回落硬编码串）
   var tk = document.getElementById('c115TokenInput');
   if (tk) tk.value = '';
@@ -1208,18 +1203,18 @@ function start115Login(){
 }
 function show115QrArea(){
   var wrap = document.getElementById('c115QrWrap'); if (wrap) wrap.style.display = '';
-  var st = document.getElementById('c115Status'); if (st) st.textContent = '正在生成二维码…';
-  var cd = document.getElementById('c115Countdown'); if (cd) cd.textContent = '';
-  var btn = document.getElementById('c115ReQrBtn'); if (btn) btn.style.display = 'none';
+  var st = document.getElementById('c115Status'); if (st){ st.style.display = ''; st.textContent = '正在生成二维码…'; }
+  var cd = document.getElementById('c115Countdown'); if (cd){ cd.style.display = ''; cd.textContent = ''; }
+  var btn = document.getElementById('c115ShowQrBtn'); if (btn) btn.style.display = 'none';
 }
-function hide115QrArea(){
+function reset115QrButton(){
   if (c115CountdownTimer){ clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
   if (c115QrTimer){ clearTimeout(c115QrTimer); c115QrTimer = null; }
   stop115Polling();
   var wrap = document.getElementById('c115QrWrap'); if (wrap) wrap.style.display = 'none';
-  var st = document.getElementById('c115Status'); if (st) st.textContent = '已登录，需重新扫码时点「重新展示二维码」';
-  var cd = document.getElementById('c115Countdown'); if (cd) cd.textContent = '';
-  var btn = document.getElementById('c115ReQrBtn'); if (btn) btn.style.display = '';
+  var st = document.getElementById('c115Status'); if (st){ st.style.display = 'none'; st.textContent = ''; }
+  var cd = document.getElementById('c115Countdown'); if (cd){ cd.style.display = 'none'; cd.textContent = ''; }
+  var btn = document.getElementById('c115ShowQrBtn'); if (btn) btn.style.display = '';
 }
 function start115Countdown(){
   if (c115CountdownTimer){ clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
@@ -1276,11 +1271,15 @@ function c115PollOnce(){
         stop115Polling();
         exchange115Cookie(s.uid);
       } else if (st === -1){
-        set115Status('二维码已过期，请重新点击「扫码登录」', 'err');
+        set115Status('二维码已过期，请重新点击「展示二维码」', 'err');
         stop115Polling();
+        if (c115CountdownTimer){ clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+        var qrw = document.getElementById('c115QrWrap'); if (qrw) qrw.style.display = 'none';
+        var sb = document.getElementById('c115ShowQrBtn'); if (sb) sb.style.display = '';
       } else if (st === -2){
         set115Status('已取消登录', 'err');
         stop115Polling();
+        var sb2 = document.getElementById('c115ShowQrBtn'); if (sb2) sb2.style.display = '';
       } else {
         set115Status('未知状态：' + st, 'err');
         c115PollTimer = setTimeout(c115PollOnce, 1800);
@@ -1321,7 +1320,8 @@ function exchange115Cookie(uid){
       state.c115Cookie = cookieStr;
       return idbPut('kv', C115_COOKIE_KEY, cookieStr).then(function(){
         set115Status('登录成功，Cookie 已自动保存', 'ok');
-        hide115QrArea();
+        if (c115CountdownTimer){ clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+        var sb = document.getElementById('c115ShowQrBtn'); if (sb) sb.style.display = 'none';
         showToast('115 登录成功', 'success');
         verify115();
       });
@@ -1339,15 +1339,11 @@ function on115TokenInput(){
   state.c115ProxyToken = t || C115_PROXY_TOKEN;
   idbPut('kv', C115_TOKEN_KEY, t).catch(function(){});
 }
-function save115Cookie(){
+function copy115Cookie(){
   var ta = document.getElementById('c115Cookie');
   var v = ta ? ta.value.trim() : '';
-  if (!v){ showToast('登录信息还没填', 'error'); return; }
-  state.c115Cookie = v;
-  idbPut('kv', C115_COOKIE_KEY, v).then(function(){
-    showToast('已保存 Cookie', 'success');
-    verify115();
-  }).catch(function(){ showToast('保存失败', 'error'); });
+  if (!v){ showToast('没有可复制的登录信息', 'error'); return; }
+  copyText(v, function(ok){ showToast(ok ? '已复制登录信息' : '复制失败', ok ? 'success' : 'error'); });
 }
 /* silent=true：启动时后台自检——不写设置页状态行（那块只属于手动自检），仅确认 Cookie 失效/令牌问题时 toast；网络类错误完全静默 */
 function verify115(silent){
@@ -1370,6 +1366,9 @@ function verify115(silent){
       if (!res.ok || !res.d || res.d.state !== true){ throw new Error((res.d && (res.d.error || res.d.msg)) || 'Cookie 无效'); }
       /* 成功：silent 时静默不打扰；手动自检必须回写状态行，否则会一直卡在「自检中…」 */
       if (vEl){ vEl.textContent = '✓ 连接正常'; vEl.className = 'c115-verify ok'; }
+      /* 手动自检成功即视为有效 Cookie，回写持久化（代替已移除的「保存」按钮） */
+      state.c115Cookie = cookie;
+      idbPut('kv', C115_COOKIE_KEY, cookie).catch(function(){});
     })
     .catch(function(e){
       done();
@@ -3082,7 +3081,7 @@ async function c115UploadFileLegacy(cid, fileName, bytes, mime){
   if (d.state === true) return '';
   throw new Error('OSS PUT 上传失败（HTTP ' + putRes.status + '）：' + (d.message || d.error || (d.raw || putRes.raw || '').slice(0, 110)));
 }
-/* 115 配置页「开放平台上传 → 授权」按钮：借社区 AppID + 现有 Cookie 换 token */
+/* 115 配置页「上传授权 → 授权」按钮：借社区 AppID + 现有 Cookie 换 token */
 async function c115OpenAuthUI(){
   var el = document.getElementById('c115OpenStatus');
   function set(t){ if (el) el.textContent = t; }
