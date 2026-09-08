@@ -1845,6 +1845,7 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .as-op-ghost { background: var(--surface-hover); color: var(--text-2); }
 .auto-task-ops { display: flex; gap: 6px; padding: 0 10px 10px; }
 .auto-task-ops button { flex: 1; height: 28px; border-radius: 8px; font-size: 11.5px; font-weight: 500; background: var(--surface-hover); color: var(--text-2); }
+.auto-task-ops button.op-start { background: var(--accent, #007aff); color: #fff; }
 
 /* ==================== PC · 115 网盘配置弹窗 ==================== */
 .pc115-body { display: flex; flex-direction: column; gap: 14px; }

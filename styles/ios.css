@@ -1566,6 +1566,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .as-op-danger { background: rgba(255,59,48,0.14); color: #ff3b30; }
 .auto-task-ops { display: flex; gap: 8px; padding: 4px 16px 14px; }
 .auto-task-ops button { flex: 1; border: none; border-radius: 980px; font-size: 13px; font-weight: 600; padding: 8px 0; background: rgba(142,142,147,0.18); color: var(--label); -webkit-tap-highlight-color: transparent; }
+.auto-task-ops button.op-start { background: var(--accent, #0a84ff); color: var(--accent-text, #fff); }
 .auto-empty { padding: 60px 24px; text-align: center; }
 .auto-empty-title { font-size: 16px; font-weight: 600; color: var(--label-2); }
 .auto-empty-sub { font-size: 13px; color: var(--label-3); line-height: 1.6; margin-top: 10px; }

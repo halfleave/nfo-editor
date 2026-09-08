@@ -398,6 +398,8 @@ const lz4LiteralForTest = (bytes) => {
 
   /* 8. 排队串行化：同时点两个 115 离线 → 第二个排队，第一个终态后自动续跑 */
   script = { 'ac=add_task_url': { state: true, info_hash: 'H2', name: '排队任务' } };
+  /* 清掉前面用例遗留的 running 步骤，模拟「当前没有任务在跑」 */
+  (doc.tasks || []).forEach(function(x){ (x.steps || []).forEach(function(s){ if (s.state === 'running') s.state = 'ok'; }); });
   const tq = { id: 'tq2', magnet: 'magnet:?xt=urn:btih:4444444444444444444444444444444444444444', magnetTitle: '排队任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   const tp0 = { id: 'tp0', magnet: 'magnet:?xt=urn:btih:0000000000000000000000000000000000000000', magnetTitle: '第一个任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   ctx.auto115GetStep(tp0, 'wait').state = 'running';   // 模拟正在跑
@@ -408,6 +410,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(tq.queued === true, '同时启动第二个任务 → 转入排队');
   assert(ctx.auto115GetStep(tq, 'submit').msg.indexOf('排队中') >= 0, '排队提示可见');
   assert(ctx.auto115GetStep(tq, 'submit').state === 'idle', '排队期间不提交离线');
+  ctx.auto115GetStep(tp0, 'wait').state = 'ok';     // 终态：模拟第一个任务跑完
   ctx.auto115Finish(ctx.auto115Task('tp0'));   // 第一个任务到达终态
   assert(ctx.auto115RunningId === 'tq2', '第一个任务终态后队列推进到排队任务');
   await Promise.resolve();   // 等 ensure115Cookie 的 .then 微任务（不引入宏任务，避免唤醒桩 DOM 的启动定时器）
@@ -540,6 +543,34 @@ const lz4LiteralForTest = (bytes) => {
   docTv2.tasks.unshift(tNew2);
   await ctx.auto115Run(tNew2);
   assert(ctx.auto115GetStep(tNew2, 'submit').state === 'ok', '脏 runningId（不存在任务）被自动清理，新 TV 任务提交成功');
+  ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
+  ctx.auto115Doc = null;
+
+  // 9i. 「卡在待提交」兜底：① 占着锁却没在跑（超宽限期）→ 自动释放  ② 手动「开始」→ 强制抢锁立刻跑
+  script = { 'ac=add_task_url': { state: true, info_hash: 'HK', name: 'KickTask' } };
+  ctx.currentDetailFilm = { id: 'filmTv3', data: { title: '落魄剧集', media_type: 'tv', tmdbMediaType: 'tv', dvdId: '', year: '2025' } };
+  ctx.auto115Doc = null;
+  const docTv3 = await ctx.auto115EnsureDoc();
+  const stuck = { id: 'stuck', magnet: 'magnet:?xt=urn:btih:stuck000000000000000000000000000000000000', magnetTitle: '卡住的任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  docTv3.tasks = [stuck];
+  ctx.auto115RunningId = 'stuck';
+  ctx.auto115LockAt = Date.now() - 60000;   // 占锁已超 45s 宽限，且没有任何 running 步骤 → 脏锁
+  const tKick = { id: 'tKick', magnet: 'magnet:?xt=urn:btih:tv3333333333333333333333333333333333333', magnetTitle: '待提交任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  docTv3.tasks.unshift(tKick);
+  await ctx.auto115Run(tKick);
+  assert(ctx.auto115GetStep(tKick, 'submit').state === 'ok', '占着锁不跑的脏锁被释放，新任务正常提交（不再永久待提交）');
+  // ② 手动「开始」：即使有别的任务在跑，也直接抢锁开始这一条
+  const busy = { id: 'busy', magnet: 'magnet:?xt=urn:btih:busy0000000000000000000000000000000000000', magnetTitle: '正在跑的任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  ctx.auto115GetStep(busy, 'wait').state = 'running';
+  docTv3.tasks.unshift(busy);
+  ctx.auto115RunningId = 'busy'; ctx.auto115LockAt = Date.now();
+  const tForce = { id: 'tForce', magnet: 'magnet:?xt=urn:btih:tv4444444444444444444444444444444444444', magnetTitle: '手动点火任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  docTv3.tasks.unshift(tForce);
+  const pForce = ctx.auto115ForceStart('tForce');
+  await Promise.resolve();   // 让 ensure115Cookie 的回调先落地（抢锁发生在那里）
+  assert(ctx.auto115RunningId === 'tForce', '手动「开始」直接抢到执行锁');
+  assert(ctx.auto115GetStep(tForce, 'submit').state === 'running', '手动「开始」后立刻进入提交（不再排队等待）');
+  await pForce;
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
   ctx.auto115Doc = null;
 

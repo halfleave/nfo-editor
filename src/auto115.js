@@ -539,6 +539,40 @@
   var auto115ProbeTimer = null;
   var auto115Expanded = {};
   var auto115RunningId = '';
+  var auto115LockAt = 0;                     // 拿到锁的时刻，用于识别「占着锁但没在跑」的脏锁
+  var AUTO115_LOCK_GRACE = 45000;            // 宽限期：刚拿到锁的头 45s 允许还没跑到 running 步骤
+  function auto115HoldLock(t) { auto115RunningId = t.id; auto115LockAt = Date.now(); }
+  function auto115ReleaseLock() { auto115RunningId = ''; auto115LockAt = 0; }
+  /* 脏锁清理：锁指向的任务不存在 / 已中止 / 已终态 / 超过宽限期仍无任何 running 步骤 → 释放。
+     最后一条是「卡在待提交」的根因：任务拿到锁后卡在读 Cookie 等异步环节，步骤迟迟不 running。 */
+  function auto115ClearDirtyLock() {
+    if (!auto115RunningId) return;
+    var cur = auto115Task(auto115RunningId);
+    if (!cur || cur.aborted) { auto115ReleaseLock(); return; }
+    if (auto115IsActive(cur)) return;
+    var st = auto115Status(cur);
+    if (st.cls === 'ab-ok' || st.cls === 'ab-fail') { auto115ReleaseLock(); return; }
+    if (Date.now() - auto115LockAt > AUTO115_LOCK_GRACE) auto115ReleaseLock();
+  }
+  /* 自愈：没有任何任务在跑时，把最早一条待开始（排队中/待提交）的任务拉起来，避免永远停摆 */
+  function auto115KickStuck() {
+    if (!auto115Doc || auto115RunningId) return;
+    var ts = auto115Doc.tasks || [];
+    for (var k = 0; k < ts.length; k++) if (auto115IsActive(ts[k])) return;  // 有任务在跑就不抢，防并发串档
+    var target = null;
+    for (var i = ts.length - 1; i >= 0; i--) {
+      if (ts[i] && ts[i].queued && !ts[i].aborted) { target = ts[i]; break; }
+    }
+    if (!target) {
+      for (var j = ts.length - 1; j >= 0; j--) {
+        var x = ts[j];
+        if (x && !x.aborted && auto115Status(x).cls === 'ab-idle') { target = x; break; }
+      }
+    }
+    if (!target) return;
+    target.queued = false;
+    auto115Run(target);
+  }
 
   function auto115Key(filmId) { return AUTO115_PREFIX + filmId; }
   function auto115Now() { return Date.now(); }
@@ -660,7 +694,15 @@
     }
     var cleanup = auto115GetStep(t, 'cleanup');
     if (cleanup.state === 'ok' || cleanup.state === 'skip') return { text: '已完成', cls: 'ab-ok' };
+    if (t.queued) return { text: '排队中', cls: 'ab-wait' };
     return { text: '待提交', cls: 'ab-idle' };
+  }
+  /* 任务是否真的在跑：只要有任一步骤处于 running 就算活跃 */
+  function auto115IsActive(t) {
+    if (!t || t.aborted) return false;
+    var steps = t.steps || [];
+    for (var i = 0; i < steps.length; i++) if (steps[i].state === 'running') return true;
+    return false;
   }
 
   /* ---------- PC popover 渲染 ---------- */
@@ -728,8 +770,11 @@
         for (var k = 0; k < AUTO115_STEPS_UPLOAD.length; k++) uploadKeys[AUTO115_STEPS_UPLOAD[k].key] = 1;
         renderSteps = renderSteps.filter(function (s) { return uploadKeys[s.key]; });
       }
+      var startOp = (st.cls === 'ab-idle')
+        ? '<button type="button" class="op-start" onclick="auto115ForceStart(\'' + t.id + '\')">开始</button>' : '';
       html += '<div class="auto-steps">' + renderSteps.map(function (s) { return auto115StepHtml(t, s); }).join('') + '</div>'
         + '<div class="auto-task-ops">'
+        + startOp
         + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重试</button>'
         + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除</button>'
         + '</div>';
@@ -796,26 +841,19 @@
   /* ---------- 六步执行器 ---------- */
   function auto115Run(t) {
     if (!t) return Promise.resolve(null);
-    if (auto115RunningId) {
-      var dirty = auto115Task(auto115RunningId);
-      if (!dirty || dirty.aborted) {
-        auto115RunningId = '';
-      } else {
-        var st = auto115Status(dirty);
-        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
-      }
-    }
+    /* 清理脏的 runningId：指向的任务已终态/已删除/已中止/占着锁却没在跑 → 释放队列 */
+    auto115ClearDirtyLock();
     if (auto115RunningId && auto115RunningId !== t.id) {
       var cur = auto115Task(auto115RunningId);
-      if (cur) {
+      if (cur && (auto115IsActive(cur) || Date.now() - auto115LockAt <= AUTO115_LOCK_GRACE)) {
         t.queued = true;
         auto115Set(t, auto115StepDefs(t)[0].key, 'idle', '排队中：等「' + (cur.magnetTitle || '当前任务') + '」完成');
         auto115Save(); pc115RenderAuto(); pc115UpdateBadge();
         return Promise.resolve(null);
       }
-      auto115RunningId = '';
+      auto115ReleaseLock();
     }
-    auto115RunningId = t.id;
+    auto115HoldLock(t);
     t.queued = false;
     return ensure115Cookie().then(function (ck) {
       if (!ck) { auto115Set(t, auto115StepDefs(t)[0].key, 'fail', '还没登录 115'); auto115Finish(t); return null; }
@@ -826,21 +864,9 @@
     });
   }
   function auto115AdvanceQueue(t) {
-    if (auto115RunningId && (!t || t.id === auto115RunningId)) auto115RunningId = '';
-    if (auto115RunningId) {
-      var cur = auto115Task(auto115RunningId);
-      if (!cur || cur.aborted) {
-        auto115RunningId = '';
-      } else {
-        var st = auto115Status(cur);
-        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
-      }
-    }
-    var ts = (auto115Doc && auto115Doc.tasks) || [];
-    for (var i = ts.length - 1; i >= 0; i--) {
-      var n = ts[i];
-      if (n && n.queued) { n.queued = false; auto115Run(n); break; }
-    }
+    if (auto115RunningId && (!t || t.id === auto115RunningId)) auto115ReleaseLock();
+    auto115ClearDirtyLock();
+    auto115KickStuck();
   }
   function auto115StepSubmit(t) {
     auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…');
@@ -1458,23 +1484,10 @@
   }
   function auto115Resume() {
     if (!auto115Doc) return;
-    if (auto115RunningId) {
-      var cur = auto115Task(auto115RunningId);
-      if (!cur || cur.aborted) {
-        auto115RunningId = '';
-      } else {
-        var st = auto115Status(cur);
-        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
-      }
-    }
-    var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function (x) { return auto115GetStep(x, 'wait').state === 'running'; });
+    auto115ClearDirtyLock();
+    var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function (x) { return auto115IsActive(x); });
     if (hasRunning) auto115ScheduleProbe();
-    if (!auto115RunningId && !hasRunning) {
-      var ts = auto115Doc.tasks || [];
-      for (var i = ts.length - 1; i >= 0; i--) {
-        if (ts[i] && ts[i].queued) { ts[i].queued = false; auto115Run(ts[i]); break; }
-      }
-    }
+    if (!auto115RunningId) auto115KickStuck();
   }
 
   /* ---------- 添加磁力（popover 内联） ---------- */
@@ -1508,29 +1521,27 @@
   }
 
   /* ---------- 任务操作 ---------- */
-  function auto115RetryStep(tid, key) {
+  function auto115RetryStep(tid, key, force) {
     var t = auto115Task(tid);
     if (!t) return Promise.resolve(null);
     return ensure115Cookie().then(function (ck) {
       if (!ck) { showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
-      if (auto115RunningId) {
-        var dirty = auto115Task(auto115RunningId);
-        if (!dirty || dirty.aborted) {
-          auto115RunningId = '';
-        } else {
-          var st = auto115Status(dirty);
-          if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+      if (force) {
+        /* 兜底强启：不管队列里有没有别的任务，直接抢锁跑这一条（用户手动点火用） */
+        auto115HoldLock(t);
+        t.queued = false;
+      } else {
+        auto115ClearDirtyLock();
+        if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)) {
+          t.queued = true;
+          var cur2 = auto115Task(auto115RunningId);
+          auto115Set(t, key, 'idle', '排队中：等「' + auto115TaskTitle(cur2) + '」完成');
+          auto115Save(); pc115RenderAuto(); pc115UpdateBadge();
+          return;
         }
+        auto115HoldLock(t);
+        t.queued = false;
       }
-      if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)) {
-        t.queued = true;
-        var cur = auto115Task(auto115RunningId);
-        auto115Set(t, key, 'idle', '排队中：等「' + auto115TaskTitle(cur) + '」完成');
-        auto115Save(); pc115RenderAuto(); pc115UpdateBadge();
-        return;
-      }
-      auto115RunningId = t.id;
-      t.queued = false;
       var defs = auto115StepDefs(t);
       var idx = -1;
       for (var i = 0; i < defs.length; i++) if (defs[i].key === key) idx = i;
@@ -1550,11 +1561,20 @@
       if (key === 'move2') return auto115StepTvMoveVideos(t);
     }).catch(function (e) { showToast((e && e.message) || '重试失败', 'error'); });
   }
+  /* 手动点火：任务卡在「待提交 / 排队中」时直接抢锁从第一步开始跑 */
+  function auto115ForceStart(tid) {
+    var t = auto115Task(tid);
+    if (!t) return;
+    showToast('立即开始…', 'info');
+    return auto115RetryStep(tid, auto115StepDefs(t)[0].key, true);
+  }
   function auto115RetryTask(tid) {
     var t = auto115Task(tid);
     if (!t) return;
     var steps = t.steps || [];
     for (var i = 0; i < steps.length; i++) if (steps[i].state === 'fail') return auto115RetryStep(tid, steps[i].key);
+    /* 没有失败步骤但整体还没跑起来（待提交/排队中/已中止）→ 直接从头强启，不再干等队列 */
+    if (auto115Status(t).cls === 'ab-idle') return auto115ForceStart(tid);
     showToast('没有失败的步骤', 'info');
   }
   function auto115ContinueProbe(tid) {
@@ -1616,13 +1636,24 @@
   /* ---------- ui.js 钩子 ---------- */
   function pc115OnDetailOpen() {
     auto115Doc = null;
-    auto115RunningId = '';
+    auto115ReleaseLock();
     pc115StopProbe();
     pc115UpdateBadge();
     return pc115OpenAutoPanel().then(pc115UpdateBadge);
   }
 
   /* ---------- 暴露 ---------- */
+  /* 任务卡里的内联 onclick 需要这些函数在 window 上可见（IIFE 内部声明不会自动挂全局） */
+  global.auto115Toggle = auto115Toggle;
+  global.auto115RetryStep = auto115RetryStep;
+  global.auto115RetryTask = auto115RetryTask;
+  global.auto115ForceStart = auto115ForceStart;
+  global.auto115ContinueProbe = auto115ContinueProbe;
+  global.auto115Abort = auto115Abort;
+  global.auto115RemoveTask = auto115RemoveTask;
+  global.auto115ClearDone = auto115ClearDone;
+  global.auto115AddUploadTask = auto115AddUploadTask;
+
   global.PC115 = {
     toggleAutoPanel: pc115ToggleAutoPanel,
     openAutoPanel: pc115OpenAutoPanel,

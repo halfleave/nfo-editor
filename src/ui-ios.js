@@ -2043,7 +2043,15 @@ function auto115Status(t){
   }
   var cleanup = auto115GetStep(t, 'cleanup');
   if (cleanup.state === 'ok' || cleanup.state === 'skip') return { text: '已完成', cls: 'ab-ok' };
+  if (t.queued) return { text: '排队中', cls: 'ab-wait' };
   return { text: '待提交', cls: 'ab-idle' };
+}
+/* 任务是否真的在跑：只要有任一步骤处于 running 就算活跃（waiting/ok/idle/skip 都不算） */
+function auto115IsActive(t){
+  if (!t || t.aborted) return false;
+  var steps = t.steps || [];
+  for (var i = 0; i < steps.length; i++) if (steps[i].state === 'running') return true;
+  return false;
 }
 /* —— 页面渲染 —— */
 function openAuto115Page(){
@@ -2105,8 +2113,11 @@ function auto115TaskHtml(t){
       for (var k = 0; k < AUTO115_STEPS_UPLOAD.length; k++) uploadKeys[AUTO115_STEPS_UPLOAD[k].key] = 1;
       renderSteps = renderSteps.filter(function(s){ return uploadKeys[s.key]; });
     }
+    var startOp = (st.cls === 'ab-idle')
+      ? '<button type="button" class="op-start" onclick="auto115ForceStart(\'' + t.id + '\')">开始</button>' : '';
     html += '<div class="auto-steps">' + renderSteps.map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>'
       + '<div class="auto-task-ops">'
+      + startOp
       + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重试</button>'
       + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除</button>'
       + '</div>';
@@ -2198,29 +2209,58 @@ function auto115QueryTask(t){
    同时点多个「115 离线」时，第一个正常跑完（含改名/并入判断），其余排队等它终态后逐个启动——
    后跑的自然命中并入模式（移入已有标题文件夹、改名 番号.A…），也避免并发时时间窗兜底定位错文件夹。 */
 var auto115RunningId = '';
-function auto115Run(t){
-  if (!t) return Promise.resolve(null);
-  /* 清理脏的 runningId：指向的任务已终态/已删除/已中止 → 释放队列 */
-  if (auto115RunningId){
-    var dirty = auto115Task(auto115RunningId);
-    if (!dirty || dirty.aborted){
-      auto115RunningId = '';
-    } else {
-      var st = auto115Status(dirty);
-      if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+var auto115LockAt = 0;                       // 拿到锁的时刻，用于识别「占着锁但没在跑」的脏锁
+var AUTO115_LOCK_GRACE = 45000;              // 宽限期：刚拿到锁的头 45s 允许还没跑到 running 步骤（读 Cookie/建目录）
+function auto115HoldLock(t){ auto115RunningId = t.id; auto115LockAt = Date.now(); }
+function auto115ReleaseLock(){ auto115RunningId = ''; auto115LockAt = 0; }
+/* 脏锁清理：锁指向的任务不存在 / 已中止 / 已终态 / 超过宽限期仍没有任何 running 步骤 → 释放。
+   最后一条是「卡在待提交」的根因：任务拿到锁后卡在读 Cookie 等异步环节，步骤迟迟不 running，
+   旧逻辑只认「已终态」不认「没在跑」，于是锁永不释放，后面所有任务全变排队（界面一直显示待提交）。 */
+function auto115ClearDirtyLock(){
+  if (!auto115RunningId) return;
+  var cur = auto115Task(auto115RunningId);
+  if (!cur || cur.aborted){ auto115ReleaseLock(); return; }
+  if (auto115IsActive(cur)) return;
+  var st = auto115Status(cur);
+  if (st.cls === 'ab-ok' || st.cls === 'ab-fail'){ auto115ReleaseLock(); return; }
+  if (Date.now() - auto115LockAt > AUTO115_LOCK_GRACE) auto115ReleaseLock();
+}
+/* 自愈：没有任何任务在跑时，把最早一条「待开始」（待提交/排队中）的任务拉起来，避免永远停摆 */
+function auto115KickStuck(){
+  if (!auto115Doc || auto115RunningId) return;
+  var ts = auto115Doc.tasks || [];
+  /* 真有任务在执行（任一步骤 running）就不抢，避免两条流水线并发导致定位/改名串档 */
+  for (var k = 0; k < ts.length; k++) if (auto115IsActive(ts[k])) return;
+  /* 先接排队的，再救卡在待提交的 */
+  var target = null;
+  for (var i = ts.length - 1; i >= 0; i--){
+    if (ts[i] && ts[i].queued && !ts[i].aborted){ target = ts[i]; break; }
+  }
+  if (!target){
+    for (var j = ts.length - 1; j >= 0; j--){
+      var x = ts[j];
+      if (x && !x.aborted && auto115Status(x).cls === 'ab-idle'){ target = x; break; }
     }
   }
+  if (!target) return;
+  target.queued = false;
+  auto115Run(target);
+}
+function auto115Run(t){
+  if (!t) return Promise.resolve(null);
+  /* 清理脏的 runningId：指向的任务已终态/已删除/已中止/占着锁却没在跑 → 释放队列 */
+  auto115ClearDirtyLock();
   if (auto115RunningId && auto115RunningId !== t.id){
     var cur = auto115Task(auto115RunningId);
-    if (cur){
+    if (cur && (auto115IsActive(cur) || Date.now() - auto115LockAt <= AUTO115_LOCK_GRACE)){
       t.queued = true;
       auto115Set(t, 'submit', 'idle', '排队中：等「' + (cur.magnetTitle || '当前任务') + '」完成');
       auto115Save(); renderAuto115(); updateAutoBadge();
       return Promise.resolve(null);
     }
-    auto115RunningId = '';
+    auto115ReleaseLock();
   }
-  auto115RunningId = t.id;
+  auto115HoldLock(t);
   t.queued = false;
   return ensure115Cookie().then(function(ck){
     if (!ck){
@@ -2235,22 +2275,11 @@ function auto115Run(t){
 }
 /* 当前任务到达终态（成功/失败/中止）后释放队列，启动最早的排队任务 */
 function auto115AdvanceQueue(t){
-  if (auto115RunningId && (!t || t.id === auto115RunningId)) auto115RunningId = '';
-  /* 释放后如果还有脏 runningId（指向已终态/已删任务），一并清掉 */
-  if (auto115RunningId){
-    var cur = auto115Task(auto115RunningId);
-    if (!cur || cur.aborted){
-      auto115RunningId = '';
-    } else {
-      var st = auto115Status(cur);
-      if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
-    }
-  }
-  var ts = (auto115Doc && auto115Doc.tasks) || [];
-  for (var i = ts.length - 1; i >= 0; i--){
-    var n = ts[i];
-    if (n && n.queued){ n.queued = false; auto115Run(n); break; }
-  }
+  if (auto115RunningId && (!t || t.id === auto115RunningId)) auto115ReleaseLock();
+  /* 释放后如果还有脏 runningId（指向已终态/已删/占锁不跑的任务），一并清掉 */
+  auto115ClearDirtyLock();
+  /* 没有排队任务时，把卡住的待开始任务也拉起来（防停摆） */
+  auto115KickStuck();
 }
 function auto115StepSubmit(t){
   auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…');
@@ -3614,25 +3643,12 @@ function auto115ScheduleProbe(t){
 }
 function auto115Resume(){
   if (!auto115Doc) return;
-  /* 清理脏 runningId：页面重新打开时如果它指向已终态/已删任务，必须释放 */
-  if (auto115RunningId){
-    var cur = auto115Task(auto115RunningId);
-    if (!cur || cur.aborted){
-      auto115RunningId = '';
-    } else {
-      var st = auto115Status(cur);
-      if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
-    }
-  }
-  var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
+  /* 清理脏 runningId：页面重新打开时如果它指向已终态/已删/占锁不跑的任务，必须释放 */
+  auto115ClearDirtyLock();
+  var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function(x){ return auto115IsActive(x); });
   if (hasRunning) auto115ScheduleProbe();
-  /* 上次会话遗留的排队任务：没有正在跑的任务时自动接着跑 */
-  if (!auto115RunningId && !hasRunning){
-    var ts = auto115Doc.tasks || [];
-    for (var i = ts.length - 1; i >= 0; i--){
-      if (ts[i] && ts[i].queued){ ts[i].queued = false; auto115Run(ts[i]); break; }
-    }
-  }
+  /* 上次会话遗留的排队任务 或 卡在待提交的任务：没有正在跑的任务时自动接着跑 */
+  if (!auto115RunningId) auto115KickStuck();
 }
 /* —— 任务操作 —— */
 function auto115AddFromOp(){
@@ -3705,31 +3721,29 @@ function auto115AddMagnetTask(){
     });
   }).catch(function(e){ showToast((e && e.message) || '加入失败', 'error'); });
 }
-function auto115RetryStep(tid, key){
+function auto115RetryStep(tid, key, force){
   var t = auto115Task(tid);
   if (!t) return Promise.resolve(null);
   return ensure115Cookie().then(function(ck){
     if (!ck){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
-    /* 清理脏的 runningId */
-    if (auto115RunningId){
-      var dirty = auto115Task(auto115RunningId);
-      if (!dirty || dirty.aborted){
-        auto115RunningId = '';
-      } else {
-        var st = auto115Status(dirty);
-        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+    if (force){
+      /* 兜底强启：不管队列里有没有别的任务，直接抢锁跑这一条（用户手动点火用） */
+      auto115HoldLock(t);
+      t.queued = false;
+    } else {
+      /* 清理脏的 runningId */
+      auto115ClearDirtyLock();
+      /* 有别的任务正在跑 → 本任务转为排队，等它终态后自动续跑 */
+      if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)){
+        t.queued = true;
+        var cur = auto115Task(auto115RunningId);
+        auto115Set(t, key, 'idle', '排队中：等「' + auto115TaskTitle(cur) + '」完成');
+        auto115Save(); renderAuto115(); updateAutoBadge();
+        return;
       }
+      auto115HoldLock(t);
+      t.queued = false;
     }
-    /* 有别的任务正在跑 → 本任务转为排队，等它终态后自动续跑 */
-    if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)){
-      t.queued = true;
-      var cur = auto115Task(auto115RunningId);
-      auto115Set(t, key, 'idle', '排队中：等「' + auto115TaskTitle(cur) + '」完成');
-      auto115Save(); renderAuto115(); updateAutoBadge();
-      return;
-    }
-    auto115RunningId = t.id;
-    t.queued = false;
     var defs = auto115StepDefs(t); /* 按任务类型取步骤表：上传任务是 dir/upload，不是离线六步 */
     var idx = -1;
     for (var i = 0; i < defs.length; i++) if (defs[i].key === key) idx = i;
@@ -3753,6 +3767,14 @@ function auto115RetryStep(tid, key){
     if (key === 'move2') return auto115StepTvMoveVideos(t);
   }).catch(function(e){ showToast((e && e.message) || '重试失败', 'error'); });
 }
+/* 手动点火：任务卡在「待提交 / 排队中」时直接抢锁从第一步开始跑 */
+function auto115ForceStart(tid){
+  var t = auto115Task(tid);
+  if (!t) return;
+  var defs = auto115StepDefs(t);
+  showToast('立即开始…', 'info');
+  return auto115RetryStep(tid, defs[0].key, true);
+}
 function auto115RetryTask(tid){
   var t = auto115Task(tid);
   if (!t) return;
@@ -3760,6 +3782,8 @@ function auto115RetryTask(tid){
   for (var i = 0; i < steps.length; i++){
     if (steps[i].state === 'fail') return auto115RetryStep(tid, steps[i].key);
   }
+  /* 没有失败步骤但整体还没跑起来（待提交/排队中/已中止）→ 直接从头强启，不再干等队列 */
+  if (auto115Status(t).cls === 'ab-idle') return auto115ForceStart(tid);
   showToast('没有失败的步骤', 'info');
 }
 function auto115ContinueProbe(tid){
@@ -4890,7 +4914,7 @@ function saveFilm(film){ return idbPut('kv', NfoCore.filmKey(film.id), film); }
 function loadFilm(id){ return idbGet('kv', NfoCore.filmKey(id)); }
 function deleteFilm(id){
   /* 影片删除时一并清除其 115 自动化记录：否则记录会残留成孤儿（任务列表/已完成项仍能点开、上传 NFO 指向已删影片） */
-  if (auto115Doc && auto115Doc.filmId === id){ auto115Doc = null; auto115RunningId = null; }
+  if (auto115Doc && auto115Doc.filmId === id){ auto115Doc = null; auto115ReleaseLock(); }
   return Promise.all([
     idbDelete('kv', NfoCore.filmKey(id)),
     idbDelete('kv', auto115Key(id)).catch(function(){}) // 无自动化记录时忽略
