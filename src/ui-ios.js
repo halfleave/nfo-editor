@@ -3348,8 +3348,8 @@ function auto115AddFromOp(){
 }
 /* 添加磁力 弹窗：手动粘贴外部磁力做 115 离线（独立任务，不绑定当前影片） */
 function auto115OpenMagnetModal(){
-  var mask = document.getElementById('magnetMask');
-  var sheet = document.getElementById('magnetSheet');
+  var mask = document.getElementById('addMagnetMask');
+  var sheet = document.getElementById('addMagnetSheet');
   if (!mask || !sheet) return;
   var inp = document.getElementById('magnetInput');
   var nm = document.getElementById('magnetNameInput');
@@ -3359,8 +3359,8 @@ function auto115OpenMagnetModal(){
   sheet.classList.add('show');
 }
 function auto115CloseMagnetModal(){
-  var mask = document.getElementById('magnetMask');
-  var sheet = document.getElementById('magnetSheet');
+  var mask = document.getElementById('addMagnetMask');
+  var sheet = document.getElementById('addMagnetSheet');
   if (mask) mask.classList.remove('show');
   if (sheet) sheet.classList.remove('show');
 }
