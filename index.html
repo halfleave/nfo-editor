@@ -5,63 +5,247 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#3D8CF0">
+<meta name="theme-color" content="#E9E9F0">
 <title>NFO 编辑器</title>
 <style>
-  * { box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    margin: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #F2F1F6;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
-    color: #1c1c1e;
-    -webkit-tap-highlight-color: transparent;
+  :root{
+    --bg:#E9E9F0;
+    --surface:rgba(255,255,255,.62);
+    --surface-hover:rgba(255,255,255,.74);
+    --surface-active:rgba(255,255,255,.86);
+    --border:rgba(255,255,255,.72);
+    --border-strong:rgba(170,170,185,.5);
+    --text:#1D1D1F;
+    --text-2:#6b6b70;
+    --text-3:#8e8e93;
+    --accent:#007AFF;
+    --accent-hover:#0067D9;
+    --accent-soft:rgba(0,122,255,.15);
+    --accent-text:#fff;
+    --radius:14px;
+    --radius-sm:10px;
+    --radius-xs:7px;
+    --radius-pill:999px;
+    --shadow-card:0 1px 3px rgba(0,0,0,.06),0 6px 20px rgba(0,0,0,.05);
+    --shadow-pop:0 10px 30px rgba(0,0,0,.14),0 2px 8px rgba(0,0,0,.08);
+    --glass-bg:rgba(255,255,255,.55);
+    --glass-border:rgba(255,255,255,.72);
+    --glass-blur:30px;
+    --glass-shadow:0 8px 34px rgba(0,0,0,.14),0 2px 8px rgba(0,0,0,.06);
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
   }
-  .wrap { text-align: center; padding: 28px; }
-  .spinner {
-    width: 30px; height: 30px;
-    border: 3px solid rgba(61, 140, 240, 0.22);
-    border-top-color: #3D8CF0;
-    border-radius: 50%;
-    animation: spin 0.75s linear infinite;
-    margin: 0 auto 18px;
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#121217;
+      --surface:rgba(38,38,46,.6);
+      --surface-hover:rgba(58,58,70,.66);
+      --surface-active:rgba(72,72,86,.8);
+      --border:rgba(255,255,255,.14);
+      --border-strong:rgba(255,255,255,.22);
+      --text:#F2F2F4;
+      --text-2:#a8a8b0;
+      --text-3:#8e8e93;
+      --accent:#3D8CF0;
+      --accent-hover:#5A9EF5;
+      --accent-soft:rgba(61,140,240,.22);
+      --glass-bg:rgba(38,38,46,.55);
+      --glass-border:rgba(255,255,255,.16);
+      --glass-blur:30px;
+      --glass-shadow:0 8px 34px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.3);
+      --shadow-card:0 1px 3px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+      --shadow-pop:0 10px 30px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.4);
+    }
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  h1 { font-size: 19px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.2px; }
-  p { font-size: 14px; color: #8e8e93; margin: 0 0 22px; }
-  .links { display: flex; align-items: center; justify-content: center; gap: 16px; }
-  .links a {
-    font-size: 14px; font-weight: 500;
-    color: #3D8CF0; text-decoration: none;
-    padding: 6px 10px; border-radius: 8px;
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:var(--font);
+    color:var(--text);
+    background:var(--bg);
+    background-image:
+      radial-gradient(1200px 600px at 15% -10%, rgba(0,122,255,.10), transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, rgba(125,95,255,.10), transparent 55%);
+    background-attachment:fixed;
+    display:flex;align-items:center;justify-content:center;
+    padding:24px;
+    min-height:100dvh;
   }
-  .links a:active { background: rgba(61,140,240,0.10); }
+  .page{width:100%;max-width:560px;text-align:center;}
+  .brand{display:inline-flex;align-items:center;gap:12px;margin-bottom:6px;}
+  .logo{
+    width:46px;height:46px;border-radius:14px;
+    background:linear-gradient(145deg,var(--accent),#5A9EF5);
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-weight:700;font-size:20px;
+    box-shadow:var(--shadow-card);
+  }
+  h1{font-size:22px;font-weight:650;margin:0;letter-spacing:-.3px;}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px;}
+  @media (max-width:460px){.cards{grid-template-columns:1fr;}}
+  .card{
+    position:relative;text-align:left;
+    padding:20px 18px;
+    border-radius:var(--radius);
+    background:var(--glass-bg);
+    border:1px solid var(--glass-border);
+    backdrop-filter:blur(var(--glass-blur));
+    -webkit-backdrop-filter:blur(var(--glass-blur));
+    box-shadow:var(--glass-shadow);
+    cursor:pointer;text-decoration:none;color:inherit;
+    transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .card:hover{transform:translateY(-2px);background:var(--surface-hover);}
+  .card:active{transform:translateY(0);background:var(--surface-active);}
+  .card.recommend{
+    border-color:var(--accent);
+    box-shadow:0 0 0 1.5px var(--accent), var(--glass-shadow);
+  }
+  .badge{
+    position:absolute;top:12px;right:12px;
+    font-size:11px;font-weight:600;
+    color:var(--accent-text);background:var(--accent);
+    padding:3px 9px;border-radius:var(--radius-pill);
+  }
+  .ic{
+    width:42px;height:42px;border-radius:12px;
+    background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .ic svg{width:22px;height:22px;display:block;}
+  .ttl{font-size:16px;font-weight:600;}
+  .go{
+    margin-top:auto;
+    font-size:13px;font-weight:600;color:var(--accent);
+    display:inline-flex;align-items:center;gap:4px;
+  }
+  .auto{
+    margin-top:24px;font-size:13px;color:var(--text-2);
+    display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
+  }
+  .countdown{
+    font-variant-numeric:tabular-nums;font-weight:700;color:var(--accent);
+    min-width:16px;text-align:center;
+  }
+  .cancel{
+    font-size:13px;font-weight:600;color:var(--text-2);
+    background:none;border:1px solid var(--border-strong);
+    padding:5px 13px;border-radius:var(--radius-pill);
+    cursor:pointer;transition:background .15s ease;
+  }
+  .cancel:hover{background:var(--surface);}
+  .bar{
+    margin:14px auto 0;max-width:360px;height:4px;border-radius:var(--radius-pill);
+    background:var(--surface);overflow:hidden;
+  }
+  .bar > i{
+    display:block;height:100%;width:100%;
+    background:linear-gradient(90deg,var(--accent),#5A9EF5);
+    transform-origin:left;transform:scaleX(1);
+    transition:transform .25s linear;
+  }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="spinner"></div>
-    <h1>NFO 编辑器</h1>
-    <p>正在根据设备类型跳转…</p>
-    <div class="links">
-      <a href="nfo-editor.html">桌面版</a>
-      <a href="nfo-editor-ios.html">iOS / 移动版</a>
+  <div class="page">
+    <div class="brand">
+      <div class="logo">N</div>
+      <h1>NFO 编辑器</h1>
     </div>
+
+    <div class="cards">
+      <a class="card" id="cardPc" href="nfo-editor.html" role="button" aria-label="进入桌面版">
+        <div class="ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="12" rx="2"/>
+            <path d="M9 20h6"/><path d="M12 16v4"/>
+          </svg>
+        </div>
+        <div class="ttl">桌面版</div>
+        <div class="go">进入桌面版 →</div>
+      </a>
+      <a class="card" id="cardMobile" href="nfo-editor-ios.html" role="button" aria-label="进入移动版">
+        <div class="ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="7" y="3" width="10" height="18" rx="2.5"/>
+            <path d="M11 18h2"/>
+          </svg>
+        </div>
+        <div class="ttl">移动版</div>
+        <div class="go">进入移动版 →</div>
+      </a>
+    </div>
+
+    <div class="auto">
+      <span id="autoText">5 秒后自动进入</span>
+      <span class="countdown" id="count">5</span>
+      <button class="cancel" id="cancelBtn" type="button">取消</button>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
   </div>
-  <script>
-    (function(){
-      var ua = navigator.userAgent.toLowerCase();
-      // iOS：包含 iPhone/iPad/iPod；也处理 iPad 桌面模式 UA（Macintosh + 触屏）
-      var isIOS = /iphone|ipad|ipod/.test(ua) || (ua.indexOf('macintosh') > -1 && navigator.maxTouchPoints > 1);
-      // 其他移动设备：Android / 旧 BlackBerry / Windows Phone / Opera Mini 等
-      var isMobile = isIOS || /android|webos|blackberry|iemobile|opera mini/.test(ua)
-        || ('ontouchstart' in window && window.innerWidth < 1024);
-      var target = isMobile ? 'nfo-editor-ios.html' : 'nfo-editor.html';
-      location.replace(target);
-    })();
-  </script>
+
+<script>
+(function(){
+  var meta = document.querySelector('meta[name=theme-color]');
+  if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches && meta){
+    meta.setAttribute('content', '#121217');
+  }
+
+  var ua = navigator.userAgent.toLowerCase();
+  var isIOS = /iphone|ipad|ipod/.test(ua) || (ua.indexOf('macintosh') > -1 && navigator.maxTouchPoints > 1);
+  var isMobile = isIOS || /android|webos|blackberry|iemobile|opera mini/.test(ua)
+    || ('ontouchstart' in window && window.innerWidth < 1024);
+  var target = isMobile ? 'nfo-editor-ios.html' : 'nfo-editor.html';
+  var targetName = isMobile ? '移动版' : '桌面版';
+  var deviceLabel = isMobile ? (isIOS ? 'iOS 设备' : '移动设备') : '桌面设备';
+
+  var cardPc = document.getElementById('cardPc');
+  var cardMobile = document.getElementById('cardMobile');
+  var rec = isMobile ? cardMobile : cardPc;
+  rec.classList.add('recommend');
+  var badge = document.createElement('span');
+  badge.className = 'badge';
+  badge.textContent = '推荐';
+  rec.appendChild(badge);
+
+  var autoTextEl = document.getElementById('autoText');
+  var countEl = document.getElementById('count');
+  var barEl = document.getElementById('bar');
+  var barWrap = document.querySelector('.bar');
+
+  autoTextEl.textContent = '检测到 ' + deviceLabel + '，5 秒后自动进入' + targetName;
+
+  var total = 5000, step = 200, elapsed = 0, timer = null, redirecting = false;
+
+  function go(){
+    if (redirecting) return;
+    redirecting = true;
+    clearTimeout(timer);
+    autoTextEl.textContent = '正在进入' + targetName + '…';
+    countEl.textContent = '0';
+    location.replace(target);
+  }
+  function tick(){
+    elapsed += step;
+    var left = Math.max(0, Math.ceil((total - elapsed) / 1000));
+    countEl.textContent = left;
+    barEl.style.transform = 'scaleX(' + Math.max(0, (total - elapsed) / total) + ')';
+    if (elapsed >= total){ go(); }
+    else { timer = setTimeout(tick, step); }
+  }
+
+  cardPc.addEventListener('click', function(e){ e.preventDefault(); location.replace('nfo-editor.html'); });
+  cardMobile.addEventListener('click', function(e){ e.preventDefault(); location.replace('nfo-editor-ios.html'); });
+  document.getElementById('cancelBtn').addEventListener('click', function(){
+    clearTimeout(timer); timer = null;
+    autoTextEl.textContent = '已取消自动跳转，可手动选择版本';
+    countEl.textContent = '·';
+    barWrap.style.display = 'none';
+  });
+
+  timer = setTimeout(tick, step);
+})();
+</script>
 </body>
 </html>

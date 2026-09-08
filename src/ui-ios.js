@@ -5,7 +5,7 @@ var currentPage = '';
 function switchPage(page) {
   var from = currentPage;
   currentPage = page;
-  if (from === 'detail' && page !== 'detail') stopDetailBgSlideshow(); // 离开详情页：停掉底图轮播，释放定时器（底图本身保留）
+  if (from === 'detail' && page !== 'detail'){ stopDetailBgSlideshow(); clearDetailShotCache(); } // 离开详情页：停掉底图轮播 + 清空剧照运行时缓存（底图本身保留）
   if (from && from !== 'detail' && page === 'detail') resumeDetailBgZoom(); // 返回详情页：恢复底图缓慢放大
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
@@ -4285,9 +4285,12 @@ function renderOverview(){
     grid.innerHTML = films.map(function(f){
       var enc = escapeAttr(encodeURIComponent(f.id));
       var subOn = !!(f.data && f.data.hasSubtitle);   // 持久化字幕标记
-      var posterCls = (isAvFilm(f) && f.posterDataUrl) ? 'mc-poster av-poster' : 'mc-poster';
-      var poster = f.posterDataUrl
-        ? '<div class="' + posterCls + '" style="background-image:url(' + escapeAttr(f.posterDataUrl) + ')">' + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
+      var d0 = f.data || {};
+      var lightUrl = d0.poster || f.posterDataUrl || '';   // 轻量封面（搜索列表自带的小图）优先秒显
+      var hiRes = f.posterDataUrl || '';                    // 高清大图：后台加载完后替换
+      var posterCls = (isAvFilm(f) && lightUrl) ? 'mc-poster av-poster' : 'mc-poster';
+      var poster = lightUrl
+        ? '<div class="' + posterCls + '"' + (hiRes && hiRes !== lightUrl ? ' data-hires="' + escapeAttr(hiRes) + '"' : '') + ' style="background-image:url(' + escapeAttr(lightUrl) + ')">' + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
         : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>';
       var hasTrailer = !!(f.data && f.data.trailer);
       var badgeHtml = '';
@@ -4305,6 +4308,7 @@ function renderOverview(){
     }).join('');
     bindOverviewLongPress();
     applyOverviewPosterCrop();
+    applyOverviewHiResSwap();
   }).catch(function(){
     grid.innerHTML = '';
     empty.style.display = '';
@@ -4322,6 +4326,26 @@ function applyOverviewPosterCrop(){
     cropRightHalfAuto(url).then(function(cropped){
       if (cropped && cropped !== url) el.style.backgroundImage = 'url(' + cropped + ')';
     }).catch(function(){});
+  });
+}
+/* 首页封面：轻量图秒显后，后台加载高清 dataURL 并替换（AV 同步重裁右半） */
+function applyOverviewHiResSwap(){
+  var nodes = document.querySelectorAll('.mc-poster[data-hires]');
+  if (!nodes || !nodes.length) return;
+  nodes.forEach(function(el){
+    var hr = el.getAttribute('data-hires');
+    if (!hr) return;
+    var setBg = function(u){ el.style.backgroundImage = 'url(' + escapeAttr(u) + ')'; };
+    var img = new Image();
+    img.onload = function(){
+      if (el.classList.contains('av-poster')){
+        cropRightHalfAuto(hr).then(function(c){ setBg((c && c !== hr) ? c : hr); }).catch(function(){ setBg(hr); });
+      } else {
+        setBg(hr);
+      }
+    };
+    img.onerror = function(){};
+    img.src = hr;
   });
 }
 
@@ -4493,8 +4517,8 @@ function getActivationCode(){ return idbGet('kv', 'activationCode').then(functio
 function setActivationCode(v){ return idbPut('kv', 'activationCode', v || ''); }
 function getTier(){ return idbGet('kv', 'tier').then(function(v){ return v || ''; }); }
 function setTier(v){ return idbPut('kv', 'tier', v || ''); }
-/* 剧照档位上限：免费 1 张、中等 5 张、满级 12 张（满级不卡上限，可看全部） */
-function getShotCap(){ var t = state.tier || ''; if (t === 'full') return 12; if (t === 'medium') return 5; return 1; }
+/* 剧照档位上限：免费 1 张、中等 5 张、高级 8 张（高级不卡上限，可看全部；仅高级出现「加载更多」） */
+function getShotCap(){ var t = state.tier || ''; if (t === 'full') return 8; if (t === 'medium') return 5; return 1; }
 function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
 /* JavBus 基址：由「Worker 代理地址」自动推导（state.magnetWorker + '/javbus'），无需单独配置输入框 */
 function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') + '/javbus'; }
@@ -4832,10 +4856,10 @@ function populateFromJAV(d){
   state.trailer = n.trailer;
   renderCast();
 
-  // 封面/剧照：n.galleryLinks 为去重后代理 URL 全量列表；仅前 6 张转 dataURL 持久化
+  // 封面/剧照：n.galleryLinks 为去重后代理 URL 全量列表；仅前 8 张转 dataURL 持久化
   var galleryUrls = n.galleryLinks.slice();
   state.galleryLinks = galleryUrls.slice();
-  var cachedUrls = galleryUrls.slice(0, 6);
+  var cachedUrls = galleryUrls.slice(0, 8);
   state.gallery = cachedUrls.slice();
   state.fanart = cachedUrls[0] || '';
   state.fanartCandidates = cachedUrls.slice(1);
@@ -4903,10 +4927,10 @@ function populateFromJavbus(d){
   state.trailer = d.trailer || '';   // /meta 已带回预告片（DMM 动态签名 / 无码源预览，best-effort）
   renderCast();
 
-  // 封面/剧照：n.galleryLinks 为去重后代理 URL 全量列表；仅前 6 张转 dataURL 持久化
+  // 封面/剧照：n.galleryLinks 为去重后代理 URL 全量列表；仅前 8 张转 dataURL 持久化
   var galleryUrls = n.galleryLinks.slice();
   state.galleryLinks = galleryUrls.slice();
-  var cachedUrls = galleryUrls.slice(0, 6);
+  var cachedUrls = galleryUrls.slice(0, 8);
   state.gallery = cachedUrls.slice();
   state.fanart = cachedUrls[0] || '';
   state.fanartCandidates = cachedUrls.slice(1);
@@ -5313,12 +5337,12 @@ function populateFromTMDB(d){
   state.fanartCandidates = [];
   // 海报：优先用 images.posters（多张），回退到 d.poster_path；最多缓存 3 张
   if (n.posterPaths.length) imgPromises = imgPromises.concat(loadMediaCandidates(n.posterPaths, 'poster', 'w780'));
-  // 剧照：用 images.backdrops（多张），最多缓存 3 张；注意：无 backdrops 时不再回退到海报，避免「剧照」变成海报
+  // 剧照：用 images.backdrops（多张），最多缓存 8 张；注意：无 backdrops 时不再回退到海报，避免「剧照」变成海报
   if (n.backdropPaths.length){
     imgPromises = imgPromises.concat(loadMediaCandidates(n.backdropPaths, 'fanart', 'w1280'));
     // 同时把原比例剧照存进 state.gallery（数组，不裁剪），供详情页「剧照」区展示
     state.galleryLinks = n.galleryLinks;  // 全量链接（w1280 直连 URL，已含 CORS 直连）
-    var galleryPromises = n.backdropPaths.slice(0, 6).map(function(p){
+    var galleryPromises = n.backdropPaths.slice(0, 8).map(function(p){
       var url = NfoCore.tmdbImgUrl(p, 'w1280');
       var pr = fetch(url)
         .then(function(r){ return r.ok ? r.blob() : null; })
@@ -6174,7 +6198,7 @@ function renderFilmDetail(film){
       detailShotRevealing = false;
       detailPlacedShotEls = [];
       var html = '<div class="detail-shots-title">剧照</div><div class="detail-shots-row"><div class="detail-shots-col" id="detailShotsCol0"></div><div class="detail-shots-col" id="detailShotsCol1"></div></div>';
-      if (fullShots.length > getShotCap()){
+      if (state.tier === 'full' && fullShots.length > getShotCap()){
         html += '<button class="detail-shots-more" onclick="loadMoreShots()">加载更多</button>';
       }
       shotEl.innerHTML = html;
@@ -6256,10 +6280,11 @@ var detailShotQueueIndex = 0;
 var detailShotRevealQueue = [];
 var detailShotRevealing = false;
 var detailPlacedShotEls = [];   // 已放置剧照 {el, src}：dropShot 剔除小图后重排 data-idx 用（renderFilmDetail 每次重置）
-var SHOTS_BATCH = 12;
+var SHOTS_BATCH = 8;
 var SHOT_REVEAL_MS = 150;
 var detailRenderSeq = 0;   // 详情页渲染代号：每次 renderFilmDetail +1，用于丢弃上一部影片的延迟 still 加载回调，防止剧照污染不同影片
 function loadMoreShots(){
+  if (state.tier !== 'full') return;   // 仅高级用户可加载更多（付费墙）
   if (!detailShotCols.length) return;
   // 续入队下一批尚未加载的剧照，走同一 queueShot/placeShot，前面已放置的图零重排。
   // 注意：不受 getShotCap() 限制（getShotCap 只决定初始展示几张），点击应能逐步揭示全部未加载剧照，直到没有更多为止。
@@ -6915,6 +6940,19 @@ function stopDetailBgSlideshow(){
   if (p1){ p1.style.transition = 'none'; p1.style.transform = 'scale(1)'; p1.style.opacity = '1'; }
   if (p2){ p2.style.transition = 'none'; p2.style.transform = 'scale(1)'; p2.style.opacity = '0'; p2.style.backgroundImage = ''; }
 }
+/* 离开详情页：清空剧照运行时缓存（DOM + 已放置元素 + 队列 + 列高），释放看多部片时累积的内存。
+   底图轮播池已由 stopDetailBgSlideshow 清空，此处专注剧照区。 */
+function clearDetailShotCache(){
+  detailFullShots = [];
+  detailShotQueueIndex = 0;
+  detailShotRevealQueue = [];
+  detailShotRevealing = false;
+  detailPlacedShotEls = [];
+  detailShotCols = [];
+  detailShotColH = [0, 0];
+  var shotEl = document.getElementById('detailShots');
+  if (shotEl) shotEl.innerHTML = '';
+}
 
 /* 返回详情页：对保留的底图恢复缓慢放大动画（切换页面时被 stop 复位过） */
 function resumeDetailBgZoom(){
@@ -6926,8 +6964,8 @@ function resumeDetailBgZoom(){
   }
 }
 
-/* 把所有「当前已显示的剧照」纳入底图轮播候选池（横版、竖版都参与切换，不只横版）。
-   点「加载更多」后已显示剧照增多，池子自动扩大；不足 2 张则不切换，保持静止（与 PC 一致）。 */
+/* 把所有「当前已显示的剧照」纳入底图轮播候选池（横版、竖版都参与切换）。
+   点「加载更多」后已显示剧照增多，池子自动扩大；只有 1 张时也持续轮播（切回自身、重新放大），不卡数量门槛。 */
 function refreshDetailBgPool(){
   var pool = [];
   var seen = {};
@@ -6939,7 +6977,6 @@ function refreshDetailBgPool(){
     }
   }
   detailBgPool = pool;
-  if (pool.length < 2) return;   /* 不足 2 张则不切换，保持静止 */
   if (detailBgTimer) return;     /* 已在轮播，仅更新候选池即可 */
   /* 首次启动：当前显示的初始图立即开始 5 秒缓慢放大 */
   var layers = [document.getElementById('detailPoster'), document.getElementById('detailPoster2')];
