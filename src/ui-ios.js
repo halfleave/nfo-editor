@@ -6,8 +6,9 @@ function switchPage(page) {
   var from = currentPage;
   currentPage = page;
   if (from === 'detail' && page !== 'detail'){ stopDetailBgSlideshow(); clearDetailShotCache(); } // 离开详情页：停掉底图轮播 + 清空剧照运行时缓存（底图本身保留）
-  if (from && from !== 'detail' && page === 'detail') resumeDetailBgZoom(); // 返回详情页：恢复底图缓慢放大
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
+  // 返回/进入详情页：页面已显示后再恢复底图缓慢放大，确保 transition 从 scale(1) 真正生效
+  if (from && from !== 'detail' && page === 'detail') resumeDetailBgZoom();
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
   var tb = document.getElementById('tabBar');
   if (tb) tb.style.display = (page === 'auto') ? 'none' : ''; // 自动化页为三级页：隐藏底部 tab 栏
@@ -1892,7 +1893,7 @@ function auto115TaskTitle(t){
 }
 var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
 var auto115ProbeTimer = null;
-var auto115Expanded = '';
+var auto115Expanded = {};          // 已展开的任务卡 id 集合（支持多个同时展开）
 
 function auto115Key(filmId){ return AUTO115_PREFIX + filmId; }
 function auto115Now(){ return Date.now(); }
@@ -1928,9 +1929,15 @@ function auto115EnsureDoc(){
   auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, tasks: [] };
   return idbGet('kv', auto115Key(film.id)).then(function(v){
     if (v && v.tasks){
-      // 旧流程（v1：建新文件夹/移动/删文件夹）任务整体重置——旧 offlineDirCid 语义已废弃且可能指向云下载根目录，绝不能沿用
+      // 上传任务独立，不应包含 offline 专用步骤（如 wait），加载时清理旧数据/异常步骤
+      var uploadKeys = {};
+      for (var k = 0; k < AUTO115_STEPS_UPLOAD.length; k++) uploadKeys[AUTO115_STEPS_UPLOAD[k].key] = 1;
       for (var i = 0; i < v.tasks.length; i++){
         var tt = v.tasks[i];
+        if (tt.type === 'upload' && tt.steps){
+          tt.steps = tt.steps.filter(function(s){ return uploadKeys[s.key]; });
+        }
+        // 旧流程（v1：建新文件夹/移动/删文件夹）任务整体重置——旧 offlineDirCid 语义已废弃且可能指向云下载根目录，绝不能沿用
         if (tt.fv !== AUTO115_FLOW_VERSION){
           tt.fv = AUTO115_FLOW_VERSION;
           tt.steps = auto115NewSteps();
@@ -2013,7 +2020,7 @@ function openAuto115Page(){
   }).catch(function(e){ showToast((e && e.message) || '打开自动化失败', 'error'); });
 }
 function auto115Back(){ stopAuto115Probe(); switchPage('detail'); }
-function auto115Toggle(id){ auto115Expanded = (auto115Expanded === id) ? '' : id; renderAuto115(); }
+function auto115Toggle(id){ if (auto115Expanded[id]) delete auto115Expanded[id]; else auto115Expanded[id] = true; renderAuto115(); }
 function updateAutoBadge(){
   var el = document.getElementById('autoBadge');
   if (!el) return;
@@ -2049,7 +2056,7 @@ function auto115StepHtml(t, s){
 }
 function auto115TaskHtml(t){
   var st = auto115Status(t);
-  var expanded = (auto115Expanded === t.id);
+  var expanded = !!auto115Expanded[t.id];
   var html = '<div class="auto-task' + (expanded ? ' expanded' : '') + '">'
     + '<div class="auto-task-head" onclick="auto115Toggle(\'' + t.id + '\')">'
     + '<div class="auto-task-title">' + escapeHtml(auto115TaskTitle(t)) + '</div>'
@@ -2057,8 +2064,14 @@ function auto115TaskHtml(t){
     + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
     + '</div>';
   if (expanded){
-    /* 上传已独立成任务（顶部「上传 NFO 到 115」入口），不再挂在离线任务卡片上 */
-    html += '<div class="auto-steps">' + (t.steps || []).map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>'
+    /* 上传已独立成任务，不再挂在离线任务卡片上；渲染时过滤掉不属于本类型的步骤（如旧数据残留的 wait） */
+    var renderSteps = (t.steps || []).slice();
+    if (auto115TaskType(t) === 'upload'){
+      var uploadKeys = {};
+      for (var k = 0; k < AUTO115_STEPS_UPLOAD.length; k++) uploadKeys[AUTO115_STEPS_UPLOAD[k].key] = 1;
+      renderSteps = renderSteps.filter(function(s){ return uploadKeys[s.key]; });
+    }
+    html += '<div class="auto-steps">' + renderSteps.map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>'
       + '<div class="auto-task-ops">'
       + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重试</button>'
       + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除</button>'
@@ -2079,6 +2092,8 @@ function renderAuto115(){
   listEl.innerHTML = html + tasks.map(auto115TaskHtml).join('');
   var clearBtn = document.getElementById('autoClearBtn');
   if (clearBtn) clearBtn.style.display = tasks.some(function(t){ return auto115Status(t).cls === 'ab-ok'; }) ? '' : 'none';
+  var uploadBtn = document.getElementById('autoUploadBtn');
+  if (uploadBtn) uploadBtn.style.display = tasks.some(function(t){ return auto115TaskType(t) === 'upload'; }) ? 'none' : '';
   updateAutoBadge();
 }
 /* —— 115 接口封装 —— */
@@ -3201,7 +3216,7 @@ function auto115AddUploadTask(){
       type: 'upload', steps: auto115NewSteps('upload'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
     };
     ts.unshift(t); doc.tasks = ts;
-    auto115Expanded = t.id;
+    auto115Expanded[t.id] = true;
     return auto115Save().then(function(){
       return openAuto115Page().then(function(){ return auto115Run(t); });
     });
@@ -3260,7 +3275,7 @@ function auto115AddFromOp(){
       steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
     };
     doc.tasks.unshift(t);
-    auto115Expanded = t.id;
+    auto115Expanded[t.id] = true;
     return auto115Save().then(function(){
       showToast('已加入自动化', 'success');
       return openAuto115Page().then(function(){ return auto115Run(t); });
@@ -6037,6 +6052,7 @@ function renderFilmDetail(film){
       // 内圈 rAF 再切到 scale(1.1) 并带过渡，浏览器才会真正从 1 动画到 1.1。
       requestAnimationFrame(function(){
         requestAnimationFrame(function(){
+          void pe.offsetWidth; // 强制重排：确保 scale(1) 起始状态已提交，transition 才会从 1 动画到 1.1
           pe.style.transition = 'transform 5s ease-out, filter .15s linear';
           pe.style.transform = 'scale(1.1)';
         });
