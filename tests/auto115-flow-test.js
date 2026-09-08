@@ -39,7 +39,9 @@ Object.assign(ctx, {
   encodeURIComponent, decodeURIComponent
 });
 const noop = function(){ return {}; };
-ctx.NfoCore = new Proxy({}, { get: () => noop });   // core-shared.js 的桩
+// core-shared.js 的桩：默认一律 noop；但 isAvFilm 是「影片/AV 统一区分」的核心逻辑，必须给真实实现，
+// 否则 ui-ios.js 内 `var isAvFilm = NfoCore.isAvFilm` 会捕获到 noop，导致分类断言失真。
+ctx.NfoCore = new Proxy({ isAvFilm: (f) => !!(f && f.data && f.data.dvdId) }, { get: (t, k) => (k in t ? t[k] : noop) });
 ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx;
 vm.createContext(ctx);
 try { vm.runInContext(src, ctx, { filename: 'ui-ios.js' }); }
@@ -72,6 +74,15 @@ ctx.c115ProxyFetch = async function (url, opts) {
 };
 
 const assert = (cond, msg) => { console.log((cond ? 'PASS  ' : 'FAIL  ') + msg); if (!cond) process.exitCode = 1; };
+
+/* 番号规则统一回归：影片/AV 的唯一区分标准是「是否含番号（dvdId）」，与分级/来源/TMDB 标志无关 */
+assert(ctx.isAvFilm({ data: { dvdId: 'IPX-486' } }) === true, 'isAvFilm: 有番号 → AV');
+assert(ctx.isAvFilm({ data: { dvdId: '' } }) === false, 'isAvFilm: 空番号 → 影片');
+assert(ctx.isAvFilm({ data: {} }) === false, 'isAvFilm: 无 data.dvdId → 影片');
+assert(ctx.isAvFilm({}) === false, 'isAvFilm: 无 data 对象 → 影片');
+assert(ctx.isAvFilm({ data: { dvdId: 'ABC-123' }, adult: false }) === true, 'isAvFilm: 有番号且 adult=false → 仍判 AV（不看 adult 字段）');
+assert(ctx.isAvFilm({ data: {}, adult: true }) === false, 'isAvFilm: 无番号且 adult=true → 仍判影片（不看 adult 字段）');
+
 /* 字面量 LZ4 块编码（token + 扩展长度 + 原始字节），供加密回包构造用 */
 const lz4LiteralForTest = (bytes) => {
   const out = [];

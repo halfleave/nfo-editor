@@ -434,10 +434,18 @@ function normalizeJavbusFilm(d, opts){
   // 影片类型标记（持久化对象 __type）
   var FILM_TYPE = 'film';
 
-  // 成人归属：完全由分级决定——nc-17 或 nr（含 JAV 默认 NR）即归 18+（XV）。
-  // 这是「保存 AV 再保存影片、影片被错存成 AV」串档 bug 的根因修复点，集中为单点真相。
+  // 成人归属（旧）：原本完全由分级决定——nc-17 或 nr（含 JAV 默认 NR）即归 18+（XV）。
+  // 2026-09-08 起统一改为「是否有番号（dvdId）」决定，此函数保留仅供历史参考/其他端复用。
   function isAdultByRating(mpaa){
     return /^(nc-17|nr)$/i.test((mpaa || '').trim());
+  }
+
+  // 影片 / AV 的唯一区分标准：是否含有番号（dvdId）。
+  // 2026-09-08 统一规则：不再看分级、不再看 TMDB 的 adult 标志、不再看来源（jav/tmdb）。
+  // 单点真相，两端显示与存储都走它。
+  function isAvFilm(f){
+    var d = (f && f.data) || {};
+    return !!(d.dvdId);
   }
 
   // 持久化键约定：IndexedDB kv 存储的 film 键（两端统一，避免 key 漂移）
@@ -456,8 +464,8 @@ function normalizeJavbusFilm(d, opts){
   // 仍依赖各端顶层全局：getVal / state / currentFilmLocked / normalizeTextField（两端均声明为顶层全局，调用时按当前加载的端解析）。
   function buildFilmFromCurrent(){
     var id = sanitizeName(getVal('filename') || getVal('title') || ('film-' + Date.now()));
-    // 成人归属完全由分级决定：nc-17 或 nr（含 JAV 默认 NR）即归 18+（XV）——集中到共享核心单点真相
-    var adult = isAdultByRating(state.mpaa);
+    // 成人归属统一由「是否有番号（dvdId）」决定（2026-09-08 起），不再依赖分级/来源/TMDB 标志
+    var adult = !!(state.dvdId);
     // 来源：优先沿用当前编辑态（刷新时由对应 populate 重新赋值），否则按搜索源推导，自定义兜底
     var src = state.source || (state.metaSource === 'jav' ? 'jav' : 'tmdb');
     return {
@@ -593,6 +601,7 @@ function normalizeJavbusFilm(d, opts){
     armTranslatingFallback: armTranslatingFallback,
     clearTranslatingFallback: clearTranslatingFallback,
     loadImageFromURL: loadImageFromURL,
-    buildFilmFromCurrent: buildFilmFromCurrent
+    buildFilmFromCurrent: buildFilmFromCurrent,
+    isAvFilm: isAvFilm
   };
 })(typeof window !== 'undefined' ? window : this);

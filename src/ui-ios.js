@@ -465,8 +465,7 @@ function onYearSelect(sel){ setYear(sel.value); }
 function onMpaaSelect(sel){
   state.mpaa = sel.value;
   syncSelectDisplay('mpaa', 'mpaaVal');
-  // 分级变更实时决定成人归属（nc-17 / nr → 18+），并同步编辑页字段显隐
-  state.adult = /^(nc-17|nr)$/i.test((state.mpaa || '').trim());
+  // 成人归属统一由「是否有番号（dvdId）」决定（见 applyEditMode），分级仅影响 NFO 的 mpaa 字段，不再切换影片/AV
   applyEditMode();
   updateState();
 }
@@ -4132,7 +4131,7 @@ function saveToDisk(){
   saveFilm(film).then(function(){
     currentFilmId = film.id;
     // 保存后回到首页对应的 影片/XV 列表（按分级自动归属）
-    state.overviewTab = film.adult ? 'xv' : 'movie';
+    state.overviewTab = isAvFilm(film) ? 'xv' : 'movie';
     var tabs = document.getElementById('overviewTabs');
     if (tabs) tabs.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === state.overviewTab); });
     goAfterEdit(film.id);
@@ -4158,7 +4157,7 @@ function quickSaveAndHome(){
     var saved = result.film;
     currentFilmId = saved.id;
     // 保存后回到首页对应的 影片/XV 列表（按分级自动归属）
-    state.overviewTab = saved.adult ? 'xv' : 'movie';
+    state.overviewTab = isAvFilm(saved) ? 'xv' : 'movie';
     var tabs = document.getElementById('overviewTabs');
     if (tabs) tabs.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === state.overviewTab); });
     renderOverview(); clearExpiredFilms();
@@ -4274,9 +4273,9 @@ function renderOverview(){
   var empty = document.getElementById('overviewEmpty');
   if (!grid) return Promise.resolve();
   return listFilms().then(function(films){
-    if (!state.themeHidden) films = films.filter(function(f){ return !f.adult; });
-    else if (state.overviewTab === 'xv') films = films.filter(function(f){ return !!f.adult; });
-    else films = films.filter(function(f){ return !f.adult; });
+    if (!state.themeHidden) films = films.filter(function(f){ return !isAvFilm(f); });
+    else if (state.overviewTab === 'xv') films = films.filter(function(f){ return isAvFilm(f); });
+    else films = films.filter(function(f){ return !isAvFilm(f); });
     if (!films.length){
       grid.innerHTML = '';
       empty.style.display = '';
@@ -4286,7 +4285,7 @@ function renderOverview(){
     grid.innerHTML = films.map(function(f){
       var enc = escapeAttr(encodeURIComponent(f.id));
       var subOn = !!(f.data && f.data.hasSubtitle);   // 持久化字幕标记
-      var posterCls = (f.adult && f.posterDataUrl) ? 'mc-poster av-poster' : 'mc-poster';
+      var posterCls = (isAvFilm(f) && f.posterDataUrl) ? 'mc-poster av-poster' : 'mc-poster';
       var poster = f.posterDataUrl
         ? '<div class="' + posterCls + '" style="background-image:url(' + escapeAttr(f.posterDataUrl) + ')">' + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
         : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>';
@@ -4297,7 +4296,7 @@ function renderOverview(){
       var badges = badgeHtml ? '<div class="mc-badges">' + badgeHtml + '</div>' : '';
       var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
       var trBadge = (state.translatingIds && state.translatingIds.has(f.id)) ? '<div class="mc-translating"><span class="tr-spin"></span></div>' : '';
-      var cardTitle = (f.adult && f.data && f.data.dvdId) ? (f.data.dvdId || '').toUpperCase() : (f.title || f.id);
+      var cardTitle = (isAvFilm(f) && f.data && f.data.dvdId) ? (f.data.dvdId || '').toUpperCase() : (f.title || f.id);
       var title = '<div class="mc-title">' + escapeHtml(cardTitle) + '</div>';
       // 注意：点击走 addEventListener 绑定（见 bindOverviewLongPress），不在此内联 onclick 嵌入 id，
       // 避免片名含单引号时 escapeAttr 转义破坏 JS 字符串导致点击失效。
@@ -5119,8 +5118,8 @@ function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
 function refreshFilm(id){
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
-    // 来源优先级：film.source > 旧数据按 adult 兜底（成人→JavBus，否则→TMDB）
-    var src = (film.source) || (film.adult ? 'jav' : 'tmdb');
+    // 来源优先级：film.source > 旧数据按是否含番号兜底（有番号→JavBus，否则→TMDB）
+    var src = (film.source) || (isAvFilm(film) ? 'jav' : 'tmdb');
     if (src === 'javbus') return refreshFromJavbus(film);
     if (src === 'jav') return refreshFromJavbus(film);
     return refreshFromTMDB(film);
@@ -5278,7 +5277,7 @@ function fetchTrailersForResults(results, mediaType){
 }
 function populateFromTMDB(d){
   resetSourceState();
-  state.adult = !!d.adult;
+  // 注：不再用 TMDB 的 d.adult 标记决定影片/AV——统一按是否有番号（dvdId）区分
   state.source = 'tmdb';   // 记录来源，供「刷新」按源刷新
 
   // TMDB 字段归一化已抽至共享核心 src/core-shared.js（纯逻辑，不读全局 state）
@@ -5524,6 +5523,7 @@ function setMpaa(val){
 var escapeXml = NfoCore.escapeXml;
 function getVal(id){ var el = document.getElementById(id); return el ? el.value.trim() : ''; }
 var sanitizeName = NfoCore.sanitizeName;
+var isAvFilm = NfoCore.isAvFilm;   // 影片/AV 唯一区分标准：是否有番号（dvdId）
 function generateNFOMovie(){
   var d = {
     title: getVal('title'), originaltitle: getVal('originaltitle'),
@@ -5563,7 +5563,8 @@ function onTrailerInput(el){
 }
 function applyFilmData(film){
   currentFilmLocked = !!film.locked;
-  state.adult = !!(film.adult);
+  // 编辑态 adult 同步为「是否含番号」，与统一规则一致（applyEditMode 现按 dvdId 显隐字段）
+  state.adult = !!(film.data && film.data.dvdId);
   var d = film.data || {};
   state.source = film.source || '';   // 还原来源，编辑后保存保持原来源
   state.javbusId = d.javbusId || null;
@@ -5574,7 +5575,7 @@ function applyFilmData(film){
   // 兼容旧数据：AV 且 dvdId 为空、originaltitle 形如番号时，将番号归位到独立 dvdId 字段，
   // 原始标题恢复为日文原标题，避免番号同时出现在两个字段
   state.dvdId = d.dvdId || '';
-  if (state.adult && !state.dvdId && d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle)){
+  if (isAvFilm(film) && !state.dvdId && d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle)){
     state.dvdId = d.originaltitle;
     state.originaltitle = d.title || '';
     setFieldVal('originaltitle', state.originaltitle);
@@ -5587,9 +5588,9 @@ function applyFilmData(film){
   setFieldVal('plot', d.plot);
   setFieldVal('rating', d.rating);
   if (d.mpaa) setMpaa(d.mpaa);
-  // 数据迁移保护：旧版成人影片分级为空，重新编辑保存时会因「分级决定成人」而掉回影片；
-  // 故载入成人影片且分级为空时默认补 NR，确保重存仍归 18+
-  else if (film.adult) setMpaa('NR');
+  // 数据迁移保护：旧版成人影片分级为空，重新编辑保存时会因「无番号」而掉回影片；
+  // 故载入含番号的影片且分级为空时默认补 NR，确保重存仍归 18+
+  else if (isAvFilm(film)) setMpaa('NR');
   state.countries = (d.countries || []).slice(); renderCountryChips();
   state.genres = (d.genres || []).slice(); renderGenreChips();
   state.directors = d.directors || []; state.actors = d.actors || []; renderCast();
@@ -5625,7 +5626,8 @@ function applyFilmData(film){
 }
 /* —— 编辑页字段按 影片 / AV 自适应 —— */
 function applyEditMode(){
-  var adult = !!state.adult;
+  // 编辑页字段显隐（女优/演员、导演区）统一由「是否含番号（dvdId）」决定，与首页分类一致
+  var adult = !!state.dvdId;
   var ot = document.querySelector('label[for="originaltitle"]');
   if (ot) ot.textContent = '原始标题';
   // 番号 / 制作商 / 发行商 / 系列 现在作为通用字段始终显示，不再按 adult 隐藏
@@ -5992,7 +5994,7 @@ function renderFilmDetail(film){
   if (film){ auto115EnsureDoc().then(updateAutoBadge).catch(function(){}); }
   detailRenderSeq++;   // 本次渲染代号；任何上一部影片的延迟(still probe onload)回调都会被判定为过期而丢弃，避免污染当前影片
   var d = film.data || {};
-  var adult = !!film.adult;
+  var adult = isAvFilm(film);   // 详情页：影片/AV 由番号决定（当前渲染未再直接使用，保留语义一致性）
   // 进入详情页时底图先用「海报」，再回退到 fanart/剧照；海报为竖版，按 80% 屏高顶对齐、缓缓放大
   var bgUrl = d.poster || film.posterDataUrl || d.fanart || (d.fanartCandidates && d.fanartCandidates[0]) || d.detailPoster || '';
   var bgIsLandscape = !!(d.fanart || (d.fanartCandidates && d.fanartCandidates[0]));
