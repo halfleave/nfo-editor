@@ -2012,8 +2012,8 @@ function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115S
 
 /* —— 大状态合成 —— */
 function auto115StepLabel(key){
-  /* 两张步骤表都要查（上传任务用的是 upload 表的 key） */
-  var all = AUTO115_STEP_DEFS.concat(AUTO115_STEPS_UPLOAD);
+  /* 三张步骤表都要查：offline / tv / upload */
+  var all = AUTO115_STEP_DEFS.concat(AUTO115_STEPS_TV).concat(AUTO115_STEPS_UPLOAD);
   for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i].label;
   return key;
 }
@@ -2035,9 +2035,10 @@ function auto115Status(t){
   if (wait.state === 'waiting') return { text: '等待中 · 已探 ' + (wait.probes || 0) + '/' + AUTO115_PROBE_MAX, cls: 'ab-wait' };
   if (auto115GetStep(t, 'submit').state === 'running') return { text: '提交中…', cls: 'ab-run' };
   if (wait.state === 'running') return { text: '离线中 (' + ((wait.probes || 0) + 1) + '/' + AUTO115_PROBE_MAX + ')', cls: 'ab-run' };
-  for (var j = 2; j < AUTO115_STEP_DEFS.length; j++){
-    if (auto115GetStep(t, AUTO115_STEP_DEFS[j].key).state === 'running'){
-      return { text: '整理中 · ' + AUTO115_STEP_DEFS[j].label, cls: 'ab-run' };
+  var allDefs = (auto115IsTvTask() ? AUTO115_STEPS_TV : AUTO115_STEP_DEFS);
+  for (var j = 2; j < allDefs.length; j++){
+    if (auto115GetStep(t, allDefs[j].key).state === 'running'){
+      return { text: '整理中 · ' + allDefs[j].label, cls: 'ab-run' };
     }
   }
   var cleanup = auto115GetStep(t, 'cleanup');
@@ -2199,6 +2200,16 @@ function auto115QueryTask(t){
 var auto115RunningId = '';
 function auto115Run(t){
   if (!t) return Promise.resolve(null);
+  /* 清理脏的 runningId：指向的任务已终态/已删除/已中止 → 释放队列 */
+  if (auto115RunningId){
+    var dirty = auto115Task(auto115RunningId);
+    if (!dirty || dirty.aborted){
+      auto115RunningId = '';
+    } else {
+      var st = auto115Status(dirty);
+      if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+    }
+  }
   if (auto115RunningId && auto115RunningId !== t.id){
     var cur = auto115Task(auto115RunningId);
     if (cur){
@@ -2217,11 +2228,24 @@ function auto115Run(t){
       auto115Finish(t); return null;
     }
     return (auto115TaskType(t) === 'upload') ? auto115StepUploadDir(t) : auto115StepSubmit(t);
+  }).catch(function(e){
+    auto115Set(t, auto115StepDefs(t)[0].key, 'fail', (e && e.message) ? e.message : '启动失败');
+    auto115Finish(t); return null;
   });
 }
 /* 当前任务到达终态（成功/失败/中止）后释放队列，启动最早的排队任务 */
 function auto115AdvanceQueue(t){
   if (auto115RunningId && (!t || t.id === auto115RunningId)) auto115RunningId = '';
+  /* 释放后如果还有脏 runningId（指向已终态/已删任务），一并清掉 */
+  if (auto115RunningId){
+    var cur = auto115Task(auto115RunningId);
+    if (!cur || cur.aborted){
+      auto115RunningId = '';
+    } else {
+      var st = auto115Status(cur);
+      if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+    }
+  }
   var ts = (auto115Doc && auto115Doc.tasks) || [];
   for (var i = ts.length - 1; i >= 0; i--){
     var n = ts[i];
@@ -3590,7 +3614,17 @@ function auto115ScheduleProbe(t){
 }
 function auto115Resume(){
   if (!auto115Doc) return;
-  var hasRunning = (auto115Doc.tasks || []).some(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
+  /* 清理脏 runningId：页面重新打开时如果它指向已终态/已删任务，必须释放 */
+  if (auto115RunningId){
+    var cur = auto115Task(auto115RunningId);
+    if (!cur || cur.aborted){
+      auto115RunningId = '';
+    } else {
+      var st = auto115Status(cur);
+      if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+    }
+  }
+  var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
   if (hasRunning) auto115ScheduleProbe();
   /* 上次会话遗留的排队任务：没有正在跑的任务时自动接着跑 */
   if (!auto115RunningId && !hasRunning){
@@ -3676,6 +3710,16 @@ function auto115RetryStep(tid, key){
   if (!t) return Promise.resolve(null);
   return ensure115Cookie().then(function(ck){
     if (!ck){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+    /* 清理脏的 runningId */
+    if (auto115RunningId){
+      var dirty = auto115Task(auto115RunningId);
+      if (!dirty || dirty.aborted){
+        auto115RunningId = '';
+      } else {
+        var st = auto115Status(dirty);
+        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+      }
+    }
     /* 有别的任务正在跑 → 本任务转为排队，等它终态后自动续跑 */
     if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)){
       t.queued = true;
@@ -3701,10 +3745,13 @@ function auto115RetryStep(tid, key){
     if (key === 'submit') return auto115StepSubmit(t);
     if (key === 'wait') return auto115StepWait(t, true);
     if (key === 'mkdir') return auto115StepMkdir(t);
-    if (key === 'move') return auto115StepMove(t);
-    if (key === 'rename') return auto115StepRename(t);
-    if (key === 'cleanup') return auto115StepCleanup(t);
-  });
+    if (key === 'move') return auto115IsTvTask() ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
+    if (key === 'rename') return auto115IsTvTask() ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
+    if (key === 'cleanup') return auto115IsTvTask() ? auto115StepTvRenameFolder(t) : auto115StepCleanup(t);
+    /* TV 专属步骤 */
+    if (key === 'mkdir2') return auto115StepTvMkdirSeasons(t);
+    if (key === 'move2') return auto115StepTvMoveVideos(t);
+  }).catch(function(e){ showToast((e && e.message) || '重试失败', 'error'); });
 }
 function auto115RetryTask(tid){
   var t = auto115Task(tid);

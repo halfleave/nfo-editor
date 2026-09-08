@@ -399,8 +399,11 @@ const lz4LiteralForTest = (bytes) => {
   /* 8. 排队串行化：同时点两个 115 离线 → 第二个排队，第一个终态后自动续跑 */
   script = { 'ac=add_task_url': { state: true, info_hash: 'H2', name: '排队任务' } };
   const tq = { id: 'tq2', magnet: 'magnet:?xt=urn:btih:4444444444444444444444444444444444444444', magnetTitle: '排队任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  const tp0 = { id: 'tp0', magnet: 'magnet:?xt=urn:btih:0000000000000000000000000000000000000000', magnetTitle: '第一个任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  ctx.auto115GetStep(tp0, 'wait').state = 'running';   // 模拟正在跑
+  doc.tasks.unshift(tp0);
   doc.tasks.unshift(tq);
-  ctx.auto115RunningId = 'tp0';   // 假装第一个任务正在跑
+  ctx.auto115RunningId = 'tp0';
   await ctx.auto115Run(tq);
   assert(tq.queued === true, '同时启动第二个任务 → 转入排队');
   assert(ctx.auto115GetStep(tq, 'submit').msg.indexOf('排队中') >= 0, '排队提示可见');
@@ -517,6 +520,28 @@ const lz4LiteralForTest = (bytes) => {
   assert(delBodies.some(b => b.indexOf('J1') >= 0), '删除 sample J1');
   assert(!delBodies.some(b => b.indexOf('SU1') >= 0), '不删除简中字幕 SU1');
   ctx.auto115Doc.type = 'movie'; ctx.auto115Doc.filmTitle = '测试影片'; ctx.auto115Doc.dvdId = 'IPX-486';
+
+  // 9h. 脏 runningId 自动清理：runningId 指向已完成/已删任务时，新任务应能启动（不死锁）
+  ctx.currentDetailFilm = { id: 'filmTv2', data: { title: '权力的游戏', media_type: 'tv', tmdbMediaType: 'tv', dvdId: '', originaltitle: '', year: '2026', premiered: '2026-01-01' } };
+  ctx.auto115Doc = null;
+  const docTv2 = await ctx.auto115EnsureDoc();
+  const oldDone = { id: 'oldDone', magnet: 'magnet:?xt=urn:btih:OLD', magnetTitle: 'old', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  oldDone.steps.forEach(s => s.state = 'ok');
+  docTv2.tasks = [oldDone];
+  ctx.auto115RunningId = 'oldDone';
+  const tNew = { id: 'tNew', magnet: 'magnet:?xt=urn:btih:tv1111111111111111111111111111111111111', magnetTitle: '剧集磁力', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  docTv2.tasks.unshift(tNew);
+  calls.length = 0;
+  await ctx.auto115Run(tNew);
+  assert(ctx.auto115GetStep(tNew, 'submit').state === 'ok', '脏 runningId（已完成任务）被自动清理，新 TV 任务提交成功');
+  // ghost runningId（指向已删任务）
+  ctx.auto115RunningId = 'ghost';
+  const tNew2 = { id: 'tNew2', magnet: 'magnet:?xt=urn:btih:tv2222222222222222222222222222222222222', magnetTitle: '剧集磁力2', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  docTv2.tasks.unshift(tNew2);
+  await ctx.auto115Run(tNew2);
+  assert(ctx.auto115GetStep(tNew2, 'submit').state === 'ok', '脏 runningId（不存在任务）被自动清理，新 TV 任务提交成功');
+  ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
+  ctx.auto115Doc = null;
 
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');

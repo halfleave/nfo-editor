@@ -13,6 +13,15 @@ var ICON = {
   user:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
 };
 
+/* ---------- 删除影片时同步清除 115 自动化记录（覆盖 core.js 默认只删影片） ---------- */
+function deleteFilm(id){
+  if (typeof auto115Doc !== 'undefined' && auto115Doc && auto115Doc.filmId === id){ auto115Doc = null; auto115RunningId = null; }
+  return Promise.all([
+    idbDelete('kv', NfoCore.filmKey(id)),
+    idbDelete('kv', (typeof auto115Key === 'function' ? auto115Key(id) : ('auto115:' + id))).catch(function(){})
+  ]);
+}
+
 /* ---------- Toast ---------- */
 function showToast(msg, type, duration){
   var box = document.getElementById('toasts');

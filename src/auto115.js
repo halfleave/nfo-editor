@@ -635,7 +635,7 @@
 
   /* ---------- 大状态合成 ---------- */
   function auto115StepLabel(key) {
-    var all = AUTO115_STEP_DEFS.concat(AUTO115_STEPS_UPLOAD);
+    var all = AUTO115_STEP_DEFS.concat(AUTO115_STEPS_TV).concat(AUTO115_STEPS_UPLOAD);
     for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i].label;
     return key;
   }
@@ -654,8 +654,9 @@
     if (wait.state === 'waiting') return { text: '等待中 · 已探 ' + (wait.probes || 0) + '/' + AUTO115_PROBE_MAX, cls: 'ab-wait' };
     if (auto115GetStep(t, 'submit').state === 'running') return { text: '提交中…', cls: 'ab-run' };
     if (wait.state === 'running') return { text: '离线中 (' + ((wait.probes || 0) + 1) + '/' + AUTO115_PROBE_MAX + ')', cls: 'ab-run' };
-    for (var j = 2; j < AUTO115_STEP_DEFS.length; j++) {
-      if (auto115GetStep(t, AUTO115_STEP_DEFS[j].key).state === 'running') return { text: '整理中 · ' + AUTO115_STEP_DEFS[j].label, cls: 'ab-run' };
+    var allDefs = (auto115IsTvTask() ? AUTO115_STEPS_TV : AUTO115_STEP_DEFS);
+    for (var j = 2; j < allDefs.length; j++) {
+      if (auto115GetStep(t, allDefs[j].key).state === 'running') return { text: '整理中 · ' + allDefs[j].label, cls: 'ab-run' };
     }
     var cleanup = auto115GetStep(t, 'cleanup');
     if (cleanup.state === 'ok' || cleanup.state === 'skip') return { text: '已完成', cls: 'ab-ok' };
@@ -795,6 +796,15 @@
   /* ---------- 六步执行器 ---------- */
   function auto115Run(t) {
     if (!t) return Promise.resolve(null);
+    if (auto115RunningId) {
+      var dirty = auto115Task(auto115RunningId);
+      if (!dirty || dirty.aborted) {
+        auto115RunningId = '';
+      } else {
+        var st = auto115Status(dirty);
+        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+      }
+    }
     if (auto115RunningId && auto115RunningId !== t.id) {
       var cur = auto115Task(auto115RunningId);
       if (cur) {
@@ -810,10 +820,22 @@
     return ensure115Cookie().then(function (ck) {
       if (!ck) { auto115Set(t, auto115StepDefs(t)[0].key, 'fail', '还没登录 115'); auto115Finish(t); return null; }
       return (auto115TaskType(t) === 'upload') ? auto115StepUploadDir(t) : auto115StepSubmit(t);
+    }).catch(function (e) {
+      auto115Set(t, auto115StepDefs(t)[0].key, 'fail', (e && e.message) ? e.message : '启动失败');
+      auto115Finish(t); return null;
     });
   }
   function auto115AdvanceQueue(t) {
     if (auto115RunningId && (!t || t.id === auto115RunningId)) auto115RunningId = '';
+    if (auto115RunningId) {
+      var cur = auto115Task(auto115RunningId);
+      if (!cur || cur.aborted) {
+        auto115RunningId = '';
+      } else {
+        var st = auto115Status(cur);
+        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+      }
+    }
     var ts = (auto115Doc && auto115Doc.tasks) || [];
     for (var i = ts.length - 1; i >= 0; i--) {
       var n = ts[i];
@@ -1436,7 +1458,16 @@
   }
   function auto115Resume() {
     if (!auto115Doc) return;
-    var hasRunning = (auto115Doc.tasks || []).some(function (x) { return auto115GetStep(x, 'wait').state === 'running'; });
+    if (auto115RunningId) {
+      var cur = auto115Task(auto115RunningId);
+      if (!cur || cur.aborted) {
+        auto115RunningId = '';
+      } else {
+        var st = auto115Status(cur);
+        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+      }
+    }
+    var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function (x) { return auto115GetStep(x, 'wait').state === 'running'; });
     if (hasRunning) auto115ScheduleProbe();
     if (!auto115RunningId && !hasRunning) {
       var ts = auto115Doc.tasks || [];
@@ -1482,6 +1513,15 @@
     if (!t) return Promise.resolve(null);
     return ensure115Cookie().then(function (ck) {
       if (!ck) { showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+      if (auto115RunningId) {
+        var dirty = auto115Task(auto115RunningId);
+        if (!dirty || dirty.aborted) {
+          auto115RunningId = '';
+        } else {
+          var st = auto115Status(dirty);
+          if (st.cls === 'ab-ok' || st.cls === 'ab-fail') auto115RunningId = '';
+        }
+      }
       if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)) {
         t.queued = true;
         var cur = auto115Task(auto115RunningId);
@@ -1503,10 +1543,12 @@
       if (key === 'submit') return auto115StepSubmit(t);
       if (key === 'wait') return auto115StepWait(t, true);
       if (key === 'mkdir') return auto115StepMkdir(t);
-      if (key === 'move') return auto115StepMove(t);
-      if (key === 'rename') return auto115StepRename(t);
-      if (key === 'cleanup') return auto115StepCleanup(t);
-    });
+      if (key === 'move') return auto115IsTvTask() ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
+      if (key === 'rename') return auto115IsTvTask() ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
+      if (key === 'cleanup') return auto115IsTvTask() ? auto115StepTvRenameFolder(t) : auto115StepCleanup(t);
+      if (key === 'mkdir2') return auto115StepTvMkdirSeasons(t);
+      if (key === 'move2') return auto115StepTvMoveVideos(t);
+    }).catch(function (e) { showToast((e && e.message) || '重试失败', 'error'); });
   }
   function auto115RetryTask(tid) {
     var t = auto115Task(tid);
