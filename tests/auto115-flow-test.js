@@ -146,7 +146,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(g('rename') === 'ok', '步骤5 修改视频名称 = ok');
   assert(ctx.auto115GetStep(t, 'rename').msg.indexOf('IPX-486.mkv') >= 0, '改名为 IPX-486.mkv：' + ctx.auto115GetStep(t, 'rename').msg);
   assert(g('cleanup') === 'ok', '步骤6 修改文件夹名称 = ok');
-  assert(ctx.auto115GetStep(t, 'cleanup').msg.indexOf('测试影片') >= 0, '文件夹改名为「测试影片」：' + ctx.auto115GetStep(t, 'cleanup').msg);
+  assert(ctx.auto115GetStep(t, 'cleanup').msg.indexOf('测试影片') >= 0, '文件夹改名（始终取标题）「测试影片」：' + ctx.auto115GetStep(t, 'cleanup').msg);
   assert(ctx.auto115Status(t).text === '已完成', '任务终态 = 已完成');
 
   /* 2b. 单文件磁力：无文件夹落地 → move/cleanup 自动 skip */
@@ -162,6 +162,33 @@ const lz4LiteralForTest = (bytes) => {
   assert(g5('rename') === 'ok' && ctx.auto115GetStep(t5, 'rename').msg.indexOf('IPX-486.mp4') >= 0, '单文件改名为 IPX-486.mp4');
   assert(g5('cleanup') === 'skip', '文件夹改名步骤跳过');
   assert(ctx.auto115Status(t5).text === '已完成', '单文件任务终态 = 已完成');
+
+  /* 2c. 多 part 影片：cd1/cd2 全部保留，不误删第二张碟 */
+  script = {
+    'ac=add_task_url': { state: true, name: '多碟影片' },
+    'ac=task_lists': { tasks: [{ info_hash: 'MULTI', name: '多碟影片', percentDone: 100, status: 2, cid: 'ROOTCID' }] },
+    'files?cid=3311283881428122938': { state: true, data: [ { cid: 'DIRM', n: '多碟影片', t: NOW_SEC } ] },
+    'files?cid=DIRM': { state: true, data: [
+      { fid: 'M1', n: 'Movie.cd1.mkv', s: 900 },
+      { fid: 'M2', n: 'Movie.cd2.mkv', s: 880 },
+      { fid: 'M3', n: 'sample.mp4', s: 5000 }
+    ] },
+    'files/edit': { state: true },
+    'rb/delete': { state: true }
+  };
+  doc.dvdId = ''; doc.filmTitle = '多碟影片'; doc.originalTitle = ''; doc.year = '';
+  const tmov = { id: 'tmov', magnet: 'magnet:?xt=urn:btih:multi', magnetTitle: '多碟影片', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  doc.tasks.unshift(tmov);
+  ctx.auto115GetStep(tmov, 'mkdir').state = 'ok';
+  tmov.offlineDirCid = 'DIRM'; tmov.offlineDirName = '多碟影片';
+  calls.length = 0;
+  await ctx.auto115StepMove(tmov);
+  assert(ctx.auto115GetStep(tmov, 'move').state === 'ok', '多 part 清理 = ok');
+  assert(tmov.keepFids && tmov.keepFids.length === 2, '保留 2 个视频（cd1+cd2），实际=' + (tmov.keepFids || []).length);
+  assert(tmov.keepFids.indexOf('M1') >= 0 && tmov.keepFids.indexOf('M2') >= 0, '保留 M1/M2 两张碟');
+  const delM = calls.find(c => c.url.indexOf('rb/delete') >= 0);
+  assert(delM && delM.body.indexOf('M3') >= 0 && delM.body.indexOf('M1') < 0 && delM.body.indexOf('M2') < 0, '只删 sample(M3)，保留 cd1/cd2');
+  doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = '';
 
   /* 3. 探测 3 次后转「等待中」（直接驱动探测步，不等真实 10s 定时器） */
   script['ac=task_lists'] = () => ({ tasks: [{ info_hash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF01', percentDone: 10, status: 1 }] });
@@ -184,12 +211,35 @@ const lz4LiteralForTest = (bytes) => {
   ctx.auto115GetStep(t3, 'mkdir').state = 'fail';
   assert(ctx.auto115Status(t3).text === '失败 · 定位文件夹', '失败定位到「定位文件夹」');
 
-  /* 5. 番号为空 → 改名步失败提示 */
+  /* 5. 影片（无番号）→ 按「标题」改名（不再因无番号中断） */
   const t4 = { id: 't4', steps: ctx.auto115NewSteps(), videoFid: 'F9', videoName: 'x.mp4' };
   doc.dvdId = '';
   await ctx.auto115StepRename(t4);
-  assert(ctx.auto115GetStep(t4, 'rename').state === 'fail', '无番号 → 改名步失败');
-  assert(ctx.auto115GetStep(t4, 'rename').msg.indexOf('没有番号') >= 0, '提示「没有番号」');
+  assert(ctx.auto115GetStep(t4, 'rename').state === 'ok', '影片（无番号）按标题改名 = ok');
+  assert(ctx.auto115GetStep(t4, 'rename').msg.indexOf('测试影片.mp4') >= 0, '改名为 测试影片.mp4：' + ctx.auto115GetStep(t4, 'rename').msg);
+  doc.dvdId = 'IPX-486';
+  /* 5b. 影片命名规则：标题.原始标题.年份 / 原始标题空格转点 / 标题=原始标题→标题.年份 / 无年份→仅标题 */
+  doc.dvdId = '';
+  doc.filmTitle = '盗梦空间'; doc.originalTitle = 'Inception'; doc.year = '2010';
+  const t6 = { id: 't6', steps: ctx.auto115NewSteps(), videoFid: 'F9', videoName: 'x.mkv' };
+  await ctx.auto115StepRename(t6);
+  assert(ctx.auto115GetStep(t6, 'rename').state === 'ok' && ctx.auto115GetStep(t6, 'rename').msg.indexOf('盗梦空间.Inception.2010.mkv') >= 0, '影片命名 = 标题.原始标题.年份：' + ctx.auto115GetStep(t6, 'rename').msg);
+  doc.originalTitle = 'The Lord of the Rings';
+  const t7 = { id: 't7', steps: ctx.auto115NewSteps(), videoFid: 'F9', videoName: 'x.mkv' };
+  await ctx.auto115StepRename(t7);
+  assert(ctx.auto115GetStep(t7, 'rename').msg.indexOf('盗梦空间.The.Lord.of.the.Rings.2010.mkv') >= 0, '原始标题空格转点：' + ctx.auto115GetStep(t7, 'rename').msg);
+  doc.filmTitle = 'Inception'; doc.originalTitle = 'Inception';
+  const t8 = { id: 't8', steps: ctx.auto115NewSteps(), videoFid: 'F9', videoName: 'x.mkv' };
+  await ctx.auto115StepRename(t8);
+  assert(ctx.auto115GetStep(t8, 'rename').msg.indexOf('Inception.2010.mkv') >= 0, '标题=原始标题 → 标题.年份：' + ctx.auto115GetStep(t8, 'rename').msg);
+  doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = '2010';
+  const t9 = { id: 't9', steps: ctx.auto115NewSteps(), videoFid: 'F9', videoName: 'x.mkv' };
+  await ctx.auto115StepRename(t9);
+  assert(ctx.auto115GetStep(t9, 'rename').msg.indexOf('测试影片.2010.mkv') >= 0, '无原始标题、有年份 → 标题.年份：' + ctx.auto115GetStep(t9, 'rename').msg);
+  doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = '';
+  const t10 = { id: 't10', steps: ctx.auto115NewSteps(), videoFid: 'F9', videoName: 'x.mp4' };
+  await ctx.auto115StepRename(t10);
+  assert(ctx.auto115GetStep(t10, 'rename').msg.indexOf('测试影片.mp4') >= 0, '无年份 → 仅标题：' + ctx.auto115GetStep(t10, 'rename').msg);
   doc.dvdId = 'IPX-486';
 
   /* 6. 上传 NFO/海报/剧照 链路（115 4.0 加密通道：uploadinfo → initupload(ECDH+AES) → getuploadinfo → gettoken → OSS PUT） */
