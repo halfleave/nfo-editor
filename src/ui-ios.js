@@ -3366,8 +3366,8 @@ var subYear = '';
 var subUserEdited = false;
 function openSubtitleSheet(){
   var w = state.magnetWorker || DEFAULT_WORKER;
-  // 字幕搜索需激活码（中等 / 满级）；未满足时统一提示暂不可用，不暴露档位
-  if (!state.activationCode){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
+  // 字幕搜索仅满级可用（免费 / 中等不显示按钮、不可搜）；未满足时统一提示暂不可用，不暴露档位
+  if (!state.activationCode || (state.tier || '') !== 'full'){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
   if (!w){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
   openSheet('subtitleSheet');
   document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">输入后点击「搜索」</div>';
