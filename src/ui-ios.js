@@ -3745,22 +3745,19 @@ function auto115PasteMagnet(){
     navigator.clipboard.readText().then(function(txt){
       var val = (txt || '').trim();
       if (!val){
-        showToast('剪贴板为空，请手动长按文本框粘贴', 'info');
+        showToast('剪贴板为空，请长按文本框用系统菜单粘贴', 'info');
         inp.readOnly = false;
-        setTimeout(function(){ inp.focus(); }, 50);
         return;
       }
       inp.value = val;
       showToast('已粘贴', 'success');
     }).catch(function(){
-      showToast('无法自动读取剪贴板，请手动长按文本框粘贴', 'info');
+      showToast('无法自动读取剪贴板，请长按文本框用系统菜单粘贴', 'info');
       inp.readOnly = false;
-      setTimeout(function(){ inp.focus(); }, 50);
     });
   } else {
-    showToast('当前环境不支持自动粘贴，请手动长按文本框粘贴', 'info');
+    showToast('当前环境不支持自动粘贴，请长按文本框用系统菜单粘贴', 'info');
     inp.readOnly = false;
-    setTimeout(function(){ inp.focus(); }, 50);
   }
 }
 function auto115AddMagnetTask(){
