@@ -541,6 +541,27 @@
   var auto115RunningId = '';
   var auto115LockAt = 0;                     // 拿到锁的时刻，用于识别「占着锁但没在跑」的脏锁
   var AUTO115_LOCK_GRACE = 45000;            // 宽限期：刚拿到锁的头 45s 允许还没跑到 running 步骤
+  /* 僵尸步骤清理：某一步卡在 running 超过 10 分钟没动静（关页面/断网/请求挂起会留下这种状态），
+     它会被当成「任务还在跑」，导致执行锁不释放、别的任务永远排不上队。这里统一判死，让用户能重试。 */
+  var AUTO115_ZOMBIE_MS = 10 * 60 * 1000;
+  function auto115SweepZombies() {
+    var ts = (auto115Doc && auto115Doc.tasks) || [];
+    var now = Date.now(), changed = false;
+    for (var i = 0; i < ts.length; i++) {
+      var t = ts[i];
+      if (!t || t.aborted) continue;
+      var steps = t.steps || [];
+      for (var j = 0; j < steps.length; j++) {
+        var s = steps[j];
+        if (s.state === 'running' && s.at && now - s.at > AUTO115_ZOMBIE_MS) {
+          s.state = 'fail'; s.msg = '这一步长时间没响应，点「重试」继续';
+          changed = true;
+        }
+      }
+    }
+    if (changed) { auto115Save(); pc115RenderAuto(); pc115UpdateBadge(); }
+    return changed;
+  }
   function auto115HoldLock(t) { auto115RunningId = t.id; auto115LockAt = Date.now(); }
   function auto115ReleaseLock() { auto115RunningId = ''; auto115LockAt = 0; }
   /* 脏锁清理：锁指向的任务不存在 / 已中止 / 已终态 / 超过宽限期仍无任何 running 步骤 → 释放。
@@ -556,7 +577,10 @@
   }
   /* 自愈：没有任何任务在跑时，把最早一条待开始（排队中/待提交）的任务拉起来，避免永远停摆 */
   function auto115KickStuck() {
-    if (!auto115Doc || auto115RunningId) return;
+    if (!auto115Doc) return;
+    auto115SweepZombies();                          // 先清僵尸（可能把占锁任务的 running 步骤判死）
+    if (auto115RunningId) auto115ClearDirtyLock();  // 僵尸清完后锁往往就变脏了，顺带释放
+    if (auto115RunningId) return;
     var ts = auto115Doc.tasks || [];
     for (var k = 0; k < ts.length; k++) if (auto115IsActive(ts[k])) return;  // 有任务在跑就不抢，防并发串档
     var target = null;
@@ -631,7 +655,9 @@
             tt.aborted = false;
           }
         }
-        auto115Doc.tasks = v.tasks || [];
+        // ⚠️ 不能直接 auto115Doc.tasks = v.tasks：会把内存里刚创建/正在跑的任务对象换成反序列化副本，
+        // 执行器手里还是旧引用 → 请求照发（115 里确实存进去了），进度却写到孤儿对象上，界面永远「待提交」。
+        auto115Doc.tasks = auto115MergeTasks(auto115Doc.tasks || [], v.tasks || []);
         auto115Doc.filmTitle = d.title || v.filmTitle || auto115Doc.filmTitle || '';
         auto115Doc.dvdId = dvdId || v.dvdId || auto115Doc.dvdId || '';
         auto115Doc.originalTitle = d.originaltitle || v.originalTitle || '';
@@ -640,6 +666,22 @@
       }
       return auto115Doc;
     }).catch(function () { return auto115Doc; });
+  }
+  /* 合并任务列表：内存里的任务对象保持原引用（正在跑的任务绝不能被换掉），
+     只把数据库里有、内存里没有的补进来。 */
+  function auto115MergeTasks(memTasks, savedTasks) {
+    var out = [], seen = {};
+    for (var i = 0; i < memTasks.length; i++) {
+      var m = memTasks[i];
+      if (!m || !m.id || seen[m.id]) continue;
+      out.push(m); seen[m.id] = 1;
+    }
+    for (var j = 0; j < savedTasks.length; j++) {
+      var s = savedTasks[j];
+      if (!s || !s.id || seen[s.id]) continue;
+      out.push(s); seen[s.id] = 1;
+    }
+    return out;
   }
   function auto115Save() {
     if (!auto115Doc) return Promise.resolve();
@@ -761,6 +803,9 @@
       + '<div class="auto-task-head" onclick="auto115Toggle(\'' + t.id + '\')">'
       + '<div class="auto-task-title">' + escapeHtml(auto115TaskTitle(t)) + '</div>'
       + '<span class="auto-task-badge ' + st.cls + '">' + escapeHtml(st.text) + '</span>'
+      + (st.cls === 'ab-idle'
+        ? '<button type="button" class="auto-task-start" onclick="event.stopPropagation();auto115ForceStart(\'' + t.id + '\')">开始</button>'
+        : '')
       + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
       + '</div>';
     if (expanded) {
@@ -841,7 +886,10 @@
   /* ---------- 六步执行器 ---------- */
   function auto115Run(t) {
     if (!t) return Promise.resolve(null);
-    /* 清理脏的 runningId：指向的任务已终态/已删除/已中止/占着锁却没在跑 → 释放队列 */
+    /* 引用兜底：doc 被重新加载过时换回 doc 里当前那条；doc 里没有就收编回来，避免进度写进孤儿对象 */
+    var live = auto115Task(t.id);
+    if (live) t = live;
+    else if (auto115Doc && auto115Doc.tasks && t.id) auto115Doc.tasks.unshift(t);
     auto115ClearDirtyLock();
     if (auto115RunningId && auto115RunningId !== t.id) {
       var cur = auto115Task(auto115RunningId);
@@ -1484,6 +1532,7 @@
   }
   function auto115Resume() {
     if (!auto115Doc) return;
+    auto115SweepZombies();
     auto115ClearDirtyLock();
     var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function (x) { return auto115IsActive(x); });
     if (hasRunning) auto115ScheduleProbe();

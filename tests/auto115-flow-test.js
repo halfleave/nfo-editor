@@ -571,6 +571,35 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115RunningId === 'tForce', '手动「开始」直接抢到执行锁');
   assert(ctx.auto115GetStep(tForce, 'submit').state === 'running', '手动「开始」后立刻进入提交（不再排队等待）');
   await pForce;
+  // 9j. 僵尸步骤：某一步卡在 running 超过 10 分钟 → 判死，执行锁释放，队列不再被堵
+  const zt = { id: 'zt', magnet: 'magnet:?xt=urn:btih:tv5555555555555555555555555555555555555', magnetTitle: '僵尸任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  const zs = ctx.auto115GetStep(zt, 'submit');
+  zs.state = 'running'; zs.at = Date.now() - 11 * 60 * 1000;
+  docTv3.tasks.unshift(zt);
+  ctx.auto115RunningId = 'zt'; ctx.auto115LockAt = Date.now() - 11 * 60 * 1000;
+  ctx.auto115KickStuck();
+  assert(ctx.auto115GetStep(zt, 'submit').state === 'fail', '卡死超 10 分钟的 running 步骤被判死（可重试）');
+  assert(ctx.auto115RunningId === '', '僵尸任务占着的执行锁被释放');
+  ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
+  ctx.auto115Doc = null;
+
+  // 9k. 引用掉包回归：任务落库后 doc 被重新加载（任务换成反序列化副本），
+  //     执行器手里拿旧引用跑，进度也必须落在 doc 里那条上（否则 115 已收到、界面却永远「待提交」）
+  script = { 'ac=add_task_url': { state: true, info_hash: 'HR', name: 'RefTask' } };
+  ctx.currentDetailFilm = { id: 'filmRef', data: { title: '引用测试', dvdId: 'IPX-999' } };
+  ctx.auto115Doc = null;
+  const docRef = await ctx.auto115EnsureDoc();
+  const tRef = { id: 'tRef', magnet: 'magnet:?xt=urn:btih:ref11111111111111111111111111111111111111', magnetTitle: '引用任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  docRef.tasks.unshift(tRef);
+  await ctx.auto115Save();
+  ctx.auto115Doc = null;
+  await ctx.auto115EnsureDoc();                       // 重新加载 → doc 里的任务是新对象
+  assert(ctx.auto115Task('tRef') !== tRef, '重新加载后 doc 里的任务是数据库反序列化出来的另一个对象');
+  await ctx.auto115Run(tRef);                         // 执行器拿着旧引用
+  const liveRef = ctx.auto115Task('tRef');
+  assert(liveRef && liveRef !== tRef, '执行器已切回 doc 里的当前对象（不再是孤儿引用）');
+  assert(ctx.auto115GetStep(liveRef, 'submit').state !== 'idle', '旧引用跑完后 doc 里那条的提交步骤已更新');
+  assert(ctx.auto115Status(liveRef).text !== '待提交', '任务不再显示「待提交」');
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
   ctx.auto115Doc = null;
 

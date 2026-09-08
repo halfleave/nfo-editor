@@ -1823,6 +1823,7 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .auto-task-badge.ab-ok { color: #1F9D55; background: rgba(31,157,85,.16); }
 .auto-task-badge.ab-idle { color: var(--text-3); background: var(--surface-hover); }
 .auto-task-arrow { flex: 0 0 auto; width: 15px; height: 15px; color: var(--text-3); transition: transform .2s; }
+.auto-task-start { flex: 0 0 auto; border: none; border-radius: 999px; font-size: 11px; font-weight: 600; padding: 3px 10px; background: var(--accent, #007aff); color: #fff; cursor: pointer; }
 .auto-task.expanded .auto-task-arrow { transform: rotate(90deg); }
 .auto-steps { padding: 2px 10px 6px; border-top: 1px solid var(--border); }
 .auto-step { display: flex; gap: 9px; padding: 6px 0; }
