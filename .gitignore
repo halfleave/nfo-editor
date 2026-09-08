@@ -8,5 +8,6 @@ adult-loading-phrases.json
 __pycache__/
 *.pyc
 
-# 本地规划文档（含内部协作信息，勿推公开仓库）
-docs/
+# 本地协作/规划文档（含内部协作信息，勿推公开仓库）
+AI-COLLAB.md
+nfo-prd.md
