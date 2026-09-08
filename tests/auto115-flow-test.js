@@ -364,6 +364,7 @@ const lz4LiteralForTest = (bytes) => {
 
   /* 7. 并入模式：同影片第二个磁力 → 移入已有标题文件夹，改名 番号.A.ext，删除临时文件夹 */
   script = {
+    'files?cid=DIR999': { state: true, data: [ { fid: 'F2', n: 'Some.Torrent.Folder-xxx.mkv', s: 800 } ] },
     'files?cid=DIR777': { state: true, data: [ { fid: 'F0', n: 'IPX-486.mp4', s: 900 } ] },
     'files/move': { state: true },
     'files/edit': { state: true },
@@ -373,10 +374,12 @@ const lz4LiteralForTest = (bytes) => {
   for (let i = 0; i < tp.steps.length; i++){ tp.steps[i].state = 'ok'; }
   doc.tasks.unshift(tp);
   const tm = { id: 'tm1', magnet: 'magnet:?xt=urn:btih:2222222222222222222222222222222222222222', magnetTitle: '第二个磁力', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIR999', offlineDirName: 'Some.Torrent.Folder-xxx', videoFid: 'F2', videoName: 'Some.Torrent.Folder-xxx.mkv', fv: 2 };
-  ['submit', 'wait', 'mkdir', 'move'].forEach(k => { ctx.auto115GetStep(tm, k).state = 'ok'; });
+  ['submit', 'wait', 'mkdir'].forEach(k => { ctx.auto115GetStep(tm, k).state = 'ok'; });
   doc.tasks.unshift(tm);
   calls.length = 0;
-  await ctx.auto115StepRename(tm);
+  /* 方案 B：cleanup 第 4 步识别并入目标 → skip → 联动 move → rename（移入+删临时夹） */
+  await ctx.auto115StepCleanup(tm);
+  assert(ctx.auto115GetStep(tm, 'cleanup').state === 'skip', '并入任务 cleanup 标记 skip（不改临时夹名）');
   const mvCall = calls.find(c => c.url.indexOf('files/move') >= 0);
   assert(!!mvCall && mvCall.body.indexOf('fid=F2') >= 0 && mvCall.body.indexOf('pid=DIR777') >= 0, '视频移入已有文件夹 DIR777');
   const editCall = calls.find(c => c.url.indexOf('files/edit') >= 0);
@@ -480,7 +483,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(planCn.renames.find(x => x.fid === 'B').name === '老剧.S01E02.mp4', 'TV plan 第二集 → S01E02');
   assert(planCn.renames.find(x => x.fid === 'C').name === '老剧.S01E03.mp4', 'TV plan 第三集 → S01E03');
 
-  // 9g. 集成：剧集离线新流程端到端（清除无关文件 → 改名 → 建 S01 → 移入 → 改标题文件夹）
+  // 9g. 集成：剧集离线新流程端到端（方案 B：改标题文件夹 → 清除无关文件 → 建 S01 → 改名 → 移入）
   ctx.auto115Doc.type = 'tv'; ctx.auto115Doc.filmTitle = '权力的游戏'; ctx.auto115Doc.dvdId = '';
   let listTvCalls = 0;
   script = {
@@ -504,13 +507,15 @@ const lz4LiteralForTest = (bytes) => {
     'rb/delete': { state: true }
   };
   const ttv = { id: 'ttv', magnet: 'magnet:?xt=urn:btih:tv1111111111111111111111111111111111111', magnetTitle: '剧集磁力', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIRTV', offlineDirName: 'GoT', fv: 2 };
+  ['submit', 'wait', 'mkdir'].forEach(k => { ctx.auto115GetStep(ttv, k).state = 'ok'; });
   calls.length = 0;
-  await ctx.auto115StepTvCleanupFiles(ttv);
+  /* 方案 B：cleanup 第 4 步先改标题文件夹，再联动后续步骤 */
+  await ctx.auto115StepCleanup(ttv);
+  assert(ctx.auto115GetStep(ttv, 'cleanup').state === 'ok', 'TV 修改标题文件夹 cleanup = ok（先定容器）');
   assert(ctx.auto115GetStep(ttv, 'move').state === 'ok', 'TV 清除无关文件 move = ok');
-  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 修改视频名称 rename = ok');
   assert(ctx.auto115GetStep(ttv, 'mkdir2').state === 'ok', 'TV 新建季文件夹 mkdir2 = ok');
+  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 修改视频名称 rename = ok');
   assert(ctx.auto115GetStep(ttv, 'move2').state === 'ok', 'TV 移入对应视频 move2 = ok');
-  assert(ctx.auto115GetStep(ttv, 'cleanup').state === 'ok', 'TV 修改标题文件夹 cleanup = ok');
   const editBodies = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.mkv') >= 0), '改名含 权力的游戏.S01E01.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.mkv') >= 0), '改名含 权力的游戏.S01E02.mkv');

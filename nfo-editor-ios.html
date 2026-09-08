@@ -47,7 +47,7 @@
     <div class="about-title" data-page-node-id="2mk3QxHmQ25zheTyL1jeCL">关于</div>
     <div class="about-body" data-page-node-id="UDuDPvuiSOf8k8FIpfmU8U">
       <p data-page-node-id="LmbAfxlxuZReJSPUqNcYuB">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-      <p data-page-node-id="m3N3CiBJJa1Q0EPf6AAMwr">@Halfleave · v2.0.226</p>
+      <p data-page-node-id="m3N3CiBJJa1Q0EPf6AAMwr">@Halfleave · v2.0.230</p>
     </div>
     <button class="about-done" onclick="closeAllSheets()" data-page-node-id="KnNqBwsFiLFeshOApUODcS">完成</button>
   </div>
@@ -817,13 +817,15 @@
       <div class="auto-film" id="autoFilmTitle"></div>
       <div class="auto-list" id="autoTaskList"></div>
       <div class="auto-actions">
-        <button class="auto-action-btn" id="autoAddMagnetBtn" onclick="auto115OpenMagnetModal()">添加磁力</button>
         <button class="auto-action-btn" id="autoUploadBtn" onclick="auto115AddUploadTask()">上传元数据</button>
       </div>
       <div class="auto-empty" id="autoEmpty" style="display:none;">
         <div class="auto-empty-title">还没有自动化任务</div>
       </div>
     </div>
+    <button class="auto-fab" id="autoAddMagnetBtn" onclick="auto115OpenMagnetModal()" aria-label="添加磁力">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/><path d="m12 15 4 4"/></svg>
+    </button>
   </section>
 
   <!-- 添加磁力 弹窗：用户自行粘贴磁力，点击确定后走 115 离线任务 -->
@@ -834,7 +836,6 @@
       <textarea id="magnetInput" class="magnet-input" rows="5" readonly onclick="auto115PasteMagnet()" placeholder="点击此处粘贴磁力链接（magnet:?...）" style="-webkit-user-select:text;"></textarea>
     </div>
     <div class="magnet-sheet-ops">
-      <button class="sheet-btn magnet-paste-btn" id="magnetPasteBtn" onclick="auto115PasteMagnet()">粘贴</button>
       <button class="sheet-btn magnet-confirm-btn" onclick="auto115AddMagnetTask()">确定</button>
     </div>
   </div>

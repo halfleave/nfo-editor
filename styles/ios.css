@@ -1507,7 +1507,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .detail-auto-btn { position: relative; width: 36px; height: 36px; border-radius: 18px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.28); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: none; color: #fff; -webkit-tap-highlight-color: transparent; }
 .detail-auto-btn svg { width: 21px; height: 21px; }
 .detail-auto-btn:active { opacity: .6; }
-.auto-badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.auto-badge { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 0 2px rgba(0,0,0,0.28); }
+.auto-badge-red { background: #ff3b30; }
+.auto-badge-run { background: #ffcc00; }
+.auto-badge-ok { background: #34c759; }
 .auto-topbar { position: relative; display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; flex: 0 0 auto; }
 .auto-topbar button { width: 34px; height: 34px; border: none; background: transparent; color: var(--label); display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
 .auto-topbar button svg { width: 22px; height: 22px; }
@@ -1516,9 +1519,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; }
 /* 上传入口：常驻在任务列表上方，不依赖任何离线任务 */
-.auto-actions { display: flex; gap: 10px; width: 92%; margin: 14px auto 16px; }
+.auto-actions { display: flex; width: 60%; margin: 14px auto 16px; }
 .auto-action-btn { flex: 1; border: none; border-radius: 980px; background: var(--accent); color: var(--accent-text); font-size: 14px; font-weight: 600; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
 .auto-action-btn:active { opacity: .75; }
+/* 添加磁力：右下角圆形浮动按钮（线形磁铁图标） */
+.auto-fab { position: absolute; right: 18px; bottom: calc(24px + env(safe-area-inset-bottom)); width: 54px; height: 54px; border-radius: 50%; border: none; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,.18); z-index: 30; -webkit-tap-highlight-color: transparent; appearance: none; -webkit-appearance: none; }
+.auto-fab svg { width: 24px; height: 24px; }
+.auto-fab:active { opacity: .8; }
 .auto-list { display: flex; flex-direction: column; gap: 12px; }
 /* 添加磁力 弹窗 */
 .magnet-sheet-head { font-size: 16px; font-weight: 600; text-align: center; color: var(--label); margin: 4px 0 14px; }
@@ -1527,8 +1534,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-input::placeholder { color: var(--label-2); }
 .magnet-sheet-ops { display: flex; align-items: stretch; gap: 10px; margin-top: 18px; }
 .sheet-btn { flex: 1; display: flex; align-items: center; justify-content: center; appearance: none; -webkit-appearance: none; font-family: inherit; font-size: 15px; font-weight: 600; border: none; border-radius: 12px; padding: 12px 0; min-height: 48px; line-height: 1.2; -webkit-tap-highlight-color: transparent; background-clip: padding-box; }
-.magnet-paste-btn { background: var(--label); color: #fff; }
-.magnet-paste-btn:active { opacity: .8; }
 .magnet-confirm-btn { background: var(--accent); color: var(--accent-text); }
 .magnet-confirm-btn:active { opacity: .8; }
 .sheet-btn:active { opacity: .8; }

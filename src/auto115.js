@@ -506,19 +506,19 @@
     { key: 'submit', label: '提交离线' },
     { key: 'wait', label: '等待离线完成' },
     { key: 'mkdir', label: '定位文件夹' },
+    { key: 'cleanup', label: '修改文件夹名称' },
     { key: 'move', label: '清理文件' },
-    { key: 'rename', label: '修改视频名称' },
-    { key: 'cleanup', label: '修改文件夹名称' }
+    { key: 'rename', label: '修改视频名称' }
   ];
   var AUTO115_STEPS_TV = [
     { key: 'submit', label: '提交离线' },
     { key: 'wait', label: '等待离线完成' },
     { key: 'mkdir', label: '定位文件夹' },
+    { key: 'cleanup', label: '修改标题文件夹' },
     { key: 'move', label: '清除无关文件' },
-    { key: 'rename', label: '修改视频名称' },
     { key: 'mkdir2', label: '新建季文件夹' },
-    { key: 'move2', label: '移入对应视频' },
-    { key: 'cleanup', label: '修改标题文件夹' }
+    { key: 'rename', label: '修改视频名称' },
+    { key: 'move2', label: '移入对应视频' }
   ];
   var AUTO115_STEPS_UPLOAD = [
     { key: 'dir', label: '准备文件夹' },
@@ -771,10 +771,22 @@
   function pc115UpdateBadge() {
     var el = document.getElementById('pcAutoBadge');
     if (!el) return;
-    var n = 0;
-    if (auto115Doc) n = (auto115Doc.tasks || []).filter(function (t) { return /ab-run|ab-fail|ab-wait/.test(auto115Status(t).cls); }).length;
-    el.textContent = n > 99 ? '99+' : String(n);
-    el.style.display = n ? '' : 'none';
+    var cls = '';
+    if (auto115Doc && (auto115Doc.tasks || []).length) {
+      var ts = auto115Doc.tasks, hasFail = false, hasActive = false, allDone = true;
+      for (var i = 0; i < ts.length; i++) {
+        var c = auto115Status(ts[i]).cls;
+        if (c === 'ab-fail') hasFail = true;
+        if (c === 'ab-run' || c === 'ab-wait' || c === 'ab-idle') hasActive = true;
+        if (c !== 'ab-ok') allDone = false;
+      }
+      if (hasFail) cls = 'auto-badge-red';
+      else if (hasActive) cls = 'auto-badge-run';
+      else if (allDone) cls = 'auto-badge-ok';
+    }
+    el.textContent = '';
+    el.className = cls ? ('auto-badge ' + cls) : 'auto-badge';
+    el.style.display = cls ? '' : 'none';
   }
   function auto115StepHtml(t, s) {
     var label = auto115StepLabel(s.key);
@@ -970,8 +982,8 @@
         if (cid === C115_DEFAULT_DIR_CID) { auto115Set(t, 'mkdir', 'fail', '没找到合适的文件夹'); auto115Finish(t); return null; }
         t.offlineDirCid = cid; t.offlineDirName = dir.n || '';
         auto115Set(t, 'mkdir', 'ok', '已定位文件夹：' + (dir.n || ''));
-        if (auto115IsTvTask()) return auto115StepTvCleanupFiles(t);
-        return auto115StepMove(t);
+        /* 方案 B：先改容器（第 4 步 cleanup），再整理内容 */
+        return auto115StepCleanup(t);
       }
       if (t.offlineName) {
         for (i = 0; i < files.length; i++) { if ((files[i].n || '') === t.offlineName) { f = files[i]; break; } }
@@ -983,8 +995,8 @@
         t.noFolder = true;
         t.videoFid = String(f.fid); t.videoName = f.n || ''; t.videoSize = Number(f.s) || 0;
         auto115Set(t, 'mkdir', 'ok', '单文件落地（无文件夹）：' + t.videoName);
-        if (auto115IsTvTask()) return auto115StepTvCleanupFiles(t);
-        return auto115StepMove(t);
+        /* 方案 B：noFolder 也要过 cleanup 步骤（TV 在此建剧集根；单影片标记跳过） */
+        return auto115StepCleanup(t);
       }
       auto115Set(t, 'mkdir', 'fail', '还没找到刚下载的内容，稍等再看看'); auto115Finish(t); return null;
     }).catch(function (e) { auto115Set(t, 'mkdir', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
@@ -1135,8 +1147,12 @@
     var name = 'S' + auto115Pad2(season);
     return auto115FindDir(rootCid, name).then(function (d) {
       if (d) return d.cid;
-        return auto115Post('https://webapi.115.com/files/add', 'pid=' + encodeURIComponent(rootCid) + '&file_name=' + encodeURIComponent(name)).then(function (res) {
-          var dd = res.d || {}; return (res.ok && (dd.state === true || dd.errno === 0)) ? String((dd.cid || (dd.data && dd.data.cid) || res.cid || '')) : null;
+        return auto115Post('https://webapi.115.com/files/add', 'pid=' + encodeURIComponent(rootCid) + '&cname=' + encodeURIComponent(name)).then(function (res) {
+          var dd = res.d || {}, ddd = dd.data || {};
+          var cid = String(ddd.cid || ddd.file_id || ddd.id || dd.cid || res.cid || '');
+          if (!res.ok || !(dd.state === true || dd.errno === 0)) throw new Error(auto115ErrText(dd, res, '创建 ' + name + ' 失败'));
+          if (!cid) throw new Error('创建 ' + name + ' 没拿到 cid');
+          return cid;
         });
     });
   }
@@ -1144,8 +1160,12 @@
     var name = auto115TvDirName(showTitle);
     return auto115FindDir(C115_DEFAULT_DIR_CID, name).then(function (d) {
       if (d) return d.cid;
-      return auto115Post('https://webapi.115.com/files/add', 'pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID) + '&file_name=' + encodeURIComponent(name)).then(function (res) {
-        var dd = res.d || {}; return (res.ok && (dd.state === true || dd.errno === 0)) ? String((dd.cid || (dd.data && dd.data.cid) || res.cid || '')) : null;
+      return auto115Post('https://webapi.115.com/files/add', 'pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID) + '&cname=' + encodeURIComponent(name)).then(function (res) {
+        var dd = res.d || {}, ddd = dd.data || {};
+        var cid = String(ddd.cid || ddd.file_id || ddd.id || dd.cid || res.cid || '');
+        if (!res.ok || !(dd.state === true || dd.errno === 0)) throw new Error(auto115ErrText(dd, res, '创建 ' + name + ' 失败'));
+        if (!cid) throw new Error('创建 ' + name + ' 没拿到 cid');
+        return cid;
       });
     });
   }
@@ -1163,13 +1183,13 @@
       if (!plan.renames.length){ auto115Set(t, 'move', 'fail', '没有可识别的视频文件，点「重试」'); auto115Finish(t); return null; }
       t.tvPlan = plan;
       var delIds = plan.deleteFids.filter(Boolean);
-      if (!delIds.length){ auto115Set(t, 'move', 'ok', '没有无关文件，保留 ' + plan.renames.length + ' 个文件'); return auto115StepTvRenameVideos(t); }
+      if (!delIds.length){ auto115Set(t, 'move', 'ok', '没有无关文件，保留 ' + plan.renames.length + ' 个文件'); return auto115StepTvMkdirSeasons(t); }
       auto115Set(t, 'move', 'running', '保留 ' + plan.renames.length + ' 个文件，正在删除 ' + delIds.length + ' 项无关文件…');
       var parent = t.noFolder ? C115_DEFAULT_DIR_CID : t.offlineDirCid;
       return auto115DeleteBatch(parent, delIds).then(function (errMsg) {
         if (errMsg){ auto115Set(t, 'move', 'fail', errMsg); auto115Finish(t); return null; }
         auto115Set(t, 'move', 'ok', '已清除 ' + delIds.length + ' 项无关文件，保留 ' + plan.renames.length + ' 个文件');
-        return auto115StepTvRenameVideos(t);
+        return auto115StepTvMkdirSeasons(t);
       });
     }).catch(function (e) { auto115Set(t, 'move', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   }
@@ -1179,7 +1199,7 @@
     if (!plan || !plan.renames.length){ auto115Set(t, 'rename', 'fail', '没有可重命名的文件'); auto115Finish(t); return Promise.resolve(null); }
     return auto115ApplyRenames(t, plan.renames, null).then(function () {
       auto115Set(t, 'rename', 'ok', '已改名为：' + plan.renames[0].name + (plan.renames.length > 1 ? ' 等 ' + plan.renames.length + ' 个文件' : ''));
-      return auto115StepTvMkdirSeasons(t);
+      return auto115StepTvMoveVideos(t);
     }).catch(function (e) { auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   }
   function auto115StepTvMkdirSeasons(t){
@@ -1210,7 +1230,7 @@
       return p.then(function (map) {
         t.tvSeasonMap = map;
         auto115Set(t, 'mkdir2', 'ok', '已新建 ' + seasonNums.length + ' 个季文件夹：' + seasonNums.map(function (s) { return 'S' + s; }).join('、'));
-        return auto115StepTvMoveVideos(t);
+        return auto115StepTvRenameVideos(t);
       });
     }).catch(function (e) { auto115Set(t, 'mkdir2', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   }
@@ -1234,31 +1254,12 @@
     return p.then(function () {
       var total = seasonKeys.reduce(function (n, s) { return n + bySeason[s].length; }, 0);
       auto115Set(t, 'move2', 'ok', '已移入 ' + total + ' 个文件到对应季文件夹');
-      return auto115StepTvRenameFolder(t);
+      auto115Finish(t);
+      return Promise.resolve(null);
     }).catch(function (e) { auto115Set(t, 'move2', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   }
-  function auto115StepTvRenameFolder(t){
-    auto115Set(t, 'cleanup', 'running', '正在把文件夹改名为剧集标题…');
-    var showTitle = auto115TvDirName(auto115Doc.filmTitle);
-    if (t.noFolder){
-      t.finalDirCid = t.tvRootCid; t.finalDirName = showTitle;
-      auto115Set(t, 'cleanup', 'ok', '单文件剧集已整理到「' + showTitle + '/S01」');
-      auto115Finish(t); return Promise.resolve(null);
-    }
-    if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'cleanup', 'fail', '文件夹没定位到'); auto115Finish(t); return Promise.resolve(null); }
-    return auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(t.offlineDirCid) + '&file_name=' + encodeURIComponent(showTitle)).then(function (res) {
-      var d = res.d || {};
-      if (res.ok && (d.state === true || d.errno === 0)){
-        t.finalDirCid = t.offlineDirCid; t.finalDirName = showTitle;
-        auto115Set(t, 'cleanup', 'ok', '已改名为「' + showTitle + '」');
-      } else {
-        auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '改名失败'));
-      }
-      auto115Finish(t); return null;
-    }).catch(function (e) { auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
-  }
+  /* 「修改标题文件夹」（方案 B 第 4 步）已并入 auto115StepCleanup 的 TV 分支。 */
   function auto115StepMove(t) {
-    if (auto115IsTvTask()) return auto115StepTvCleanupFiles(t);
     if (t.noFolder) { auto115Set(t, 'move', 'skip', '单文件落地，无需清理'); return auto115StepRename(t); }
     if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) { auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
     auto115Set(t, 'move', 'running', '正在扫描文件夹内容…');
@@ -1339,7 +1340,7 @@
     return null;
   }
   function auto115StepRename(t) {
-    if (auto115IsTvTask()) return auto115StepTvCleanupFiles(t);
+    if (auto115IsTvTask()) return auto115StepTvRenameVideos(t);
     if (t.external) {
       if (!t.targetName) { auto115Set(t, 'rename', 'skip', '未填目标名称，保留 115 原始文件名'); auto115Finish(t); return Promise.resolve(null); }
     }
@@ -1371,7 +1372,7 @@
         return auto115ApplyRenames(t, jobs, prev.cid).then(function () {
           t.videoName = jobs[0].name;
           auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
-          return auto115StepCleanup(t);
+          return auto115RemoveTmpDir(t).then(function () { auto115Finish(t); return null; });
         });
       }).catch(function (e) { auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
     }
@@ -1383,43 +1384,97 @@
     return auto115ApplyRenames(t, jobs, null).then(function () {
       t.videoName = jobs[0].name;
       auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
-      return auto115StepCleanup(t);
+      return auto115RemoveTmpDir(t).then(function () { auto115Finish(t); return null; });
     }).catch(function (e) { auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   }
+  /* 自动删除已并入的临时离线目录（不显示在 UI，rename 完成后静默触发）。
+     失败也不回退——临时目录留着用户可以手动清，不影响主流程。 */
+  function auto115RemoveTmpDir(t) {
+    if (!t.finalDirCid || t.noFolder) return Promise.resolve();
+    if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID || t.offlineDirCid === t.finalDirCid) return Promise.resolve();
+    var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+    return auto115Post('https://webapi.115.com/rb/delete', delBody).then(function (res) {
+      var d = res.d || {};
+      if (!(res.ok && (d.state === true || d.errno === 0))) showToast('临时目录未删，可手动清理：' + (t.offlineDirName || ''), 'info');
+      return;
+    }).catch(function () { /* 网络错误静默，不影响主流程 */ });
+  }
   function auto115StepCleanup(t) {
-    if (auto115IsTvTask()) return auto115StepTvRenameFolder(t);
-    if (t.finalDirCid) {
-      if (t.noFolder) { auto115Set(t, 'cleanup', 'skip', '视频已并入「' + (t.finalDirName || '') + '」，无需清理'); auto115Finish(t); return Promise.resolve(null); }
-      if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID || t.offlineDirCid === t.finalDirCid) { auto115Set(t, 'cleanup', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
-      auto115Set(t, 'cleanup', 'running', '正在删除已清空的临时文件夹…');
-      var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
-      return auto115Post('https://webapi.115.com/rb/delete', delBody).then(function (res) {
+    if (auto115IsTvTask()) {
+      /* 剧集流程第 4 步（方案 B）：先把容器改成剧集标题；改完调 TvCleanupFiles（第 5 步） */
+      var showTitle = auto115TvDirName(auto115Doc.filmTitle);
+      if (t.noFolder) {
+        /* 单文件剧集：离线没有落地文件夹，在这里把剧集根目录建好（后续建季/移入都用它） */
+        return auto115EnsureTvRoot(auto115Doc.filmTitle).then(function (cid) {
+          if (!cid) { auto115Set(t, 'cleanup', 'fail', '创建剧集根文件夹失败'); auto115Finish(t); return null; }
+          t.tvRootCid = cid; t.finalDirCid = cid; t.finalDirName = showTitle;
+          auto115Set(t, 'cleanup', 'ok', '剧集根目录「' + showTitle + '」就绪');
+          return auto115StepTvCleanupFiles(t);
+        }).catch(function (e) {
+          auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
+          auto115Finish(t); return null;
+        });
+      }
+      if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) {
+        auto115Set(t, 'cleanup', 'fail', '文件夹没定位到'); auto115Finish(t); return Promise.resolve(null);
+      }
+      if (t.offlineDirName === showTitle) {
+        auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改');
+        return auto115StepTvCleanupFiles(t);
+      }
+      auto115Set(t, 'cleanup', 'running', '正在把文件夹改名为「' + showTitle + '」…');
+      var tvBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&file_name=' + encodeURIComponent(showTitle);
+      return auto115Post('https://webapi.115.com/files/edit', tvBody).then(function (res) {
         var d = res.d || {};
-        if (res.ok && (d.state === true || d.errno === 0)) auto115Set(t, 'cleanup', 'ok', '已删除临时文件夹，视频在「' + t.finalDirName + '」');
-        else auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '删除临时文件夹失败'));
+        if (res.ok && (d.state === true || d.errno === 0)) {
+          t.offlineDirName = showTitle;
+          auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + showTitle);
+          return auto115StepTvCleanupFiles(t);
+        } else {
+          auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '改名失败'));
+          auto115Finish(t); return null;
+        }
+      }).catch(function (e) {
+        auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
         auto115Finish(t); return null;
-      }).catch(function (e) { auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+      });
     }
-    if (t.noFolder) { auto115Set(t, 'cleanup', 'skip', '单文件落地，无需改文件夹名'); auto115Finish(t); return Promise.resolve(null); }
+    /* 单影片流程第 4 步（方案 B）：先把容器改成影片名；改完调 StepMove（第 5 步） */
+    if (t.noFolder) { auto115Set(t, 'cleanup', 'skip', '单文件落地，无需改文件夹名'); return auto115StepMove(t); }
+    /* 并入任务：同影片已有目标文件夹，离线临时夹稍后整体删除，不改名 */
+    var prev = t.external ? null : auto115FindMergeTarget(t);
+    if (prev) {
+      t.finalDirCid = prev.cid; t.finalDirName = prev.name;
+      auto115Set(t, 'cleanup', 'skip', '将并入已有文件夹「' + prev.name + '」');
+      return auto115StepMove(t);
+    }
     if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) { auto115Set(t, 'cleanup', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
     var newName;
     if (t.external) {
-      if (!t.targetName) { auto115Set(t, 'cleanup', 'skip', '未填目标名称，保留 115 文件夹名'); auto115Finish(t); return Promise.resolve(null); }
+      if (!t.targetName) { auto115Set(t, 'cleanup', 'skip', '未填目标名称，保留 115 文件夹名'); return auto115StepMove(t); }
       newName = auto115ExternalBaseName(t);
     } else {
       /* 文件夹命名：始终只取影片标题（AV/影片一致） */
       newName = ((auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || t.offlineDirName || '').trim();
     }
     if (!newName) { auto115Set(t, 'cleanup', 'fail', '缺少名称信息，没法改名'); auto115Finish(t); return Promise.resolve(null); }
-    if (newName === t.offlineDirName) { auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改'); auto115Finish(t); return Promise.resolve(null); }
+    if (newName === t.offlineDirName) { auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改'); return auto115StepMove(t); }
     auto115Set(t, 'cleanup', 'running', '正在把文件夹改名为「' + newName + '」…');
     var body = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&file_name=' + encodeURIComponent(newName);
     return auto115Post('https://webapi.115.com/files/edit', body).then(function (res) {
       var d = res.d || {};
-      if (res.ok && (d.state === true || d.errno === 0)) { t.offlineDirName = newName; auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + newName); }
-      else auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '文件夹改名失败'));
+      if (res.ok && (d.state === true || d.errno === 0)) {
+        t.offlineDirName = newName;
+        auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + newName);
+        return auto115StepMove(t);
+      } else {
+        auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '文件夹改名失败'));
+        auto115Finish(t); return null;
+      }
+    }).catch(function (e) {
+      auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
       auto115Finish(t); return null;
-    }).catch(function (e) { auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+    });
   }
 
   /* ---------- 上传任务（NFO/海报/剧照，开放平台通道） ---------- */
@@ -1605,7 +1660,7 @@
       if (key === 'mkdir') return auto115StepMkdir(t);
       if (key === 'move') return auto115IsTvTask() ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
       if (key === 'rename') return auto115IsTvTask() ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
-      if (key === 'cleanup') return auto115IsTvTask() ? auto115StepTvRenameFolder(t) : auto115StepCleanup(t);
+      if (key === 'cleanup') return auto115StepCleanup(t);
       if (key === 'mkdir2') return auto115StepTvMkdirSeasons(t);
       if (key === 'move2') return auto115StepTvMoveVideos(t);
     }).catch(function (e) { showToast((e && e.message) || '重试失败', 'error'); });
