@@ -107,7 +107,10 @@ var currentFilmId = null;
 
 var currentFilmLocked = false;
 
-var DB_NAME = 'NFOEditorFS', DB_VERSION = 1;
+// 注意：PC 与移动端共用同一 IndexedDB 库（同源：同一 GitHub Pages 域名），版本号必须一致，
+// 否则先用过移动端（已建成 v2）再开 PC 端时，open(_, 1) 会因「请求版本低于已有版本」抛 VersionError，
+// 导致 openDB 永远 reject、全部本地读写（API 配置、保存影片、所有设置弹窗）静默失败。
+var DB_NAME = 'NFOEditorFS', DB_VERSION = 2;
 
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
 
@@ -150,10 +153,10 @@ var MAGNET_BATCH = 10;
 var SHOTS_INITIAL = 12;
 var SHOTS_BATCH = 12;
 
-// 剧照初始显示上限随激活层级变化：免费 1 张、中等 5 张、满级 12 张。
+// 剧照初始显示上限随激活层级变化：免费 1 张、中等 5 张、满级 8 张（与手机端一致）。
 function getShotCap(){
   var t = (state.tier || '').trim();
-  if (t === 'full') return 12;
+  if (t === 'full') return 8;
   if (t === 'medium') return 5;
   return 1;
 }
@@ -1409,13 +1412,27 @@ function stripMagnetTitle(t){
 function openDB(){
   if (openDB._p) return openDB._p;   // 缓存 Promise，避免初始化时并发重复 open
   openDB._p = new Promise(function(res, rej){
-    var req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = function(){
-      var db = req.result;
-      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+    var upgraded = false;
+    var doOpen = function(version){
+      var req = indexedDB.open(DB_NAME, version);
+      req.onupgradeneeded = function(){
+        var db = req.result;
+        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        upgraded = true;
+      };
+      req.onsuccess = function(){ res(req.result); };
+      req.onerror = function(){
+        // 版本倒挂（PC 请求版本低于已存在版本，例如同源先用过移动端 v2）会抛 VersionError，
+        // 不自愈则 openDB 永远 reject、全部本地读写失败。这里以更高版本重试一次即可自愈。
+        if (!upgraded && req.error && req.error.name === 'VersionError'){
+          console.warn('[openDB] 版本倒挂，重试为 v' + (version + 1));
+          doOpen(version + 1);
+        } else {
+          rej(req.error);
+        }
+      };
     };
-    req.onsuccess = function(){ res(req.result); };
-    req.onerror = function(){ rej(req.error); };
+    doOpen(DB_VERSION);
   });
   return openDB._p;
 }

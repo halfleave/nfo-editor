@@ -1364,6 +1364,7 @@ function openFilmDetail(encId){
     if (!film){ showToast('未找到影片', 'error'); return; }
     currentDetailFilmId = film.id;
     currentDetailFilm = film;
+    if (window.PC115) PC115.onDetailOpen();
     renderFilmDetail(film);
     switchPage('detail');
     var sc = document.getElementById('detailScroll');

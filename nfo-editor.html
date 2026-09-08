@@ -12,7 +12,7 @@
 <meta name="color-scheme" content="light dark" data-page-node-id="jErD6Cqs5fcGpZCZFDZMjC">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzAwN0FGRiIvPjxwYXRoIGQ9Ik0xMiAxMGwxMCA2LTEwIDZ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+" data-page-node-id="YEPH7RjM30f9lDAmrM7Exz">
 <title>NFO 编辑器</title>
-  <link rel="stylesheet" href="./styles/pc.css?v=46" data-page-node-id="McivyXH0xfpFASamTE8Ha4">
+  <link rel="stylesheet" href="./styles/pc.css?v=47" data-page-node-id="McivyXH0xfpFASamTE8Ha4">
   <script>
   /* 首屏同步应用主题色，避免刷新瞬间默认蓝 → 主题色的闪烁 (FOUC)。
      主题色权威值存于 IndexedDB（异步），这里仅用 localStorage 镜像做首屏兜底。 */
@@ -142,6 +142,38 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="6W01FSYMMLogkpKG4mm6cm"><path d="m15 18-6-6 6-6" data-page-node-id="7YTOAqyqWDZBeNJByyPaho"/></svg>
           返回
         </button>
+        <div class="detail-topbar-right">
+          <button class="detail-auto-btn" id="autoBtn" onclick="PC115.toggleAutoPanel()" title="115 自动化">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
+            <span>自动化</span>
+            <span class="auto-badge" id="pcAutoBadge" style="display:none;"></span>
+          </button>
+        </div>
+        <div class="auto-popover" id="autoPopover" aria-hidden="true">
+          <div class="auto-pop-head">
+            <div class="auto-pop-title">115 自动化</div>
+            <button class="auto-pop-close" onclick="PC115.closeAutoPanel()" aria-label="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="auto-film" id="pcAutoFilmTitle"></div>
+          <div class="auto-list" id="pcAutoPanel"></div>
+          <div class="auto-empty" id="pcAutoEmpty">还没有自动化任务</div>
+          <div class="auto-login-tip" id="pcAutoLoginTip" style="display:none;">还没登录 115，去「设置 → 115 网盘」登录后回来点「重试」</div>
+          <div class="auto-add-magnet">
+            <input class="auto-magnet-input" id="pcMagnetInput" placeholder="粘贴磁力链接 magnet:?..." />
+            <input class="auto-magnet-name" id="pcMagnetName" placeholder="目标名称（番号或影片名，可选）" />
+            <div class="auto-add-row">
+              <button class="auto-paste" type="button" onclick="PC115.pasteMagnet()">粘贴</button>
+              <button class="auto-add-btn" type="button" onclick="PC115.submitAddMagnet()">加入自动化</button>
+            </div>
+          </div>
+          <div class="auto-actions">
+            <button class="auto-up" id="pcAutoUploadBtn" type="button" onclick="PC115.addUploadTask()">上传元数据</button>
+            <button class="auto-clear" id="pcAutoClearBtn" type="button" style="display:none;" onclick="PC115.clearDone()">清空已完成</button>
+            <button class="auto-cfg" type="button" onclick="PC115.openConfig()">115 网盘设置</button>
+          </div>
+        </div>
       </div>
       <div class="detail-scroll" id="detailScroll" data-page-node-id="mPdCB85WzkINu3plEbFgRX">
         <div class="detail-inner" data-page-node-id="kZZoX2Q96HjK8GCmbCYwCX">
@@ -608,6 +640,12 @@
       </span>
       <span class="sm-tx" data-page-node-id="3f6Zus3sWa9JlWEfsYk8Sh">缓存配置</span>
     </button>
+    <button class="sm-item" role="menuitem" onclick="PC115.openConfig()" data-page-node-id="pc115MenuItem">
+      <span class="sm-ic" style="background:#FF3B30;" data-page-node-id="pc115MenuIc">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
+      </span>
+      <span class="sm-tx" data-page-node-id="pc115MenuTx">115 网盘</span>
+    </button>
   </div>
 </div>
 
@@ -663,6 +701,48 @@
     </div>
     <div class="spacer" data-page-node-id="Yfs2ZIiCxMOkvbNv7ybyCs"></div>
     <button class="btn btn-primary" onclick="saveCacheDays()" data-page-node-id="c1K3jzmpF5vjhSLIpUsGt9">保存</button>
+  </div>
+</div>
+
+<!-- ==================== 115 网盘配置 ==================== -->
+<div class="modal" id="pc115Sheet" data-page-node-id="pc115Sheet">
+  <div class="modal-head">
+    <h3>115 网盘</h3>
+    <button class="modal-close" onclick="closeAllSheets()" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="modal-body pc115-body">
+    <div class="field">
+      <label class="field-label">115 登录信息（Cookie）</label>
+      <textarea class="input pc115-cookie" id="c115CookiePc" rows="3" placeholder="扫码登录后自动填入，也可手动粘贴"></textarea>
+      <div class="field-ops">
+        <button class="btn btn-ghost btn-sm" type="button" id="c115ShowQrBtnPc" onclick="PC115.startLogin()">展示二维码</button>
+        <button class="btn btn-primary btn-sm" type="button" id="c115LoginBtnPc" onclick="PC115.startLogin()">扫码登录</button>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="PC115.copyCookie()">复制</button>
+      </div>
+    </div>
+    <div class="pc115-qr-wrap" id="c115QrWrapPc" style="display:none;">
+      <div class="pc115-qr" id="c115QrPc"></div>
+      <div class="c115-status" id="c115StatusPc"></div>
+      <div class="pc115-countdown" id="c115CountdownPc"></div>
+    </div>
+    <div class="c115-verify" id="c115VerifyPc"></div>
+    <div class="field">
+      <label class="field-label">代理令牌（应用内可配，默认已填）</label>
+      <input class="input" id="c115TokenPc" type="text" placeholder="与 Vercel 代理 C115_TOKEN 一致" oninput="PC115.tokenInput()" />
+      <div class="field-hint">留空则使用内置默认令牌</div>
+    </div>
+    <div class="field">
+      <label class="field-label">上传授权（开放平台）</label>
+      <div class="c115-verify" id="c115OpenStatusPc">未授权</div>
+      <button class="btn btn-default btn-sm" type="button" id="c115OpenAuthBtnPc" onclick="PC115.authorize()">授权并获取 token</button>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <div class="spacer"></div>
+    <button class="btn btn-default" type="button" onclick="PC115.verify()">检查连接</button>
+    <button class="btn btn-primary" type="button" onclick="closeAllSheets()">完成</button>
   </div>
 </div>
 
@@ -1089,9 +1169,10 @@
 
 <!-- ==================== Toast ==================== -->
 <div class="toasts" id="toasts" data-page-node-id="TD9n03wFqRdZX4PS2qQlOt"></div>
-  <script src="./src/core-shared.js?v=46"></script>
-  <script src="./src/core.js?v=46"></script>
-  <script src="./src/ui.js?v=46"></script>
-  <script src="./src/main.js?v=46"></script>
+  <script src="./src/core-shared.js?v=48"></script>
+  <script src="./src/core.js?v=48"></script>
+  <script src="./src/ui.js?v=48"></script>
+  <script src="./src/auto115.js?v=48"></script>
+  <script src="./src/main.js?v=48"></script>
 </body>
 </html>

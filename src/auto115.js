@@ -1,0 +1,1351 @@
+/* =====================================================================
+ * nfo-editor · PC 端 115 自动化引擎（auto115.js）
+ * 移植自手机端 ui-ios.js v213/v214 的活跃逻辑；剔除 4.0 加密逆向死代码，
+ * SHA1/HMAC 走 Web Crypto（与手机端一致）。渲染指向 PC DOM（popover + 配置弹窗），
+ * 不触碰手机端代码。依赖 PC 全局：state / currentDetailFilm / idbGet / idbPut /
+ * showToast / openSheet / closeAllSheets / DEFAULT_WORKER / escapeHtml /
+ * escapeAttr / buildNFOMovieXml / dataUrlToBytesSync / loadFilm / copyText。
+ * 暴露 window.PC115 供 ui.js 调用；任务/引擎函数为全局（供内联 onclick 直接调用）。
+ * ===================================================================== */
+(function (global) {
+  'use strict';
+
+  /* ---------- 常量 ---------- */
+  var C115_PROXY_TOKEN = 'C115PX_7d3k9f2m5q8x1a4t';
+  var C115_APP = 'web';
+  var C115_COOKIE_KEY = 'c115cookie';
+  var C115_TOKEN_KEY = 'c115token';
+  var C115_DEFAULT_DIR_CID = '3311283881428122938';
+  var C115_OPEN_KEY = 'c115open';
+  var C115_UA_DISK = 'Mozilla/5.0 115disk/30.5.1';
+  var C115_UA_ALI = 'aliyun-sdk-android/2.9.1';
+
+  /* 确保 state 上的 115 字段存在（core.js 已定义 state） */
+  if (typeof state !== 'undefined') {
+    if (!('c115Cookie' in state)) state.c115Cookie = '';
+    if (!('c115ProxyToken' in state)) state.c115ProxyToken = C115_PROXY_TOKEN;
+    if (!('c115Open' in state)) state.c115Open = null;
+  }
+
+  /* ---------- 协议层（与手机端一致） ---------- */
+  function c115ProxyBase() {
+    return (state.magnetWorker || DEFAULT_WORKER || '').replace(/\/$/, '') + '';
+  }
+  var c115FailStreak = 0;
+  function c115AdaptiveDelay() {
+    if (c115FailStreak <= 0) return 0;
+    var base = Math.min(800 * Math.pow(2, c115FailStreak - 1), 8000);
+    return base + Math.floor(Math.random() * 300);
+  }
+  function c115Sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  async function c115ProxyFetch(targetUrl, opts) {
+    opts = opts || {};
+    var base = c115ProxyBase();
+    if (!base) { var err = new Error('未配置代理服务地址'); err.status = 0; err.body = ''; throw err; }
+    var proxyUrl = base + '/api/cloud/proxy';
+    var form = 'url=' + encodeURIComponent(targetUrl) + '&token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN);
+    if (opts.headers && opts.headers['X-115-Cookie']) form += '&ck=' + encodeURIComponent(opts.headers['X-115-Cookie']);
+    if (opts.ua) form += '&ua=' + encodeURIComponent(opts.ua);
+    if (opts.xs) form += '&xs=' + encodeURIComponent(JSON.stringify(opts.xs));
+    if (opts.noRef) form += '&noRef=1';
+    if (opts.method && opts.method !== 'GET') {
+      form += '&method=' + encodeURIComponent(opts.method.toUpperCase());
+      if (opts.body != null) form += '&payload=' + encodeURIComponent(typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
+      if (opts.headers && opts.headers['Content-Type']) form += '&ct=' + encodeURIComponent(opts.headers['Content-Type']);
+      if (opts.b64) form += '&b64=1';
+    }
+    var waitMs = c115AdaptiveDelay();
+    if (waitMs > 0) await c115Sleep(waitMs);
+    return fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form,
+      cache: 'no-store'
+    }).then(function (r) {
+      c115FailStreak = r.ok ? 0 : Math.min(c115FailStreak + 1, 4);
+      if (opts.bin) {
+        return r.arrayBuffer().then(function (buf) {
+          return { ok: r.ok, status: r.status, d: {}, raw: '', bin: c115BytesToB64(new Uint8Array(buf)) };
+        });
+      }
+      return r.text().then(function (txt) {
+        var d = {};
+        try { d = JSON.parse(txt); } catch (_) { d = { raw: txt.slice(0, 300) }; }
+        if (!r.ok) {
+          var errMsg = d && d.error ? d.error : ('HTTP ' + r.status);
+          if (d && d.debug) errMsg += ' | ' + JSON.stringify(d.debug);
+          var err = new Error(errMsg); err.status = r.status; err.body = txt.slice(0, 300); err.data = d;
+          throw err;
+        }
+        return { ok: r.ok, status: r.status, d: d || {}, raw: txt.slice(0, 500) };
+      });
+    }).catch(function (e) {
+      if (!(e && e.status)) c115FailStreak = Math.min(c115FailStreak + 1, 4);
+      if (e && e.status) throw e;
+      var err = new Error((e && e.message ? e.message : '网络错误') + ' [' + proxyUrl + ']');
+      err.network = true; err.url = proxyUrl; err.original = e;
+      throw err;
+    });
+  }
+
+  /* ---------- 加密辅助（Web Crypto） ---------- */
+  async function c115Sha1Hex(input, tag) {
+    var bytes = (typeof input === 'string') ? new TextEncoder().encode(input) : input;
+    try {
+      var buf = await crypto.subtle.digest('SHA-1', bytes);
+      return Array.from(new Uint8Array(buf)).map(function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join('');
+    } catch (e) {
+      throw new Error('SHA1' + (tag ? '(' + tag + ')' : '') + '失败：' + ((e && e.message) || e) + ' len=' + bytes.length);
+    }
+  }
+  async function c115HmacSha1B64(secret, msg) {
+    try {
+      var k = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+      var mac = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(msg));
+      return c115BytesToB64(new Uint8Array(mac));
+    } catch (e) { throw new Error('HMAC-SHA1 失败：' + ((e && e.message) || e) + ' secretLen=' + secret.length + ' msgLen=' + msg.length); }
+  }
+  function c115BytesToB64(bytes) {
+    var bin = '', i;
+    for (i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 0x8000, bytes.length)));
+    return btoa(bin);
+  }
+  function pcSanitizeName(name) {
+    if (typeof NfoCore !== 'undefined' && NfoCore.sanitizeName) return NfoCore.sanitizeName(name);
+    if (typeof sanitizeName === 'function') return sanitizeName(name);
+    return (name || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie';
+  }
+
+  /* ---------- 115 配置（扫码登录 + Cookie 管理 + 开放平台授权） ---------- */
+  var c115QrInstance = null, c115Polling = false, c115PollTimer = null, c115QrTimer = null;
+  var c115CountdownTimer = null, c115QrDeadline = 0, c115Session = null;
+
+  function pc115SetStatus(text, type) {
+    var el = document.getElementById('c115StatusPc');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'c115-status' + (type ? ' ' + type : '');
+  }
+  function pc115OpenSheet() {
+    closeAllSheets();
+    var ta = document.getElementById('c115CookiePc');
+    if (ta) ta.value = '';
+    openSheet('pc115Sheet');
+    pc115RefreshOpenStatus();
+    idbGet('kv', C115_COOKIE_KEY).then(function (v) {
+      var cookie = (typeof v === 'string') ? v : (v && v.cookie) || '';
+      if (ta && cookie) ta.value = cookie;
+      state.c115Cookie = cookie;
+      pc115ResetQrButton();
+    }).catch(function () { pc115ResetQrButton(); });
+    var tk = document.getElementById('c115TokenPc');
+    if (tk) tk.value = '';
+    idbGet('kv', C115_TOKEN_KEY).then(function (v) {
+      var t = (typeof v === 'string') ? v : (v && v.token) || '';
+      if (tk && t) tk.value = t;
+      state.c115ProxyToken = t || C115_PROXY_TOKEN;
+    }).catch(function () { state.c115ProxyToken = C115_PROXY_TOKEN; });
+    var vEl = document.getElementById('c115VerifyPc');
+    if (vEl) { vEl.textContent = ''; vEl.className = 'c115-verify'; }
+  }
+  function pc115StartLogin() {
+    if (c115QrTimer) { clearTimeout(c115QrTimer); c115QrTimer = null; }
+    if (c115CountdownTimer) { clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+    pc115ShowQrArea();
+    var base = c115ProxyBase();
+    if (!base) { showToast('还没设置网络服务，去「设置 → 应用配置」填一下', 'error'); return; }
+    pc115SetStatus('正在生成二维码…', '');
+    c115ProxyFetch('https://qrcodeapi.115.com/api/1.0/web/1.0/token/')
+      .then(function (res) {
+        if (!res.ok || !res.d || !res.d.data || !res.d.data.uid) { var err = new Error('获取二维码失败'); err.status = res && res.status; err.data = res && res.d; throw err; }
+        var data = res.d.data;
+        c115Session = { uid: data.uid, time: data.time, sign: data.sign, app: C115_APP };
+        var qrText = data.qrcode || ('https://qrcodeapi.115.com/api/1.0/web/1.0/token/?uid=' + data.uid + '&time=' + data.time + '&sign=' + data.sign + '&app=' + C115_APP);
+        var m = /[?&]app=([^&]+)/.exec(qrText);
+        if (m) c115Session.app = decodeURIComponent(m[1]);
+        pc115RenderQr(qrText);
+        pc115SetStatus('请用 115 App 扫码并在手机上确认', '');
+        pc115StartPolling();
+        pc115StartCountdown();
+      })
+      .catch(function (e) {
+        var info = (e && e.message ? e.message : '网络错误');
+        if (e && e.status) info += ' (HTTP ' + e.status + ')';
+        if (e && e.body && e.body.length < 80) info += ' ' + e.body;
+        if (e && e.data) info += ' | ' + JSON.stringify(e.data).slice(0, 200);
+        if (e && e.network) info = '连不上代理：' + info;
+        pc115SetStatus('生成二维码失败：' + info, 'err');
+      });
+  }
+  function pc115ShowQrArea() {
+    var wrap = document.getElementById('c115QrWrapPc'); if (wrap) wrap.style.display = '';
+    var st = document.getElementById('c115StatusPc'); if (st) { st.style.display = ''; st.textContent = '正在生成二维码…'; }
+    var cd = document.getElementById('c115CountdownPc'); if (cd) { cd.style.display = ''; cd.textContent = ''; }
+    var btn = document.getElementById('c115ShowQrBtnPc'); if (btn) btn.style.display = 'none';
+  }
+  function pc115ResetQrButton() {
+    if (c115CountdownTimer) { clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+    if (c115QrTimer) { clearTimeout(c115QrTimer); c115QrTimer = null; }
+    pc115StopPolling();
+    var wrap = document.getElementById('c115QrWrapPc'); if (wrap) wrap.style.display = 'none';
+    var st = document.getElementById('c115StatusPc'); if (st) { st.style.display = 'none'; st.textContent = ''; }
+    var cd = document.getElementById('c115CountdownPc'); if (cd) { cd.style.display = 'none'; cd.textContent = ''; }
+    var btn = document.getElementById('c115ShowQrBtnPc'); if (btn) btn.style.display = '';
+  }
+  function pc115StartCountdown() {
+    if (c115CountdownTimer) { clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+    c115QrDeadline = Date.now() + 120000;
+    pc115UpdateCountdown();
+    c115CountdownTimer = setInterval(pc115UpdateCountdown, 1000);
+  }
+  function pc115UpdateCountdown() {
+    var el = document.getElementById('c115CountdownPc');
+    if (!el) return;
+    var remain = Math.ceil((c115QrDeadline - Date.now()) / 1000);
+    if (remain <= 0) {
+      if (c115CountdownTimer) { clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+      pc115StartLogin();
+      return;
+    }
+    el.textContent = '二维码 ' + remain + ' 秒后刷新';
+  }
+  function pc115RenderQr(text) {
+    var el = document.getElementById('c115QrPc');
+    if (!el) return;
+    el.innerHTML = '';
+    if (typeof QRCode === 'undefined') { pc115SetStatus('二维码库未加载', 'err'); return; }
+    c115QrInstance = new QRCode(el, { text: text, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.M });
+  }
+  function pc115StartPolling() {
+    if (c115Polling) return;
+    c115Polling = true;
+    pc115PollOnce();
+  }
+  function pc115StatusValue(res) {
+    if (!res || !res.d || !res.d.data) return null;
+    var d = res.d.data;
+    if (typeof d.status !== 'undefined' && d.status !== null) return d.status;
+    if (Array.isArray(d) && d[0] && typeof d[0].status !== 'undefined') return d[0].status;
+    return null;
+  }
+  function pc115PollOnce() {
+    if (!c115Polling || !c115Session) return;
+    var s = c115Session;
+    var url = 'https://qrcodeapi.115.com/get/status/?uid=' + s.uid + '&time=' + s.time + '&sign=' + encodeURIComponent(s.sign);
+    c115ProxyFetch(url)
+      .then(function (res) {
+        if (!c115Polling) return;
+        var st = pc115StatusValue(res);
+        if (st === 0 || st === null) { pc115SetStatus('请用 115 App 扫码并在手机上确认', ''); c115PollTimer = setTimeout(pc115PollOnce, 1800); }
+        else if (st === 1) { pc115SetStatus('已扫码，请在 115 App 上确认登录', ''); c115PollTimer = setTimeout(pc115PollOnce, 1800); }
+        else if (st === 2) { pc115SetStatus('已确认，正在换取 Cookie…', 'ok'); pc115StopPolling(); pc115ExchangeCookie(s.uid); }
+        else if (st === -1) {
+          pc115SetStatus('二维码已过期，请重新点击「展示二维码」', 'err'); pc115StopPolling();
+          if (c115CountdownTimer) { clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+          var qrw = document.getElementById('c115QrWrapPc'); if (qrw) qrw.style.display = 'none';
+          var sb = document.getElementById('c115ShowQrBtnPc'); if (sb) sb.style.display = '';
+        } else if (st === -2) {
+          pc115SetStatus('已取消登录', 'err'); pc115StopPolling();
+          var sb2 = document.getElementById('c115ShowQrBtnPc'); if (sb2) sb2.style.display = '';
+        } else { pc115SetStatus('未知状态：' + st, 'err'); c115PollTimer = setTimeout(pc115PollOnce, 1800); }
+      })
+      .catch(function (e) {
+        if (!c115Polling) return;
+        var info = (e && e.message ? e.message : '网络错误');
+        if (e && e.status) info += ' (' + e.status + ')';
+        pc115SetStatus('轮询失败：' + info + '，重试中…', 'err');
+        c115PollTimer = setTimeout(pc115PollOnce, 2500);
+      });
+  }
+  function pc115StopPolling() {
+    c115Polling = false;
+    if (c115PollTimer) { clearTimeout(c115PollTimer); c115PollTimer = null; }
+    if (c115QrTimer) { clearTimeout(c115QrTimer); c115QrTimer = null; }
+  }
+  function pc115ExchangeCookie(uid) {
+    var btn = document.getElementById('c115LoginBtnPc');
+    if (btn) btn.disabled = true;
+    var app = (c115Session && c115Session.app) || C115_APP;
+    c115ProxyFetch('https://passportapi.115.com/app/1.0/' + app + '/1.0/login/qrcode/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'app=' + encodeURIComponent(app) + '&account=' + encodeURIComponent(uid)
+    })
+      .then(function (res) {
+        if (!res.ok || !res.d || !res.d.data || !res.d.data.cookie) { var msg = (res.d && res.d.error) ? res.d.error : '换取 Cookie 失败'; var err = new Error(msg); err.status = res.status; err.data = res.d; throw err; }
+        var ck = res.d.data.cookie;
+        var cookieStr = Object.keys(ck).map(function (k) { return k + '=' + ck[k]; }).join('; ');
+        var ta = document.getElementById('c115CookiePc');
+        if (ta) ta.value = cookieStr;
+        state.c115Cookie = cookieStr;
+        return idbPut('kv', C115_COOKIE_KEY, cookieStr).then(function () {
+          pc115SetStatus('登录成功，Cookie 已自动保存', 'ok');
+          if (c115CountdownTimer) { clearInterval(c115CountdownTimer); c115CountdownTimer = null; }
+          var sb = document.getElementById('c115ShowQrBtnPc'); if (sb) sb.style.display = 'none';
+          showToast('115 登录成功', 'success');
+          pc115Verify();
+        });
+      })
+      .catch(function (e) {
+        var info = (e && e.message ? e.message : '网络错误');
+        if (e && e.status) info += ' (HTTP ' + e.status + ')';
+        pc115SetStatus('换取 Cookie 失败：' + info, 'err');
+        if (btn) btn.disabled = false;
+      });
+  }
+  function pc115TokenInput() {
+    var tk = document.getElementById('c115TokenPc');
+    var t = tk ? tk.value.trim() : '';
+    state.c115ProxyToken = t || C115_PROXY_TOKEN;
+    idbPut('kv', C115_TOKEN_KEY, t).catch(function () {});
+  }
+  function pc115CopyCookie() {
+    var ta = document.getElementById('c115CookiePc');
+    var v = ta ? ta.value.trim() : '';
+    if (!v) { showToast('没有可复制的登录信息', 'error'); return; }
+    copyText(v, function (ok) { showToast(ok ? '已复制登录信息' : '复制失败', ok ? 'success' : 'error'); });
+  }
+  function pc115Verify(silent) {
+    var vEl = silent ? null : document.getElementById('c115VerifyPc');
+    var ta = document.getElementById('c115CookiePc');
+    var cookie = (ta && ta.value) ? ta.value.trim() : (state.c115Cookie || '');
+    if (!cookie) { if (vEl) { vEl.textContent = '请先填写登录信息'; vEl.className = 'c115-verify err'; } return; }
+    if (vEl) { vEl.textContent = '正在检查…'; vEl.className = 'c115-verify'; }
+    var timedOut = false;
+    var timer = setTimeout(function () {
+      timedOut = true;
+      if (vEl) { vEl.textContent = '✗ 没连上，稍后再试'; vEl.className = 'c115-verify err'; }
+    }, 15000);
+    var done = function () { clearTimeout(timer); };
+    c115ProxyFetch('https://webapi.115.com/files?cid=0', { headers: { 'X-115-Cookie': cookie } })
+      .then(function (res) {
+        done();
+        if (timedOut) return;
+        if (!res.ok || !res.d || res.d.state !== true) throw new Error((res.d && (res.d.error || res.d.msg)) || 'Cookie 无效');
+        if (vEl) { vEl.textContent = '✓ 连接正常'; vEl.className = 'c115-verify ok'; }
+        state.c115Cookie = cookie;
+        idbPut('kv', C115_COOKIE_KEY, cookie).catch(function () {});
+      })
+      .catch(function (e) {
+        done();
+        if (timedOut) return;
+        var msg = (e && e.message) ? e.message : '自检失败';
+        if (vEl) { vEl.textContent = '✗ 没能连上，稍后再试'; vEl.className = 'c115-verify err'; return; }
+        if (silent && /Cookie|失效|令牌|登录/.test(msg)) showToast('115 登录过期了，去设置里重新登录一下', 'error');
+      });
+  }
+
+  /* ---------- 开放平台（上传 NFO 走官方通道） ---------- */
+  function c115OpenForm(o) { return Object.keys(o).map(function (k) { return k + '=' + encodeURIComponent(o[k]); }).join('&'); }
+  async function c115OpenReq(url, method, body, auth) {
+    var opts = { method: method || 'GET', xs: auth, ua: C115_UA_DISK };
+    if (body != null) { opts.body = body; opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' }; }
+    var r = await c115ProxyFetch(url, opts);
+    var d = r.d || {};
+    if (d.state === false) throw new Error('开放平台拒绝：' + (d.message || d.error || JSON.stringify(d).slice(0, 120)));
+    return d.data || d;
+  }
+  async function c115OpenAuthorize() {
+    var base = c115ProxyBase();
+    if (!base) throw new Error('未配置代理服务地址');
+    var cookie = state.c115Cookie || '';
+    if (!cookie) throw new Error('未登录 115（无 Cookie）');
+    var r = await fetch(base + '/open115/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'token=' + encodeURIComponent(state.c115ProxyToken || C115_PROXY_TOKEN) + '&ck=' + encodeURIComponent(cookie),
+      cache: 'no-store'
+    });
+    var j = {};
+    try { j = await r.json(); } catch (_) { throw new Error('授权响应解析失败（HTTP ' + r.status + '）'); }
+    if (!j.ok) {
+      var extra = '';
+      if (j.hint) extra += '\n诊断：' + j.hint;
+      if (j.redirectTo) extra += '\n服务端 Location：' + j.redirectTo;
+      throw new Error((j.error || '授权失败') + extra);
+    }
+    var rec = { access: j.access_token, refresh: j.refresh_token, appId: j.app_id || '', exp: Date.now() + 7000 * 1000 };
+    try { await idbPut('kv', C115_OPEN_KEY, rec); } catch (_) {}
+    state.c115Open = rec;
+    return rec;
+  }
+  async function c115OpenToken() {
+    var t = state.c115Open;
+    if (!t || !t.access) { try { t = await idbGet('kv', C115_OPEN_KEY); } catch (_) { t = null; } if (t && t.access) state.c115Open = t; }
+    if (t && t.access && t.exp && Date.now() < t.exp - 60000) return t.access;
+    if (t && t.refresh) {
+      try {
+        var res = await c115ProxyFetch('https://passportapi.115.com/open/refreshToken', {
+          method: 'POST', body: 'refresh_token=' + encodeURIComponent(t.refresh),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, ua: C115_UA_DISK, noRef: 1
+        });
+        var d = res.d || {}, dd = d.data || d;
+        if (dd && dd.access_token) {
+          var rec = { access: dd.access_token, refresh: dd.refresh_token || t.refresh, appId: t.appId, exp: Date.now() + 7000 * 1000 };
+          try { await idbPut('kv', C115_OPEN_KEY, rec); } catch (_) {}
+          state.c115Open = rec;
+          return rec.access;
+        }
+      } catch (e) {}
+    }
+    var fresh = await c115OpenAuthorize();
+    return fresh.access;
+  }
+  async function c115OpenUploadFile(cid, fileName, bytes, mime) {
+    var at = await c115OpenToken();
+    var auth = { 'Authorization': 'Bearer ' + at };
+    var fileID = (await c115Sha1Hex(bytes, 'file')).toUpperCase();
+    var preID = (await c115Sha1Hex(bytes.subarray(0, Math.min(bytes.length, 131072)), 'preid')).toUpperCase();
+    var payload = { file_name: fileName, file_size: String(bytes.length), target: 'U_1_' + cid, fileid: fileID, preid: preID, topupload: '0' };
+    var d = await c115OpenReq('https://proapi.115.com/open/upload/init', 'POST', c115OpenForm(payload), auth);
+    var status = Number(d.status), code = Number(d.code || 0);
+    if ((code === 700 && status === 6) || (code === 701 && status === 7)) {
+      var sc = String(d.sign_check || '').split('-');
+      var s0 = parseInt(sc[0], 10), s1 = parseInt(sc[1], 10);
+      if (isNaN(s0) || isNaN(s1) || s0 < 0 || s1 < s0) throw new Error('sign_check 范围异常：' + d.sign_check);
+      payload.sign_key = String(d.sign_key || '');
+      payload.sign_val = (await c115Sha1Hex(bytes.subarray(s0, s1 + 1), 'signVal')).toUpperCase();
+      d = await c115OpenReq('https://proapi.115.com/open/upload/init', 'POST', c115OpenForm(payload), auth);
+      status = Number(d.status); code = Number(d.code || 0);
+    }
+    if (code === 702 && status === 8) throw new Error('文件签名认证失败（702）');
+    if (status === 2) return '';
+    if (status !== 1) throw new Error('上传初始化失败：' + (d.message || JSON.stringify(d).slice(0, 120)));
+    var bucket = d.bucket, object = d.object, cb = d.callback || {};
+    if (!bucket || !object || !cb.callback) throw new Error('初始化响应缺少 OSS 参数：' + JSON.stringify(d).slice(0, 120));
+    var sts = await c115OpenReq('https://proapi.115.com/open/upload/get_token', 'GET', null, auth);
+    if (!sts.endpoint || !sts.AccessKeyId || !sts.AccessKeySecret || !sts.SecurityToken) throw new Error('获取 OSS 临时凭证失败：' + JSON.stringify(sts).slice(0, 120));
+    mime = mime || 'application/octet-stream';
+    var date = new Date().toUTCString();
+    var xs = {
+      'x-oss-security-token': sts.SecurityToken,
+      'x-oss-callback': btoa(unescape(encodeURIComponent(cb.callback))),
+      'x-oss-callback-var': btoa(unescape(encodeURIComponent(cb.callback_var || ''))),
+      'x-oss-date': date
+    };
+    var canonical = ['x-oss-callback', 'x-oss-callback-var', 'x-oss-date', 'x-oss-security-token'].map(function (k) { return k + ':' + xs[k] + '\n'; }).join('');
+    var strToSign = 'PUT\n\n' + mime + '\n' + date + '\n' + canonical + '/' + bucket + '/' + object;
+    xs['Authorization'] = 'OSS ' + sts.AccessKeyId + ':' + (await c115HmacSha1B64(sts.AccessKeySecret, strToSign));
+    var putUrl = String(sts.endpoint).replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(putUrl)) putUrl = 'https://' + putUrl;
+    putUrl = putUrl.replace(/^(https?:\/\/)([^/]+)$/, '$1' + bucket + '.$2');
+    if (putUrl.indexOf('/' + bucket + '.') < 0 && putUrl.indexOf(bucket + '.') < 0) putUrl = putUrl.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
+    putUrl = putUrl.replace(/\/+$/, '') + '/' + object;
+    var putRes = await c115ProxyFetch(putUrl, { method: 'PUT', body: c115BytesToB64(bytes), b64: true, ua: C115_UA_ALI, xs: xs, headers: { 'Content-Type': mime } });
+    var pd = putRes.d || {};
+    if (pd.state === true || putRes.status === 200) return '';
+    throw new Error('OSS PUT 失败（HTTP ' + putRes.status + '）：' + (pd.message || pd.error || (putRes.raw || '').slice(0, 110)));
+  }
+  function pc115OpenAuthUI() {
+    var el = document.getElementById('c115OpenStatusPc');
+    function set(t) { if (el) el.textContent = t; }
+    set('正在授权…');
+    ensure115Cookie().then(function () {
+      return c115OpenAuthorize();
+    }).then(function (rec) {
+      var txt = '已授权（AppID ' + (rec.appId || '-') + '）· access 约 2 小时 · refresh 1 年';
+      set(txt); showToast('开放平台授权成功', 'success');
+    }).catch(function (e) {
+      var msg = (e && e.message) ? e.message : String(e);
+      set('授权失败：' + msg); console.warn('[115授权]', msg); showToast('115 授权没成功，稍后再试一次', 'error');
+    });
+  }
+  function pc115RefreshOpenStatus() {
+    var el = document.getElementById('c115OpenStatusPc');
+    if (!el) return;
+    idbGet('kv', C115_OPEN_KEY).then(function (v) {
+      if (!v || !v.access) { el.textContent = '未授权'; return; }
+      var left = v.exp ? Math.max(0, Math.round((v.exp - Date.now()) / 60000)) : 0;
+      el.textContent = '已授权（AppID ' + (v.appId || '-') + '）· token 剩余约 ' + left + ' 分钟';
+    }).catch(function () { el.textContent = '未授权'; });
+  }
+
+  /* ---------- 取 Cookie ---------- */
+  function ensure115Cookie() {
+    if (state.c115Cookie) return Promise.resolve(state.c115Cookie);
+    return idbGet('kv', C115_COOKIE_KEY).then(function (v) {
+      var c = v ? ((typeof v === 'string') ? v : (v.cookie || '')) : '';
+      if (c) state.c115Cookie = c;
+      return c;
+    }).catch(function () { return ''; });
+  }
+
+  /* ---------- 115 离线（磁力搜索一键离线，复用） ---------- */
+  function c115Offline(magnet) {
+    ensure115Cookie().then(function (cookie) {
+      if (!cookie) { showToast('请先到「设置 → 115 网盘」登录', 'error'); return null; }
+      showToast('正在添加到 115 离线下载…', 'info');
+      var cid = C115_DEFAULT_DIR_CID;
+      var body = 'url=' + encodeURIComponent((magnet || '').trim()) + '&wp_path_id=' + encodeURIComponent(cid);
+      return c115ProxyFetch('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', {
+        method: 'POST',
+        headers: { 'X-115-Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body
+      });
+    }).then(function (res) {
+      if (!res) return;
+      var d = res.d || {};
+      var ok = res.ok && (d.state === true || (d.data && (d.data.tid || d.data.task_id || d.data.infoid)));
+      if (!ok && res.ok && d.errcode === 10008) { showToast('该任务已在 115 离线列表中', 'info'); return; }
+      if (ok) showToast('已发送到 115 离线下载（默认目录）', 'success');
+      else { var msg = (d.error || d.msg || (d.data && (d.data.error || d.data.msg))); if (!msg && res.raw) msg = res.raw; console.warn('[115离线]', msg); showToast('没能加到离线，稍后再试', 'error'); }
+    }).catch(function (e) {
+      var detail = (e && e.body) ? e.body.slice(0, 300) : '';
+      console.warn('[115离线]', e, detail); showToast('网络不太顺，稍后再试', 'error');
+    });
+  }
+
+  /* ---------- 自动化任务模型 ---------- */
+  var AUTO115_PREFIX = 'auto115:';
+  var AUTO115_PROBE_GAPS = [5000, 5000, 10000];
+  var AUTO115_PROBE_MAX = 3;
+  var AUTO115_DIR_SLACK_MS = 10 * 60 * 1000;
+  var AUTO115_FLOW_VERSION = 2;
+  var AUTO115_STEP_DEFS = [
+    { key: 'submit', label: '提交离线' },
+    { key: 'wait', label: '等待离线完成' },
+    { key: 'mkdir', label: '定位文件夹' },
+    { key: 'move', label: '清理文件' },
+    { key: 'rename', label: '修改视频名称' },
+    { key: 'cleanup', label: '修改文件夹名称' }
+  ];
+  var AUTO115_STEPS_UPLOAD = [
+    { key: 'dir', label: '准备文件夹' },
+    { key: 'upload', label: '上传文件' }
+  ];
+  var AUTO115_STEP_TABLE = { offline: AUTO115_STEP_DEFS, upload: AUTO115_STEPS_UPLOAD };
+  function auto115TaskType(t) { return (t && t.type === 'upload') ? 'upload' : 'offline'; }
+  function auto115StepDefs(t) { return AUTO115_STEP_TABLE[auto115TaskType(t)] || AUTO115_STEP_DEFS; }
+  function auto115TaskTitle(t) {
+    if (auto115TaskType(t) === 'upload') return '上传 NFO';
+    return (t && (t.magnetTitle || auto115Btih(t && t.magnet))) || '磁力任务';
+  }
+  var auto115Doc = null;
+  var auto115ProbeTimer = null;
+  var auto115Expanded = {};
+  var auto115RunningId = '';
+
+  function auto115Key(filmId) { return AUTO115_PREFIX + filmId; }
+  function auto115Now() { return Date.now(); }
+  function auto115Time(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+  }
+  function auto115Btih(magnet) {
+    var m = /btih:([0-9a-fA-F]{40}|[0-9a-zA-Z]{32})/.exec(magnet || '');
+    return m ? m[1].toUpperCase() : '';
+  }
+  function auto115NewSteps(type) {
+    return (AUTO115_STEP_TABLE[type] || AUTO115_STEP_DEFS).map(function (s) { return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
+  }
+  function auto115Size(n) {
+    if (!n) return '0 B';
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i ? n.toFixed(1) : n) + ' ' + u[i];
+  }
+  function auto115ErrText(d, res, fallback) {
+    var m = (d && (d.error || d.message || d.error_msg)) || (res && res.raw ? String(res.raw).slice(0, 120) : '') || fallback || '失败';
+    return String(m).slice(0, 160);
+  }
+  function auto115EnsureDoc() {
+    if (auto115Doc) return Promise.resolve(auto115Doc);
+    var film = currentDetailFilm;
+    if (!film) return Promise.reject(new Error('未打开影片'));
+    var d = film.data || {};
+    var dvdId = (d.dvdId || d.content_id || (d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle) ? d.originaltitle : '') || '').toString().trim();
+    var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
+    auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, originalTitle: d.originaltitle || '', year: year, tasks: [] };
+    return idbGet('kv', auto115Key(film.id)).then(function (v) {
+      if (v && v.tasks) {
+        var uploadKeys = {};
+        for (var k = 0; k < AUTO115_STEPS_UPLOAD.length; k++) uploadKeys[AUTO115_STEPS_UPLOAD[k].key] = 1;
+        for (var i = 0; i < v.tasks.length; i++) {
+          var tt = v.tasks[i];
+          if (tt.type === 'upload' && tt.steps) tt.steps = tt.steps.filter(function (s) { return uploadKeys[s.key]; });
+          if (tt.fv !== AUTO115_FLOW_VERSION) {
+            tt.fv = AUTO115_FLOW_VERSION;
+            tt.steps = auto115NewSteps();
+            delete tt.offlineDirCid; delete tt.offlineDirName;
+            delete tt.videoFid; delete tt.videoName; delete tt.videoSize; delete tt.noFolder; delete tt.finalDirCid; delete tt.finalDirName;
+            tt.aborted = false;
+          }
+        }
+        auto115Doc = v;
+        if (auto115Doc) {
+          auto115Doc.filmTitle = d.title || auto115Doc.filmTitle;
+          auto115Doc.dvdId = dvdId || auto115Doc.dvdId;
+          auto115Doc.originalTitle = d.originaltitle || '';
+          auto115Doc.year = year || auto115Doc.year || '';
+        }
+      }
+      return auto115Doc;
+    }).catch(function () { return auto115Doc; });
+  }
+  function auto115Save() {
+    if (!auto115Doc) return Promise.resolve();
+    return idbPut('kv', auto115Key(auto115Doc.filmId), auto115Doc).catch(function () {});
+  }
+  function auto115Task(id) {
+    if (!auto115Doc) return null;
+    var ts = auto115Doc.tasks || [];
+    for (var i = 0; i < ts.length; i++) if (ts[i].id === id) return ts[i];
+    return null;
+  }
+  function auto115GetStep(t, key) {
+    var steps = t.steps || [];
+    for (var i = 0; i < steps.length; i++) if (steps[i].key === key) return steps[i];
+    var s = { key: key, state: 'idle', msg: '', at: 0, probes: 0 };
+    steps.push(s); t.steps = steps; return s;
+  }
+  function auto115Set(t, key, stt, msg) {
+    var s = auto115GetStep(t, key);
+    s.state = stt; s.msg = msg || '';
+    if (stt !== 'idle' && stt !== 'running') s.at = auto115Now();
+    else if (!s.at) s.at = auto115Now();
+    pc115RenderAuto(); auto115Save();
+    return s;
+  }
+  function auto115Finish(t) { t.updatedAt = auto115Now(); pc115RenderAuto(); auto115Save(); pc115UpdateBadge(); auto115AdvanceQueue(t); }
+
+  /* ---------- 大状态合成 ---------- */
+  function auto115StepLabel(key) {
+    var all = AUTO115_STEP_DEFS.concat(AUTO115_STEPS_UPLOAD);
+    for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i].label;
+    return key;
+  }
+  function auto115Status(t) {
+    var steps = t.steps || [];
+    for (var i = 0; i < steps.length; i++) if (steps[i].state === 'fail') return { text: '失败 · ' + auto115StepLabel(steps[i].key), cls: 'ab-fail' };
+    if (t.aborted) return { text: '已中止', cls: 'ab-idle' };
+    if (auto115TaskType(t) === 'upload') {
+      var up = auto115GetStep(t, 'upload');
+      if (up.state === 'running') return { text: '上传中', cls: 'ab-run' };
+      if (auto115GetStep(t, 'dir').state === 'running') return { text: '准备中…', cls: 'ab-run' };
+      if (up.state === 'ok') return { text: '已完成', cls: 'ab-ok' };
+      return { text: '待上传', cls: 'ab-idle' };
+    }
+    var wait = auto115GetStep(t, 'wait');
+    if (wait.state === 'waiting') return { text: '等待中 · 已探 ' + (wait.probes || 0) + '/' + AUTO115_PROBE_MAX, cls: 'ab-wait' };
+    if (auto115GetStep(t, 'submit').state === 'running') return { text: '提交中…', cls: 'ab-run' };
+    if (wait.state === 'running') return { text: '离线中 (' + ((wait.probes || 0) + 1) + '/' + AUTO115_PROBE_MAX + ')', cls: 'ab-run' };
+    for (var j = 2; j < AUTO115_STEP_DEFS.length; j++) {
+      if (auto115GetStep(t, AUTO115_STEP_DEFS[j].key).state === 'running') return { text: '整理中 · ' + AUTO115_STEP_DEFS[j].label, cls: 'ab-run' };
+    }
+    var cleanup = auto115GetStep(t, 'cleanup');
+    if (cleanup.state === 'ok' || cleanup.state === 'skip') return { text: '已完成', cls: 'ab-ok' };
+    return { text: '待提交', cls: 'ab-idle' };
+  }
+
+  /* ---------- PC popover 渲染 ---------- */
+  function pc115RenderAuto() {
+    var listEl = document.getElementById('pcAutoPanel');
+    var emptyEl = document.getElementById('pcAutoEmpty');
+    var titleEl = document.getElementById('pcAutoFilmTitle');
+    var tipEl = document.getElementById('pcAutoLoginTip');
+    if (!listEl || !auto115Doc) return;
+    if (titleEl) titleEl.textContent = '目标：' + (auto115Doc.dvdId || auto115Doc.filmTitle || '未命名');
+    var tasks = auto115Doc.tasks || [];
+    if (emptyEl) emptyEl.style.display = tasks.length ? 'none' : '';
+    if (tipEl) tipEl.style.display = (state.c115Cookie ? 'none' : '');
+    var html = '';
+    listEl.innerHTML = html + tasks.map(auto115TaskHtml).join('');
+    var clearBtn = document.getElementById('pcAutoClearBtn');
+    if (clearBtn) clearBtn.style.display = tasks.some(function (t) { return auto115Status(t).cls === 'ab-ok'; }) ? '' : 'none';
+    var uploadBtn = document.getElementById('pcAutoUploadBtn');
+    if (uploadBtn) uploadBtn.style.display = tasks.some(function (t) { return auto115TaskType(t) === 'upload'; }) ? 'none' : '';
+    pc115UpdateBadge();
+  }
+  function pc115UpdateBadge() {
+    var el = document.getElementById('pcAutoBadge');
+    if (!el) return;
+    var n = 0;
+    if (auto115Doc) n = (auto115Doc.tasks || []).filter(function (t) { return /ab-run|ab-fail|ab-wait/.test(auto115Status(t).cls); }).length;
+    el.textContent = n > 99 ? '99+' : String(n);
+    el.style.display = n ? '' : 'none';
+  }
+  function auto115StepHtml(t, s) {
+    var label = auto115StepLabel(s.key);
+    if (s.state === 'running') label += '…';
+    var dot = (s.state === 'ok') ? '✓' : (s.state === 'fail') ? '!' : (s.state === 'skip') ? '–' : '';
+    var ops = '';
+    if (s.state === 'fail') ops = '<button class="as-op-retry" onclick="auto115RetryStep(\'' + t.id + '\',\'' + s.key + '\')">重试</button>';
+    if (s.key === 'wait' && s.state === 'waiting') {
+      ops = '<button class="as-op-retry" onclick="auto115ContinueProbe(\'' + t.id + '\')">继续探测</button>'
+        + '<button class="as-op-ghost" onclick="auto115RetryStep(\'' + t.id + '\',\'submit\')">重新提交</button>';
+    }
+    if (s.key === 'wait' && s.state === 'running') ops = '<button class="as-op-ghost" onclick="auto115Abort(\'' + t.id + '\')">中止</button>';
+    return '<div class="auto-step">'
+      + '<div class="as-dot ' + s.state + '">' + dot + '</div>'
+      + '<div class="as-body">'
+      + '<div class="as-label' + (s.state === 'idle' ? ' dim' : '') + '">' + escapeHtml(label)
+      + (s.at ? '<span class="as-time">' + auto115Time(s.at) + '</span>' : '') + '</div>'
+      + (s.msg ? '<div class="as-msg' + (s.state === 'fail' ? ' err' : '') + '">' + escapeHtml(s.msg) + '</div>' : '')
+      + (ops ? '<div class="as-ops">' + ops + '</div>' : '')
+      + '</div></div>';
+  }
+  function auto115TaskHtml(t) {
+    var st = auto115Status(t);
+    var expanded = !!auto115Expanded[t.id];
+    var html = '<div class="auto-task' + (expanded ? ' expanded' : '') + '">'
+      + '<div class="auto-task-head" onclick="auto115Toggle(\'' + t.id + '\')">'
+      + '<div class="auto-task-title">' + escapeHtml(auto115TaskTitle(t)) + '</div>'
+      + '<span class="auto-task-badge ' + st.cls + '">' + escapeHtml(st.text) + '</span>'
+      + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
+      + '</div>';
+    if (expanded) {
+      var renderSteps = (t.steps || []).slice();
+      if (auto115TaskType(t) === 'upload') {
+        var uploadKeys = {};
+        for (var k = 0; k < AUTO115_STEPS_UPLOAD.length; k++) uploadKeys[AUTO115_STEPS_UPLOAD[k].key] = 1;
+        renderSteps = renderSteps.filter(function (s) { return uploadKeys[s.key]; });
+      }
+      html += '<div class="auto-steps">' + renderSteps.map(function (s) { return auto115StepHtml(t, s); }).join('') + '</div>'
+        + '<div class="auto-task-ops">'
+        + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重试</button>'
+        + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除</button>'
+        + '</div>';
+    }
+    return html + '</div>';
+  }
+  function auto115Toggle(id) { if (auto115Expanded[id]) delete auto115Expanded[id]; else auto115Expanded[id] = true; pc115RenderAuto(); }
+
+  /* ---------- 115 接口封装 ---------- */
+  function auto115Post(url, body) {
+    return c115ProxyFetch(url, {
+      method: 'POST',
+      headers: { 'X-115-Cookie': state.c115Cookie || '', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body
+    });
+  }
+  function auto115ListDir(cid, sort) {
+    var url = 'https://webapi.115.com/files?cid=' + encodeURIComponent(cid) + '&offset=0&limit=200&show_dir=1';
+    if (sort) url += '&o=' + sort + '&asc=0';
+    return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } }).then(function (res) {
+      var d = res.d || {};
+      var list = d.data || d.files || [];
+      return Array.isArray(list) ? list : [];
+    });
+  }
+  function auto115ItemTime(it) {
+    var v = it && (it.t != null ? it.t : (it.pt != null ? it.pt : ''));
+    if (Array.isArray(v)) v = v[0];
+    var n = Number(v);
+    if (!isFinite(n) || n <= 0) { var p = Date.parse(v); return isFinite(p) ? p : 0; }
+    return n < 1e12 ? n * 1000 : n;
+  }
+  function auto115IsVideoName(n) { return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm|iso)$/i.test(n || ''); }
+  function auto115FindDir(parentCid, name) {
+    return auto115ListDir(parentCid).then(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        if ((it.n || it.name) === name) return { cid: (it.cid || it.fid || '').toString(), name: name };
+      }
+      return null;
+    });
+  }
+  function auto115QueryTask(t) {
+    return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=task_lists', 'page=1&page_row=100').then(function (res) {
+      var d = res.d || {};
+      var tasks = d.tasks || (d.data && d.data.tasks) || [];
+      var hash = (t.infoHash || '').toUpperCase();
+      var found = null;
+      for (var i = 0; i < tasks.length; i++) {
+        var x = tasks[i];
+        var xh = ((x.info_hash || x.infohash || x.hash || '') + '').toUpperCase();
+        if (hash && xh && xh === hash) { found = x; break; }
+        if (!found && t.offlineName && x.name === t.offlineName) found = x;
+      }
+      if (!found) return null;
+      var percent = (found.percentDone != null) ? found.percentDone : (found.percent != null ? found.percent : null);
+      var status = found.status;
+      var done = (percent === 100 || status === 2 || status === '2' || status === 'complete' || status === '已完成');
+      var failed = (status === 3 || status === '3' || status === -1 || status === '-1' || status === 'failed' || status === '失败');
+      return { done: !!done, failed: !!failed, percent: percent, name: found.name || '', msg: found.error_msg || found.msg || '', cid: (found.cid || found.dir_id || found.wp_path_id || '').toString() };
+    });
+  }
+
+  /* ---------- 六步执行器 ---------- */
+  function auto115Run(t) {
+    if (!t) return Promise.resolve(null);
+    if (auto115RunningId && auto115RunningId !== t.id) {
+      var cur = auto115Task(auto115RunningId);
+      if (cur) {
+        t.queued = true;
+        auto115Set(t, auto115StepDefs(t)[0].key, 'idle', '排队中：等「' + (cur.magnetTitle || '当前任务') + '」完成');
+        auto115Save(); pc115RenderAuto(); pc115UpdateBadge();
+        return Promise.resolve(null);
+      }
+      auto115RunningId = '';
+    }
+    auto115RunningId = t.id;
+    t.queued = false;
+    return ensure115Cookie().then(function (ck) {
+      if (!ck) { auto115Set(t, auto115StepDefs(t)[0].key, 'fail', '还没登录 115'); auto115Finish(t); return null; }
+      return (auto115TaskType(t) === 'upload') ? auto115StepUploadDir(t) : auto115StepSubmit(t);
+    });
+  }
+  function auto115AdvanceQueue(t) {
+    if (auto115RunningId && (!t || t.id === auto115RunningId)) auto115RunningId = '';
+    var ts = (auto115Doc && auto115Doc.tasks) || [];
+    for (var i = ts.length - 1; i >= 0; i--) {
+      var n = ts[i];
+      if (n && n.queued) { n.queued = false; auto115Run(n); break; }
+    }
+  }
+  function auto115StepSubmit(t) {
+    auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…');
+    var body = 'url=' + encodeURIComponent(t.magnet) + '&wp_path_id=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+    return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', body).then(function (res) {
+      var d = res.d || {};
+      if (res.ok && (d.state === true || d.errcode === 10008 || (d.data && d.data.info_hash))) {
+        t.infoHash = ((d.info_hash || (d.data && d.data.info_hash) || auto115Btih(t.magnet)) || '').toUpperCase();
+        t.offlineName = d.name || (d.data && d.data.name) || t.magnetTitle || '';
+        auto115Set(t, 'submit', 'ok', d.errcode === 10008 ? '任务已在 115 列表中（复用）' : '已提交到云下载');
+        return auto115StepWait(t, true);
+      }
+      auto115Set(t, 'submit', 'fail', auto115ErrText(d, res, '提交失败'));
+      auto115Finish(t); return null;
+    }).catch(function (e) { auto115Set(t, 'submit', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+  }
+  function auto115StepWait(t, reset) {
+    var s = auto115Set(t, 'wait', 'running', '正在查询离线状态…');
+    if (reset) s.probes = 0;
+    return auto115QueryTask(t).then(function (info) {
+      if (!info) {
+        s.probes = (s.probes || 0) + 1;
+        if (s.probes >= AUTO115_PROBE_MAX) { auto115Set(t, 'wait', 'waiting', '已探测 ' + s.probes + ' 次，任务暂未出现在列表'); auto115Finish(t); return null; }
+        s.msg = '任务暂未出现（' + s.probes + '/' + AUTO115_PROBE_MAX + '）';
+        auto115Finish(t); auto115ScheduleProbe(t); return null;
+      }
+      if (info.done) {
+        t.offlineName = info.name || t.offlineName;
+        auto115Set(t, 'wait', 'ok', '离线完成' + (info.percent != null ? '（' + info.percent + '%）' : ''));
+        return auto115StepMkdir(t);
+      }
+      if (info.failed) { console.warn('[115离线]', info.msg); auto115Set(t, 'wait', 'fail', '115 那边下载失败了'); auto115Finish(t); return null; }
+      s.probes = (s.probes || 0) + 1;
+      if (s.probes >= AUTO115_PROBE_MAX) { auto115Set(t, 'wait', 'waiting', '已探测 ' + s.probes + ' 次，进度 ' + (info.percent != null ? info.percent + '%' : '未知')); auto115Finish(t); return null; }
+      s.msg = '离线中 ' + (info.percent != null ? info.percent + '% ' : '') + '（' + s.probes + '/' + AUTO115_PROBE_MAX + '）';
+      pc115RenderAuto(); auto115Save(); auto115ScheduleProbe(t); return null;
+    }).catch(function (e) { auto115Set(t, 'wait', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+  }
+  function auto115StepMkdir(t) {
+    auto115Set(t, 'mkdir', 'running', '正在定位离线落地的文件夹…');
+    return auto115ListDir(C115_DEFAULT_DIR_CID, 'user_ptime').then(function (list) {
+      var folders = list.filter(function (it) { return it && it.cid && !it.fid; });
+      var files = list.filter(function (it) { return it && it.fid; });
+      var dir = null, f = null, i;
+      if (t.offlineName) {
+        for (i = 0; i < folders.length; i++) { if ((folders[i].n || '') === t.offlineName) { dir = folders[i]; break; } }
+      }
+      if (!dir) {
+        for (i = 0; i < folders.length; i++) { if (auto115ItemTime(folders[i]) >= t.createdAt - AUTO115_DIR_SLACK_MS) { dir = folders[i]; break; } }
+      }
+      if (dir) {
+        var cid = String(dir.cid);
+        if (cid === C115_DEFAULT_DIR_CID) { auto115Set(t, 'mkdir', 'fail', '没找到合适的文件夹'); auto115Finish(t); return null; }
+        t.offlineDirCid = cid; t.offlineDirName = dir.n || '';
+        auto115Set(t, 'mkdir', 'ok', '已定位文件夹：' + (dir.n || ''));
+        return auto115StepMove(t);
+      }
+      if (t.offlineName) {
+        for (i = 0; i < files.length; i++) { if ((files[i].n || '') === t.offlineName) { f = files[i]; break; } }
+      }
+      if (!f) {
+        for (i = 0; i < files.length; i++) { if (auto115ItemTime(files[i]) >= t.createdAt - AUTO115_DIR_SLACK_MS) { f = files[i]; break; } }
+      }
+      if (f) {
+        t.noFolder = true;
+        t.videoFid = String(f.fid); t.videoName = f.n || ''; t.videoSize = Number(f.s) || 0;
+        auto115Set(t, 'mkdir', 'ok', '单文件落地（无文件夹）：' + t.videoName);
+        return auto115StepMove(t);
+      }
+      auto115Set(t, 'mkdir', 'fail', '还没找到刚下载的内容，稍等再看看'); auto115Finish(t); return null;
+    }).catch(function (e) { auto115Set(t, 'mkdir', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+  }
+
+  /* ---------- 主视频筛选 / 影片命名 / 批量改名 ---------- */
+  function auto115Norm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9一-龥]/g, ''); }
+  function auto115PartBase(name) {
+    var n = (name || '').replace(/\.[a-z0-9]+$/i, '');
+    n = n.replace(/\s*(cd|disc|disk|part|pt)\s*\d+\s*$/i, '');
+    n = n.replace(/[-._ ]?\d+\s*$/, '');
+    return auto115Norm(n);
+  }
+  /* 影片命名规则（PC 与手机端一致）：始终只取标题，番号仅用于 AV 视频改名 */
+  function auto115MovieVideoName() {
+    var title = (auto115Doc.filmTitle || '').trim();
+    var orig = (auto115Doc.originalTitle || '').trim();
+    var year = (auto115Doc.year || '').trim();
+    var name;
+    if (!year) name = title;
+    else if (orig && orig.toLowerCase() !== title.toLowerCase()) name = title + '.' + orig.replace(/ /g, '.') + '.' + year;
+    else name = title + '.' + year;
+    return name.replace(/ /g, '.').replace(/[\/\\:*?"<>|]/g, '').trim();
+  }
+  function auto115LooksDvd(s) { return /^[A-Za-z]{2,}-?\d+[A-Za-z]?$/i.test((s || '').trim()); }
+  function auto115CleanName(s) { return (s || '').replace(/ /g, '.').replace(/[\/\\:*?"<>|]/g, '').trim(); }
+  function auto115ExternalBaseName(t) {
+    if (!t.targetName) return '';
+    return auto115LooksDvd(t.targetName) ? t.targetName.trim() : auto115CleanName(t.targetName);
+  }
+  function auto115VidSize(it) { return Number(it.s != null ? it.s : it.size) || 0; }
+  function auto115ApplyRenames(t, jobs, targetCid) {
+    return jobs.reduce(function (p, job) {
+      if (!job || !job.fid) return p;
+      return p.then(function () {
+        var chain = Promise.resolve();
+        if (targetCid) chain = chain.then(function () { return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(job.fid) + '&pid=' + encodeURIComponent(targetCid)); });
+        return chain.then(function () {
+          return auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(job.fid) + '&file_name=' + encodeURIComponent(job.name));
+        }).then(function (res) {
+          var d = res.d || {};
+          if (!(res.ok && (d.state === true || d.errno === 0))) throw new Error('改名失败');
+        });
+      });
+    }, Promise.resolve());
+  }
+  function auto115StepMove(t) {
+    if (t.noFolder) { auto115Set(t, 'move', 'skip', '单文件落地，无需清理'); return auto115StepRename(t); }
+    if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) { auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
+    auto115Set(t, 'move', 'running', '正在扫描文件夹内容…');
+    return auto115ListDir(t.offlineDirCid).then(function (list) {
+      var vids = list.filter(function (it) { return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
+      if (!vids.length) { auto115Set(t, 'move', 'fail', '这个文件夹里没有视频'); auto115Finish(t); return null; }
+      var EXCLUDE = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
+      var mainCands = vids.filter(function (it) { return !EXCLUDE.test(it.n || it.name || ''); });
+      var pool = mainCands.length ? mainCands : vids;
+      var normDvd = auto115Norm(auto115Doc.dvdId);
+      var normTitles = [auto115Norm(auto115Doc.filmTitle), auto115Norm(auto115Doc.originalTitle)].filter(Boolean);
+      function strongHit(it) {
+        var nm = auto115Norm(it.n || it.name || '');
+        if (normDvd && nm.indexOf(normDvd) >= 0) return true;
+        if (!normDvd && normTitles.length) { for (var j = 0; j < normTitles.length; j++) { if (normTitles[j] && nm.indexOf(normTitles[j]) >= 0) return true; } }
+        return false;
+      }
+      var keep;
+      var strong = pool.filter(strongHit);
+      if (strong.length) keep = strong;
+      else {
+        var groups = {};
+        pool.forEach(function (it) { var b = auto115PartBase(it.n || it.name || ''); (groups[b] = groups[b] || []).push(it); });
+        var partKeys = Object.keys(groups).filter(function (b) { return groups[b].length >= 2; });
+        if (partKeys.length) { keep = []; partKeys.forEach(function (b) { keep = keep.concat(groups[b]); }); }
+        else keep = [pool.slice().sort(function (a, b) { return auto115VidSize(b) - auto115VidSize(a); })[0]];
+      }
+      keep.sort(function (a, b) { return auto115VidSize(b) - auto115VidSize(a); });
+      t.keepFids = keep.map(function (it) { return String(it.fid); });
+      var v = keep[0];
+      t.videoFid = String(v.fid); t.videoName = v.n || v.name || ''; t.videoSize = auto115VidSize(v);
+      var delIds = [];
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        if (!it) continue;
+        if (it.fid) { if (t.keepFids.indexOf(String(it.fid)) < 0) delIds.push(String(it.fid)); }
+        else if (it.cid) { if (String(it.cid) !== C115_DEFAULT_DIR_CID) delIds.push(String(it.cid)); }
+      }
+      if (!delIds.length) { auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频，无需清理'); return auto115StepRename(t); }
+      auto115Set(t, 'move', 'running', '保留 ' + keep.length + ' 个视频，正在删除其余 ' + delIds.length + ' 项…');
+      return auto115DeleteBatch(t.offlineDirCid, delIds).then(function (errMsg) {
+        if (errMsg) { auto115Set(t, 'move', 'fail', errMsg); auto115Finish(t); return null; }
+        auto115Set(t, 'move', 'ok', '已清理 ' + delIds.length + ' 项，保留 ' + keep.length + ' 个视频（' + auto115Size(t.videoSize) + '）');
+        return auto115StepRename(t);
+      });
+    }).catch(function (e) { auto115Set(t, 'move', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+  }
+  function auto115DeleteBatch(parentCid, ids) {
+    var chunks = [];
+    for (var i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+    var p = Promise.resolve('');
+    chunks.forEach(function (chunk) {
+      p = p.then(function (err) {
+        if (err) return err;
+        var parts = [];
+        for (var k = 0; k < chunk.length; k++) parts.push('fid[' + k + ']=' + encodeURIComponent(chunk[k]));
+        parts.push('pid=' + encodeURIComponent(parentCid));
+        return auto115Post('https://webapi.115.com/rb/delete', parts.join('&')).then(function (res) {
+          var d = res.d || {};
+          return (res.ok && (d.state === true || d.errno === 0)) ? '' : auto115ErrText(d, res, '删除失败');
+        });
+      });
+    });
+    return p;
+  }
+  function auto115FindMergeTarget(t) {
+    var ts = (auto115Doc && auto115Doc.tasks) || [];
+    for (var i = 0; i < ts.length; i++) {
+      var p = ts[i];
+      if (!p || p.id === t.id) continue;
+      var dirCid = p.finalDirCid || p.offlineDirCid;
+      var dirName = p.finalDirName || p.offlineDirName || '';
+      if (p.noFolder || !dirCid || !dirName) continue;
+      if (dirCid === t.offlineDirCid || dirCid === C115_DEFAULT_DIR_CID) continue;
+      var sc = auto115GetStep(p, 'cleanup');
+      if (sc.state === 'ok' || sc.state === 'skip') return { cid: dirCid, name: dirName };
+    }
+    return null;
+  }
+  function auto115StepRename(t) {
+    if (t.external) {
+      if (!t.targetName) { auto115Set(t, 'rename', 'skip', '未填目标名称，保留 115 原始文件名'); auto115Finish(t); return Promise.resolve(null); }
+    }
+    var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
+    var baseName = t.external ? auto115ExternalBaseName(t) : (auto115Doc.dvdId ? auto115Doc.dvdId : auto115MovieVideoName());
+    if (!baseName) { auto115Set(t, 'rename', 'fail', '缺少名称信息，没法自动改名'); auto115Finish(t); return Promise.resolve(null); }
+    var keep = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [t.videoFid] : []);
+    if (!keep.length) { auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
+    var multi = keep.length > 1;
+    var prev = t.external ? null : auto115FindMergeTarget(t);
+    if (prev) {
+      t.finalDirCid = prev.cid;
+      t.finalDirName = prev.name;
+      auto115Set(t, 'rename', 'running', '并入文件夹「' + prev.name + '」…');
+      return auto115ListDir(prev.cid).then(function (list) {
+        var stems = {};
+        for (var i = 0; i < list.length; i++) { var nm = String(list[i].n || ''); stems[nm.replace(/\.[a-z0-9]+$/i, '').toLowerCase()] = 1; }
+        var jobs = keep.map(function (fid, i) {
+          var suffix = multi ? ('.cd' + (i + 1)) : '';
+          var cand = baseName + suffix, k = 0;
+          while (stems[cand.toLowerCase()]) {
+            k++;
+            if (k > 26) { auto115Set(t, 'rename', 'fail', '同名文件太多啦，去 115 手动整理一下'); auto115Finish(t); return null; }
+            cand = baseName + '.' + String.fromCharCode(64 + k) + suffix;
+          }
+          return { fid: fid, name: cand + ext };
+        });
+        if (jobs.indexOf(null) >= 0) return null;
+        return auto115ApplyRenames(t, jobs, prev.cid).then(function () {
+          t.videoName = jobs[0].name;
+          auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
+          return auto115StepCleanup(t);
+        });
+      }).catch(function (e) { auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+    }
+    var jobs = keep.map(function (fid, i) {
+      var suffix = multi ? ('.cd' + (i + 1)) : '';
+      return { fid: fid, name: baseName + suffix + ext };
+    });
+    auto115Set(t, 'rename', 'running', '正在改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
+    return auto115ApplyRenames(t, jobs, null).then(function () {
+      t.videoName = jobs[0].name;
+      auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
+      return auto115StepCleanup(t);
+    }).catch(function (e) { auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+  }
+  function auto115StepCleanup(t) {
+    if (t.finalDirCid) {
+      if (t.noFolder) { auto115Set(t, 'cleanup', 'skip', '视频已并入「' + (t.finalDirName || '') + '」，无需清理'); auto115Finish(t); return Promise.resolve(null); }
+      if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID || t.offlineDirCid === t.finalDirCid) { auto115Set(t, 'cleanup', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
+      auto115Set(t, 'cleanup', 'running', '正在删除已清空的临时文件夹…');
+      var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+      return auto115Post('https://webapi.115.com/rb/delete', delBody).then(function (res) {
+        var d = res.d || {};
+        if (res.ok && (d.state === true || d.errno === 0)) auto115Set(t, 'cleanup', 'ok', '已删除临时文件夹，视频在「' + t.finalDirName + '」');
+        else auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '删除临时文件夹失败'));
+        auto115Finish(t); return null;
+      }).catch(function (e) { auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+    }
+    if (t.noFolder) { auto115Set(t, 'cleanup', 'skip', '单文件落地，无需改文件夹名'); auto115Finish(t); return Promise.resolve(null); }
+    if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) { auto115Set(t, 'cleanup', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
+    var newName;
+    if (t.external) {
+      if (!t.targetName) { auto115Set(t, 'cleanup', 'skip', '未填目标名称，保留 115 文件夹名'); auto115Finish(t); return Promise.resolve(null); }
+      newName = auto115ExternalBaseName(t);
+    } else {
+      /* 文件夹命名：始终只取影片标题（AV/影片一致） */
+      newName = ((auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || t.offlineDirName || '').trim();
+    }
+    if (!newName) { auto115Set(t, 'cleanup', 'fail', '缺少名称信息，没法改名'); auto115Finish(t); return Promise.resolve(null); }
+    if (newName === t.offlineDirName) { auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改'); auto115Finish(t); return Promise.resolve(null); }
+    auto115Set(t, 'cleanup', 'running', '正在把文件夹改名为「' + newName + '」…');
+    var body = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&file_name=' + encodeURIComponent(newName);
+    return auto115Post('https://webapi.115.com/files/edit', body).then(function (res) {
+      var d = res.d || {};
+      if (res.ok && (d.state === true || d.errno === 0)) { t.offlineDirName = newName; auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + newName); }
+      else auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '文件夹改名失败'));
+      auto115Finish(t); return null;
+    }).catch(function (e) { auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+  }
+
+  /* ---------- 上传任务（NFO/海报/剧照，开放平台通道） ---------- */
+  function auto115UploadDirName() { return pcSanitizeName((auto115Doc && auto115Doc.filmTitle) || '') || ''; }
+  function auto115Mkdir(name) {
+    return auto115Post('https://webapi.115.com/files/add', 'pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID) + '&cname=' + encodeURIComponent(name))
+      .then(function (res) {
+        var d = res.d || {}, dd = d.data || d;
+        var cid = String((dd && (dd.cid || dd.file_id || dd.id)) || '');
+        if (!cid) throw new Error('建文件夹没成功');
+        return cid;
+      });
+  }
+  function auto115StepUploadDir(t) {
+    var name = auto115UploadDirName();
+    if (!name) { auto115Set(t, 'dir', 'fail', '这部影片没有标题，不知道传到哪儿'); auto115Finish(t); return Promise.resolve(null); }
+    auto115Set(t, 'dir', 'running', '正在 115 里找「' + name + '」…');
+    pc115RenderAuto();
+    return auto115ListDir(C115_DEFAULT_DIR_CID).then(function (list) {
+      var folders = list.filter(function (it) { return it && it.cid && !it.fid; });
+      for (var i = 0; i < folders.length; i++) {
+        if ((folders[i].n || '') === name) {
+          t.uploadDirCid = String(folders[i].cid); t.uploadDirName = name;
+          auto115Set(t, 'dir', 'ok', '已找到「' + name + '」');
+          return auto115StepUploadFiles(t);
+        }
+      }
+      auto115Set(t, 'dir', 'running', '没找到，正在创建「' + name + '」…');
+      pc115RenderAuto();
+      return auto115Mkdir(name).then(function (cid) {
+        t.uploadDirCid = cid; t.uploadDirName = name;
+        auto115Set(t, 'dir', 'ok', '已创建「' + name + '」');
+        return auto115StepUploadFiles(t);
+      });
+    }).catch(function (e) {
+      console.warn('[115上传]', e);
+      auto115Set(t, 'dir', 'fail', '文件夹没准备好，点「重试」再来一次');
+      auto115Finish(t); return null;
+    });
+  }
+  function auto115StepUploadFiles(t) {
+    if (!t.uploadDirCid) { auto115Set(t, 'upload', 'fail', '还没确定传到哪个文件夹'); auto115Finish(t); return Promise.resolve(null); }
+    auto115Set(t, 'upload', 'running', '正在准备文件…');
+    pc115RenderAuto();
+    return loadFilm(auto115Doc.filmId).then(function (film) {
+      if (!film) throw new Error('没找到影片信息');
+      var d = film.data || {};
+      var base = auto115Doc.dvdId || pcSanitizeName(auto115Doc.filmTitle || '') || 'movie';
+      var files = [{ name: base + '.nfo', mime: 'application/octet-stream', bytes: new TextEncoder().encode(buildNFOMovieXml(d)) }];
+      var pb = (typeof d.poster === 'string') ? dataUrlToBytesSync(d.poster) : null;
+      if (pb) files.push({ name: base + '-poster.jpg', mime: 'image/jpeg', bytes: pb });
+      var fb = (typeof d.fanart === 'string') ? dataUrlToBytesSync(d.fanart) : null;
+      if (fb) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: fb });
+      var total = files.length, idx = 0;
+      function next() {
+        if (idx >= total) return Promise.resolve();
+        var f = files[idx];
+        auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
+        pc115RenderAuto();
+        return c115OpenUploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function () { idx++; return next(); });
+      }
+      return next().then(function () {
+        t.nfoUploaded = auto115Now();
+        auto115Set(t, 'upload', 'ok', '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」');
+        auto115Finish(t);
+        showToast('已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」', 'success');
+      });
+    }).catch(function (e) {
+      console.warn('[115上传]', e);
+      auto115Set(t, 'upload', 'fail', '没传成功，点「重试」再来一次');
+      auto115Finish(t);
+    });
+  }
+  function auto115AddUploadTask() {
+    auto115EnsureDoc().then(function (doc) {
+      var ts = doc.tasks || [];
+      for (var i = 0; i < ts.length; i++) {
+        if (auto115TaskType(ts[i]) === 'upload' && auto115Status(ts[i]).cls === 'ab-run') { showToast('正在上传中，等一下就好', 'info'); return null; }
+      }
+      var t = { id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6), type: 'upload', steps: auto115NewSteps('upload'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION };
+      ts.unshift(t); doc.tasks = ts;
+      auto115Expanded[t.id] = true;
+      return auto115Save().then(function () {
+        pc115OpenAutoPanel().then(function () { return auto115Run(t); });
+      });
+    }).catch(function (e) { showToast((e && e.message) || '没能开始上传', 'error'); });
+  }
+
+  /* ---------- 探测 / 恢复 ---------- */
+  function pc115StopProbe() { if (auto115ProbeTimer) { clearTimeout(auto115ProbeTimer); auto115ProbeTimer = null; } }
+  function auto115ProbeDelay(doneProbes) {
+    var i = Math.min(Math.max(doneProbes || 0, 0), AUTO115_PROBE_GAPS.length - 1);
+    return AUTO115_PROBE_GAPS[i];
+  }
+  function auto115ScheduleProbe(t) {
+    pc115StopProbe();
+    var delay = AUTO115_PROBE_GAPS[0];
+    if (t) delay = auto115ProbeDelay(auto115GetStep(t, 'wait').probes);
+    else {
+      var pend = (auto115Doc && auto115Doc.tasks || []).filter(function (x) { return auto115GetStep(x, 'wait').state === 'running'; });
+      for (var i = 0; i < pend.length; i++) delay = Math.min(delay, auto115ProbeDelay(auto115GetStep(pend[i], 'wait').probes));
+    }
+    auto115ProbeTimer = setTimeout(function () {
+      auto115ProbeTimer = null;
+      if (!auto115Doc) return;
+      var pending = (auto115Doc.tasks || []).filter(function (x) { return auto115GetStep(x, 'wait').state === 'running'; });
+      if (!pending.length) return;
+      ensure115Cookie().then(function (ck) { if (ck) pending.forEach(function (x) { auto115StepWait(x, false); }); });
+    }, delay);
+  }
+  function auto115Resume() {
+    if (!auto115Doc) return;
+    var hasRunning = (auto115Doc.tasks || []).some(function (x) { return auto115GetStep(x, 'wait').state === 'running'; });
+    if (hasRunning) auto115ScheduleProbe();
+    if (!auto115RunningId && !hasRunning) {
+      var ts = auto115Doc.tasks || [];
+      for (var i = ts.length - 1; i >= 0; i--) {
+        if (ts[i] && ts[i].queued) { ts[i].queued = false; auto115Run(ts[i]); break; }
+      }
+    }
+  }
+
+  /* ---------- 添加磁力（popover 内联） ---------- */
+  function pc115PasteMagnet() {
+    var inp = document.getElementById('pcMagnetInput');
+    if (!inp) return;
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (txt) { inp.value = (txt || '').trim(); inp.focus(); })
+        .catch(function () { showToast('读取剪贴板失败，请手动粘贴', 'error'); });
+    } else showToast('当前环境不支持自动粘贴，请手动粘贴', 'info');
+  }
+  function pc115SubmitAddMagnet() {
+    var inp = document.getElementById('pcMagnetInput');
+    var nm = document.getElementById('pcMagnetName');
+    var magnet = (inp && inp.value || '').trim();
+    var name = (nm && nm.value || '').trim();
+    if (!/^magnet:\?/i.test(magnet)) { showToast('请粘贴有效的磁力链接（以 magnet:? 开头）', 'error'); return; }
+    auto115EnsureDoc().then(function (doc) {
+      var t = {
+        id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
+        type: 'offline', external: true,
+        magnet: magnet, magnetTitle: name || auto115Btih(magnet),
+        targetName: name,
+        steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
+      };
+      doc.tasks.unshift(t);
+      auto115Expanded[t.id] = true;
+      return auto115Save().then(function () {
+        if (inp) inp.value = ''; if (nm) nm.value = '';
+        showToast('已加入自动化', 'success');
+        pc115OpenAutoPanel().then(function () { return auto115Run(t); });
+      });
+    }).catch(function (e) { showToast((e && e.message) || '加入失败', 'error'); });
+  }
+
+  /* ---------- 任务操作 ---------- */
+  function auto115RetryStep(tid, key) {
+    var t = auto115Task(tid);
+    if (!t) return Promise.resolve(null);
+    return ensure115Cookie().then(function (ck) {
+      if (!ck) { showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+      if (auto115RunningId && auto115RunningId !== t.id && auto115Task(auto115RunningId)) {
+        t.queued = true;
+        var cur = auto115Task(auto115RunningId);
+        auto115Set(t, key, 'idle', '排队中：等「' + auto115TaskTitle(cur) + '」完成');
+        auto115Save(); pc115RenderAuto(); pc115UpdateBadge();
+        return;
+      }
+      auto115RunningId = t.id;
+      t.queued = false;
+      var defs = auto115StepDefs(t);
+      var idx = -1;
+      for (var i = 0; i < defs.length; i++) if (defs[i].key === key) idx = i;
+      if (idx < 0) return;
+      for (var j = idx; j < defs.length; j++) { var s = auto115GetStep(t, defs[j].key); s.state = 'idle'; s.msg = ''; s.probes = 0; s.at = 0; }
+      t.aborted = false;
+      auto115Save(); pc115RenderAuto();
+      if (key === 'dir') return auto115StepUploadDir(t);
+      if (key === 'upload') return auto115StepUploadFiles(t);
+      if (key === 'submit') return auto115StepSubmit(t);
+      if (key === 'wait') return auto115StepWait(t, true);
+      if (key === 'mkdir') return auto115StepMkdir(t);
+      if (key === 'move') return auto115StepMove(t);
+      if (key === 'rename') return auto115StepRename(t);
+      if (key === 'cleanup') return auto115StepCleanup(t);
+    });
+  }
+  function auto115RetryTask(tid) {
+    var t = auto115Task(tid);
+    if (!t) return;
+    var steps = t.steps || [];
+    for (var i = 0; i < steps.length; i++) if (steps[i].state === 'fail') return auto115RetryStep(tid, steps[i].key);
+    showToast('没有失败的步骤', 'info');
+  }
+  function auto115ContinueProbe(tid) {
+    var t = auto115Task(tid);
+    if (!t) return Promise.resolve(null);
+    return ensure115Cookie().then(function (ck) {
+      if (!ck) { showToast('请先登录 115', 'error'); return null; }
+      return auto115StepWait(t, true);
+    });
+  }
+  function auto115Abort(tid) {
+    var t = auto115Task(tid);
+    if (!t) return;
+    t.aborted = true;
+    var w = auto115GetStep(t, 'wait');
+    if (w.state === 'running') { w.state = 'idle'; w.msg = '已手动中止'; }
+    pc115StopProbe();
+    auto115Finish(t);
+  }
+  function auto115RemoveTask(tid) {
+    if (!auto115Doc) return;
+    auto115Doc.tasks = (auto115Doc.tasks || []).filter(function (x) { return x.id !== tid; });
+    if (auto115RunningId === tid) auto115AdvanceQueue(null);
+    auto115Save().then(pc115RenderAuto);
+  }
+  function auto115ClearDone() {
+    if (!auto115Doc) return;
+    auto115Doc.tasks = (auto115Doc.tasks || []).filter(function (t) { return auto115Status(t).cls !== 'ab-ok'; });
+    auto115Save().then(function () { pc115RenderAuto(); showToast('已清空已完成任务', 'success'); });
+  }
+
+  /* ---------- popover 开合 ---------- */
+  var pcAutoOpen = false;
+  function pc115OpenAutoPanel() {
+    return auto115EnsureDoc().then(function () {
+      pc115RenderAuto();
+      auto115Resume();
+    }).catch(function (e) { showToast((e && e.message) || '打开自动化失败', 'error'); });
+  }
+  function pc115ToggleAutoPanel() {
+    var pop = document.getElementById('autoPopover');
+    if (!pop) return;
+    pcAutoOpen = !pcAutoOpen;
+    pop.classList.toggle('show', pcAutoOpen);
+    if (pcAutoOpen) pc115OpenAutoPanel();
+  }
+  function pc115CloseAutoPanel() {
+    var pop = document.getElementById('autoPopover');
+    if (pop) pop.classList.remove('show');
+    pcAutoOpen = false;
+  }
+  document.addEventListener('click', function (e) {
+    if (!pcAutoOpen) return;
+    var pop = document.getElementById('autoPopover');
+    var btn = document.getElementById('autoBtn');
+    if (pop && btn && !pop.contains(e.target) && !btn.contains(e.target)) pc115CloseAutoPanel();
+  });
+
+  /* ---------- ui.js 钩子 ---------- */
+  function pc115OnDetailOpen() {
+    auto115Doc = null;
+    auto115RunningId = '';
+    pc115StopProbe();
+    pc115UpdateBadge();
+    return pc115OpenAutoPanel().then(pc115UpdateBadge);
+  }
+
+  /* ---------- 暴露 ---------- */
+  global.PC115 = {
+    toggleAutoPanel: pc115ToggleAutoPanel,
+    openAutoPanel: pc115OpenAutoPanel,
+    closeAutoPanel: pc115CloseAutoPanel,
+    onDetailOpen: pc115OnDetailOpen,
+    openConfig: pc115OpenSheet,
+    startLogin: pc115StartLogin,
+    verify: pc115Verify,
+    tokenInput: pc115TokenInput,
+    copyCookie: pc115CopyCookie,
+    authorize: pc115OpenAuthUI,
+    refreshOpenStatus: pc115RefreshOpenStatus,
+    pasteMagnet: pc115PasteMagnet,
+    submitAddMagnet: pc115SubmitAddMagnet,
+    addUploadTask: auto115AddUploadTask,
+    clearDone: auto115ClearDone,
+    offline: c115Offline,
+    refreshBadge: pc115UpdateBadge
+  };
+
+})(window);
