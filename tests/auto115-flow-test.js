@@ -608,6 +608,42 @@ const lz4LiteralForTest = (bytes) => {
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
   ctx.auto115Doc = null;
 
+  // 9m. 同名剧集夹已存在：cleanup 改名失败（该目录名称已存在）→ 并入同名夹整理，最后删临时夹
+  ctx.currentDetailFilm = { id: 'filmTvMerge', data: { title: '师兄太稳健', dvdId: '' } };
+  ctx.auto115Doc = null;
+  const docTv = await ctx.auto115EnsureDoc();
+  docTv.type = 'tv';
+  const tTvM = { id: 'tTvM', magnet: 'magnet:?xt=urn:btih:tvm1111111111111111111111111111111111111', magnetTitle: '师兄太稳健26-30.2160p.HDR.60fps', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIRTVM', offlineDirName: '师兄太稳健26-30.2160p.HDR.60fps', fv: 2 };
+  ['submit', 'wait', 'mkdir'].forEach(k => { ctx.auto115GetStep(tTvM, k).state = 'ok'; });
+  docTv.tasks.unshift(tTvM);
+  calls.length = 0;
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [ { cid: 'MERGE1', n: '师兄太稳健', t: NOW_SEC } ] },
+    'files?cid=DIRTVM': { state: true, data: [ { fid: 'TV1', n: '第1集.mp4', s: 800 }, { fid: 'TV2', n: '第2集.mp4', s: 820 } ] },
+    'files?cid=MERGE1': { state: true, data: [] },
+    'files/add': { state: true, data: { cid: 'S01NEW' } },
+    'files?cid=S01NEW': { state: true, data: [] },
+    'files/move': { state: true },
+    'files/edit': (n) => (n <= 1 ? { state: false, error: '该目录名称已存在' } : { state: true }),   /* 第1次=改标题夹（失败触发并入），后续=改视频名 */
+    'rb/delete': { state: true }
+  };
+  await ctx.auto115StepCleanup(tTvM);
+  assert(ctx.auto115GetStep(tTvM, 'cleanup').state === 'ok', 'TV 同名夹已存在：改标题文件夹转 ok（不失败）');
+  assert(tTvM.tvMergeCid === 'MERGE1' && tTvM.finalDirCid === 'MERGE1', '并入目标为已存在的同名剧集夹');
+  assert(ctx.auto115GetStep(tTvM, 'move').state === 'ok', '后续清理文件步骤继续执行');
+  assert(ctx.auto115GetStep(tTvM, 'mkdir2').state === 'ok', '季文件夹建在同名夹内（mkdir2 ok）');
+  const addCall = calls.find(c => c.url.indexOf('files/add') >= 0);
+  assert(addCall && addCall.body.indexOf('pid=MERGE1') >= 0, '新建 S01 的父目录是同名剧集夹 MERGE1');
+  assert(ctx.auto115GetStep(tTvM, 'rename').state === 'ok', '视频改名步骤 ok');
+  assert(ctx.auto115GetStep(tTvM, 'move2').state === 'ok', '移入季文件夹步骤 ok');
+  const mvCalls = calls.filter(c => c.url.indexOf('files/move') >= 0);
+  assert(mvCalls.some(c => c.body.indexOf('pid=S01NEW') >= 0), '视频已移入同名夹内的 S01');
+  const delTv = calls.find(c => c.url.indexOf('rb/delete') >= 0);
+  assert(delTv && delTv.body.indexOf('fid=DIRTVM') >= 0, '完成后删除离线临时夹 DIRTVM');
+  assert(ctx.auto115Status(tTvM).text === '已完成', '并入整理任务终态 = 已完成');
+  ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
+  ctx.auto115Doc = null;
+
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');
   process.exit(process.exitCode || 0);

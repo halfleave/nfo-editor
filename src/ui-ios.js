@@ -2483,6 +2483,8 @@ function auto115ApplyRenames(t, jobs, targetCid){
       if (targetCid){
         chain = chain.then(function(){ return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(job.fid) + '&pid=' + encodeURIComponent(targetCid)); });
       }
+      /* 文件名已符合规则（目标名 === 当前名）→ 跳过改名请求（move 照常执行） */
+      if (job.orig != null && job.orig === job.name) return chain;
       return chain.then(function(){
         return auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(job.fid) + '&file_name=' + encodeURIComponent(job.name));
       }).then(function(res){
@@ -2568,20 +2570,20 @@ function auto115TvPlan(showTitle, items){
   var vidPlan = [], vidPending = [];
   vids.forEach(function(it){
     var ep = auto115EpisodeOf(it.name);
-    if (ep && ep.episode){ var s = ep.season || 1; if (!occupied[key(s, ep.episode)]){ take(s, ep.episode); vidPlan.push({ fid: it.fid, season: s, ep: ep.episode, orig: it.name }); return; } }
+    if (ep && ep.episode){ var s = ep.season || 1; if (!occupied[key(s, ep.episode)]){ take(s, ep.episode); vidPlan.push({ fid: it.fid, season: s, ep: ep.episode, orig: it.name, size: it.s || 0 }); return; } }
     vidPending.push(it);
   });
   vidPending.forEach(function(it){
     var ep = auto115EpisodeOf(it.name);
     var s = (ep && ep.season) || 1;
-    vidPlan.push({ fid: it.fid, season: s, ep: nextEp(s), orig: it.name });
+    vidPlan.push({ fid: it.fid, season: s, ep: nextEp(s), orig: it.name, size: it.s || 0 });
   });
   var subPlan = [], subPending = [];
   subs.forEach(function(it){
     var lang = auto115SubLang(it.name);
     if (!lang){ junk.push(it); return; }
     var ep = auto115EpisodeOf(it.name);
-    if (ep && ep.episode){ var s = ep.season || 1; subPlan.push({ fid: it.fid, season: s, ep: ep.episode, lang: lang, orig: it.name }); return; }
+    if (ep && ep.episode){ var s2 = ep.season || 1; subPlan.push({ fid: it.fid, season: s2, ep: ep.episode, lang: lang, orig: it.name, size: it.s || 0 }); return; }
     subPending.push({ it: it, lang: lang });
   });
   subPending.forEach(function(sp, idx){
@@ -2591,11 +2593,11 @@ function auto115TvPlan(showTitle, items){
     var matchVid = null;
     for (var i = 0; i < vidPlan.length; i++){ if (vidPlan[i].orig === (vp && vp.name)){ matchVid = vidPlan[i]; break; } }
     var epNo = matchVid ? matchVid.ep : nextEp(season);
-    subPlan.push({ fid: sp.it.fid, season: season, ep: epNo, lang: sp.lang, orig: sp.it.name });
+    subPlan.push({ fid: sp.it.fid, season: season, ep: epNo, lang: sp.lang, orig: sp.it.name, size: sp.it.s || 0 });
   });
   var renames = [];
-  vidPlan.forEach(function(p){ renames.push({ fid: p.fid, name: auto115TvVideoName(showTitle, p.season, p.ep, auto115Ext(p.orig)) }); });
-  subPlan.forEach(function(p){ renames.push({ fid: p.fid, name: auto115TvSubName(showTitle, p.season, p.ep, p.lang, auto115Ext(p.orig)) }); });
+  vidPlan.forEach(function(p){ renames.push({ fid: p.fid, name: auto115TvVideoName(showTitle, p.season, p.ep, auto115Ext(p.orig)), orig: p.orig, size: p.size }); });
+  subPlan.forEach(function(p){ renames.push({ fid: p.fid, name: auto115TvSubName(showTitle, p.season, p.ep, p.lang, auto115Ext(p.orig)), orig: p.orig, size: p.size }); });
   var deleteFids = junk.map(function(it){ return it.fid; }).filter(Boolean);
   return { renames: renames, deleteFids: deleteFids };
 }
@@ -2657,8 +2659,10 @@ function auto115StepTvRenameVideos(t){
   var plan = t.tvPlan;
   if (!plan || !plan.renames.length){ auto115Set(t, 'rename', 'fail', '没有可重命名的文件'); auto115Finish(t); return Promise.resolve(null); }
   var parent = t.noFolder ? C115_DEFAULT_DIR_CID : t.offlineDirCid;
+  var needRename = plan.renames.filter(function(r){ return r.orig !== r.name; }).length;
   return auto115ApplyRenames(t, plan.renames, null).then(function(){
-    auto115Set(t, 'rename', 'ok', '已改名为：' + plan.renames[0].name + (plan.renames.length > 1 ? ' 等 ' + plan.renames.length + ' 个文件' : ''));
+    if (!needRename) auto115Set(t, 'rename', 'ok', '文件名已符合规则，无需改名');
+    else auto115Set(t, 'rename', 'ok', '已改名为：' + plan.renames[0].name + (plan.renames.length > 1 ? ' 等 ' + plan.renames.length + ' 个文件' : ''));
     return auto115StepTvMoveVideos(t);
   }).catch(function(e){ auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
 }
@@ -2671,7 +2675,10 @@ function auto115StepTvMkdirSeasons(t){
   var seasonNums = Object.keys(seasons).sort();
   if (!seasonNums.length){ auto115Set(t, 'mkdir2', 'fail', '未能识别季号'); auto115Finish(t); return Promise.resolve(null); }
   var parentPromise;
-  if (t.noFolder){
+  if (t.tvRootCid){
+    /* 并入同名剧集夹（cleanup 阶段发现）或单文件剧集：季文件夹建在已确定的剧集根内 */
+    parentPromise = Promise.resolve(t.tvRootCid);
+  } else if (t.noFolder){
     parentPromise = auto115EnsureTvRoot(auto115Doc.filmTitle).then(function(cid){ if (!cid) throw new Error('创建剧集根文件夹失败'); t.tvRootCid = cid; return cid; });
   } else {
     if (!t.offlineDirCid){ parentPromise = Promise.reject(new Error('父文件夹没定位到')); }
@@ -2703,18 +2710,40 @@ function auto115StepTvMoveVideos(t){
     var m = r.name.match(/S(\d{2})E/);
     if (!m) return;
     var s = m[1], cid = map[s];
-    if (cid){ (bySeason[s] = bySeason[s] || []).push({ fid: r.fid, name: r.name }); }
+    if (cid){ (bySeason[s] = bySeason[s] || []).push({ fid: r.fid, name: r.name, orig: r.orig, size: r.size }); }
   });
   var seasonKeys = Object.keys(bySeason);
   if (!seasonKeys.length){ auto115Set(t, 'move2', 'fail', '没有可移动的文件'); auto115Finish(t); return Promise.resolve(null); }
+  /* 逐季处理：季夹里已有同名文件时——大小相同视为同一文件直接跳过，大小不同目标名加 .2 避免撞名 */
+  var skipped = 0, total = 0;
   var p = Promise.resolve();
   seasonKeys.forEach(function(s){
-    p = p.then(function(){ return auto115ApplyRenames(t, bySeason[s], map[s]); });
+    p = p.then(function(){
+      return auto115ListDir(map[s]).then(function(list){
+        var existing = {};
+        (list || []).forEach(function(it){ if (it && it.n) existing[String(it.n).toLowerCase()] = it.s || 0; });
+        var jobs = [];
+        bySeason[s].forEach(function(job){
+          total++;
+          var exSize = existing[job.name.toLowerCase()];
+          if (exSize == null){ jobs.push(job); return; }
+          if (job.size != null && Math.abs((job.size || 0) - exSize) < 1){ skipped++; return; } /* 同一文件，跳过 */
+          var m2 = job.name.match(/^(.*)(\.[a-z0-9]+)$/i);
+          job.name = (m2 ? m2[1] : job.name) + '.2' + (m2 ? m2[2] : '');
+          jobs.push(job);
+        });
+        if (!jobs.length) return null;
+        return auto115ApplyRenames(t, jobs, map[s]);
+      });
+    });
   });
   return p.then(function(){
-    var total = seasonKeys.reduce(function(n, s){ return n + bySeason[s].length; }, 0);
-    auto115Set(t, 'move2', 'ok', '已移入 ' + total + ' 个文件到对应季文件夹');
+    auto115Set(t, 'move2', 'ok', '已移入 ' + (total - skipped) + ' 个文件到对应季文件夹' + (skipped ? ('（跳过 ' + skipped + ' 个已存在的相同文件）') : ''));
     auto115Finish(t);
+    /* 并入同名剧集夹场景：临时离线夹里的文件已全部处理，删除临时夹 */
+    if (t.tvMergeCid){
+      return auto115RemoveTmpDir(t).then(function(){ return null; });
+    }
     return Promise.resolve(null);
   }).catch(function(e){ auto115Set(t, 'move2', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
 }
@@ -2827,18 +2856,27 @@ function auto115StepRename(t){
   var keep = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [t.videoFid] : []);
   if (!keep.length){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
   var multi = keep.length > 1;
-  var prev = t.external ? null : auto115FindMergeTarget(t);
+  var prev = t.external ? null : (t.forcedMergeCid ? { cid: t.forcedMergeCid, name: t.finalDirName } : auto115FindMergeTarget(t));
   if (prev){
     t.finalDirCid = prev.cid;
     t.finalDirName = prev.name;
     auto115Set(t, 'rename', 'running', '并入文件夹「' + prev.name + '」…');
     return auto115ListDir(prev.cid).then(function(list){
       var stems = {};
-      for (var i = 0; i < list.length; i++){ var nm = String(list[i].n || ''); stems[nm.replace(/\.[a-z0-9]+$/i, '').toLowerCase()] = 1; }
+      for (var i = 0; i < list.length; i++){ var nm = String(list[i].n || ''); stems[nm.replace(/\.[a-z0-9]+$/i, '').toLowerCase()] = list[i].s || 0; }
+      /* 目标夹已存在同目标名且大小相同的视频 → 同一文件（多为重试），直接清临时夹收尾 */
+      if (!multi && keep.length === 1 && t.videoSize != null){
+        var dupSize = stems[(baseName + ext).toLowerCase()];
+        if (dupSize != null && Math.abs((t.videoSize || 0) - dupSize) < 1){
+          t.videoName = baseName + ext;
+          auto115Set(t, 'rename', 'ok', '视频已在「' + prev.name + '」中，跳过重复文件');
+          return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
+        }
+      }
       var jobs = keep.map(function(fid, i){
         var suffix = multi ? ('.cd' + (i + 1)) : '';
         var cand = baseName + suffix, k = 0;
-        while (stems[cand.toLowerCase()]){
+        while (stems[cand.toLowerCase()] != null){
           k++;
           if (k > 26){ auto115Set(t, 'rename', 'fail', '同名文件太多啦，去 115 手动整理一下'); auto115Finish(t); return null; }
           cand = baseName + '.' + String.fromCharCode(64 + k) + suffix;
@@ -2860,10 +2898,13 @@ function auto115StepRename(t){
     var suffix = multi ? ('.cd' + (i + 1)) : '';
     return { fid: fid, name: baseName + suffix + ext };
   });
-  auto115Set(t, 'rename', 'running', '正在改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
+  if (jobs.length) jobs[0].orig = t.videoName; /* 首个视频的当前名，供同名跳过比对 */
+  var needRename = jobs.filter(function(j){ return j.orig == null || j.orig !== j.name; }).length;
+  auto115Set(t, 'rename', 'running', needRename ? ('正在改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : '')) : '正在核对文件名…');
   return auto115ApplyRenames(t, jobs, null).then(function(){
     t.videoName = jobs[0].name;
-    auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
+    if (!needRename) auto115Set(t, 'rename', 'ok', '文件名已符合规则，无需改名');
+    else auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
     return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
   }).catch(function(e){
     auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误');
@@ -2902,10 +2943,18 @@ function auto115StepCleanup(t){
         t.offlineDirName = showTitle;
         auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + showTitle);
         return auto115StepTvCleanupFiles(t);
-      } else {
+      }
+      /* 改名失败（如「该目录名称已存在」）→ 找 115 根下同名剧集文件夹，找到就并入整理 */
+      return auto115FindDir(C115_DEFAULT_DIR_CID, showTitle).then(function(hit){
+        if (hit && hit.cid){
+          t.tvMergeCid = hit.cid; t.tvRootCid = hit.cid;
+          t.finalDirCid = hit.cid; t.finalDirName = showTitle;
+          auto115Set(t, 'cleanup', 'ok', '同名剧集夹已存在，将在「' + showTitle + '」内整理，完成后清理临时夹');
+          return auto115StepTvCleanupFiles(t);
+        }
         auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '改名失败'));
         auto115Finish(t); return null;
-      }
+      });
     }).catch(function(e){
       auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
       auto115Finish(t); return null;
@@ -2938,10 +2987,17 @@ function auto115StepCleanup(t){
       t.offlineDirName = newName;
       auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + newName);
       return auto115StepMove(t);
-    } else {
+    }
+    /* 改名失败（如「该目录名称已存在」）→ 找 115 根下同名文件夹，找到就并入：视频整理进去，最后删临时夹 */
+    return auto115FindDir(C115_DEFAULT_DIR_CID, newName).then(function(hit){
+      if (hit && hit.cid){
+        t.forcedMergeCid = hit.cid; t.finalDirCid = hit.cid; t.finalDirName = newName;
+        auto115Set(t, 'cleanup', 'ok', '同名文件夹已存在，视频将并入「' + newName + '」');
+        return auto115StepMove(t);
+      }
       auto115Set(t, 'cleanup', 'fail', auto115ErrText(d, res, '文件夹改名失败'));
       auto115Finish(t); return null;
-    }
+    });
   }).catch(function(e){
     auto115Set(t, 'cleanup', 'fail', (e && e.message) ? e.message : '网络错误');
     auto115Finish(t); return null;
