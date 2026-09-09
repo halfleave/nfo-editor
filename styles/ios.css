@@ -1515,7 +1515,6 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-topbar button { width: 34px; height: 34px; border: none; background: transparent; color: var(--label); display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
 .auto-topbar button svg { width: 22px; height: 22px; }
 .auto-topbar-title { position: absolute; left: 0; right: 0; pointer-events: none; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); }
-.auto-topbar-clear { width: auto !important; font-size: 13px; color: var(--accent); font-weight: 500; padding: 0 4px; margin-left: auto; }
 .auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; }
 /* 上传入口：常驻在任务列表上方，不依赖任何离线任务 */
@@ -1526,6 +1525,20 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-fab { position: absolute; right: 18px; bottom: calc(44px + env(safe-area-inset-bottom)); width: 54px; height: 54px; border-radius: 50%; border: none; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,.18); z-index: 30; -webkit-tap-highlight-color: transparent; appearance: none; -webkit-appearance: none; }
 .auto-fab svg { width: 24px; height: 24px; }
 .auto-fab:active { opacity: .8; }
+/* 文件整理：在磁力按钮上方，同款圆形图标按钮 */
+.auto-fab-tidy { bottom: calc(112px + env(safe-area-inset-bottom)); }
+/* 磁力按钮：略小、往左让一点，给整理按钮留出层次 */
+.auto-fab-magnet { width: 46px; height: 46px; right: 26px; bottom: calc(40px + env(safe-area-inset-bottom)); }
+.auto-fab-magnet svg { width: 21px; height: 21px; }
+/* 文件整理：候选文件夹列表 */
+.tidy-dir-tip { font-size: 12px; color: var(--label-2); text-align: center; margin: -6px 0 12px; line-height: 1.4; }
+.tidy-dir-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.tidy-dir-item { display: flex; align-items: center; gap: 10px; width: 100%; border: none; border-radius: 12px; background: var(--gray-fill); color: var(--label); font-family: inherit; font-size: 14px; line-height: 1.35; text-align: left; padding: 12px 14px; -webkit-tap-highlight-color: transparent; appearance: none; -webkit-appearance: none; }
+.tidy-dir-item:active { opacity: .75; }
+.tidy-dir-name { flex: 1; min-width: 0; word-break: break-all; }
+.tidy-dir-kind { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 5px; background: rgba(120,120,128,.14); font-size: 10px; font-weight: 600; color: var(--label-2); vertical-align: 1px; }
+.tidy-dir-score { flex: 0 0 auto; font-size: 11px; font-weight: 600; color: var(--label-2); }
+.tidy-dir-item.best .tidy-dir-score { color: var(--accent); }
 .auto-list { display: flex; flex-direction: column; gap: 12px; }
 /* 添加磁力 弹窗 */
 .magnet-sheet-head { font-size: 16px; font-weight: 600; text-align: center; color: var(--label); margin: 4px 0 14px; }

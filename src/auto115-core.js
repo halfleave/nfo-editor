@@ -91,6 +91,8 @@
     var cleanup = api.getStep(t, 'cleanup');
     if (cleanup.state === 'ok' || cleanup.state === 'skip') return { text: '已完成', cls: 'ab-ok' };
     if (t.queued) return { text: '排队中', cls: 'ab-wait' };
+    /* 整理任务（云下载里已有文件）：没有离线步骤，未开跑时说「待整理」而不是「待提交」 */
+    if (t.tidy) return { text: '待整理', cls: 'ab-idle' };
     return { text: '待提交', cls: 'ab-idle' };
   };
   /* 任务是否真的在跑：只要有任一步骤处于 running 就算活跃（waiting/ok/idle/skip 都不算） */
@@ -318,6 +320,132 @@
       todo.push(job);
     });
     return { todo: todo, skipped: skipped };
+  };
+
+  /* =================================================================
+   * 文件整理：按影片标题在「云下载」里定位已有文件夹
+   * 场景：离线没走本 App（或以前下载过），115 云下载里已经有这个片子的文件夹，
+   *       夹名往往夹带压制信息（1080p / BluRay / 压制组 / 年份），与标题只能「基本相似」。
+   * 纯逻辑：不碰网络、不碰 DOM，标题与年份一律参数传入。
+   * ================================================================= */
+  api.TIDY_ACCEPT = 72;   // ≥ 该分且与次优拉开 TIDY_GAP，才自动采用（否则弹候选让用户选）
+  api.TIDY_GAP = 8;       // 与次优候选的最小领先分
+  api.TIDY_MIN = 30;      // 低于此分不进候选列表（视为无关文件夹）
+
+  var TIDY_NOISE = {
+    '1080p':1,'2160p':1,'720p':1,'480p':1,'2160':1,'1080':1,'4k':1,'8k':1,'uhd':1,'hd':1,'sd':1,
+    'bluray':1,'blueray':1,'bdrip':1,'brrip':1,'bd':1,'webrip':1,'webdl':1,'web':1,'dl':1,'dvdrip':1,'hdtv':1,
+    'hdr':1,'hdr10':1,'dolby':1,'vision':1,'atmos':1,'dv':1,
+    'x264':1,'x265':1,'h264':1,'h265':1,'hevc':1,'avc':1,'10bit':1,'8bit':1,'hi10p':1,
+    'aac':1,'ac3':1,'dts':1,'dts-hd':1,'truehd':1,'mp3':1,'flac':1,'dd5':1,'51':1,'71':1,
+    'remux':1,'repack':1,'proper':1,'complete':1,'extended':1,'unrated':1,'theatrical':1,'directors':1,'cut':1,
+    'imax':1,'3d':1,'2d':1,'4kremux':1,'hdrdv':1,
+    'mp4':1,'mkv':1,'avi':1,'rmvb':1,'mov':1,'iso':1,'ts':1,'wmv':1,'m4v':1,'flv':1,'webm':1,
+    'torrent':1,'bt':1,'ed2k':1,'www':1,'com':1,'net':1,'org':1,'cn':1,'io':1
+  };
+  /* 归一化：去扩展名 / 去括号内容（压制组标签）/ 去压制参数词 / 只留字母数字汉字 */
+  api.tidyKey = function (s) {
+    var n = String(s || '').toLowerCase();
+    n = n.replace(/\.(mp4|mkv|avi|rmvb|mov|wmv|m4v|mpg|mpeg|flv|webm|iso|ts|srt|ass|ssa|sub|idx|rar|zip|7z)$/i, ' '); // 只认真实扩展名（避免把「.1972」当年份后缀吃掉）
+    n = n.replace(/[【\[（(][^\]】)）]{0,40}[\]】)）]/g, ' ');    // 【压制组】[xxx](xxx)
+    n = n.replace(/[._\-+~!@#$%^&*=|\\/:;"'<>,?]+/g, ' ');   // 分隔符 → 空格
+    var words = n.split(/\s+/), out = [];
+    for (var i = 0; i < words.length; i++){
+      var w = words[i];
+      if (!w || TIDY_NOISE[w]) continue;
+      out.push(w);
+    }
+    n = out.join(' ');
+    /* 中文噪声（无空格可分，按子串删） */
+    n = n.replace(/国语|国配|中字|中英|双语|简体|繁体|字幕|高清|标清|修复|未删减|加长版|剧场版|收藏版|全集|合集|内封|外挂/g, '');
+    n = n.replace(/[^a-z0-9一-龥]/g, '');
+    return n;
+  };
+  function tidyBigramDice(a, b) {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    if (a.length < 2 || b.length < 2) return 0;
+    var A = {}, B = {}, inter = 0, i;
+    for (i = 0; i < a.length - 1; i++) A[a.slice(i, i + 2)] = 1;
+    for (i = 0; i < b.length - 1; i++) B[b.slice(i, i + 2)] = 1;
+    for (var k in A) if (B[k]) inter++;
+    return (2 * inter) / ((a.length - 1) + (b.length - 1));
+  }
+  /* 一对一相似度（0..100）。noNum=true 表示双方都抹掉了数字（可能是不同作品，如「教父2」），上限压到 70 */
+  function tidyPairScore(a, b, noNum) {
+    if (!a || !b) return 0;
+    var s;
+    if (a === b) s = 96;
+    else if (a.indexOf(b) >= 0) s = 76 + Math.round(14 * (b.length / a.length));
+    else if (b.indexOf(a) >= 0) s = 76 + Math.round(14 * (a.length / b.length));
+    else s = Math.round(tidyBigramDice(a, b) * 74);
+    return noNum ? Math.min(s, 70) : s;
+  }
+  /* 单影片在 115 里的存放形态（纯逻辑，两端共用）：
+     ① AV（有番号）→ 收进文件夹；② 上传过元数据（NFO）的影片 → 也要文件夹（播放器认不出，靠 NFO 刮削）；
+     ③ 其余普通影片 → 平铺在「云下载」根目录（VidHub / Infuse 这类播放器自己能刮削，多套一层文件夹反而不好移动）。 */
+  api.movieLayout = function (doc) {
+    doc = doc || {};
+    if (doc.dvdId) return { folder: true, name: doc.filmTitle || doc.dvdId, kind: 'av', reason: 'AV 影片，收进文件夹' };
+    if (doc.nfoUploaded) return { folder: true, name: doc.filmTitle || '', kind: 'nfo', reason: '已上传元数据，需要文件夹' };
+    return { folder: false, name: '', kind: 'flat', reason: '播放器能自己识别，直接放云下载' };
+  };
+
+  /* 夹名 vs 影片：titles 可传多个（标题 / 原名 / 番号），取最高分；year 用于纠偏 */
+  api.tidyScore = function (dirName, titles, year) {
+    var dn = api.tidyKey(dirName);
+    var dn0 = dn.replace(/[0-9]/g, '');
+    var list = Array.isArray(titles) ? titles : [titles];
+    var best = 0;
+    for (var i = 0; i < list.length; i++){
+      var tn = api.tidyKey(list[i]);
+      if (!tn) continue;
+      /* 同名直中：去掉压制信息后与片名完全一致 → 直接满分，不再跟别的夹子比分数 */
+      if (dn && dn === tn) return 100;
+      var tn0 = tn.replace(/[0-9]/g, '');
+      var s = Math.max(tidyPairScore(dn, tn, false), tidyPairScore(dn0, tn0, true));
+      /* 夹名比片名多出数字后缀（教父2 / 第二部 3）→ 多半是续集或另一部，压分 */
+      if (dn0 === tn0 && dn !== tn && /[0-9]$/.test(dn) && !/(19|20)\d{2}/.test(dn)) s -= 15;
+      if (s > best) best = s;
+    }
+    var raw = String(dirName || '');
+    var y = year ? String(year) : '';
+    if (y){
+      /* 夹名里所有形如年份的 4 位数：命中影片年份 → 加分；一个都不中且确实有年份 → 视为另一部片，重罚 */
+      var ys = raw.match(/(19|20)\d{2}/g) || [];
+      var hit = false, hasYear = false;
+      for (var k = 0; k < ys.length; k++){
+        var v = Number(ys[k]);
+        if (v < 1900 || v > new Date().getFullYear() + 1) continue;
+        hasYear = true;
+        if (ys[k] === y){ hit = true; break; }
+      }
+      if (hit) best += 8;
+      else if (hasYear) best -= 30;
+    }
+    return Math.max(0, Math.min(100, Math.round(best)));
+  };
+  /* 在目录条目里挑出最像的文件夹：返回 { ok, best, candidates }
+     ok=true 表示可以直接自动采用；否则交给 UI 弹候选让用户确认。 */
+  api.matchTidyDir = function (list, titles, year) {
+    var items = [];
+    for (var i = 0; i < (list || []).length; i++){
+      var it = list[i];
+      if (!it) continue;
+      var cid = String(it.cid || it.fid || '');
+      var name = it.n || it.name || '';
+      if (!cid || !name) continue;
+      var score = api.tidyScore(name, titles, year);
+      if (score >= api.TIDY_MIN) items.push({ cid: cid, n: name, score: score });
+    }
+    items.sort(function (a, b) { return b.score - a.score; });
+    var best = items[0] || null;
+    var ok = false;
+    if (best && best.score >= api.TIDY_ACCEPT){
+      var second = items[1];
+      if (!second || best.score - second.score >= api.TIDY_GAP) ok = true;
+    }
+    return { ok: ok, best: best, candidates: items.slice(0, 8) };
   };
 
   global.Auto115Core = api;

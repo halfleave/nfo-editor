@@ -112,6 +112,45 @@ assert(pm.todo.length === 2 && pm.skipped === 1, 'planMoveJobs：1 移 + 1 跳�
 assert(jobs[2].name === 'A.S01E03.2.mkv', '同名不同大小 → 目标名加 .2');
 assert(api.planMoveJobs(jobs, []).skipped === 0, '空目标夹全移');
 
+/* ---------- 文件整理：标题相似度定位 ---------- */
+assert(api.tidyKey('The.Matrix.1999.1080p.BluRay.x264-AAA') === 'thematrix1999aaa', 'tidyKey 只去压制参数（年份数字保留，由 tidyScore 双 key 消化）');
+assert(api.tidyKey('【电影天堂】教父.1080p.国语中字.mp4') === '教父', 'tidyKey 去压制组标签与中文噪声');
+assert(api.tidyKey('SSNI-666') === 'ssni666', 'tidyKey 保留番号主体');
+assert(api.tidyScore('教父.1972.1080p.BluRay', ['教父'], '1972') >= api.TIDY_ACCEPT, '中文档名+年份 → 高分');
+assert(api.tidyScore('教父.1972.1080p.BluRay', ['教父'], '1990') < api.TIDY_ACCEPT, '夹名年份与影片不符 → 扣分');
+assert(api.tidyScore('The Matrix 1999 1080p', ['黑客帝国', 'The Matrix'], '1999') >= api.TIDY_ACCEPT, '原名命中英文夹名');
+assert(api.tidyScore('SSNI-666 出差', ['SSNI-666'], '') >= api.TIDY_ACCEPT, '番号命中');
+assert(api.tidyScore('完全不相干的文件夹', ['教父'], '1972') < api.TIDY_MIN, '无关夹名低于候选线');
+const tidyList = [
+  { cid: 'c1', n: '教父.1972.1080p.BluRay.x264-AAA' },
+  { cid: 'c2', n: '教父2' },
+  { cid: 'c3', n: '别的东西' }
+];
+const tidyM = api.matchTidyDir(tidyList, ['教父'], '1972');
+assert(tidyM.best && tidyM.best.cid === 'c1', 'matchTidyDir 选出最像的夹');
+assert(tidyM.ok === true, '高分且拉开差距 → 自动采用');
+assert(tidyM.candidates.length === 2, '候选只保留过线的');
+const tidyAmbiguous = api.matchTidyDir([
+  { cid: 'x1', n: '教父.1972' }, { cid: 'x2', n: '教父.1972.修复版' }
+], ['教父'], '1972');
+assert(tidyAmbiguous.ok === false && tidyAmbiguous.candidates.length === 2, '两个候选太接近 → 不自动采用，交给用户选');
+assert(api.matchTidyDir([], ['教父'], '1972').ok === false && !api.matchTidyDir([], ['教父'], '1972').best, '空目录 → 无命中');
+assert(api.matchTidyDir([{ fid: 'f1', n: '教父.mkv' }], ['教父'], '1972').best.cid === 'f1', '文件条目也能定位（无 cid 时取 fid）');
+
+/* ---------- 单影片存放形态（平铺 / 文件夹） ---------- */
+assert(api.movieLayout({ dvdId: 'IPX-486', filmTitle: '某片' }).folder === true, 'AV（有番号）→ 收进文件夹');
+assert(api.movieLayout({ dvdId: 'IPX-486', filmTitle: '某片' }).kind === 'av', 'AV → kind=av');
+assert(api.movieLayout({ dvdId: '', filmTitle: '教父', nfoUploaded: 0 }).folder === false, '普通影片（无番号、没传 NFO）→ 平铺云下载');
+assert(api.movieLayout({ dvdId: '', filmTitle: '教父', nfoUploaded: 0 }).kind === 'flat', '普通影片 → kind=flat');
+assert(api.movieLayout({ dvdId: '', filmTitle: '教父', nfoUploaded: 1750000000000 }).folder === true, '已上传元数据（NFO）→ 需要文件夹');
+assert(api.movieLayout({ dvdId: '', filmTitle: '教父', nfoUploaded: 1750000000000 }).name === '教父', '需要文件夹时用片名做夹名');
+assert(api.movieLayout({}).folder === false, '空 doc → 平铺（不崩）');
+/* 同名直中：去掉压制信息后与片名完全一致 → 满分，优先于其他相似夹名 */
+assert(api.tidyScore('教父', ['教父'], '1972') === 100, '夹名与片名完全一致 → 100 分（同名直中）');
+assert(api.tidyScore('教父.1972.1080p.BluRay.x264-AAA', ['教父'], '1972') < 100, '带压制信息的夹名不抢同名直中');
+assert(api.matchTidyDir([{ cid: 'c1', n: '教父.1972.1080p' }, { cid: 'c2', n: '教父' }], ['教父'], '1972').best.cid === 'c2', '同名文件夹优先被选中');
+assert(api.matchTidyDir([{ cid: 'c1', n: '教父.1972.1080p' }, { cid: 'c2', n: '教父' }], ['教父'], '1972').ok === true, '同名文件夹自动采用（无需弹候选）');
+
 /* ---------- 探测延迟 ---------- */
 assert(api.probeDelay(0) === 5000 && api.probeDelay(1) === 5000 && api.probeDelay(2) === 10000 && api.probeDelay(9) === 10000, 'probeDelay 5s/5s/10s 封顶');
 

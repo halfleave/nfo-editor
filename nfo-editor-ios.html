@@ -47,7 +47,7 @@
     <div class="about-title" data-page-node-id="2mk3QxHmQ25zheTyL1jeCL">关于</div>
     <div class="about-body" data-page-node-id="UDuDPvuiSOf8k8FIpfmU8U">
       <p data-page-node-id="LmbAfxlxuZReJSPUqNcYuB">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-      <p data-page-node-id="m3N3CiBJJa1Q0EPf6AAMwr">@Halfleave · v2.0.234</p>
+      <p data-page-node-id="m3N3CiBJJa1Q0EPf6AAMwr">@Halfleave · v2.0.236</p>
     </div>
     <button class="about-done" onclick="closeAllSheets()" data-page-node-id="KnNqBwsFiLFeshOApUODcS">完成</button>
   </div>
@@ -811,7 +811,6 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
       <div class="auto-topbar-title" id="autoTopTitle">自动化</div>
-      <button class="auto-topbar-clear" id="autoClearBtn" onclick="auto115ClearDone()">清空</button>
     </div>
     <div class="auto-scroll">
       <div class="auto-film" id="autoFilmTitle"></div>
@@ -823,7 +822,11 @@
         <div class="auto-empty-title">还没有自动化任务</div>
       </div>
     </div>
-    <button class="auto-fab" id="autoAddMagnetBtn" onclick="auto115OpenMagnetModal()" aria-label="添加磁力">
+    <!-- 文件整理：云下载里已经有这个片子、只是没归置好 → 跳过离线，直接改名整理 -->
+    <button class="auto-fab auto-fab-tidy" id="autoTidyBtn" onclick="auto115OpenTidy()" aria-label="文件整理">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/><path d="M7.5 11.5h9M7.5 15h6"/></svg>
+    </button>
+    <button class="auto-fab auto-fab-magnet" id="autoAddMagnetBtn" onclick="auto115OpenMagnetModal()" aria-label="添加磁力">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/><path d="m12 15 4 4"/></svg>
     </button>
   </section>
@@ -837,6 +840,17 @@
     </div>
     <div class="magnet-sheet-ops">
       <button class="sheet-btn magnet-confirm-btn" onclick="auto115AddMagnetTask()">确定</button>
+    </div>
+  </div>
+
+  <!-- 文件整理：云下载里自动认不出唯一文件夹时，让用户挑一个 -->
+  <div class="sheet-mask" id="tidyDirMask" onclick="auto115CloseTidyDirModal()"></div>
+  <div class="sheet" id="tidyDirSheet">
+    <div class="magnet-sheet-head">选择要整理的文件夹</div>
+    <div class="tidy-dir-tip" id="tidyDirTip"></div>
+    <div class="tidy-dir-list" id="tidyDirList"></div>
+    <div class="magnet-sheet-ops">
+      <button class="sheet-btn" onclick="auto115CloseTidyDirModal()">取消</button>
     </div>
   </div>
 

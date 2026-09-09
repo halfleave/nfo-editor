@@ -8,7 +8,11 @@ adult-loading-phrases.json
 __pycache__/
 *.pyc
 
+# 本地辅助脚本（AI 收尾工具，仅本机使用，勿推公开仓库）
+tools/
+
 # 本地协作/规划文档（含内部协作信息，勿推公开仓库）
 AI-COLLAB.md
 nfo-design.md
 nfo-plan-pc-115-align.md
+nfo-plan-v3.md

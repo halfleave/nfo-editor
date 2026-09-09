@@ -152,7 +152,9 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115GetStep(t, 'cleanup').msg.indexOf('测试影片') >= 0, '文件夹改名（始终取标题）「测试影片」：' + ctx.auto115GetStep(t, 'cleanup').msg);
   assert(ctx.auto115Status(t).text === '已完成', '任务终态 = 已完成');
 
-  /* 2b. 单文件磁力：无文件夹落地 → move/cleanup 自动 skip */
+  /* 2b. 单文件磁力（AV，有番号）：无文件夹落地 → move 跳过，但 AV 需要文件夹 → 建好后把视频移进去 */
+  script['files/add'] = { state: true, data: { cid: 'AVDIR' } };
+  script['files?cid=AVDIR'] = { state: true, data: [] };
   script['files?cid=3311283881428122938'] = { state: true, data: [
     { fid: 'F9', n: '测试磁力', s: 123, t: NOW_SEC }
   ] };
@@ -161,9 +163,10 @@ const lz4LiteralForTest = (bytes) => {
   await ctx.auto115Run(t5);
   const g5 = (k) => ctx.auto115GetStep(t5, k).state;
   assert(g5('mkdir') === 'ok' && ctx.auto115GetStep(t5, 'mkdir').msg.indexOf('单文件') >= 0, '单文件落地识别');
-  assert(g5('move') === 'skip', '清理步骤自动跳过');
-  assert(g5('rename') === 'ok' && ctx.auto115GetStep(t5, 'rename').msg.indexOf('IPX-486.mp4') >= 0, '单文件改名为 IPX-486.mp4');
-  assert(g5('cleanup') === 'skip', '文件夹改名步骤跳过');
+  assert(g5('move') === 'skip', '清理步骤自动跳过（单文件无杂物）');
+  assert(g5('rename') === 'ok' && ctx.auto115GetStep(t5, 'rename').msg.indexOf('IPX-486.mp4') >= 0, '单文件改名为 IPX-486.mp4：' + ctx.auto115GetStep(t5, 'rename').msg);
+  assert(g5('cleanup') === 'ok' && ctx.auto115GetStep(t5, 'cleanup').msg.indexOf('测试影片') >= 0, 'AV 单文件 → 建好文件夹再收进去：' + ctx.auto115GetStep(t5, 'cleanup').msg);
+  assert(calls.some(c => c.url.indexOf('files/move') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=F9') >= 0 && decodeURIComponent(c.body || '').indexOf('pid=AVDIR') >= 0), 'AV 单文件 → 视频移进新建的文件夹');
   assert(ctx.auto115Status(t5).text === '已完成', '单文件任务终态 = 已完成');
 
   /* 2c. 多 part 影片：cd1/cd2 全部保留，不误删第二张碟 */
@@ -696,6 +699,96 @@ const lz4LiteralForTest = (bytes) => {
   const mvSp2 = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(mvSp2.some(b => b.indexOf('pid=S01NEW') >= 0) && mvSp2.some(b => b.indexOf('pid=S02NEW') >= 0), '视频分别移入 S01 / S02');
   ctx.Auto115Core.SPLIT_MIN_EPISODES = 100;
+
+  /* 10. 文件整理任务（tidy）：云下载里已有文件 → 跳过离线两步，从定位文件夹开始跑改名整理 */
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [
+      { cid: 'DIRT1', n: '整理测试片.2020.1080p.BluRay', t: Math.floor(Date.now() / 1000) }
+    ] },
+    'files?cid=DIRT1': { state: true, data: [
+      { fid: 'V1', n: '乱七八糟的名字.1080p.mkv', s: 900 },
+      { fid: 'S1', n: 'sample.mp4', s: 10 }
+    ] },
+    'files/edit': { state: true },
+    'rb/delete': { state: true }
+  };
+  const docT = await ctx.auto115EnsureDoc();
+  docT.dvdId = ''; docT.filmTitle = '整理测试片'; docT.originalTitle = ''; docT.year = '2020'; docT.type = 'movie';
+  docT.tasks.length = 0;   // 隔离：清掉前面用例留下的任务（否则「并入已有文件夹」逻辑会介入）
+  const tt = { id: 'ttidy', type: 'tidy', tidy: true, steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  docT.tasks.unshift(tt);
+  /* 模拟点「文件整理」：在云下载里按标题命中 DIRT1 → 建任务（前两步标记跳过） */
+  ctx.auto115Set(tt, 'submit', 'skip', '已有文件，跳过离线下载');
+  ctx.auto115Set(tt, 'wait', 'skip', '已有文件，跳过离线下载');
+  tt.offlineDirCid = 'DIRT1'; tt.offlineDirName = '整理测试片.2020.1080p.BluRay';
+  await ctx.auto115Run(tt);
+  assert(ctx.auto115GetStep(tt, 'submit').state === 'skip' && ctx.auto115GetStep(tt, 'wait').state === 'skip', '整理任务跳过离线两步');
+  assert(ctx.auto115GetStep(tt, 'mkdir').state === 'ok', '整理任务定位文件夹 = ok');
+  assert(ctx.auto115GetStep(tt, 'move').state === 'ok', '整理任务清理文件 = ok');
+  assert(ctx.auto115GetStep(tt, 'cleanup').state === 'skip', '普通影片整理 → 不改夹名（播放器能自己刮削）');
+  assert(ctx.auto115GetStep(tt, 'rename').state === 'ok' && ctx.auto115GetStep(tt, 'rename').msg.indexOf('整理测试片.2020.mkv') >= 0, '整理任务改视频名：' + ctx.auto115GetStep(tt, 'rename').msg);
+  const mvFlat = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(mvFlat.some(b => b.indexOf('fid=V1') >= 0 && b.indexOf('pid=3311283881428122938') >= 0), '普通影片整理 → 视频移到云下载根目录');
+  assert(calls.some(c => c.url.indexOf('rb/delete') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=DIRT1') >= 0), '视频移出后删掉空文件夹');
+  assert(ctx.auto115Status(tt).text === '已完成', '整理任务终态 = 已完成');
+  assert(ctx.auto115TaskTitle(tt).indexOf('整理：') === 0, '整理任务标题 = 整理：xxx');
+  const tt2 = { id: 'ttidy2', tidy: true, steps: ctx.auto115NewSteps() };
+  assert(ctx.auto115Status(tt2).text === '待整理', '未开跑的整理任务 = 待整理');
+  /* 没有 cid 时（重试 / 数据丢失）→ 按标题重新匹配一次 */
+  const tt3 = { id: 'ttidy3', type: 'tidy', tidy: true, steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  docT.tasks.unshift(tt3);
+  await ctx.auto115StepTidyMkdir(tt3);
+  assert(tt3.offlineDirCid === 'DIRT1', '整理任务兜底：按标题重新匹配到 DIRT1，实际=' + tt3.offlineDirCid);
+
+  /* 10b. AV（有番号）整理 → 仍然收进文件夹：改夹名 + 视频按番号命名，不移出 */
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [ { cid: 'DIRT1', n: '整理测试片.2020.1080p.BluRay' } ] },
+    'files?cid=DIRT1': { state: true, data: [ { fid: 'V2', n: '乱七八糟的名字.1080p.mkv', s: 900 } ] },
+    'files/edit': { state: true }, 'rb/delete': { state: true }
+  };
+  docT.dvdId = 'ABC-123';
+  calls.length = 0;
+  const ttAv = { id: 'tav', type: 'tidy', tidy: true, steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  ttAv.offlineDirCid = 'DIRT1'; ttAv.offlineDirName = '整理测试片.2020.1080p.BluRay';
+  docT.tasks.length = 0; docT.tasks.unshift(ttAv);
+  await ctx.auto115Run(ttAv);
+  assert(ctx.auto115GetStep(ttAv, 'cleanup').state === 'ok' && ctx.auto115GetStep(ttAv, 'cleanup').msg.indexOf('整理测试片') >= 0, 'AV 整理仍改夹名：' + ctx.auto115GetStep(ttAv, 'cleanup').msg);
+  assert(ctx.auto115GetStep(ttAv, 'rename').msg.indexOf('ABC-123.mkv') >= 0, 'AV 整理视频按番号命名：' + ctx.auto115GetStep(ttAv, 'rename').msg);
+  assert(!calls.some(c => c.url.indexOf('files/move') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=V2') >= 0), 'AV 整理 → 视频留在文件夹里，不移出');
+  docT.dvdId = '';
+
+  /* 10c. 散装视频（直接躺在云下载、名字不规范）→ 整理只改名，不建文件夹 */
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [ { fid: 'V9', n: '乱七八糟的名字.mkv', s: 900 } ] },
+    'files/edit': { state: true }, 'rb/delete': { state: true }
+  };
+  calls.length = 0;
+  const ttLoose = { id: 'tloose', type: 'tidy', tidy: true, noFolder: true, steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  ttLoose.videoFid = 'V9'; ttLoose.videoName = '乱七八糟的名字.mkv'; ttLoose.videoSize = 900; ttLoose.keepFids = ['V9'];
+  docT.tasks.length = 0; docT.tasks.unshift(ttLoose);
+  await ctx.auto115Run(ttLoose);
+  assert(ctx.auto115GetStep(ttLoose, 'mkdir').state === 'ok' && ctx.auto115GetStep(ttLoose, 'mkdir').msg.indexOf('已定位视频') >= 0, '散装视频整理 → 定位到视频：' + ctx.auto115GetStep(ttLoose, 'mkdir').msg);
+  assert(ctx.auto115GetStep(ttLoose, 'rename').state === 'ok' && ctx.auto115GetStep(ttLoose, 'rename').msg.indexOf('整理测试片.2020.mkv') >= 0, '散装视频整理 → 改名：' + ctx.auto115GetStep(ttLoose, 'rename').msg);
+  assert(!calls.some(c => c.url.indexOf('files/move') >= 0), '散装视频整理 → 不移动（本来就在根目录）');
+
+  /* 10d. 先上传 NFO（已有同名文件夹）再整理散装视频 → 视频移进那个文件夹 */
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [
+      { cid: 'NFODIR', n: '整理测试片' }, { fid: 'V9', n: '乱七八糟的名字.mkv', s: 900 }
+    ] },
+    'files?cid=NFODIR': { state: true, data: [ { fid: 'NFO1', n: '整理测试片.nfo', s: 2 } ] },
+    'files/edit': { state: true }, 'rb/delete': { state: true }
+  };
+  calls.length = 0;
+  docT.nfoUploaded = Date.now();
+  const ttNfo = { id: 'tnfo', type: 'tidy', tidy: true, noFolder: true, steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  ttNfo.videoFid = 'V9'; ttNfo.videoName = '乱七八糟的名字.mkv'; ttNfo.videoSize = 900; ttNfo.keepFids = ['V9'];
+  docT.tasks.length = 0; docT.tasks.unshift(ttNfo);
+  await ctx.auto115Run(ttNfo);
+  assert(ctx.auto115GetStep(ttNfo, 'cleanup').state === 'ok' && ctx.auto115GetStep(ttNfo, 'cleanup').msg.indexOf('整理测试片') >= 0, '已传 NFO → 整理时并入已有文件夹：' + ctx.auto115GetStep(ttNfo, 'cleanup').msg);
+  assert(ctx.auto115GetStep(ttNfo, 'rename').state === 'ok' && ctx.auto115GetStep(ttNfo, 'rename').msg.indexOf('已移入「整理测试片」') >= 0, '散装视频移入 NFO 文件夹：' + ctx.auto115GetStep(ttNfo, 'rename').msg);
+  docT.nfoUploaded = 0;
+
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
   ctx.auto115Doc = null;
 
