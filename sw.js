@@ -1,13 +1,15 @@
 /* nfo-editor-ios Service Worker —— 离线缓存应用壳 + 海报图片
  * 策略：
  *  - 磁力代理（*.workers.dev）：始终走网络、不缓存，保证每次都打到最新 Worker
- *  - 同源（nfo-editor-ios.html / manifest.json 等应用壳）：网络优先，离线回退缓存（支持离线打开）
+ *  - 同源（nfo-editor-ios.html / manifest.json 等应用壳）：网络优先且**绕过浏览器 HTTP 缓存**，
+ *    离线回退缓存（支持离线打开）。绕过缓存是为了让 PWA 独立窗口每次打开都拿到最新版，
+ *    不再需要用户手动清站缓存 / 重加主屏。
  *  - 跨域图片（image.tmdb.org 等海报）：缓存优先，离线可见已加载过的图
  *  - 其余（TMDB API 等）：走网络，不缓存
  * 改版时递增下方 CACHE 版本号，旧缓存会在 activate 阶段被清理。
  * 逐版本变更记录见 git log，此处不再罗列。
  */
-const CACHE = 'nfo-ios-v236';
+const CACHE = 'nfo-ios-v237';
 const APP_SHELL = ['./nfo-editor-ios.html', './manifest.json', './src/core-shared.js', './src/auto115-core.js', './styles/ios.css', './src/ui-ios.js', './src/qrcode.min.js'];
 const WORKER_RE = /workers\.dev$/i;
 
@@ -48,17 +50,21 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // 同源：网络优先，离线回退缓存
+  // 同源：网络优先（绕过 HTTP 缓存，保证拿到最新），离线回退缓存
   if (url.origin === self.location.origin) {
     e.respondWith(
-      fetch(req).then(function (res) {
+      fetch(req, { cache: 'reload' }).then(function (res) {
         if (okToCache(res)) {
           var copy = res.clone();
           caches.open(CACHE).then(function (c) { c.put(req, copy); });
         }
         return res;
       }).catch(function () {
-        return caches.match(req).then(function (cached) { return cached || caches.match('./nfo-editor-ios.html'); });
+        return caches.match(req).then(function (cached) {
+          if (cached) return cached;
+          // 静态资源带 ?v= 版本号，忽略查询串回退到预缓存的无参数版本
+          return caches.match(req, { ignoreSearch: true }).then(function (c2) { return c2 || caches.match('./nfo-editor-ios.html'); });
+        });
       })
     );
     return;

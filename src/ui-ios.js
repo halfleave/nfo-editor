@@ -7956,7 +7956,16 @@ document.addEventListener('visibilitychange', function(){ if (document.hidden) c
 /* —— PWA：Service Worker 离线缓存（仅 HTTPS / localhost 生效；file:// 直接跳过） —— */
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').catch(function(err){ console.warn('SW 注册失败：', err); });
+    /* updateViaCache:'none' —— sw.js 自身也不许走 HTTP 缓存，保证每次打开都能发现新版本 */
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(function(err){ console.warn('SW 注册失败：', err); });
+  });
+  /* 新 SW 接管后自动刷新一次（同一个会话只刷一次，避免打断用户操作） */
+  var swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if (swReloaded) return;
+    try { if (sessionStorage.getItem('nfoSwReloaded')) return; sessionStorage.setItem('nfoSwReloaded', '1'); } catch (e2) {}
+    swReloaded = true;
+    location.reload();
   });
 }
 // 裁剪框为固定设计：移动/缩放作用于图片本身，手势统一由 cropStage 的 touch/pointer 事件处理；此处不再绑定框的拖拽/缩放
