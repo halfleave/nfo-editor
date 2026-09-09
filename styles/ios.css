@@ -1522,14 +1522,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-action-btn { flex: 1; border: none; border-radius: 980px; background: var(--accent); color: var(--accent-text); font-size: 14px; font-weight: 600; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
 .auto-action-btn:active { opacity: .75; }
 /* 添加磁力：右下角圆形浮动按钮（线形磁铁图标） */
-.auto-fab { position: absolute; right: 18px; bottom: calc(44px + env(safe-area-inset-bottom)); width: 54px; height: 54px; border-radius: 50%; border: none; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,.18); z-index: 30; -webkit-tap-highlight-color: transparent; appearance: none; -webkit-appearance: none; }
-.auto-fab svg { width: 24px; height: 24px; }
+.auto-fab { position: absolute; right: 22px; bottom: calc(44px + env(safe-area-inset-bottom)); width: 48px; height: 48px; border-radius: 50%; border: none; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,.18); z-index: 30; -webkit-tap-highlight-color: transparent; appearance: none; -webkit-appearance: none; }
+.auto-fab svg { width: 21px; height: 21px; }
 .auto-fab:active { opacity: .8; }
 /* 文件整理：在磁力按钮上方，同款圆形图标按钮 */
 .auto-fab-tidy { bottom: calc(112px + env(safe-area-inset-bottom)); }
-/* 磁力按钮：略小、往左让一点，给整理按钮留出层次 */
-.auto-fab-magnet { width: 46px; height: 46px; right: 26px; bottom: calc(40px + env(safe-area-inset-bottom)); }
-.auto-fab-magnet svg { width: 21px; height: 21px; }
+/* 文件整理与磁力按钮同为 54px 圆形、右对齐一致；磁力按钮沿用 .auto-fab 基础样式，不再单独缩放/偏移 */
 /* 文件整理：候选文件夹列表 */
 .tidy-dir-tip { font-size: 12px; color: var(--label-2); text-align: center; margin: -6px 0 12px; line-height: 1.4; }
 .tidy-dir-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
