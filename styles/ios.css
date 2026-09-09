@@ -1211,21 +1211,26 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #sheet115 .c115-login-btn { width: 100%; margin-top: 6px; background: var(--accent); color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; padding: 13px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 #sheet115 .c115-login-btn:active { filter: brightness(0.94); }
 #sheet115 .c115-login-btn:disabled { opacity: 0.5; }
-#sheet115 .c115-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 6px; }
-#sheet115 .c115-row button { flex: 1; border: 1px solid var(--accent); background: var(--card-fill); color: var(--accent); border-radius: 980px; font-size: 14px; font-weight: 600; padding: 10px 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-#sheet115 .c115-row button:active { background: var(--accent); color: #fff; }
-#sheet115 .c115-cookie-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--sep); border-radius: 12px; background: var(--card-fill); padding: 0 12px; }
-#sheet115 .c115-cookie-input { flex: 1; width: auto; border: none; background: transparent; border-radius: 0; padding: 14px 0; text-align: left; color: var(--label); font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; -webkit-tap-highlight-color: transparent; }
-#sheet115 .c115-cookie-input:focus { outline: none; box-shadow: none; }
-#sheet115 .c115-cookie-input::placeholder { color: var(--label-3); }
-#sheet115 .c115-copy-btn { flex: none; border: none; background: transparent; color: var(--accent); font-size: 14px; font-weight: 600; padding: 6px 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#sheet115 .api-group-title { font-size: 13px; font-weight: 600; color: var(--label-2); margin: 0; letter-spacing: 0.2px; }
+#sheet115 .api-group-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+/* 115 配置：输入框内右侧复制按钮（与应用配置搜索框/激活码框同款） */
+#sheet115 .c115-cookie-wrap { position: relative; }
+#sheet115 .c115-cookie-wrap .ios-input { padding-right: 52px; }
+#sheet115 .c115-copy-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: none; background: transparent; color: var(--accent); font-size: 13px; font-weight: 600; padding: 4px 6px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 #sheet115 .c115-copy-btn:active { opacity: 0.6; }
-#sheet115 .c115-verify { font-size: 13px; color: var(--label-2); text-align: center; margin-top: 8px; min-height: 18px; }
-#sheet115 .c115-verify.ok { color: var(--accent); font-weight: 600; }
-#sheet115 .c115-verify.err { color: #ff3b30; font-weight: 600; }
+/* 自检按钮 + 状态语：cookie 输入框下方一行 */
+#sheet115 .c115-selfcheck-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+#sheet115 .c115-selfcheck-btn { flex: none; border: 1px solid var(--accent); background: var(--card-fill); color: var(--accent); border-radius: 980px; font-size: 13px; font-weight: 600; padding: 5px 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#sheet115 .c115-selfcheck-btn:active { background: var(--accent); color: #fff; }
+#sheet115 .c115-verify-inline { font-size: 13px; color: var(--label-2); }
+#sheet115 .c115-verify-inline.ok { color: var(--accent); font-weight: 600; }
+#sheet115 .c115-verify-inline.err { color: #ff3b30; font-weight: 600; }
+/* 弹窗底部：授权状态条（钉在最下方） */
+#sheet115 .c115-auth-foot { flex-shrink: 0; font-size: 12px; color: var(--label-3); text-align: center; padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--sep); margin-top: 4px; }
 /* 115 配置弹窗 85% 高 + 刷新倒计时 */
 #sheet115 { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
-#sheet115 .sheet-list { max-height: 72vh; max-height: 72dvh; }
+#sheet115 { display: flex; flex-direction: column; padding-bottom: calc(var(--sab, env(safe-area-inset-bottom)) + 14px); }
+#sheet115 .sheet-list { flex: 1 1 auto; min-height: 0; max-height: 72vh; max-height: 72dvh; }
 #sheet115 .c115-countdown { font-size: 12px; color: var(--label-3); text-align: center; margin-top: 6px; min-height: 16px; }
 /* 磁力列表：点击展开 复制 / 115离线 */
 .magnet-result { flex-wrap: wrap; }

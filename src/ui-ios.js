@@ -1151,6 +1151,7 @@ function open115Sheet(){
     if (ta && cookie) ta.value = cookie;
     state.c115Cookie = cookie;
     reset115QrButton(); // 始终显示【展示二维码】按钮，进入时不自动生成二维码
+    auto115EnsureOpenAuth(); // 弹窗打开时，已登录则自动授权（已授权且未过期不重复）
   }).catch(function(){ reset115QrButton(); });
   // 载入 115 代理令牌（应用内可配，默认回落硬编码串）
   var tk = document.getElementById('c115TokenInput');
@@ -1369,6 +1370,7 @@ function verify115(silent){
       /* 手动自检成功即视为有效 Cookie，回写持久化（代替已移除的「保存」按钮） */
       state.c115Cookie = cookie;
       idbPut('kv', C115_COOKIE_KEY, cookie).catch(function(){});
+      auto115EnsureOpenAuth(); // 自检成功即自动开放平台授权（不重复授权）
     })
     .catch(function(e){
       done();
@@ -1831,7 +1833,7 @@ function ensure115Cookie(){
 function c115Offline(magnet){
   closeMagnetOp();
   ensure115Cookie().then(function(cookie){
-    if (!cookie){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return null; }
+    if (!cookie){ showToast('请先到「设置 → 115 配置」登录', 'error'); return null; }
     showToast('正在添加到 115 离线下载…', 'info');
     var cid = C115_DEFAULT_DIR_CID;
     var body = 'url=' + encodeURIComponent((magnet || '').trim()) + '&wp_path_id=' + encodeURIComponent(cid);
@@ -2105,7 +2107,7 @@ function renderAuto115(){
   var tasks = auto115Doc.tasks || [];
   if (emptyEl) emptyEl.style.display = tasks.length ? 'none' : '';
   var html = '';
-  if (!state.c115Cookie) html += '<div class="auto-login-tip">还没登录 115，去「设置 → 115 网盘」登录后回来点「重试」</div>';
+  if (!state.c115Cookie) html += '<div class="auto-login-tip">还没登录 115，去「设置 → 115 配置」登录后回来点「重试」</div>';
   listEl.innerHTML = html + tasks.map(auto115TaskHtml).join('');
   var clearBtn = document.getElementById('autoClearBtn');
   if (clearBtn) clearBtn.style.display = tasks.some(function(t){ return auto115Status(t).cls === 'ab-ok'; }) ? '' : 'none';
@@ -3652,6 +3654,24 @@ async function c115OpenAuthUI(){
     console.warn('[115授权]', msg); showToast('115 授权没成功，稍后再试一次', 'error');
   }
 }
+/* 自动开放平台授权：已登录且未过期则不重复授权；无 Cookie 则跳过（等用户扫码/填登录信息）。
+   供「自检成功」与「弹窗打开」两处调用，替代原手动「授权」按钮（已移除）。 */
+async function auto115EnsureOpenAuth(){
+  var existing;
+  try { existing = await idbGet('kv', C115_OPEN_KEY); } catch(_){ existing = null; }
+  /* 已有授权且未过期（exp > 0 且未临近过期）：不重复授权，仅刷新底部状态显示 */
+  if (existing && existing.access && existing.exp && existing.exp > 0 && Date.now() < existing.exp - 60000){
+    refresh115OpenStatus();
+    return;
+  }
+  /* 取 Cookie：优先 state，其次输入框当前值 */
+  var cookie = state.c115Cookie || '';
+  if (!cookie){ var ta = document.getElementById('c115Cookie'); if (ta && ta.value) cookie = ta.value.trim(); }
+  if (!cookie) return; // 未登录，暂不授权
+  state.c115Cookie = cookie;
+  try { await c115OpenAuthorize(); refresh115OpenStatus(); }
+  catch(e){ /* 静默：授权失败不影响主流程，底部状态保持未授权 */ }
+}
 /* 打开 115 配置页时回填开放平台授权状态 */
 function refresh115OpenStatus(){
   var el = document.getElementById('c115OpenStatus');
@@ -3915,7 +3935,7 @@ function auto115RetryStep(tid, key, force){
   var t = auto115Task(tid);
   if (!t) return Promise.resolve(null);
   return ensure115Cookie().then(function(ck){
-    if (!ck){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return; }
+    if (!ck){ showToast('请先到「设置 → 115 配置」登录', 'error'); return; }
     if (force){
       /* 兜底强启：不管队列里有没有别的任务，直接抢锁跑这一条（用户手动点火用） */
       auto115HoldLock(t);
@@ -4018,7 +4038,7 @@ var tidyDirPending = [];
 function auto115OpenTidy(){
   if (!currentDetailFilm){ showToast('请先打开一部影片', 'error'); return; }
   ensure115Cookie().then(function(ck){
-    if (!ck){ showToast('请先到「设置 → 115 网盘」登录', 'error'); return null; }
+    if (!ck){ showToast('请先到「设置 → 115 配置」登录', 'error'); return null; }
     return auto115EnsureDoc().then(function(){
       showToast('正在云下载里查找…', 'info');
       return auto115ListDir(C115_DEFAULT_DIR_CID, 'user_ptime');
