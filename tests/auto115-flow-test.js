@@ -1,8 +1,9 @@
 /* 隔离测试：115 自动化六步状态机（桩 DOM + 桩 115 接口） */
 const fs = require('fs');
 const vm = require('vm');
-const path = '/Users/leavehalf/Downloads/work/NFO/nfo-editor/src/ui-ios.js';
-const src = fs.readFileSync(path, 'utf8');
+const SRC_DIR = '/Users/leavehalf/Downloads/work/NFO/nfo-editor/src/';
+const coreSrc = fs.readFileSync(SRC_DIR + 'auto115-core.js', 'utf8');
+const src = fs.readFileSync(SRC_DIR + 'ui-ios.js', 'utf8');
 
 /* ---- DOM 桩 ---- */
 const mkEl = () => ({
@@ -44,6 +45,8 @@ const noop = function(){ return {}; };
 ctx.NfoCore = new Proxy({ isAvFilm: (f) => !!(f && f.data && f.data.dvdId) }, { get: (t, k) => (k in t ? t[k] : noop) });
 ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx;
 vm.createContext(ctx);
+/* 先加载真实 Auto115Core（纯逻辑单点真相），再加载 ui-ios.js —— 后者的纯函数均转发 core */
+vm.runInContext(coreSrc, ctx, { filename: 'auto115-core.js' });
 try { vm.runInContext(src, ctx, { filename: 'ui-ios.js' }); }
 catch (e) { console.log('LOAD WARN:', e.message); }
 /* bootApp 定时器在 crypto 异步等待期间会触发，补齐其依赖的 state 字段防崩（state 为 let 声明，需在 vm 作用域内补） */
@@ -513,16 +516,17 @@ const lz4LiteralForTest = (bytes) => {
   await ctx.auto115StepCleanup(ttv);
   assert(ctx.auto115GetStep(ttv, 'cleanup').state === 'ok', 'TV 修改标题文件夹 cleanup = ok（先定容器）');
   assert(ctx.auto115GetStep(ttv, 'move').state === 'ok', 'TV 清除无关文件 move = ok');
-  assert(ctx.auto115GetStep(ttv, 'mkdir2').state === 'ok', 'TV 新建季文件夹 mkdir2 = ok');
-  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 修改视频名称 rename = ok');
-  assert(ctx.auto115GetStep(ttv, 'move2').state === 'ok', 'TV 移入对应视频 move2 = ok');
+  assert(ctx.auto115GetStep(ttv, 'mkdir2').state === 'skip', 'TV 只有一季 → 不分季（mkdir2 skip）');
+  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 修改视频名称 rename = ok（命名仍带 SxxExx）');
+  assert(ctx.auto115GetStep(ttv, 'move2').state === 'skip', 'TV 不分季时文件留在剧集根文件夹（move2 skip）');
   const editBodies = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.mkv') >= 0), '改名含 权力的游戏.S01E01.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.mkv') >= 0), '改名含 权力的游戏.S01E02.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.zh.srt') >= 0), '简中字幕重命名为 权力的游戏.S01E01.zh.srt');
   assert(editBodies.some(b => b.indexOf('file_name=权力的游戏') >= 0), '标题文件夹改名为 权力的游戏');
   const moveBodies = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
-  assert(moveBodies.some(b => b.indexOf('pid=SEASON01') >= 0), '移入 S01 文件夹');
+  assert(!calls.some(c => c.url.indexOf('files/add') >= 0), '只有一季时不新建季文件夹');
+  assert(!moveBodies.some(b => b.indexOf('pid=SEASON01') >= 0), '只有一季时不移入季文件夹（平铺在剧集根）');
   const delBodies = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(delBodies.some(b => b.indexOf('SU2') >= 0), '删除英文字幕 SU2');
   assert(delBodies.some(b => b.indexOf('J1') >= 0), '删除 sample J1');
@@ -631,16 +635,67 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115GetStep(tTvM, 'cleanup').state === 'ok', 'TV 同名夹已存在：改标题文件夹转 ok（不失败）');
   assert(tTvM.tvMergeCid === 'MERGE1' && tTvM.finalDirCid === 'MERGE1', '并入目标为已存在的同名剧集夹');
   assert(ctx.auto115GetStep(tTvM, 'move').state === 'ok', '后续清理文件步骤继续执行');
-  assert(ctx.auto115GetStep(tTvM, 'mkdir2').state === 'ok', '季文件夹建在同名夹内（mkdir2 ok）');
-  const addCall = calls.find(c => c.url.indexOf('files/add') >= 0);
-  assert(addCall && addCall.body.indexOf('pid=MERGE1') >= 0, '新建 S01 的父目录是同名剧集夹 MERGE1');
+  assert(ctx.auto115GetStep(tTvM, 'mkdir2').state === 'skip', '单季并入：不分季（mkdir2 skip）');
+  assert(!calls.some(c => c.url.indexOf('files/add') >= 0), '单季并入时不新建季文件夹');
   assert(ctx.auto115GetStep(tTvM, 'rename').state === 'ok', '视频改名步骤 ok');
-  assert(ctx.auto115GetStep(tTvM, 'move2').state === 'ok', '移入季文件夹步骤 ok');
+  assert(ctx.auto115GetStep(tTvM, 'move2').state === 'ok', '移入同名剧集夹步骤 ok');
   const mvCalls = calls.filter(c => c.url.indexOf('files/move') >= 0);
-  assert(mvCalls.some(c => c.body.indexOf('pid=S01NEW') >= 0), '视频已移入同名夹内的 S01');
+  assert(mvCalls.some(c => c.body.indexOf('pid=MERGE1') >= 0), '视频已平铺移入同名剧集夹 MERGE1');
+  const editCallsM = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editCallsM.some(b => b.indexOf('师兄太稳健.S01E01.mp4') >= 0), '平铺时命名仍带季集号 S01E01');
   const delTv = calls.find(c => c.url.indexOf('rb/delete') >= 0);
   assert(delTv && delTv.body.indexOf('fid=DIRTVM') >= 0, '完成后删除离线临时夹 DIRTVM');
   assert(ctx.auto115Status(tTvM).text === '已完成', '并入整理任务终态 = 已完成');
+  ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
+  ctx.auto115Doc = null;
+
+  // 9n. 分季阈值：多季但总集数不足阈值 → 平铺不分季；多季且达到阈值 → 才建季文件夹
+  ctx.currentDetailFilm = { id: 'filmTvSplit', data: { title: '多季剧', media_type: 'tv', tmdbMediaType: 'tv', dvdId: '' } };
+  ctx.auto115Doc = null;
+  const docTvS = await ctx.auto115EnsureDoc();
+  docTvS.type = 'tv';
+  let listSplitCalls = 0;
+  const SPLIT_FILES = [
+    { fid: 'SV1', n: 'Show.S01E01.mkv', s: 900 },
+    { fid: 'SV2', n: 'Show.S01E02.mkv', s: 900 },
+    { fid: 'SV3', n: 'Show.S02E01.mkv', s: 910 },
+    { fid: 'SV4', n: 'Show.S02E02.mkv', s: 910 }
+  ];
+  script = {
+    'files?cid=DIRSPLIT': function(){
+      listSplitCalls++;
+      return { state: true, data: listSplitCalls === 1 ? SPLIT_FILES : [] };   /* 首次=扫描内容，之后=查 Sxx 是否已存在 */
+    },
+    'files/add': (n) => ({ state: true, data: { cid: n === 1 ? 'S01NEW' : 'S02NEW' } }),
+    'files?cid=S01NEW': { state: true, data: [] },
+    'files?cid=S02NEW': { state: true, data: [] },
+    'files/move': { state: true },
+    'files/edit': { state: true },
+    'rb/delete': { state: true }
+  };
+  const mkSplitTask = (id) => ({ id: id, magnet: 'magnet:?xt=urn:btih:sp11111111111111111111111111111111111111', magnetTitle: '多季剧', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIRSPLIT', offlineDirName: '多季剧.S01-S02', fv: 2 });
+  /* ① 默认阈值 100：2 季共 4 集 → 不足 100 集，平铺不分季 */
+  const tSp1 = mkSplitTask('tSp1');
+  docTvS.tasks.unshift(tSp1);
+  calls.length = 0; listSplitCalls = 0;
+  await ctx.auto115StepCleanup(tSp1);
+  assert(ctx.auto115GetStep(tSp1, 'mkdir2').state === 'skip', '多季但总集数不足阈值 → 不分季（mkdir2 skip）');
+  assert(!calls.some(c => c.url.indexOf('files/add') >= 0), '不足阈值时不新建季文件夹');
+  const editSp1 = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editSp1.some(b => b.indexOf('多季剧.S02E01.mkv') >= 0), '平铺不分季时命名仍带季集号（S02E01）');
+  /* ② 阈值降到 3：2 季共 4 集 → 达到阈值，建季文件夹并移入（阈值单点真相在 Auto115Core.SPLIT_MIN_EPISODES） */
+  ctx.Auto115Core.SPLIT_MIN_EPISODES = 3;
+  const tSp2 = mkSplitTask('tSp2');
+  docTvS.tasks.unshift(tSp2);
+  calls.length = 0; listSplitCalls = 0;
+  await ctx.auto115StepCleanup(tSp2);
+  assert(ctx.auto115GetStep(tSp2, 'mkdir2').state === 'ok', '多季且达到阈值 → 建季文件夹（mkdir2 ok）');
+  const addSp2 = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(addSp2.length === 2 && addSp2.some(b => b.indexOf('cname=S01') >= 0) && addSp2.some(b => b.indexOf('cname=S02') >= 0), '新建 S01 与 S02 两个季文件夹');
+  assert(ctx.auto115GetStep(tSp2, 'move2').state === 'ok', '达到阈值时移入对应季文件夹（move2 ok）');
+  const mvSp2 = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(mvSp2.some(b => b.indexOf('pid=S01NEW') >= 0) && mvSp2.some(b => b.indexOf('pid=S02NEW') >= 0), '视频分别移入 S01 / S02');
+  ctx.Auto115Core.SPLIT_MIN_EPISODES = 100;
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
   ctx.auto115Doc = null;
 
