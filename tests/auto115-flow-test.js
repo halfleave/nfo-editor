@@ -196,6 +196,28 @@ const lz4LiteralForTest = (bytes) => {
   assert(delM && delM.body.indexOf('M3') >= 0 && delM.body.indexOf('M1') < 0 && delM.body.indexOf('M2') < 0, '只删 sample(M3)，保留 cd1/cd2');
   doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = '';
 
+  /* 2b. 单影片保留字幕：字幕不进入删除清单，rename 时跟随主视频规范命名 */
+  script['files?cid=DIRSUB'] = { state: true, data: [
+    { fid: 'S1', n: 'IPX-486.mp4', s: 900 },
+    { fid: 'SUB1', n: 'www.98T.la@01.ass', s: 36 },
+    { fid: 'M3', n: 'sample.mp4', s: 5000 }
+  ] };
+  const tSub = { id: 'tsub', magnet: 'magnet:?xt=urn:btih:subtest', magnetTitle: '字幕测试', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  doc.tasks.unshift(tSub);
+  ctx.auto115GetStep(tSub, 'mkdir').state = 'ok';
+  tSub.offlineDirCid = 'DIRSUB'; tSub.offlineDirName = 'IPX-486';
+  calls.length = 0;
+  await ctx.auto115StepMove(tSub);
+  assert(ctx.auto115GetStep(tSub, 'move').state === 'ok', 'move：保留视频+字幕，删除 sample');
+  assert(tSub.keepFids.indexOf('S1') >= 0, '保留主视频 S1');
+  assert((tSub.subInfos || []).some(s => s.fid === 'SUB1'), '保留字幕 SUB1');
+  const delSub = calls.find(c => c.url.indexOf('rb/delete') >= 0);
+  assert(delSub && delSub.body.indexOf('M3') >= 0 && delSub.body.indexOf('SUB1') < 0, '只删 sample，不删字幕');
+  await ctx.auto115StepRename(tSub);
+  const editSub = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editSub.some(b => b.indexOf('IPX-486.und.ass') >= 0), '字幕改名为 IPX-486.und.ass');
+  doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = '';
+
   /* 3. 探测 3 次后转「等待中」（直接驱动探测步，不等真实 10s 定时器） */
   script['ac=task_lists'] = () => ({ tasks: [{ info_hash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF01', percentDone: 10, status: 1 }] });
   const t2 = { id: 't2', magnet: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01', magnetTitle: '慢速磁力', steps: ctx.auto115NewSteps(), infoHash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' };
@@ -451,13 +473,13 @@ const lz4LiteralForTest = (bytes) => {
   ep = ctx.auto115EpisodeOf('第一季.mkv'); assert(ep && ep.season === 1 && ep.episode === null, 'Ep 仅季号 → 1/null');
   ep = ctx.auto115EpisodeOf('random.mkv'); assert(ep === null, 'Ep 无标记 → null（留给顺序兜底）');
 
-  // 9c. 字幕语言：仅中文保留
+  // 9c. 字幕语言：中文识别；无法识别的保留并标记 und（unknown）
   assert(ctx.auto115SubLang('Show.S01E01.chs.srt') === 'zh', 'Sub 简中 chs → zh');
   assert(ctx.auto115SubLang('Show.S01E01.zh.srt') === 'zh', 'Sub .zh → zh');
   assert(ctx.auto115SubLang('Show.S01E01.cht.srt') === 'zt', 'Sub 繁中 cht → zt');
   assert(ctx.auto115SubLang('Show.S01E01.zt.srt') === 'zt', 'Sub .zt → zt');
-  assert(ctx.auto115SubLang('Show.S01E01.eng.srt') === null, 'Sub 英文 → null（不保留）');
-  assert(ctx.auto115SubLang('Show.S01E01.jp.srt') === null, 'Sub 日文字幕 → null（不保留）');
+  assert(ctx.auto115SubLang('Show.S01E01.eng.srt') === 'und', 'Sub 英文 → und（保留）');
+  assert(ctx.auto115SubLang('Show.S01E01.jp.srt') === 'und', 'Sub 日文字幕 → und（保留）');
 
   // 9d. 命名格式
   assert(ctx.auto115TvVideoName('权力的游戏', 1, 1, '.mkv') === '权力的游戏.S01E01.mkv', 'TV 视频名 = 标题.S01E01.ext');
@@ -475,7 +497,8 @@ const lz4LiteralForTest = (bytes) => {
   assert(rn('V1') === 'Show.S01E01.mkv', 'TV plan V1 → Show.S01E01.mkv');
   assert(rn('V2') === 'Show.S01E02.mkv', 'TV plan V2 → Show.S01E02.mkv');
   assert(rn('SU1') === 'Show.S01E01.zh.srt', 'TV plan 简中字幕保留并重命名');
-  assert(planTv.deleteFids.indexOf('SU2') >= 0, 'TV plan 英文字幕进删除列表');
+  assert(rn('SU2') === 'Show.S01E02.und.srt', 'TV plan 英文字幕保留并重命名为 und');
+  assert(planTv.deleteFids.indexOf('SU2') < 0, 'TV plan 英文字幕不再删除');
   assert(planTv.deleteFids.indexOf('J1') >= 0, 'TV plan sample 进删除列表');
   assert(planTv.deleteFids.indexOf('SU1') < 0, 'TV plan 简中字幕不删除');
 
@@ -526,12 +549,13 @@ const lz4LiteralForTest = (bytes) => {
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.mkv') >= 0), '改名含 权力的游戏.S01E01.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.mkv') >= 0), '改名含 权力的游戏.S01E02.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.zh.srt') >= 0), '简中字幕重命名为 权力的游戏.S01E01.zh.srt');
+  assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.und.srt') >= 0), '英文字幕重命名为 权力的游戏.S01E02.und.srt');
   assert(editBodies.some(b => b.indexOf('file_name=权力的游戏') >= 0), '标题文件夹改名为 权力的游戏');
   const moveBodies = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(!calls.some(c => c.url.indexOf('files/add') >= 0), '只有一季时不新建季文件夹');
   assert(!moveBodies.some(b => b.indexOf('pid=SEASON01') >= 0), '只有一季时不移入季文件夹（平铺在剧集根）');
   const delBodies = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => decodeURIComponent(c.body || ''));
-  assert(delBodies.some(b => b.indexOf('SU2') >= 0), '删除英文字幕 SU2');
+  assert(!delBodies.some(b => b.indexOf('SU2') >= 0), '不再删除英文字幕 SU2');
   assert(delBodies.some(b => b.indexOf('J1') >= 0), '删除 sample J1');
   assert(!delBodies.some(b => b.indexOf('SU1') >= 0), '不删除简中字幕 SU1');
   ctx.auto115Doc.type = 'movie'; ctx.auto115Doc.filmTitle = '测试影片'; ctx.auto115Doc.dvdId = 'IPX-486';

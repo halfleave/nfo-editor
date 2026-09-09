@@ -1,4 +1,5 @@
 /* auto115-core.js 纯逻辑单测 —— 不需要 DOM/浏览器桩，直接 require 加载 */
+require('/Users/leavehalf/Downloads/work/NFO/nfo-editor/src/pinyin-initial.js'); // 必须在 auto115-core 之前，注入拼音首字母表
 const api = require('/Users/leavehalf/Downloads/work/NFO/nfo-editor/src/auto115-core.js');
 const assert = (cond, msg) => { console.log((cond ? 'PASS  ' : 'FAIL  ') + msg); if (!cond) process.exitCode = 1; };
 
@@ -57,7 +58,7 @@ assert(api.cnNum('十二') === 12 && api.cnNum('两') === 2 && api.cnNum('零七
 assert(api.pad2(3) === '03' && api.pad2(12) === '12', 'pad2 补零');
 assert(api.isVideoName('a.mkv') && !api.isVideoName('a.jpg'), '视频扩展名判定');
 assert(api.isSubtitle('a.zh.srt') && !api.isSubtitle('a.mp4'), '字幕扩展名判定');
-assert(api.subLang('Show.S01E01.chs.srt') === 'zh' && api.subLang('Show.S01E01.cht.srt') === 'zt' && api.subLang('Show.S01E01.kor.srt') === null, '字幕语言：简/繁/其他');
+assert(api.subLang('Show.S01E01.chs.srt') === 'zh' && api.subLang('Show.S01E01.cht.srt') === 'zt' && api.subLang('Show.S01E01.kor.srt') === 'und', '字幕语言：简/繁/其他 → 无法识别标记 und（保留）');
 
 /* ---------- 剧集命名 ---------- */
 assert(api.tvVideoName('师兄 太稳健', 1, 1, '.mp4') === '师兄.太稳健.S01E01.mp4', 'tvVideoName：标题.SxxExx.ext');
@@ -72,13 +73,13 @@ const items = [
   { fid: 's1', name: 'Show.S01E01.chs.srt' },
   { fid: 'j1', name: 'sample.mp4' },
   { fid: 'j2', name: 'cover.jpg' },
-  { fid: 's2', name: 'Show.kor.srt' }           // 非中文字幕 → 删
+  { fid: 's2', name: 'Show.kor.srt' }           // 非中文字幕 → 保留并标记 und
 ];
 const plan = api.tvPlan('Show', items);
 const names = plan.renames.map(r => r.name);
 assert(names.indexOf('Show.S01E01.mkv') >= 0 && names.indexOf('Show.S01E02.mkv') >= 0 && names.indexOf('Show.S02E01.mkv') >= 0, 'tvPlan：已识别集号保持不变');
 assert(names.indexOf('Show.S01E01.zh.srt') >= 0, 'tvPlan：中文字幕带 .zh');
-assert(plan.deleteFids.indexOf('j1') >= 0 && plan.deleteFids.indexOf('j2') >= 0 && plan.deleteFids.indexOf('s2') >= 0, 'tvPlan：sample/无关文件/非中文字幕进删除清单');
+assert(plan.deleteFids.indexOf('j1') >= 0 && plan.deleteFids.indexOf('j2') >= 0 && plan.deleteFids.indexOf('s2') < 0, 'tvPlan：sample/无关文件进删除清单；非中文字幕保留');
 const plan2 = api.tvPlan('X', [{ fid: 'p1', name: '某剧 第1集.mkv' }, { fid: 'p2', name: '某剧 第2集.mkv' }]);
 assert(plan2.renames.map(r => r.name).join(',') === 'X.S01E01.mkv,X.S01E02.mkv', 'tvPlan：中文集号按顺序识别');
 const plan3 = api.tvPlan('Y', [{ fid: 'q1', name: 'ep.mkv' }, { fid: 'q2', name: 'ep2.mkv' }]);
@@ -150,6 +151,21 @@ assert(api.tidyScore('教父', ['教父'], '1972') === 100, '夹名与片名完�
 assert(api.tidyScore('教父.1972.1080p.BluRay.x264-AAA', ['教父'], '1972') < 100, '带压制信息的夹名不抢同名直中');
 assert(api.matchTidyDir([{ cid: 'c1', n: '教父.1972.1080p' }, { cid: 'c2', n: '教父' }], ['教父'], '1972').best.cid === 'c2', '同名文件夹优先被选中');
 assert(api.matchTidyDir([{ cid: 'c1', n: '教父.1972.1080p' }, { cid: 'c2', n: '教父' }], ['教父'], '1972').ok === true, '同名文件夹自动采用（无需弹候选）');
+
+/* ---------- 中文标题首字母缩写识别（nmz / 匿mz / n名z 等任意交错） ---------- */
+assert(api.titleInitials('匿名者') === 'nmz', 'titleInitials 匿名者 → nmz');
+assert(api.titleInitials('匿mz') === 'nmz', 'titleInitials 匿mz（中文混首字母）→ nmz');
+assert(api.titleInitials('n名z') === 'nmz', 'titleInitials n名z（任意交错）→ nmz');
+assert(api.titleInitials('匿mz1080p') === 'nmz1080p', 'titleInitials 保留数字/字母');
+assert(api.titleInitials('The Matrix') === 'thematrix', 'titleInitials 英文不折叠成首字母（整词保留）');
+assert(api.tidyScore('nmz', ['匿名者'], '') === 90, '纯首字母夹名 nmz 命中中文标题（90）');
+assert(api.tidyScore('匿mz', ['匿名者'], '') === 90, '中文混首字母夹名 匿mz 命中（90）');
+assert(api.tidyScore('n名z', ['匿名者'], '') === 90, '中文混首字母夹名 n名z 命中（90）');
+assert(api.tidyScore('nmz1080p', ['匿名者'], '') >= api.TIDY_ACCEPT, '带压制信息的首字母夹名仍命中');
+assert(api.tidyScore('完全无关夹GameOfThrones', ['匿名者'], '') < api.TIDY_MIN, '无关英文夹名不被首字母误命中');
+const abbrM = api.matchTidyDir([{ cid: 'a', n: 'nmz' }, { cid: 'b', n: '匿名者' }, { cid: 'c', n: 'n名z' }], ['匿名者'], '');
+assert(abbrM.best && abbrM.best.cid === 'b', 'matchTidyDir 精确全名优先于首字母缩写');
+assert(abbrM.candidates.length >= 3 && abbrM.candidates.some(c => c.cid === 'a' && c.score === 90), '首字母缩写夹名进入候选且 90 分');
 
 /* ---------- 探测延迟 ---------- */
 assert(api.probeDelay(0) === 5000 && api.probeDelay(1) === 5000 && api.probeDelay(2) === 10000 && api.probeDelay(9) === 10000, 'probeDelay 5s/5s/10s 封顶');

@@ -1620,7 +1620,7 @@ function closeApiHelp(){
 var magnetCurrentFilm = null;
 function openMagnetSheet(){
   document.getElementById('magnetResults').innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
-  openSheet('magnetSheet');
+  openMagnetCombo('search');
   var input = document.getElementById('magnetQueryInput');
   if (currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
@@ -2622,6 +2622,10 @@ function auto115StepMove(t){
   return auto115ListDir(t.offlineDirCid).then(function(list){
     var vids = list.filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
     if (!vids.length){ auto115Set(t, 'move', 'fail', '这个文件夹里没有视频'); auto115Finish(t); return null; }
+    // 收集字幕文件（不删除，后续跟随主视频一起规范命名）
+    var subs = list.filter(function(it){ return it && it.fid && !auto115IsVideoName(it.n || it.name || '') && auto115IsSubtitle(it.n || it.name || ''); });
+    t.subInfos = subs.map(function(it){ return { fid: String(it.fid), name: it.n || it.name || '', lang: Auto115Core.subLang(it.n || it.name || '') }; });
+    var subFids = (t.subInfos || []).map(function(s){ return s.fid; });
     // 排除明显非正片（sample/预告/特典/花絮等），不参与主视频候选
     var EXCLUDE = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
     var mainCands = vids.filter(function(it){ return !EXCLUDE.test(it.n || it.name || ''); });
@@ -2650,16 +2654,17 @@ function auto115StepMove(t){
     t.keepFids = keep.map(function(it){ return String(it.fid); });
     var v = keep[0];
     t.videoFid = String(v.fid); t.videoName = v.n || v.name || ''; t.videoSize = auto115VidSize(v);
-    // 待删：非 keep 的全部（含 sample/extras/字幕/子文件夹）；根目录保护双保险
+    // 待删：非 keep 且非字幕的全部（含 sample/extras/子文件夹）；根目录保护双保险
     var delIds = [];
     for (var i = 0; i < list.length; i++){
       var it = list[i];
       if (!it) continue;
-      if (it.fid){ if (t.keepFids.indexOf(String(it.fid)) < 0) delIds.push(String(it.fid)); }
+      if (it.fid){ if (t.keepFids.indexOf(String(it.fid)) < 0 && subFids.indexOf(String(it.fid)) < 0) delIds.push(String(it.fid)); }
       else if (it.cid){ if (String(it.cid) !== C115_DEFAULT_DIR_CID) delIds.push(String(it.cid)); }
     }
-    if (!delIds.length){ auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频，无需清理'); return auto115StepRename(t); }
-    auto115Set(t, 'move', 'running', '保留 ' + keep.length + ' 个视频，正在删除其余 ' + delIds.length + ' 项…');
+    var subCount = (t.subInfos || []).length;
+    if (!delIds.length){ auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + '，无需清理'); return auto115StepRename(t); }
+    auto115Set(t, 'move', 'running', '保留 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + '，正在删除其余 ' + delIds.length + ' 项…');
     return auto115DeleteBatch(t.offlineDirCid, delIds).then(function(errMsg){
       if (errMsg){ auto115Set(t, 'move', 'fail', errMsg); auto115Finish(t); return null; }
       auto115Set(t, 'move', 'ok', '已清理 ' + delIds.length + ' 项，保留 ' + keep.length + ' 个视频（' + auto115Size(t.videoSize) + '）');
@@ -2785,12 +2790,17 @@ function auto115StepRename(t){
           if (k > 26){ auto115Set(t, 'rename', 'fail', '同名文件太多啦，去 115 手动整理一下'); auto115Finish(t); return null; }
           cand = baseName + '.' + String.fromCharCode(64 + k) + suffix;
         }
-        return { fid: fid, name: cand + ext };
+        return { fid: fid, name: cand + ext, size: t.videoSize };
       });
       if (jobs.indexOf(null) >= 0){ return null; }
+      var subJobs = (t.subInfos || []).map(function(s){ return { fid: s.fid, name: Auto115Core.subNameForVideo(jobs[0].name, s.name), orig: s.name, size: 0 }; });
+      var allJobs = jobs.concat(subJobs);
+      var conflictPlan = Auto115Core.planMoveJobs(allJobs, list || []);
+      jobs = conflictPlan.todo;
+      var subCount = (t.subInfos || []).length;
       return auto115ApplyRenames(t, jobs, prev.cid).then(function(){
         t.videoName = jobs[0].name;
-        auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
+        auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + jobs.length + ' 个文件') : '')));
         return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
       });
     }).catch(function(e){
@@ -2800,15 +2810,21 @@ function auto115StepRename(t){
   }
   var jobs = keep.map(function(fid, i){
     var suffix = multi ? ('.cd' + (i + 1)) : '';
-    return { fid: fid, name: baseName + suffix + ext };
+    return { fid: fid, name: baseName + suffix + ext, size: t.videoSize };
   });
   if (jobs.length) jobs[0].orig = t.videoName; /* 首个视频的当前名，供同名跳过比对 */
+  // 字幕跟随主视频一起规范命名
+  var subJobs = (t.subInfos || []).map(function(s){ return { fid: s.fid, name: Auto115Core.subNameForVideo(jobs[0].name, s.name), orig: s.name, size: 0 }; });
+  var allJobs = jobs.concat(subJobs);
+  var conflictPlan = Auto115Core.planMoveJobs(allJobs, []);
+  jobs = conflictPlan.todo;
+  var subCount = (t.subInfos || []).length;
   var needRename = jobs.filter(function(j){ return j.orig == null || j.orig !== j.name; }).length;
-  auto115Set(t, 'rename', 'running', needRename ? ('正在改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : '')) : '正在核对文件名…');
+  auto115Set(t, 'rename', 'running', needRename ? ('正在改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + (jobs.length) + ' 个文件') : ''))) : '正在核对文件名…');
   return auto115ApplyRenames(t, jobs, null).then(function(){
     t.videoName = jobs[0].name;
     if (!needRename) auto115Set(t, 'rename', 'ok', '文件名已符合规则，无需改名');
-    else auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : ''));
+    else auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + jobs.length + ' 个文件') : '')));
     return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
   }).catch(function(e){
     auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误');
@@ -2847,6 +2863,21 @@ function auto115StepRenameFlat(t){
       return { fid: fid, name: cand + ext };
     });
     if (jobs.length) jobs[0].orig = t.videoName;   /* 首个视频的当前名，供同名跳过比对 */
+    // 字幕跟随主视频一起规范命名（平铺到云下载根目录或只改名）
+    var subJobs = (t.subInfos || []).map(function(s){
+      var subBase = Auto115Core.subNameForVideo(jobs[0].name, s.name).replace(/\.[a-z0-9]+$/i, '');
+      var subExt = (/\.[a-z0-9]+$/i.exec(s.name) || [''])[0];
+      var cand = subBase, k = 0;
+      while (stems[cand.toLowerCase()] != null){
+        k++;
+        if (k > 26) throw new Error('同名字幕太多啦，去 115 手动整理一下');
+        cand = subBase + '.' + String.fromCharCode(64 + k);
+      }
+      stems[cand.toLowerCase()] = 0;
+      return { fid: s.fid, name: cand + subExt, orig: s.name };
+    });
+    jobs = jobs.concat(subJobs);
+    var subCount = (t.subInfos || []).length;
     /* noFolder（散装视频本来就在根目录）只改名不移动；其余先移到根目录再改名 */
     var target = t.noFolder ? null : C115_DEFAULT_DIR_CID;
     t.finalDirCid = C115_DEFAULT_DIR_CID;
@@ -2856,7 +2887,8 @@ function auto115StepRenameFlat(t){
       t.flatVideoFid = keep[0];
       t.flatVideoName = jobs[0].name;
       var msg = t.noFolder ? ('已改名为：' + jobs[0].name) : ('已移到云下载并改名为：' + jobs[0].name);
-      if (multi) msg += ' 等 ' + jobs.length + ' 个视频';
+      if (multi) msg += ' 等 ' + jobs.length + ' 个文件';
+      else if (subCount) msg += ' 等 ' + jobs.length + ' 个文件';
       auto115Set(t, 'rename', 'ok', msg);
       return auto115RemoveTmpDir(t).then(function(){ auto115RefreshDerived(); auto115Finish(t); return null; });
     });
@@ -3823,20 +3855,23 @@ function auto115AddFromOp(){
   }).catch(function(e){ showToast((e && e.message) || '加入失败', 'error'); });
 }
 /* 添加磁力 弹窗：手动粘贴磁力链做 115 离线——与「115 离线」入口等价，只是磁力来源是用户粘贴而非数据源；绑定当前影片，改名/整理按详情页标题·番号 */
+function openMagnetCombo(tab){
+  switchMagnetComboTab(tab === 'search' ? 'search' : 'add');
+  openSheet('magnetComboSheet');
+}
+function switchMagnetComboTab(tab){
+  var add = document.getElementById('magnetComboAdd');
+  var search = document.getElementById('magnetComboSearch');
+  var tabs = document.querySelectorAll('#magnetComboSheet .mc-tab');
+  for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
+  if (add) add.style.display = (tab === 'add') ? '' : 'none';
+  if (search) search.style.display = (tab === 'search') ? '' : 'none';
+}
 function auto115OpenMagnetModal(){
-  var mask = document.getElementById('addMagnetMask');
-  var sheet = document.getElementById('addMagnetSheet');
-  if (!mask || !sheet) return;
-  var inp = document.getElementById('magnetInput');
-  if (inp){ inp.value = ''; inp.readOnly = true; }
-  mask.classList.add('show');
-  sheet.classList.add('show');
+  openMagnetCombo('add');
 }
 function auto115CloseMagnetModal(){
-  var mask = document.getElementById('addMagnetMask');
-  var sheet = document.getElementById('addMagnetSheet');
-  if (mask) mask.classList.remove('show');
-  if (sheet) sheet.classList.remove('show');
+  closeAllSheets();
 }
 function auto115PasteMagnet(){
   var inp = document.getElementById('magnetInput');

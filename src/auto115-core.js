@@ -179,13 +179,20 @@
   api.vidSize = function (it) { return Number(it.s != null ? it.s : it.size) || 0; };
   api.isVideoName = function (n) { return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm|iso)$/i.test(n || ''); };
   api.isSubtitle = function (name) { return /\.(srt|ass|ssa|sub|idx|vtt|smi|lrc|txt)$/i.test(name || ''); };
-  /* 字幕语言：仅识别中文（简中 zh / 繁中 zt）；其余返回 null（不保留） */
+  /* 字幕语言：识别中文（简中 zh / 繁中 zt）；无法识别语言 → 仍保留，标记 und（unknown） */
   api.subLang = function (name) {
     var n = (name || '').toLowerCase();
     if (/(chs|简体|简中|\.zh|_zh|-zh| zh |chinese\(s\)|gb|sc\b)/.test(n)) return 'zh';
     if (/(cht|繁体|繁中|\.zt|_zt|-zt| zt |big5|tc\b)/.test(n)) return 'zt';
     if (/中文字幕/.test(n) && !/繁/.test(n)) return 'zh';
-    return null;
+    return 'und';
+  };
+  /* 单影片字幕名：按对应视频的目标名 + .语言.扩展名 */
+  api.subNameForVideo = function (videoName, subName) {
+    var ext = (/\.[a-z0-9]+$/i.exec(subName || '') || [''])[0];
+    var lang = api.subLang(subName);
+    var base = (videoName || '').replace(/\.[a-z0-9]+$/i, '');
+    return base + '.' + lang + ext;
   };
 
   /* ---------- 剧集（TV）命名与解析 ---------- */
@@ -332,6 +339,45 @@
   api.TIDY_GAP = 8;       // 与次优候选的最小领先分
   api.TIDY_MIN = 30;      // 低于此分不进候选列表（视为无关文件夹）
 
+  /* 拼音首字母映射表（U+4E00–U+9FFF），由 src/pinyin-initial.js 注入；PC 不加载该文件 → 空串，首字母通道自动降级 */
+  api.PINYIN_INIT = (typeof Auto115CorePINYIN !== 'undefined') ? Auto115CorePINYIN
+    : (typeof globalThis !== 'undefined' && globalThis.Auto115CorePINYIN) ? globalThis.Auto115CorePINYIN : '';
+  /* 把字符串折叠成「拼音首字母串」：汉字→拼音首字母，ASCII 字母/数字保留（转小写），其余忽略。
+     标题「匿名者」→"nmz"；115 夹名「nmz」「匿mz」「n名z」（任意位置交错）折叠后也都→"nmz"，
+     从而识别中文标题首字母缩写。仅标题含中文时启用，非中文（英文/番号）不触发。 */
+  api.titleInitials = function (s) {
+    s = String(s || '');
+    var PIN = api.PINYIN_INIT, out = '';
+    for (var i = 0; i < s.length; i++){
+      var c = s.charCodeAt(i);
+      if (c >= 0x4E00 && c <= 0x9FFF){
+        var ch = PIN ? PIN.charAt(c - 0x4E00) : ' ';
+        if (ch && ch !== ' ') out += ch;
+      } else if (c >= 48 && c <= 57){ out += s[i]; }                                          // 数字
+      else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)){ out += s[i].toLowerCase(); }  // 字母
+    }
+    return out;
+  };
+  /* 首字母缩写相似度（0..100）：标题含中文时，夹名可能是片名拼音首字母（nmz）或中文混首字母（匿mz，任意位置）。
+     仅当标题拼音首字母 ≥ 3 位才启用（2 位太短，如「教父」→jf，容易误命中续集夹「教父2」）。 */
+  function tidyAbbrScore(dirName, titles){
+    var da = api.titleInitials(dirName);
+    if (!da || da.length < 3) return 0;
+    var sequelTail = /(^|[^0-9])[0-9]$/.test(da) && !/[0-9]{4}$/.test(da); // 末尾单个数字（续集标记 2/3），非 4 位年份
+    var best = 0;
+    for (var i = 0; i < titles.length; i++){
+      var ta = api.titleInitials(titles[i]);
+      if (!ta || ta.length < 3) continue;
+      var s;
+      if (da === ta) s = 90;                                  // 完全等于片名首字母（nmz / 匿mz 折叠后都到此）
+      else if (da.indexOf(ta) === 0) s = sequelTail ? 55 : 78 + Math.round(10 * (ta.length / da.length)); // 以片名缩写开头 + 压制信息
+      else if (ta.indexOf(da) === 0) s = 70;                  // 夹名比片名缩写还短（罕见）
+      else { var d = tidyBigramDice(da, ta); s = d > 0 ? Math.round(d * 64) : 0; }
+      if (s > best) best = s;
+    }
+    return best;
+  }
+
   var TIDY_NOISE = {
     '1080p':1,'2160p':1,'720p':1,'480p':1,'2160':1,'1080':1,'4k':1,'8k':1,'uhd':1,'hd':1,'sd':1,
     'bluray':1,'blueray':1,'bdrip':1,'brrip':1,'bd':1,'webrip':1,'webdl':1,'web':1,'dl':1,'dvdrip':1,'hdtv':1,
@@ -407,6 +453,13 @@
       /* 夹名比片名多出数字后缀（教父2 / 第二部 3）→ 多半是续集或另一部，压分 */
       if (dn0 === tn0 && dn !== tn && /[0-9]$/.test(dn) && !/(19|20)\d{2}/.test(dn)) s -= 15;
       if (s > best) best = s;
+    }
+    /* 中文标题首字母缩写识别：夹名可能是片名拼音首字母（nmz）或中文混首字母（匿mz，任意位置交错） */
+    var hasHan = false;
+    for (var h = 0; h < list.length; h++){ if (/[一-龥]/.test(list[h] || '')){ hasHan = true; break; } }
+    if (hasHan){
+      var ab = tidyAbbrScore(dirName, list);
+      if (ab > best) best = ab;
     }
     var raw = String(dirName || '');
     var y = year ? String(year) : '';
