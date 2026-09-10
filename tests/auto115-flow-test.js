@@ -244,9 +244,10 @@ const lz4LiteralForTest = (bytes) => {
   assert(tcs.keptOtherVideos === 1, '合集：保留其他视频数 = 1');
   doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = '';
 
-  /* 2d. V3：平铺影片重复整理——根目录已有同名同大小视频 → 跳过，不再造 .A 副本 */
+  /* 2d. V3：平铺影片重复整理——根目录已有同名同大小视频 → 跳过，不再造 .A 副本
+     （v265 起改名带清晰度：原文件 赌神.1080p.mp4 → 目标名 赌神.1080p.mp4，判重按新目标名比对） */
   script['files?cid=3311283881428122938'] = { state: true, data: [
-    { fid: 'R1', n: '赌神.mp4', s: 2.5 * GB }                              // 根目录已有同名同大小 → 同一文件
+    { fid: 'R1', n: '赌神.1080p.mp4', s: 2.5 * GB }                        // 根目录已有同名同大小 → 同一文件
   ] };
   script['files?cid=DIRTMP'] = { state: true, data: [] };                  // 临时夹已空 → 会顺带删除
   doc.dvdId = ''; doc.filmTitle = '赌神'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
@@ -256,6 +257,95 @@ const lz4LiteralForTest = (bytes) => {
   await ctx.auto115StepRenameFlat(tflat);
   assert(ctx.auto115GetStep(tflat, 'rename').state === 'ok' && ctx.auto115GetStep(tflat, 'rename').msg.indexOf('跳过重复') >= 0, '平铺判重：根目录同名同大小 → 跳过（' + ctx.auto115GetStep(tflat, 'rename').msg + '）');
   assert(!calls.some(c => c.url.indexOf('files/edit') >= 0), '平铺判重：未发起改名请求（无 files/edit）');
+  doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
+
+  /* 2e. 赌神合集·平铺（v263 修丢片）：move 保住赌神2 → rename 平铺时必须把赌神2 一起移出临时夹，再删夹 */
+  script['files?cid=DIRCS2'] = { state: true, data: [
+    { fid: 'G1', n: '赌神.1080p.国粤双语.BD中字.mp4', s: 2.5 * GB },
+    { fid: 'G3', n: '赌神2.1994.1080p.mp4', s: 2.5 * GB }                 // 赌神2 → 合集保护
+  ] };
+  script['files?cid=3311283881428122938'] = { state: true, data: [] };    // 云下载根目录为空
+  doc.dvdId = ''; doc.filmTitle = '赌神'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
+  const tcs2 = { id: 'tcs2', magnet: 'magnet:?xt=urn:btih:cs2', magnetTitle: '赌神', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  doc.tasks.unshift(tcs2);
+  ctx.auto115GetStep(tcs2, 'mkdir').state = 'ok';
+  tcs2.offlineDirCid = 'DIRCS2'; tcs2.offlineDirName = '赌神合集';
+  calls.length = 0;
+  await ctx.auto115StepMove(tcs2);
+  assert(tcs2.keptOtherVideos === 1 && tcs2.keptOthers && tcs2.keptOthers[0].fid === 'G3', '平铺合集：move 记录赌神2(G3) 到 keptOthers');
+  await ctx.auto115StepRenameFlat(tcs2);
+  assert(ctx.auto115GetStep(tcs2, 'rename').state === 'ok', '平铺合集：rename = ok（' + ctx.auto115GetStep(tcs2, 'rename').msg + '）');
+  assert(calls.some(c => c.url.indexOf('files/move') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=G3') >= 0 && decodeURIComponent(c.body || '').indexOf('pid=3311283881428122938') >= 0), '平铺合集：赌神2(G3) 已按原名移出临时夹到云下载根目录');
+  const delFlat = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => c.body || '');
+  assert(delFlat.some(b => b.indexOf('fid=DIRCS2') >= 0), '平铺合集：临时夹 DIRCS2 被删除');
+  assert(!delFlat.some(b => b.indexOf('G3') >= 0 || b.indexOf('G1') >= 0), '平铺合集：删除清单里只有文件夹本身，绝不包含赌神/赌神2');
+  doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
+
+  /* 2f. 赌神合集·并入（v263 修丢片）：rename 并入已有「赌神」文件夹时，赌神2 一并移入，临时夹才删 */
+  script['files?cid=DIRGOD'] = { state: true, data: [] };                 // 已存在的「赌神」文件夹（空）
+  doc.dvdId = ''; doc.filmTitle = '赌神'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = 1;   // nfoUploaded → 需要文件夹
+  const tmg = { id: 'tmg', magnet: 'magnet:?xt=urn:btih:mg', magnetTitle: '赌神', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2,
+    videoFid: 'G1', videoName: '赌神.1080p.mp4', videoSize: 2.5 * GB, keepFids: ['G1'],
+    offlineDirCid: 'DIRTMP2', offlineDirName: '赌神 2部全',
+    forcedMergeCid: 'DIRGOD', finalDirName: '赌神',
+    keptOtherVideos: 1, keptOthers: [{ fid: 'G3', name: '赌神2.1994.1080p.mp4', size: 2.5 * GB }] };
+  doc.tasks.unshift(tmg);
+  calls.length = 0;
+  await ctx.auto115StepRename(tmg);
+  assert(ctx.auto115GetStep(tmg, 'rename').state === 'ok', '并入合集：rename = ok（' + ctx.auto115GetStep(tmg, 'rename').msg + '）');
+  assert(calls.some(c => c.url.indexOf('files/move') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=G3') >= 0 && decodeURIComponent(c.body || '').indexOf('pid=DIRGOD') >= 0), '并入合集：赌神2(G3) 已按原名移入「赌神」文件夹');
+  const delMg = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => c.body || '');
+  assert(delMg.some(b => b.indexOf('fid=DIRTMP2') >= 0), '并入合集：临时夹 DIRTMP2 被删除');
+  assert(!delMg.some(b => b.indexOf('G3') >= 0), '并入合集：赌神2 不在任何删除清单里');
+  doc.nfoUploaded = false;
+
+  /* 2g. 赌神合集·并入判重跳过路径：主视频已在目标夹 → 赌神2 仍要移出临时夹再删夹 */
+  script['files?cid=DIRGOD'] = { state: true, data: [ { fid: 'R1', n: '赌神.1080p.mp4', s: 2.5 * GB } ] };
+  doc.dvdId = ''; doc.filmTitle = '赌神'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = 1;
+  const tmg2 = { id: 'tmg2', magnet: 'magnet:?xt=urn:btih:mg2', magnetTitle: '赌神', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2,
+    videoFid: 'G1', videoName: '赌神.1080p.mp4', videoSize: 2.5 * GB, keepFids: ['G1'],
+    offlineDirCid: 'DIRTMP2', offlineDirName: '赌神 2部全',
+    forcedMergeCid: 'DIRGOD', finalDirName: '赌神',
+    keptOtherVideos: 1, keptOthers: [{ fid: 'G3', name: '赌神2.1994.1080p.mp4', size: 2.5 * GB }] };
+  doc.tasks.unshift(tmg2);
+  calls.length = 0;
+  await ctx.auto115StepRename(tmg2);
+  assert(ctx.auto115GetStep(tmg2, 'rename').state === 'ok' && ctx.auto115GetStep(tmg2, 'rename').msg.indexOf('跳过重复') >= 0, '并入判重：主视频已在目标夹 → 跳过（' + ctx.auto115GetStep(tmg2, 'rename').msg + '）');
+  assert(calls.some(c => c.url.indexOf('files/move') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=G3') >= 0 && decodeURIComponent(c.body || '').indexOf('pid=DIRGOD') >= 0), '并入判重：赌神2(G3) 仍被移入「赌神」文件夹');
+  const delMg2 = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => c.body || '');
+  assert(delMg2.some(b => b.indexOf('fid=DIRTMP2') >= 0) && !delMg2.some(b => b.indexOf('G3') >= 0), '并入判重：删的是临时夹本身，赌神2 不被删');
+  doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
+
+  /* 2h. 同片多清晰度（v263）：1080p 当主视频，720p 原名保留 1 个，480p 删掉（最多保留两个清晰度） */
+  script['files?cid=DIRQ'] = { state: true, data: [
+    { fid: 'Q1', n: '赌神.1080p.国粤双语.mkv', s: 2.5 * GB },
+    { fid: 'Q2', n: '赌神.720p.mkv', s: 1.2 * GB },
+    { fid: 'Q3', n: '赌神.480p.mkv', s: 0.6 * GB }
+  ] };
+  doc.dvdId = ''; doc.filmTitle = '赌神'; doc.originalTitle = ''; doc.year = '';
+  const tqual = { id: 'tqual', magnet: 'magnet:?xt=urn:btih:quality', magnetTitle: '赌神', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  doc.tasks.unshift(tqual);
+  ctx.auto115GetStep(tqual, 'mkdir').state = 'ok';
+  tqual.offlineDirCid = 'DIRQ'; tqual.offlineDirName = '赌神';
+  calls.length = 0;
+  await ctx.auto115StepMove(tqual);
+  assert(ctx.auto115GetStep(tqual, 'move').state === 'ok', '多清晰度：move = ok');
+  assert(tqual.keepFids && tqual.keepFids.length === 1 && tqual.keepFids[0] === 'Q1', '多清晰度：最高清 1080p（Q1）当主视频，不再 .cd1/.cd2');
+  assert(tqual.keptOtherVideos === 1 && tqual.keptOthers && tqual.keptOthers[0].fid === 'Q2', '多清晰度：次清晰度 720p（Q2）原样保留 1 个');
+  const delQ = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => c.body || '').find(b => b.indexOf('pid=DIRQ') >= 0) || '';
+  assert(delQ && delQ.indexOf('Q3') >= 0, '多清晰度：第三档 480p（Q3）删除');
+  assert(delQ.indexOf('Q1') < 0 && delQ.indexOf('Q2') < 0, '多清晰度：主视频与保留的 720p 不进删除清单');
+  doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
+
+  /* 2i. 改名追加清晰度（v263）：原文件名带 1080p → 平铺改名 赌神.1989.1080p.mp4 */
+  script['files?cid=3311283881428122938'] = { state: true, data: [] };
+  doc.dvdId = ''; doc.filmTitle = '赌神'; doc.originalTitle = ''; doc.year = '1989'; doc.nfoUploaded = false;
+  const tqf = { id: 'tqf', magnet: 'magnet:?xt=urn:btih:qtag', magnetTitle: '赌神', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2,
+    noFolder: true, videoFid: 'Q1', videoName: '赌神.1080p.mkv', videoSize: 2.5 * GB, keepFids: ['Q1'] };
+  doc.tasks.unshift(tqf);
+  calls.length = 0;
+  await ctx.auto115StepRenameFlat(tqf);
+  assert(ctx.auto115GetStep(tqf, 'rename').state === 'ok' && ctx.auto115GetStep(tqf, 'rename').msg.indexOf('赌神.1989.1080p.mkv') >= 0, '改名追加清晰度：' + ctx.auto115GetStep(tqf, 'rename').msg);
   doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
   script['ac=task_lists'] = () => ({ tasks: [{ info_hash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF01', percentDone: 10, status: 1 }] });
   const t2 = { id: 't2', magnet: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01', magnetTitle: '慢速磁力', steps: ctx.auto115NewSteps(), infoHash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' };
@@ -788,7 +878,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115GetStep(tt, 'mkdir').state === 'ok', '整理任务定位文件夹 = ok');
   assert(ctx.auto115GetStep(tt, 'move').state === 'ok', '整理任务清理文件 = ok');
   assert(ctx.auto115GetStep(tt, 'cleanup').state === 'skip', '普通影片整理 → 不改夹名（播放器能自己刮削）');
-  assert(ctx.auto115GetStep(tt, 'rename').state === 'ok' && ctx.auto115GetStep(tt, 'rename').msg.indexOf('整理测试片.2020.mkv') >= 0, '整理任务改视频名：' + ctx.auto115GetStep(tt, 'rename').msg);
+  assert(ctx.auto115GetStep(tt, 'rename').state === 'ok' && ctx.auto115GetStep(tt, 'rename').msg.indexOf('整理测试片.2020.1080p.mkv') >= 0, '整理任务改视频名（追加清晰度）：' + ctx.auto115GetStep(tt, 'rename').msg);
   const mvFlat = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(mvFlat.some(b => b.indexOf('fid=V1') >= 0 && b.indexOf('pid=3311283881428122938') >= 0), '普通影片整理 → 视频移到云下载根目录');
   assert(calls.some(c => c.url.indexOf('rb/delete') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=DIRT1') >= 0), '视频移出后删掉空文件夹');

@@ -2436,7 +2436,10 @@ function auto115StepMkdir(t){
 /* ===== 115 离线辅助：主视频筛选 / 影片命名 / 批量改名 ===== */
 function auto115Norm(s){ return Auto115Core.norm(s); }
 function auto115PartBase(name){ return Auto115Core.partBase(name); }
-function auto115MovieVideoName(){ return Auto115Core.movieVideoName(auto115Doc); }
+function auto115MovieVideoName(videoName){
+  /* 原文件名带清晰度标识（1080p/2160p/4k…）→ 追加在年份后面：标题.原始标题.年份.1080p */
+  return Auto115Core.movieVideoName(auto115Doc, videoName ? Auto115Core.qualityTag(videoName) : '');
+}
 /* 外部磁力任务：目标名称判定（番号 vs 标题） */
 function auto115LooksDvd(s){ return Auto115Core.looksDvd(s); }
 function auto115CleanName(s){ return Auto115Core.cleanName(s); }
@@ -2603,6 +2606,24 @@ function auto115MoveInto(t, jobs, targetCid){
     return auto115ApplyRenames(t, todo, targetCid).then(function(){ return res; });
   });
 }
+/* 剧集并入临时夹删除前的「遗留文件」：tvPlan 认不出集号但被保留的视频/字幕（v256 起不删不改名），
+   还躺在临时离线夹里 → 并入（tvMergeCid）后删临时夹会把它们一起带走，先移进剧集根。 */
+function auto115TvLeftoverJobs(t, plan){
+  if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) return Promise.resolve([]);
+  return auto115ListDir(t.offlineDirCid).then(function(left){
+    var done = {};
+    (plan.renames || []).forEach(function(r){ done[String(r.fid)] = 1; });
+    (plan.deleteFids || []).forEach(function(f){ done[String(f)] = 1; });
+    return (left || []).filter(function(it){
+      if (!it || !it.fid || done[String(it.fid)]) return false;
+      var nm = it.n || it.name || '';
+      return auto115IsVideoName(nm) || auto115IsSubtitle(nm);
+    }).map(function(it){
+      var nm = it.n || it.name || '';
+      return { fid: String(it.fid), name: nm, orig: nm, size: it.s || 0 };
+    });
+  });
+}
 function auto115StepTvMoveVideos(t){
   auto115Set(t, 'move2', 'running', '正在整理文件位置…');
   var plan = t.tvPlan, map = t.tvSeasonMap;
@@ -2623,7 +2644,14 @@ function auto115StepTvMoveVideos(t){
       auto115Set(t, 'move2', 'ok', '已把 ' + res.moved + ' 个文件放到「' + flatName + '」'
         + (res.skipped ? ('（跳过 ' + res.skipped + ' 个已存在的相同文件）') : ''));
       auto115Finish(t);
-      if (t.tvMergeCid || t.noFolder) return auto115RemoveTmpDir(t).then(function(){ return null; });
+      /* 并入同名剧集夹：遗留文件（认不出集号被保留的）先移进剧集根，再删临时夹 */
+      if (t.tvMergeCid){
+        return auto115TvLeftoverJobs(t, plan).then(function(leftJobs){
+          var mv = leftJobs.length ? auto115MoveInto(t, leftJobs, flatTarget) : Promise.resolve({ moved: 0 });
+          return mv.then(function(){ return auto115RemoveTmpDir(t).then(function(){ return null; }); });
+        });
+      }
+      if (t.noFolder) return auto115RemoveTmpDir(t).then(function(){ return null; });
       return Promise.resolve(null);
     }).catch(function(e){ auto115Set(t, 'move2', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   }
@@ -2648,9 +2676,13 @@ function auto115StepTvMoveVideos(t){
   return p.then(function(){
     auto115Set(t, 'move2', 'ok', '已移入 ' + moved + ' 个文件到对应季文件夹' + (skipped ? ('（跳过 ' + skipped + ' 个已存在的相同文件）') : ''));
     auto115Finish(t);
-    /* 并入同名剧集夹场景：临时离线夹里的文件已全部处理，删除临时夹 */
+    /* 并入同名剧集夹场景：临时离线夹里的文件已全部处理，删除临时夹。
+       但「认不出集号被保留」的遗留文件还在夹里 → 先移进剧集根再删，否则陪葬（v263） */
     if (t.tvMergeCid){
-      return auto115RemoveTmpDir(t).then(function(){ return null; });
+      return auto115TvLeftoverJobs(t, plan).then(function(leftJobs){
+        var mv = leftJobs.length ? auto115MoveInto(t, leftJobs, t.tvRootCid || t.tvMergeCid) : Promise.resolve({ moved: 0 });
+        return mv.then(function(){ return auto115RemoveTmpDir(t).then(function(){ return null; }); });
+      });
     }
     return Promise.resolve(null);
   }).catch(function(e){ auto115Set(t, 'move2', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
@@ -2685,8 +2717,38 @@ function auto115StepMove(t){
       return false;
     }
     var keep;
+    var demotedFids = {};   // 次清晰度版本（v263）：按合集保护原样保留 1 个，不进 .cdN、不删
+    var lowDelFids = {};    // 第三档及以下的清晰度（v263）：最多保留两个清晰度，其余删掉
     var strong = pool.filter(strongHit);
-    if (strong.length){ keep = strong; }
+    if (strong.length){
+      keep = strong;
+      /* 强命中不止一个时分两种情况：
+         ① 全部带分碟标记（cd/disc/dvd/part/碟/盘 + 数字）→ 真分碟，维持 .cdN 行为；
+         ② 没带分碟标记、且清晰度混档 → 这不是分碟，是一部片的多个版本：
+            最高清当主视频，次清晰度按原名保留 1 个（「最多保留两个清晰度，选最清晰的」），
+            更低清晰度的删掉——否则「赌神.1080p.mkv + 赌神.720p.mkv」会被改名成 赌神.cd1/cd2，
+            播放器当成一张碟的两半。同一清晰度有多个文件时维持原判重/分碟逻辑。 */
+      if (strong.length > 1){
+        var allParts = strong.every(function(it){ return Auto115Core.partMark(it.n || it.name || ''); });
+        if (!allParts){
+          var byRank = {}, bestRank = 0;
+          strong.forEach(function(it){
+            var r = Auto115Core.qualityRank(it.n || it.name || '');
+            (byRank[r] = byRank[r] || []).push(it);
+            if (r > bestRank) bestRank = r;
+          });
+          var ranks = Object.keys(byRank).map(Number).filter(function(r){ return r > 0; }).sort(function(a, b){ return b - a; });
+          if (ranks.length >= 2){
+            keep = byRank[bestRank].slice().sort(function(a, b){ return auto115VidSize(b) - auto115VidSize(a); });
+            var second = byRank[ranks[1]].slice().sort(function(a, b){ return auto115VidSize(b) - auto115VidSize(a); })[0];
+            demotedFids[String(second.fid)] = true;
+            for (var ri = 2; ri < ranks.length; ri++){
+              byRank[ranks[ri]].forEach(function(it){ lowDelFids[String(it.fid)] = true; });
+            }
+          }
+        }
+      }
+    }
     else {
       // 多 part 分组（cd/disc/part/尾随数字），同组 ≥2 视为一部片的分碟，全部保留
       var groups = {};
@@ -2720,7 +2782,7 @@ function auto115StepMove(t){
        合集保护（v260）：没被选为主视频、名字里也没有排除词的【视频文件一律保留不删】——
        它很可能是合集包里的另一部片（如「赌神 2部全」里的赌神2），删掉就是真丢片。 */
     var adThreshold = Auto115Core.adSizeThreshold(auto115VidSize(keep[0]));   // 广告视频阈值（随主视频大小浮动）
-    var delIds = [], keptVids = 0;
+    var delIds = [], keptVids = 0, keptOthers = [];
     for (var i = 0; i < list.length; i++){
       var it = list[i];
       if (!it) continue;
@@ -2728,18 +2790,25 @@ function auto115StepMove(t){
       if (it.fid){
         if (t.keepFids.indexOf(String(it.fid)) >= 0 || subFids.indexOf(String(it.fid)) >= 0) continue;
         if (dupFids.indexOf(String(it.fid)) >= 0){ delIds.push(String(it.fid)); continue; }   // 判重出的重复副本 → 删
+        if (lowDelFids[String(it.fid)]){ delIds.push(String(it.fid)); continue; }             // 第三档及以下清晰度 → 删（最多保留两个清晰度）
         if (auto115IsVideoName(nmz) && !EXCLUDE.test(nmz)){
           var sz = auto115VidSize(it);
           // 远小于主视频（< 主视频×20%，夹在 5MB–50MB）→ 大概率是广告/片头/水印片 → 删；
           // 阈值算不出来（0）或取不到体积 → 一律保留，不冒险
-          if (adThreshold > 0 && sz > 0 && sz < adThreshold){ delIds.push(String(it.fid)); continue; }
-          keptVids++; continue;   // 合集保护：保留
+          if (!(demotedFids[String(it.fid)]) && adThreshold > 0 && sz > 0 && sz < adThreshold){ delIds.push(String(it.fid)); continue; }
+          keptVids++;
+          /* 记下 fid/名字/体积：rename 若走「并入已有文件夹」或「平铺」分支，临时夹会被整体删除，
+             这些合集视频必须先移出去，否则会跟着临时夹一起进回收站（赌神2 丢失的根因）。
+             demotedFids = 同片的次清晰度版本（v263），按合集保护原样保留 */
+          keptOthers.push({ fid: String(it.fid), name: nmz, size: sz || 0 });
+          continue;   // 合集保护：保留
         }
         delIds.push(String(it.fid));
       }
       else if (it.cid){ if (String(it.cid) !== C115_DEFAULT_DIR_CID && EXCLUDE.test(nmz)) delIds.push(String(it.cid)); }
     }
     t.keptOtherVideos = keptVids;
+    t.keptOthers = keptOthers;
     var subCount = (t.subInfos || []).length;
     var keptMsg = keptVids ? ('，另保留 ' + keptVids + ' 个其他视频（可能是合集，未删除）') : '';
     if (!delIds.length){ auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，无需清理'); return auto115StepRename(t); }
@@ -2827,6 +2896,14 @@ function auto115PullFlatVideo(t){
     });
   }).catch(function(){ return false; });
 }
+/* 合集保护保下来的其他视频（赌神2 等）→ 组装成「按原名移入目标夹」的任务。
+   rename 的并入/平铺分支最后会删掉临时离线夹，这些文件必须先移出去，否则陪葬进回收站。 */
+function auto115KeptOtherJobs(t){
+  var keepSet = {};
+  (t.keepFids || []).forEach(function(f){ keepSet[String(f)] = 1; });
+  return (t.keptOthers || []).filter(function(o){ return o && o.fid && !keepSet[String(o.fid)]; })
+    .map(function(o){ return { fid: String(o.fid), name: o.name, orig: o.name, size: o.size || 0 }; });
+}
 /* 步骤5：视频改名。
    有番号（AV）→ 番号.ext（多 part → 番号.cd1.ext / 番号.cd2.ext）
    无番号（影片）→ 标题.原始标题.年份.ext（无年份/无原始标题 → 仅标题；标题=原始标题 → 标题.年份）
@@ -2839,7 +2916,7 @@ function auto115StepRename(t){
     if (!t.targetName){ auto115Set(t, 'rename', 'skip', '未填目标名称，保留 115 原始文件名'); auto115Finish(t); return Promise.resolve(null); }
   }
   var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
-  var baseName = t.external ? auto115ExternalBaseName(t) : (auto115Doc.dvdId ? auto115Doc.dvdId : auto115MovieVideoName());
+  var baseName = t.external ? auto115ExternalBaseName(t) : (auto115Doc.dvdId ? auto115Doc.dvdId : auto115MovieVideoName(t.videoName));
   if (!baseName){ auto115Set(t, 'rename', 'fail', '缺少名称信息，没法自动改名'); auto115Finish(t); return Promise.resolve(null); }
   var keep = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [t.videoFid] : []);
   if (!keep.length){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
@@ -2859,7 +2936,10 @@ function auto115StepRename(t){
         if (dupSize != null && Math.abs((t.videoSize || 0) - dupSize) < 1){
           t.videoName = baseName + ext;
           auto115Set(t, 'rename', 'ok', '视频已在「' + prev.name + '」中，跳过重复文件');
-          return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
+          /* 主视频已就位 → 先把合集保护保下的其他视频移出临时夹，再删夹（否则陪葬） */
+          var dupOthers = auto115KeptOtherJobs(t);
+          var dupMove = dupOthers.length ? auto115MoveInto(t, dupOthers, prev.cid) : Promise.resolve({ moved: 0 });
+          return dupMove.then(function(){ return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; }); });
         }
       }
       var jobs = keep.map(function(fid, i){
@@ -2874,13 +2954,19 @@ function auto115StepRename(t){
       });
       if (jobs.indexOf(null) >= 0){ return null; }
       var subJobs = (t.subInfos || []).map(function(s){ return { fid: s.fid, name: Auto115Core.subNameForVideo(jobs[0].name, s.name), orig: s.name, size: 0 }; });
-      var allJobs = jobs.concat(subJobs);
+      /* 合集保护保下的其他视频（赌神2 等）：按原名一起并入目标夹——临时夹随后会被删除，
+         留在里面就是丢片（v263 修「赌神整理把赌神2清了」） */
+      var otherJobs = auto115KeptOtherJobs(t);
+      var allJobs = jobs.concat(subJobs).concat(otherJobs);
       var conflictPlan = Auto115Core.planMoveJobs(allJobs, list || []);
       jobs = conflictPlan.todo;
       var subCount = (t.subInfos || []).length;
+      var otherCount = otherJobs.length;
       return auto115ApplyRenames(t, jobs, prev.cid).then(function(){
         t.videoName = jobs[0].name;
-        auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + jobs.length + ' 个文件') : '')));
+        auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + jobs[0].name
+          + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount || otherCount ? (' 等 ' + jobs.length + ' 个文件') : ''))
+          + (conflictPlan.skipped ? ('（' + conflictPlan.skipped + ' 个已存在相同文件，跳过）') : ''));
         return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
       });
     }).catch(function(e){
@@ -2915,7 +3001,7 @@ function auto115StepRename(t){
    离线落地的临时文件夹在视频移出后随即删掉。命名规则与文件夹内一致（番号 / 标题.原名.年份）。 */
 function auto115StepRenameFlat(t){
   var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
-  var baseName = auto115MovieVideoName();
+  var baseName = auto115MovieVideoName(t.videoName);
   if (!baseName){ auto115Set(t, 'rename', 'fail', '缺少名称信息，没法自动改名'); auto115Finish(t); return Promise.resolve(null); }
   var keep = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [t.videoFid] : []);
   if (!keep.length){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
@@ -2926,8 +3012,10 @@ function auto115StepRenameFlat(t){
     for (i = 0; i < (list || []).length; i++){
       var it = list[i];
       if (!it) continue;
+      /* 只跟「文件」撞名：文件夹不参与（临时离线夹改名后马上会删掉，不该把视频挤成 .A） */
+      if (!it.fid) continue;
       /* 自己不跟自己撞名（重试时视频可能已在根目录且已改好名） */
-      if (it.fid && keep.indexOf(String(it.fid)) >= 0) continue;
+      if (keep.indexOf(String(it.fid)) >= 0) continue;
       var nm = String(it.n || '');
       stems[nm.replace(/\.[a-z0-9]+$/i, '').toLowerCase()] = it.s || 0;
     }
@@ -2939,7 +3027,10 @@ function auto115StepRenameFlat(t){
         t.videoName = baseName + ext;
         t.flatVideoFid = keep[0]; t.flatVideoName = t.videoName;
         auto115Set(t, 'rename', 'ok', '云下载已有同名同大小的「' + t.videoName + '」，跳过重复文件');
-        return auto115RemoveTmpDir(t).then(function(){ auto115RefreshDerived(); auto115Finish(t); return null; });
+        /* 平铺要删临时夹 → 先把合集保护保下的其他视频按原名移到云下载根目录（否则陪葬） */
+        var dupOthers = (t.noFolder) ? [] : auto115KeptOtherJobs(t);
+        var dupMove = dupOthers.length ? auto115MoveInto(t, dupOthers, C115_DEFAULT_DIR_CID) : Promise.resolve({ moved: 0 });
+        return dupMove.then(function(){ return auto115RemoveTmpDir(t).then(function(){ auto115RefreshDerived(); auto115Finish(t); return null; }); });
       }
     }
     var jobs = keep.map(function(fid, idx){
@@ -2968,6 +3059,13 @@ function auto115StepRenameFlat(t){
       return { fid: s.fid, name: cand + subExt, orig: s.name };
     });
     jobs = jobs.concat(subJobs);
+    /* 合集保护保下的其他视频（赌神2 等）：主视频平铺进根目录后临时夹会被删除，
+       这些视频必须按原名一并移到云下载根目录，否则跟着临时夹进回收站（v263 修丢片） */
+    var otherJobs = t.noFolder ? [] : auto115KeptOtherJobs(t);
+    if (otherJobs.length){
+      var otherPlan = Auto115Core.planMoveJobs(otherJobs, list || []);
+      jobs = jobs.concat(otherPlan.todo);
+    }
     var subCount = (t.subInfos || []).length;
     /* noFolder（散装视频本来就在根目录）只改名不移动；其余先移到根目录再改名 */
     var target = t.noFolder ? null : C115_DEFAULT_DIR_CID;
@@ -2978,8 +3076,7 @@ function auto115StepRenameFlat(t){
       t.flatVideoFid = keep[0];
       t.flatVideoName = jobs[0].name;
       var msg = t.noFolder ? ('已改名为：' + jobs[0].name) : ('已移到云下载并改名为：' + jobs[0].name);
-      if (multi) msg += ' 等 ' + jobs.length + ' 个文件';
-      else if (subCount) msg += ' 等 ' + jobs.length + ' 个文件';
+      if (multi || subCount || otherJobs.length) msg += ' 等 ' + jobs.length + ' 个文件';
       auto115Set(t, 'rename', 'ok', msg);
       return auto115RemoveTmpDir(t).then(function(){ auto115RefreshDerived(); auto115Finish(t); return null; });
     });

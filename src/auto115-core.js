@@ -172,8 +172,9 @@
     n = n.replace(/[-._ ]?\d+\s*$/, '');
     return api.norm(n);
   };
-  /* 单影片主视频名：有番号走番号、无番号走 标题.原始标题.年份（doc 为 {filmTitle, originalTitle, year}） */
-  api.movieVideoName = function (doc) {
+  /* 单影片主视频名：有番号走番号、无番号走 标题.原始标题.年份（doc 为 {filmTitle, originalTitle, year}）。
+     quality 传清晰度标识（如 '1080p'，取自原文件名）→ 追加在年份后面：标题.原始标题.年份.1080p */
+  api.movieVideoName = function (doc, quality) {
     doc = doc || {};
     var title = (doc.filmTitle || '').trim();
     var orig = (doc.originalTitle || '').trim();
@@ -182,6 +183,7 @@
     if (!year){ name = title; }                                          // 无年份 → 仅标题
     else if (orig && orig.toLowerCase() !== title.toLowerCase()){ name = title + '.' + orig.replace(/ /g, '.') + '.' + year; }
     else { name = title + '.' + year; }                                  // 无原始标题 或 标题=原始标题 → 标题.年份
+    if (quality) name += '.' + quality;
     return name.replace(/ /g, '.').replace(/[\/\\:*?"<>|]/g, '').trim();
   };
   api.looksDvd = function (s) { return /^[A-Za-z]{2,}-?\d+[A-Za-z]?$/i.test((s || '').trim()); };
@@ -193,6 +195,31 @@
   };
   api.vidSize = function (it) { return Number(it.s != null ? it.s : it.size) || 0; };
   api.isVideoName = function (n) { return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm|iso)$/i.test(n || ''); };
+  /* 清晰度分级：同名影片多版本去歧义用（v263）。命中越高清分越高，认不出 → 0（不参与清晰度比较） */
+  api.qualityRank = function (name) {
+    var n = String(name || '').toLowerCase();
+    if (/2160p|4k/.test(n)) return 4;
+    if (/1080p/.test(n)) return 3;
+    if (/1080i/.test(n)) return 2;
+    if (/720p/.test(n)) return 1;
+    if (/480p|360p/.test(n)) return 0.5;
+    return 0;
+  };
+  /* 从文件名提取清晰度标识（改名时追加在年份后，如 赌神.1989.1080p）。认不出 → '' */
+  api.qualityTag = function (name) {
+    var n = String(name || '').toLowerCase();
+    if (/2160p/.test(n)) return '2160p';
+    if (/4k/.test(n)) return '4k';
+    if (/1080p/.test(n)) return '1080p';
+    if (/1080i/.test(n)) return '1080i';
+    if (/720p/.test(n)) return '720p';
+    if (/480p/.test(n)) return '480p';
+    if (/360p/.test(n)) return '360p';
+    return '';
+  };
+  /* 真分碟标记：名字带 cd/disc/dvd/part/碟/盘 + 数字（v263）。全部命中才算分碟，
+     否则同名多文件按「不同版本」处理（低清晰度的让位，不再一律 .cdN） */
+  api.partMark = function (name) { return /(^|[^a-z0-9])(cd|disc|disk|dvd|part|碟|盘)\s*[:：]?\s*\d/i.test(name || ''); };
   /* 词化归一：小写 + 把连续非「字母/数字/汉字」压成一个空格（保留词边界信息，供整词匹配） */
   api.normWords = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, ' ').trim(); };
   /* 标题整词命中（V2 修复）：在文件名里找标题，且命中段两侧必须是词边界（空格/首尾）。
@@ -379,11 +406,13 @@
   /* 拼音首字母映射表（U+4E00–U+9FFF），由 src/pinyin-initial.js 注入；PC 不加载该文件 → 空串，首字母通道自动降级 */
   api.PINYIN_INIT = (typeof Auto115CorePINYIN !== 'undefined') ? Auto115CorePINYIN
     : (typeof globalThis !== 'undefined' && globalThis.Auto115CorePINYIN) ? globalThis.Auto115CorePINYIN : '';
-  /* 把字符串折叠成「拼音首字母串」：汉字→拼音首字母，ASCII 字母/数字保留（转小写），其余忽略。
+  /* 把字符串折叠成「拼音首字母串」：汉字→拼音首字母，字母/数字保留（转小写），其余忽略。
+     全角字母数字（ＺＪＺ６）先折成半角——标题/夹名里出现过全角数字会导致折叠串对不上。
      标题「匿名者」→"nmz"；115 夹名「nmz」「匿mz」「n名z」（任意位置交错）折叠后也都→"nmz"，
      从而识别中文标题首字母缩写。仅标题含中文时启用，非中文（英文/番号）不触发。 */
   api.titleInitials = function (s) {
-    s = String(s || '');
+    s = String(s || '').replace(/[\uFF10-\uFF19]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); })
+      .replace(/[\uFF21-\uFF3A\uFF41-\uFF5A]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); });
     var PIN = api.PINYIN_INIT, out = '';
     for (var i = 0; i < s.length; i++){
       var c = s.charCodeAt(i);
@@ -400,15 +429,22 @@
   function tidyAbbrScore(dirName, titles){
     var da = api.titleInitials(dirName);
     if (!da || da.length < 3) return 0;
-    var sequelTail = /(^|[^0-9])[0-9]$/.test(da) && !/[0-9]{4}$/.test(da); // 末尾单个数字（续集标记 2/3），非 4 位年份
     var best = 0;
     for (var i = 0; i < titles.length; i++){
       var ta = api.titleInitials(titles[i]);
       if (!ta || ta.length < 3) continue;
       var s;
+      /* 末尾单个数字是续集标记（2/3）的前提：标题自己的缩写不以数字结尾——
+         片名本身就带数字（如「…6」→ 缩写 zjz6）时，夹名 zjz6 与标题完全相等走上面的满分通道 */
+      var sequelTail = /(^|[^0-9])[0-9]$/.test(da) && !/[0-9]{4}$/.test(da) && !/[0-9]$/.test(ta);
       if (da === ta) s = 90;                                  // 完全等于片名首字母（nmz / 匿mz 折叠后都到此）
       else if (da.indexOf(ta) === 0) s = sequelTail ? 55 : 78 + Math.round(10 * (ta.length / da.length)); // 以片名缩写开头 + 压制信息
-      else if (ta.indexOf(da) === 0) s = 70;                  // 夹名比片名缩写还短（罕见）
+      else if (ta.indexOf(da) === 0){
+        /* 夹名缩写比标题短（终结者6：黑暗命运→zjz6hamy，夹名只写到 zjz6）：
+           夹名以数字结尾且对上标题同位置的集数 → 缩写到集数为止，是本片（82 自动档）；
+           没带到集数（zjz ↔ 终结者6）→ 可能是系列里另一部，只给候选分 70 */
+        s = /[0-9]$/.test(da) ? 82 : 70;
+      }
       else { var d = tidyBigramDice(da, ta); s = d > 0 ? Math.round(d * 64) : 0; }
       if (s > best) best = s;
     }
@@ -474,11 +510,21 @@
     return { folder: false, name: '', kind: 'flat', reason: '播放器能自己识别，直接放云下载' };
   };
 
-  /* 夹名 vs 影片：titles 可传多个（标题 / 原名 / 番号），取最高分；year 用于纠偏 */
+  /* 夹名 vs 影片：titles 可传多个（标题 / 原名 / 番号），取最高分；year 用于纠偏。
+     副标题（冒号后的文字）比重降低：冒号前的主标题单独加进候选——
+     夹名只写到主标题（zjz6 ↔ 终结者6：黑暗命运 / 终结者6.1080p）也能拿高分，
+     副标题写没写只影响全名那条候选，不再拖累整体匹配。 */
   api.tidyScore = function (dirName, titles, year) {
+    var src = Array.isArray(titles) ? titles : [titles];
+    var list = [];
+    for (var e = 0; e < src.length; e++){
+      var t0 = src[e]; if (!t0) continue;
+      if (list.indexOf(t0) < 0) list.push(t0);
+      var main = String(t0).split(/[：:]/)[0].trim();
+      if (main && main !== t0 && list.indexOf(main) < 0) list.push(main);
+    }
     var dn = api.tidyKey(dirName);
     var dn0 = dn.replace(/[0-9]/g, '');
-    var list = Array.isArray(titles) ? titles : [titles];
     var best = 0;
     for (var i = 0; i < list.length; i++){
       var tn = api.tidyKey(list[i]);

@@ -214,6 +214,23 @@ const abbrM = api.matchTidyDir([{ cid: 'a', n: 'nmz' }, { cid: 'b', n: '匿名�
 assert(abbrM.best && abbrM.best.cid === 'b', 'matchTidyDir 精确全名优先于首字母缩写');
 assert(abbrM.candidates.length >= 3 && abbrM.candidates.some(c => c.cid === 'a' && c.score === 90), '首字母缩写夹名进入候选且 90 分');
 
+/* ---------- v265：主标题/副标题拆分 + 缩写到集数 + 全角数字 ---------- */
+assert(api.titleInitials('终结者６') === 'zjz6', 'titleInitials 全角数字６折成半角 6');
+assert(api.tidyScore('zjz6', ['终结者6：黑暗命运'], '') === 90, '夹名 zjz6 命中「终结者6：黑暗命运」主标题缩写（90，副标题降权）');
+assert(api.tidyScore('zjz6.1080p', ['终结者6：黑暗命运'], '') >= api.TIDY_ACCEPT, 'zjz6.1080p 以主标题缩写开头仍自动档（82）');
+assert(api.tidyScore('终结者6', ['终结者6：黑暗命运'], '') === 100, '主标题同名直中 → 100（副标题不拖累）');
+assert(api.tidyScore('zjz6hamy', ['终结者6：黑暗命运'], '') === 90, '全名首字母 zjz6hamy 完全命中（90）');
+assert(api.tidyScore('zjz6', ['终结者：黑暗命运'], '') < api.TIDY_ACCEPT, '片名本身没有 6 时 zjz6 是续集嫌疑 → 不自动档');
+assert(api.tidyScore('教父2', ['教父'], '') < api.TIDY_ACCEPT, '续集压分不受副标题改动影响');
+
+/* ---------- v265：清晰度标识 / 真分碟标记 / 命名追加清晰度 ---------- */
+assert(api.qualityRank('赌神.2160p.mkv') === 4 && api.qualityRank('A.4K.mkv') === 4 && api.qualityRank('B.1080p.mkv') === 3 && api.qualityRank('C.720p.mkv') === 1 && api.qualityRank('D.mkv') === 0, 'qualityRank 清晰度分级');
+assert(api.qualityTag('赌神.1080p.mkv') === '1080p' && api.qualityTag('Movie.4K.mkv') === '4k' && api.qualityTag('x.mkv') === '', 'qualityTag 提取清晰度标识');
+assert(api.partMark('Movie.cd1.mkv') && api.partMark('Movie.Part2.mkv') && !api.partMark('赌神.1080p.mkv'), 'partMark 只认 cd/disc/part/碟/盘+数字');
+assert(api.movieVideoName({ filmTitle: '赌神', year: '1989' }, '1080p') === '赌神.1989.1080p', '命名追加清晰度：标题.年份.1080p');
+assert(api.movieVideoName({ filmTitle: '赌神' }, '720p') === '赌神.720p', '无年份：标题.720p');
+assert(api.movieVideoName({ filmTitle: '赌神', year: '1989' }) === '赌神.1989', '无清晰度标识 → 不追加');
+
 /* ---------- 探测延迟 ---------- */
 assert(api.probeDelay(0) === 5000 && api.probeDelay(1) === 5000 && api.probeDelay(2) === 10000 && api.probeDelay(9) === 10000, 'probeDelay 5s/5s/10s 封顶');
 
