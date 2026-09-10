@@ -1215,8 +1215,12 @@ async function c115ProxyFetch(targetUrl, opts){
     if (opts.raw){ /* 原始字节响应（115「导出目录树」txt 是 UTF-16，必须拿原始字节自行解码）*/
       return r.arrayBuffer().then(function(buf){
         if (!r.ok){
+          var rawSnip = '';
+          try { rawSnip = new TextDecoder('utf-8').decode(buf.subarray(0, 400)).replace(/\s+/g, ' ').trim(); } catch (_) {}
           if (r.status === 403 || r.status === 405 || r.status === 429) c115RiskHit('HTTP ' + r.status);
-          var e2 = new Error('HTTP ' + r.status); e2.status = r.status; throw e2;
+          var e2 = new Error('HTTP ' + r.status + (rawSnip ? '（' + rawSnip.slice(0, 240) + '）' : ''));
+          e2.status = r.status; e2.body = rawSnip;
+          throw e2;
         }
         return { ok: r.ok, status: r.status, d: {}, raw: '', bytes: new Uint8Array(buf) };
       });
@@ -1235,7 +1239,7 @@ async function c115ProxyFetch(targetUrl, opts){
       if (rk) c115RiskHit(rk);
       if (!r.ok){
         if (r.status === 403 || r.status === 405 || r.status === 429) c115RiskHit('HTTP ' + r.status);
-        var errMsg = d && d.error ? d.error : ('HTTP ' + r.status);
+        var errMsg = d && d.error ? d.error : ('HTTP ' + r.status + (txt ? '（' + txt.slice(0, 200).replace(/\s+/g, ' ') + '）' : ''));
         if (d && d.debug) errMsg += ' | ' + JSON.stringify(d.debug);
         var err = new Error(errMsg);
         err.status = r.status; err.body = txt.slice(0, 300); err.data = d;
@@ -8481,10 +8485,11 @@ function tidyExportPoll(eid, left){
     return c115Sleep(TIDY_TREE_POLL_MS).then(function (){ return tidyExportPoll(eid, left - 1); });
   });
 }
-/* 取任意地址的原始字节（115 给的 CDN 下载地址也走同一条代理通道） */
+/* 取任意地址的原始字节（115 给的 CDN 下载地址也走同一条代理通道）。
+   noRef：代理侧不设 Referer/Origin —— 115 的 CDN 常因「外部 Referer」直接 403，去掉它是最常见的解法 */
 function tidyExportFetchBytes(url){
   return c115Call('read', function (){
-    return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true });
+    return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true, noRef: true });
   }).then(function (res){ return (res && res.bytes) || new Uint8Array(0); });
 }
 /* ③ 按提取码取产物内容 → 文本。
@@ -8494,7 +8499,7 @@ function tidyExportFetchBytes(url){
 function tidyExportDownload(pickCode){
   return c115Call('read', function (){
     return c115ProxyFetch('https://webapi.115.com/files/download?pickcode=' + encodeURIComponent(pickCode),
-      { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true });
+      { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true, noRef: true });
   }).then(function (res){
     var u8 = (res && res.bytes) || new Uint8Array(0);
     if (!u8.length) throw new Error('115 没返回内容（下载产物为空）');
@@ -8504,7 +8509,7 @@ function tidyExportDownload(pickCode){
       var j = null;
       try { j = JSON.parse(new TextDecoder('utf-8').decode(u8)); } catch (_){ j = null; }
       var u = (j && (j.file_url || (j.data && (j.data.file_url || j.data.url)))) || '';
-      if (u) return tidyExportFetchBytes(u);
+      if (u) return tidyStep(tidyExportFetchBytes(u), '按下载地址取字节');
       var why = (j && (j.msg || j.error)) || '没给下载地址';
       throw new Error('115 拒绝提供下载：' + why + ((j && j.msg_code) ? '（' + j.msg_code + '）' : ''));
     }
@@ -8545,6 +8550,17 @@ function tidyTreeFromExport(rawText){
   return { text: text, count: parsed.count };
 }
 
+/* 给每一步的失败加上步骤名，便于用户一眼看出卡在「提交/轮询/下载」哪一步 */
+function tidyStep(p, label){
+  return Promise.resolve(p).catch(function (e){
+    var msg = (e && e.message) ? e.message : '网络错误';
+    var err = new Error(label + '失败：' + msg);
+    if (e && e.status) err.status = e.status;
+    if (e && e.body) err.body = e.body;
+    throw err;
+  });
+}
+
 /* 获取目录树：只走 115 官方「导出目录树」接口，不成功就如实报错（无兜底） */
 function tidyTreeFetch(){
   if (!tidyState.folder){ showToast('请先选择要整理的文件夹', 'error'); return; }
@@ -8562,13 +8578,13 @@ function tidyTreeFetch(){
     tidyState.treeFetching = false;
     if (btn){ btn.disabled = false; btn.textContent = '获取目录树'; }
   }
-  tidyExportStart(tidyState.folder.cid).then(function (eid){
+  tidyStep(tidyExportStart(tidyState.folder.cid), '提交导出任务').then(function (eid){
     say('115 正在后台导出目录树…（文件夹大的话可能要等一会儿，最多等约 1 分半）');
-    return tidyExportPoll(eid, TIDY_TREE_POLL_MAX);
+    return tidyStep(tidyExportPoll(eid, TIDY_TREE_POLL_MAX), '轮询导出状态');
   }).then(function (info){
     say('导出完成，正在下载并解析…');
     /* 顺序关键：先下载、用完再删（失败也删，免得根目录越堆越多「目录树.txt」） */
-    return tidyExportDownload(info.pickCode).then(function (raw){
+    return tidyStep(tidyExportDownload(info.pickCode), '下载目录树文件').then(function (raw){
       tidyExportCleanup(info.fileId);
       return raw;
     }, function (err){
