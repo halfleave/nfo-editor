@@ -1583,6 +1583,117 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #nfoTypeSheet .nfo-type-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 #nfoTypeSheet .nfo-type-text b { font-size: 16px; font-weight: 600; color: var(--label); }
 #nfoTypeSheet .nfo-type-text small { font-size: 12px; line-height: 1.4; color: var(--label-3); }
+
+/* ============ 文件整理（M4） ============ */
+/* 顶栏右上角「整理任务」入口（标题是 absolute 居中，故按钮靠 margin-left:auto 顶到右侧） */
+.auto-topbar .tidy-task-entry { margin-left: auto; position: relative; z-index: 1; }
+/* 入口页：文件夹选择（中间偏上） */
+.tidy-folder-card { display: flex; align-items: center; gap: 12px; width: 100%; margin: 7vh 0 0; padding: 15px 14px; border: none; background: var(--card); border-radius: var(--radius-lg); text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.05); -webkit-tap-highlight-color: transparent; }
+.tidy-folder-card:active { background: var(--gray-fill); }
+.tidy-folder-card .tfc-icon { flex: none; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #34C759; }
+.tidy-folder-card .tfc-icon svg { width: 21px; height: 21px; }
+.tidy-folder-card .tfc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tidy-folder-card .tfc-text b { font-size: 16px; font-weight: 600; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-folder-card .tfc-text small { font-size: 12px; line-height: 1.4; color: var(--label-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-folder-card .tfc-chevron { flex: none; width: 20px; height: 20px; color: var(--label-3); }
+.tidy-folder-card .tfc-chevron svg { width: 20px; height: 20px; }
+/* 入口页：两个大按钮 */
+.tidy-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+.tidy-action-btn { display: flex; align-items: center; gap: 13px; width: 100%; padding: 17px 16px; border: none; border-radius: var(--radius-lg); background: var(--card); text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.05); -webkit-tap-highlight-color: transparent; }
+.tidy-action-btn:active { background: var(--gray-fill); }
+.tidy-action-btn .tab-ic { flex: none; width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
+.tidy-action-btn .tab-ic svg { width: 22px; height: 22px; }
+.tidy-act-ai .tab-ic { background: #5856D6; }
+.tidy-act-rule .tab-ic { background: #FF9500; }
+.tidy-action-btn .tab-tx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tidy-action-btn .tab-tx b { font-size: 17px; font-weight: 600; color: var(--label); }
+.tidy-action-btn .tab-tx small { font-size: 12.5px; line-height: 1.4; color: var(--label-3); }
+.tidy-hint { padding: 14px 4px 0; font-size: 12px; line-height: 1.6; color: var(--label-3); }
+
+/* 任务列表 */
+.tidy-task-list { padding: 6px 0 8px; }
+.tidy-empty { padding: 48px 20px; text-align: center; font-size: 14px; line-height: 1.7; color: var(--label-3); }
+.tidy-task-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px; margin-bottom: 10px; border: none; background: var(--card); border-radius: var(--radius-lg); text-align: left; -webkit-tap-highlight-color: transparent; }
+.tidy-task-item:active { background: var(--gray-fill); }
+.tidy-task-item .tti-icon { flex: none; width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+.tidy-task-item .tti-icon svg { width: 19px; height: 19px; }
+.tidy-task-item .tti-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tidy-task-item .tti-main b { font-size: 15px; font-weight: 500; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-task-item .tti-main small { font-size: 12px; color: var(--label-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-task-item .tti-state { flex: none; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--gray-fill); color: var(--label-2); }
+.tidy-task-item .tti-state.run { background: rgba(255,149,0,0.16); color: #FF9500; }
+.tidy-task-item .tti-state.done { background: rgba(52,199,89,0.16); color: #34C759; }
+.tidy-task-item .tti-state.fail { background: rgba(255,59,48,0.16); color: #FF3B30; }
+
+/* AI 对话页 */
+#page-tidy-chat { display: none; flex-direction: column; }
+#page-tidy-chat.active { display: flex; }
+.tidy-chat-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 16px 12px; }
+.tidy-msg { max-width: 84%; margin-bottom: 12px; padding: 10px 13px; border-radius: 16px; font-size: 14.5px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; }
+.tidy-msg.ai { background: var(--card-fill); color: var(--label); border-bottom-left-radius: 5px; }
+.tidy-msg.me { margin-left: auto; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+.tidy-msg.sys { max-width: 100%; background: transparent; color: var(--label-3); font-size: 12.5px; text-align: center; padding: 6px 0; }
+.tidy-chat-bar { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); border-top: 0.5px solid var(--sep); background: var(--bg); }
+.tidy-chat-input { flex: 1; min-height: 38px; max-height: 120px; border: none; background: var(--card-fill); border-radius: 19px; padding: 9px 14px; font-size: 15px; line-height: 1.4; color: var(--label); resize: none; -webkit-user-select: text; }
+.tidy-chat-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
+.tidy-chat-send { flex: none; border: none; border-radius: 19px; padding: 9px 18px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; }
+.tidy-chat-send:active { opacity: .8; }
+.tidy-chat-send.disabled { background: var(--card-fill); color: var(--label-3); }
+
+/* 规则页 */
+#page-tidy-rules { display: none; flex-direction: column; }
+#page-tidy-rules.active { display: flex; }
+.tidy-rule-groups { padding: 6px 0 12px; }
+.tidy-rule-group-head { padding: 16px 2px 8px; font-size: 13px; font-weight: 600; color: var(--label-2); display: flex; align-items: baseline; gap: 8px; }
+.tidy-rule-group-head small { font-size: 11.5px; font-weight: 400; color: var(--label-3); }
+.tidy-rule-group-box { background: var(--card); border-radius: var(--radius-lg); overflow: hidden; }
+.tidy-rule-item { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-bottom: 0.5px solid var(--sep); }
+.tidy-rule-item:last-child { border-bottom: none; }
+.tidy-rule-item .tri-label { flex: 1; min-width: 0; font-size: 15px; color: var(--label); }
+.tidy-rule-item.locked .tri-label { color: var(--label-3); }
+.tidy-rule-item .tri-soon { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--gray-fill); color: var(--label-3); }
+.tidy-rule-item .tri-check { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--sep); display: flex; align-items: center; justify-content: center; }
+.tidy-rule-item .tri-check svg { width: 14px; height: 14px; color: #fff; opacity: 0; }
+.tidy-rule-item.on .tri-check { background: var(--accent); border-color: var(--accent); }
+.tidy-rule-item.on .tri-check svg { opacity: 1; }
+.tidy-rule-item .tri-cfg { flex: none; border: none; background: transparent; color: var(--accent); font-size: 13px; padding: 4px 2px; }
+.tidy-rules-bar { flex: none; padding: 8px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 0.5px solid var(--sep); background: var(--bg); }
+.tidy-run-btn { display: block; width: 100%; border: none; border-radius: 22px; padding: 13px 0; background: var(--accent); color: #fff; font-size: 16px; font-weight: 600; }
+.tidy-run-btn:active { opacity: .85; }
+.tidy-run-btn.disabled { background: var(--card-fill); color: var(--label-3); }
+
+/* 文件夹选择（115 目录浏览） */
+.tidy-pick-path { padding: 2px 4px 10px; font-size: 12.5px; line-height: 1.5; color: var(--label-3); word-break: break-all; }
+.tidy-pick-list { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px; }
+.tidy-pick-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 4px; border: none; background: transparent; border-bottom: 0.5px solid var(--sep); text-align: left; font-size: 15px; color: var(--label); }
+.tidy-pick-item:active { opacity: .6; }
+.tidy-pick-item .tpi-ic { flex: none; width: 20px; height: 20px; color: #FFB300; }
+.tidy-pick-item .tpi-ic svg { width: 20px; height: 20px; }
+.tidy-pick-item .tpi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-pick-item .tpi-up { color: var(--accent); }
+.tidy-pick-ops { padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
+
+/* 水印管理 */
+.tidy-wm-tip { padding: 0 16px 10px; font-size: 12px; line-height: 1.6; color: var(--label-3); }
+.tidy-wm-tip b { color: var(--label-2); font-weight: 600; }
+.tidy-wm-list { max-height: 48vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px; }
+.tidy-wm-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 0.5px solid var(--sep); }
+.tidy-wm-row .twm-label { flex: none; width: 78px; font-size: 12px; color: var(--label-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-wm-row .twm-scope { flex: none; border: none; background: var(--card-fill); color: var(--label-2); font-size: 12px; border-radius: 8px; padding: 6px 4px; }
+.tidy-wm-row input.twm-src { flex: 1; min-width: 0; border: none; background: var(--card-fill); border-radius: 8px; padding: 7px 9px; font-size: 12.5px; font-family: ui-monospace, Menlo, monospace; color: var(--label); -webkit-user-select: text; }
+.tidy-wm-row input.twm-src:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
+.tidy-wm-row .twm-del { flex: none; width: 28px; height: 28px; border: none; background: transparent; color: #FF3B30; font-size: 18px; line-height: 1; }
+.tidy-wm-ops, .tidy-wm-save, .tidy-preview-ops { display: flex; gap: 10px; padding: 12px 16px 0; }
+.tidy-wm-save { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+.tidy-wm-save .tidy-run-btn, .tidy-preview-ops .tidy-run-btn { flex: 1; }
+.tidy-preview-ops .sheet-btn { flex: none; padding-left: 22px; padding-right: 22px; }
+
+/* 预览列表 */
+.tidy-preview-list { max-height: 52vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 16px; }
+.tidy-pv-row { padding: 9px 0; border-bottom: 0.5px solid var(--sep); font-size: 12.5px; line-height: 1.5; }
+.tidy-pv-row .pv-old { color: var(--label-3); text-decoration: line-through; word-break: break-all; }
+.tidy-pv-row .pv-new { color: var(--label); word-break: break-all; margin-top: 2px; }
+.tidy-pv-more { padding: 10px 0; font-size: 12px; color: var(--label-3); text-align: center; }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; text-align: center; }
 /* 上传入口：常驻在「目标」行上方，不依赖任何离线任务 */
 .auto-actions { display: flex; width: 60%; margin: 10px auto 12px; }

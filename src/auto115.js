@@ -1939,9 +1939,19 @@
     if (!dir) return;
     return pc115StartTidy(dir);
   }
+  /* 面板底部图标：磁力 / 字幕仅高级档可见（HTML 里默认 display:none，命中高级才显形） */
+  function pc115SyncAutoIcons() {
+    var full = false;
+    try { full = (typeof state !== 'undefined' && state && (state.tier || '') === 'full'); } catch (e) { full = false; }
+    var m = document.getElementById('pcAutoIconMagnet');
+    var s = document.getElementById('pcAutoIconSub');
+    if (m) m.style.display = full ? '' : 'none';
+    if (s) s.style.display = full ? '' : 'none';
+  }
   function pc115OpenAutoPanel() {
     return auto115EnsureDoc().then(function () {
       pc115ClearTidyPick();   // 换片/重开面板时，上一轮的整理候选不再保留
+      pc115SyncAutoIcons();   // 磁力/字幕按钮按档位显隐
       pc115RenderAuto();
       auto115Resume();
     }).catch(function (e) { showToast((e && e.message) || '打开自动化失败', 'error'); });

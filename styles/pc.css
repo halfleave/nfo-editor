@@ -476,7 +476,12 @@ a:hover { text-decoration: underline; }
   display: flex; align-items: center; justify-content: center;
 }
 .app-brand-logo svg { width: 14px; height: 14px; }
-.app-brand-name { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.app-brand-name {
+  font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+  display: inline-flex; align-items: baseline; gap: 4px;
+}
+/* 标题后的发版尾号（灰色小字，随每次发版自动抬升） */
+.app-brand-ver { font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--text-3); }
 .app-topbar .spacer { flex: 1; }
 .hidden-badge {
   display: none; align-items: center; justify-content: center;
@@ -1802,7 +1807,7 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 /* 上传元数据：常驻在「目标」行上方，居中 */
 .auto-up {
   flex: 0 0 auto; align-self: center; margin-top: 10px;
-  min-width: 62%; height: 30px; padding: 0 16px; border-radius: 8px;
+  min-width: 62%; height: 30px; padding: 0 16px; border-radius: var(--radius-pill);
   background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
 }
 .auto-up:hover { filter: brightness(1.06); }
@@ -1819,23 +1824,26 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
   margin: 0 12px 8px; padding: 8px 10px; border-radius: 9px; font-size: 11.5px; line-height: 1.5;
   color: #B45309; background: rgba(245,158,11,.14); border: 1px solid rgba(245,158,11,.3);
 }
-.auto-add-magnet { flex: 0 0 auto; padding: 8px 12px 4px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+/* 磁力链接行：输入框占满剩余宽度，「添加」按钮胶囊贴在右侧 */
+.auto-add-magnet { flex: 0 0 auto; padding: 8px 12px 4px; display: flex; flex-direction: row; align-items: center; gap: 6px; }
 .auto-magnet-input {
-  width: 100%; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px;
+  flex: 1 1 auto; min-width: 0; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px;
   background: var(--surface); color: var(--text); border: 1px solid var(--border); outline: none;
 }
 .auto-magnet-input:focus { border-color: var(--accent); }
-.auto-add-row { display: flex; gap: 6px; }
-.auto-add-row .auto-add-btn { flex: 1; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; }
-.auto-add-row .auto-add-btn:hover { filter: brightness(1.06); }
+.auto-add-btn {
+  flex: 0 0 auto; height: 30px; padding: 0 16px; border-radius: var(--radius-pill);
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
+}
+.auto-add-btn:hover { filter: brightness(1.06); }
 .auto-done-row { flex: 0 0 auto; display: flex; justify-content: center; padding: 6px 12px 8px; }
 .auto-done-row .auto-clear {
   height: 28px; padding: 0 14px; border-radius: 8px;
   background: var(--surface-hover); color: var(--text-2); font-size: 11.5px; font-weight: 500;
 }
-/* 底部快捷图标：文件整理 / 磁力 / 字幕 */
+/* 底部快捷图标：文件整理 / 磁力 / 字幕（左对齐，不分散居中） */
 .auto-icons {
-  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-around;
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-start;
   gap: 8px; padding: 8px 12px 12px; border-top: 1px solid var(--border);
 }
 .auto-icon-btn {
