@@ -227,6 +227,11 @@ assert(api.tidyScore('教父2', ['教父'], '') < api.TIDY_ACCEPT, '续集压分
 assert(api.qualityRank('赌神.2160p.mkv') === 4 && api.qualityRank('A.4K.mkv') === 4 && api.qualityRank('B.1080p.mkv') === 3 && api.qualityRank('C.720p.mkv') === 1 && api.qualityRank('D.mkv') === 0, 'qualityRank 清晰度分级');
 assert(api.qualityTag('赌神.1080p.mkv') === '1080p' && api.qualityTag('Movie.4K.mkv') === '4k' && api.qualityTag('x.mkv') === '', 'qualityTag 提取清晰度标识');
 assert(api.partMark('Movie.cd1.mkv') && api.partMark('Movie.Part2.mkv') && !api.partMark('赌神.1080p.mkv'), 'partMark 只认 cd/disc/part/碟/盘+数字');
+assert(api.sameQualityVersion('zjz6.1080p.BD中英双字[66影视www.66Ys.Co].mp4', 'zjz6.720p.mp4'), 'sameQualityVersion 压制信息不对称：zjz6 主干相等仍配对');
+assert(api.sameQualityVersion('赌神.1080p.国粤双语.mkv', '赌神.720p.mkv'), 'sameQualityVersion 中文主干相等');
+assert(!api.sameQualityVersion('赌神.1080p.mkv', '赌神2.720p.mkv'), 'sameQualityVersion 续集数字不配对（赌神 vs 赌神2）');
+assert(!api.sameQualityVersion('终结者.1080p.mkv', '终结者6.720p.mkv'), 'sameQualityVersion 续集数字不配对（终结者 vs 终结者6）');
+assert(api.sameQualityVersion('终结者6.2019.1080p.mkv', '终结者6.720p.mkv'), 'sameQualityVersion 主干含年份/集数相同则配对');
 assert(api.movieVideoName({ filmTitle: '赌神', year: '1989' }, '1080p') === '赌神.1989.1080p', '命名追加清晰度：标题.年份.1080p');
 assert(api.movieVideoName({ filmTitle: '赌神' }, '720p') === '赌神.720p', '无年份：标题.720p');
 assert(api.movieVideoName({ filmTitle: '赌神', year: '1989' }) === '赌神.1989', '无清晰度标识 → 不追加');

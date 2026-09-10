@@ -221,13 +221,21 @@
      名字主干一致 → 视为同一部片的不同清晰度版本（如 zjz6.720p.xxx 与 zjz6.1080p.xxx）。
      视频名是拼音缩写、命中不了标题时，靠这个配对次清晰度版本。 */
   api.sameQualityVersion = function (nameA, nameB) {
-    function base(n) {
-      return api.normWords(String(n || '').replace(/\[[^\]]*\]/g, '').replace(/【[^】]*】/g, ''))
-        .replace(/\s*(2160p|4k|1080p|1080i|720p|480p|360p)\s*/g, '')
-        .replace(/\s+/g, '');
+    /* 取「清晰度标记之前的主干」比对（v271）：zjz6.1080p.BD中英双字[...] vs zjz6.720p ——
+       一个带压制/站点信息一个干净名，整串比对不等；但两者在清晰度前的主干都是 zjz6。 */
+    function stem(n) {
+      var m = /^(.*?)[.\s_-]?(2160p|4k|1080p|1080i|720p|480p|360p)(?![a-z0-9])/i.exec(String(n || ''));
+      return m ? api.normWords(m[1]).replace(/\s+/g, '') : '';
     }
-    var a = base(nameA), b = base(nameB);
-    return !!a && a === b;
+    var a = stem(nameA), b = stem(nameB);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    /* 主副版本一边多带压制信息或年份（zjz6 vs zjz6bd中英双字 / 终结者6 vs 终结者6.2019）：
+       短的是长的前缀，且多出来的部分不含数字——纯 4 位年份除外（年份不是续集信号）。
+       数字是续集信号（赌神 vs 赌神2、终结者 vs 终结者6），绝不能配对成同一片的两档清晰度 */
+    var lg = a.length > b.length ? a : b, sm = a.length > b.length ? b : a;
+    var rest = lg.slice(sm.length);
+    return lg.indexOf(sm) === 0 && (!/[0-9]/.test(rest) || /^[0-9]{4}$/.test(rest));
   };
   /* 真分碟标记：名字带 cd/disc/dvd/part/碟/盘 + 数字（v263）。全部命中才算分碟，
      否则同名多文件按「不同版本」处理（低清晰度的让位，不再一律 .cdN） */

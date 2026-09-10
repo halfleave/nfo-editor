@@ -2513,6 +2513,9 @@ function auto115EnsureTvRoot(showTitle){
 function auto115StepTvGetItems(t){
   if (t.noFolder) return Promise.resolve([{ fid: t.videoFid, name: t.videoName }]);
   return auto115ListDir(t.offlineDirCid).then(function(list){
+    /* 始终穿透子文件夹（种子套层结构） */
+    return auto115FlattenSubDirs(t, list);
+  }).then(function(list){
     return list.map(function(it){ return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString() }; }).filter(function(it){ return (it.fid || it.cid) && it.name; });
   });
 }
@@ -2610,7 +2613,10 @@ function auto115MoveInto(t, jobs, targetCid){
    按约定**留在原夹不动**——夹里还有遗留文件时，并入收尾就不再删除临时夹。 */
 function auto115TvLeftoverJobs(t, plan){
   if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) return Promise.resolve([]);
-  return auto115ListDir(t.offlineDirCid).then(function(left){
+  return auto115ListDir(t.offlineDirCid).then(function(list){
+    /* 套层结构同样穿透，嵌在子夹里的遗留文件也要能看到（否则删夹时陪葬） */
+    return auto115FlattenSubDirs(t, list);
+  }).then(function(left){
     var done = {};
     (plan.renames || []).forEach(function(r){ done[String(r.fid)] = 1; });
     (plan.deleteFids || []).forEach(function(f){ done[String(f)] = 1; });
@@ -2689,6 +2695,25 @@ function auto115StepTvMoveVideos(t){
 }
 /* 步骤「修改标题文件夹」（方案 B 第 4 步）已并入 auto115StepCleanup 的 TV 分支；
    TvRenameFolder 保留为空壳仅为兼容旧重试分发，不再被调用。 */
+/* 子文件夹穿透（v270，v271 起**始终下钻**）：115 离线的种子常是「种子名/内层夹/视频」的套层结构，
+   只扫一层会漏掉嵌套的视频/字幕，且顶层有视频时子夹里也可能藏着次清晰度或合集里的其他片子。
+   因此无论顶层有没有视频，都下钻子文件夹（最多 3 层、每层最多 10 个夹）把内容合并进工作列表；
+   后续保留/删除/改名全部按 fid 操作，不受层级影响。EXCLUDE 名字的子夹（sample/预告…）不下钻。 */
+function auto115FlattenSubDirs(t, list, depth){
+  depth = depth || 0;
+  list = list || [];
+  if (depth >= 3) return Promise.resolve(list);
+  var EXCL = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
+  var subs = list.filter(function(it){ return it && it.cid && !it.fid && !EXCL.test(it.n || it.name || ''); });
+  if (!subs.length) return Promise.resolve(list);
+  return Promise.all(subs.slice(0, 10).map(function(s){
+    return auto115ListDir(s.cid).then(function(inner){ return auto115FlattenSubDirs(t, inner, depth + 1); }).catch(function(){ return []; });
+  })).then(function(inners){
+    var merged = list.slice();
+    inners.forEach(function(inner){ merged = merged.concat(inner || []); });
+    return merged;
+  });
+}
 /* 步骤4：清理文件夹内容——保留主视频（多 part 全保留），删除其余全部（含 sample/子文件夹）。
    只对该文件夹的「子项」发起删除，绝不删除文件夹本身；根目录保护双保险。 */
 function auto115StepMove(t){
@@ -2696,6 +2721,9 @@ function auto115StepMove(t){
   if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
   auto115Set(t, 'move', 'running', '正在扫描文件夹内容…');
   return auto115ListDir(t.offlineDirCid).then(function(list){
+    /* 始终穿透子文件夹（种子套层结构，顶层有视频也可能有嵌套内容） */
+    return auto115FlattenSubDirs(t, list);
+  }).then(function(list){
     var vids = list.filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
     if (!vids.length){ auto115Set(t, 'move', 'fail', '这个文件夹里没有视频'); auto115Finish(t); return null; }
     // 收集字幕文件（不删除，后续跟随主视频一起规范命名）

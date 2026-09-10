@@ -374,8 +374,53 @@ const lz4LiteralForTest = (bytes) => {
   const renZ = calls.filter(c => c.url.indexOf('files/edit') >= 0 || c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(renZ.some(b => b.indexOf('fid=Z2') >= 0 && b.indexOf('终结者6：黑暗命运.2019.720p.mp4') >= 0), 'zjz6 弱命中：720p 跟随改名 终结者6：黑暗命运.2019.720p.mp4');
   doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
+
+  /* 2k. 子文件夹穿透（v270）：种子套层（顶层只有内层夹），视频嵌在内层夹里也能整理 */
+  script['files?cid=DIRN'] = { state: true, data: [ { cid: 'SUBN', n: '终结者6.Dark.Fate.2019.1080p. BluRay' } ] };
+  script['files?cid=SUBN'] = { state: true, data: [
+    { fid: 'N1', n: 'zjz6.1080p.BD中英双字[66影视www.66Ys.Co].mp4', s: 2.5 * GB },
+    { fid: 'N2', n: 'sample.mp4', s: 10 }
+  ] };
+  doc.dvdId = ''; doc.filmTitle = '终结者6：黑暗命运'; doc.originalTitle = ''; doc.year = '2019'; doc.nfoUploaded = false;
+  const tnst = { id: 'tnst', magnet: 'magnet:?xt=urn:btih:nested', magnetTitle: 'zjz6', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  doc.tasks.unshift(tnst);
+  ctx.auto115GetStep(tnst, 'mkdir').state = 'ok';
+  tnst.offlineDirCid = 'DIRN'; tnst.offlineDirName = '终结者6.Dark.Fate.2019.1080p. BluRay';
+  calls.length = 0;
+  await ctx.auto115StepMove(tnst);
+  assert(ctx.auto115GetStep(tnst, 'move').state === 'ok', '套层结构：穿透子夹后 move = ok（' + ctx.auto115GetStep(tnst, 'move').msg + '）');
+  assert(tnst.keepFids.length === 1 && tnst.keepFids[0] === 'N1', '套层结构：内层夹里的 N1 当主视频');
+  const delN = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => c.body || '').find(b => b.indexOf('pid=DIRN') >= 0) || '';
+  assert(delN.indexOf('N2') >= 0, '套层结构：内层夹里的 sample（N2）被清理');
+  await ctx.auto115StepRenameFlat(tnst);
+  assert(ctx.auto115GetStep(tnst, 'rename').state === 'ok', '套层结构：rename = ok（' + ctx.auto115GetStep(tnst, 'rename').msg + '）');
+  const renN = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(renN.some(b => b.indexOf('fid=N1') >= 0 && b.indexOf('pid=3311283881428122938') >= 0), '套层结构：视频从内层夹搬到云下载根目录');
   doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
-  script['ac=task_lists'] = () => ({ tasks: [{ info_hash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF01', percentDone: 10, status: 1 }] });
+
+  /* 2l. 顶层有视频也下钻（v271）：主视频在顶层、次清晰度嵌在子夹里 → 照样配对跟随改名 */
+  script['files?cid=DIRM'] = { state: true, data: [
+    { fid: 'M1', n: 'zjz6.1080p.BD中英双字[66影视www.66Ys.Co].mp4', s: 2.5 * GB },
+    { cid: 'SUBM', n: 'subs' }
+  ] };
+  script['files?cid=SUBM'] = { state: true, data: [
+    { fid: 'M2', n: 'zjz6.720p.mp4', s: 1.2 * GB }
+  ] };
+  doc.dvdId = ''; doc.filmTitle = '终结者6：黑暗命运'; doc.originalTitle = ''; doc.year = '2019'; doc.nfoUploaded = false;
+  const tmst = { id: 'tmst', magnet: 'magnet:?xt=urn:btih:nested2', magnetTitle: 'zjz6', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  doc.tasks.unshift(tmst);
+  ctx.auto115GetStep(tmst, 'mkdir').state = 'ok';
+  tmst.offlineDirCid = 'DIRM'; tmst.offlineDirName = '终结者6.2019';
+  calls.length = 0;
+  await ctx.auto115StepMove(tmst);
+  assert(ctx.auto115GetStep(tmst, 'move').state === 'ok', '顶层有视频也下钻：move = ok（' + ctx.auto115GetStep(tmst, 'move').msg + '）');
+  assert(tmst.keepFids.length === 1 && tmst.keepFids[0] === 'M1', '顶层有视频也下钻：顶层 M1 当主视频');
+  assert(tmst.secondVersion && tmst.secondVersion.fid === 'M2', '顶层有视频也下钻：子夹里的 720p（M2）配对为次清晰度，实际=' + JSON.stringify(tmst.secondVersion));
+  await ctx.auto115StepRenameFlat(tmst);
+  assert(ctx.auto115GetStep(tmst, 'rename').state === 'ok', '顶层有视频也下钻：rename = ok');
+  const renM2 = calls.filter(c => c.url.indexOf('files/edit') >= 0 || c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(renM2.some(b => b.indexOf('fid=M2') >= 0 && b.indexOf('终结者6：黑暗命运.2019.720p.mp4') >= 0), '顶层有视频也下钻：子夹里的 720p 跟随改名并搬出');
+  doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
   const t2 = { id: 't2', magnet: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01', magnetTitle: '慢速磁力', steps: ctx.auto115NewSteps(), infoHash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' };
   doc.tasks.unshift(t2);
   for (let i = 0; i < 3; i++) await ctx.auto115StepWait(t2, i === 0);
