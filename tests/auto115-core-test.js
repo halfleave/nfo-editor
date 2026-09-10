@@ -87,6 +87,21 @@ const p3names = plan3.renames.map(r => r.name);
 assert(p3names.indexOf('Y.S01E01.mkv') >= 0 && p3names.indexOf('Y.S01E02.mkv') >= 0 && p3names.length === 2, 'tvPlan：认不出集号顺序补号不撞号（ep2 被 E02 规则命中）');
 const plan4 = api.tvPlan('Z', [{ fid: 'd1', name: 'D.第二部 第1集.mkv' }, { fid: 'd2', name: 'D.第1集.mkv' }]);
 assert(plan4.renames.some(r => r.name === 'Z.S02E01.mkv'), 'tvPlan：第二部 → S02');
+/* 无集号字幕跟已有视频走（循环对齐），不再往后编出 E13、E14 */
+const plan5 = api.tvPlan('竞女', [
+  { fid: 'v10', name: '竞女.S01E10.mkv' },
+  { fid: 'v11', name: '竞女.S01E11.mkv' },
+  { fid: 'v12', name: '竞女.S01E12.mkv' },
+  { fid: 's1', name: '竞女.ass' },
+  { fid: 's2', name: '竞女.ass' },
+  { fid: 's3', name: '竞女.ass' },
+  { fid: 's4', name: '竞女.ass' },
+  { fid: 's5', name: '竞女.ass' },
+  { fid: 's6', name: '竞女.ass' }
+]);
+const subNames5 = plan5.renames.filter(r => r.name.endsWith('.und.ass')).map(r => r.name);
+assert(subNames5.length === 6 && !/E1[3-9]/.test(subNames5.join(',')), 'tvPlan：无集号字幕循环对齐到 E10–E12，不继续往后编');
+assert(subNames5.filter(n => /E10/.test(n)).length === 2 && subNames5.filter(n => /E11/.test(n)).length === 2 && subNames5.filter(n => /E12/.test(n)).length === 2, 'tvPlan：无集号字幕在 E10–E12 间均分');
 
 /* ---------- 分季阈值 ---------- */
 const mkPlan = (list) => ({ renames: list.map(n => ({ name: n })) });

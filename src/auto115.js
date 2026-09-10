@@ -593,14 +593,16 @@
     if (!film) return Promise.reject(new Error('未打开影片'));
     var d = film.data || {};
     var isTv = (state.tmdbMediaType === 'tv') || (d.media_type === 'tv') || (d.tmdbMediaType === 'tv');
-    var dvdId = (d.dvdId || d.content_id || (d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle) ? d.originaltitle : '') || '').toString().trim();
+    // 番号只认显式字段；不再用 originaltitle 做兜底：否则像 "Madrid, 1987" 这种带年份的英文名会被误判为番号，导致普通影片被收进文件夹。
+    var dvdId = (d.dvdId || d.content_id || '').toString().trim();
     var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
     if (!auto115Doc) {
       auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, originalTitle: d.originaltitle || '', year: year, type: isTv ? 'tv' : 'movie', tasks: [] };
     } else {
       auto115Doc.filmId = film.id;
       auto115Doc.filmTitle = d.title || auto115Doc.filmTitle || '';
-      auto115Doc.dvdId = dvdId || auto115Doc.dvdId || '';
+      // 以当前影片数据为准；旧缓存里的错误番号不再保留，避免普通影片被误判为 AV
+      auto115Doc.dvdId = dvdId || '';
       auto115Doc.originalTitle = d.originaltitle || '';
       auto115Doc.year = year || auto115Doc.year || '';
       auto115Doc.type = isTv ? 'tv' : (auto115Doc.type || 'movie');
@@ -624,7 +626,8 @@
         // 执行器手里还是旧引用 → 请求照发（115 里确实存进去了），进度却写到孤儿对象上，界面永远「待提交」。
         auto115Doc.tasks = auto115MergeTasks(auto115Doc.tasks || [], v.tasks || []);
         auto115Doc.filmTitle = d.title || v.filmTitle || auto115Doc.filmTitle || '';
-        auto115Doc.dvdId = dvdId || v.dvdId || auto115Doc.dvdId || '';
+        // 以当前影片数据为准；旧缓存里的错误番号不再保留
+        auto115Doc.dvdId = dvdId || '';
         auto115Doc.originalTitle = d.originaltitle || v.originalTitle || '';
         auto115Doc.year = year || v.year || auto115Doc.year || '';
         auto115Doc.type = isTv ? 'tv' : (v.type || auto115Doc.type || 'movie');

@@ -1910,7 +1910,8 @@ function auto115EnsureDoc(){
   var d = film.data || {};
   // 剧集判定：优先从影片持久数据读，其次运行时 state； persisted film.data 更稳（state 可能被重置）
   var isTv = (state.tmdbMediaType === 'tv') || (d.media_type === 'tv') || (d.tmdbMediaType === 'tv');
-  var dvdId = (d.dvdId || d.content_id || (d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle) ? d.originaltitle : '') || '').toString().trim();
+  // 番号只认显式字段；不再用 originaltitle 做兜底：否则像 "Madrid, 1987" 这种带年份的英文名会被误判为番号，导致普通影片被收进文件夹。
+  var dvdId = (d.dvdId || d.content_id || '').toString().trim();
   var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
   if (!auto115Doc){
     auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, originalTitle: d.originaltitle || '', year: year, type: isTv ? 'tv' : 'movie', tasks: [] };
@@ -1947,7 +1948,8 @@ function auto115EnsureDoc(){
       // 执行器手里还是旧引用 → 请求照发（115 里确实存进去了），但进度写到了「孤儿对象」上，界面永远显示「待提交」。
       auto115Doc.tasks = auto115MergeTasks(auto115Doc.tasks || [], v.tasks || []);
       auto115Doc.filmTitle = d.title || v.filmTitle || auto115Doc.filmTitle || '';
-      auto115Doc.dvdId = dvdId || v.dvdId || auto115Doc.dvdId || '';
+      // 以当前影片数据为准；旧缓存里的错误番号不再保留，避免普通影片被误判为 AV
+      auto115Doc.dvdId = dvdId || '';
       auto115Doc.originalTitle = d.originaltitle || v.originalTitle || '';
       auto115Doc.year = year || v.year || auto115Doc.year || '';
       auto115Doc.type = isTv ? 'tv' : (v.type || auto115Doc.type || 'movie');
@@ -3877,7 +3879,44 @@ function auto115AddFromOp(){
 /* 添加磁力 弹窗：手动粘贴磁力链做 115 离线——与「115 离线」入口等价，只是磁力来源是用户粘贴而非数据源；绑定当前影片，改名/整理按详情页标题·番号 */
 function openMagnetCombo(tab){
   switchMagnetComboTab(tab === 'search' ? 'search' : 'add');
+  var search = (tab === 'search');
+  var qInp = document.getElementById('magnetQueryInput');
+  if (search && qInp){
+    var q = (auto115Doc && (auto115Doc.dvdId || auto115Doc.filmTitle)) || '';
+    qInp.value = q;
+    toggleMagnetClear();
+  }
+  // 添加磁力：每次进入都清空，避免残留上次粘贴的内容
+  if (!search){
+    var mInp = document.getElementById('magnetInput');
+    if (mInp) mInp.value = '';
+  }
+  renderMagnetQuickChips();
   openSheet('magnetComboSheet');
+}
+function fillMagnetQuery(type){
+  var qInp = document.getElementById('magnetQueryInput');
+  if (!qInp || !auto115Doc) return;
+  var q = '';
+  if (type === 'dvdId') q = auto115Doc.dvdId || '';
+  else if (type === 'title') q = auto115Doc.filmTitle || '';
+  else if (type === 'original') q = auto115Doc.originalTitle || '';
+  qInp.value = q;
+  toggleMagnetClear();
+}
+function renderMagnetQuickChips(){
+  var wrap = document.getElementById('magnetQuickChips');
+  if (!wrap) return;
+  var chips = wrap.querySelectorAll('.mqc-chip');
+  for (var i = 0; i < chips.length; i++){
+    var t = chips[i].getAttribute('data-type');
+    var has = false;
+    if (!auto115Doc) has = false;
+    else if (t === 'dvdId') has = !!auto115Doc.dvdId;
+    else if (t === 'title') has = !!auto115Doc.filmTitle;
+    else if (t === 'original') has = !!auto115Doc.originalTitle;
+    chips[i].style.display = has ? '' : 'none';
+  }
 }
 function switchMagnetComboTab(tab){
   var add = document.getElementById('magnetComboAdd');
@@ -3886,6 +3925,14 @@ function switchMagnetComboTab(tab){
   for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
   if (add) add.style.display = (tab === 'add') ? '' : 'none';
   if (search) search.style.display = (tab === 'search') ? '' : 'none';
+  // 切到搜索页时，若搜索框为空且当前影片有番号/标题，自动预填（不触发搜索）
+  if (tab === 'search'){
+    var qInp = document.getElementById('magnetQueryInput');
+    if (qInp && !qInp.value && auto115Doc){
+      qInp.value = auto115Doc.dvdId || auto115Doc.filmTitle || '';
+      toggleMagnetClear();
+    }
+  }
 }
 function auto115OpenMagnetModal(){
   openMagnetCombo('add');

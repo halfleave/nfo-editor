@@ -277,15 +277,29 @@
       if (ep && ep.episode){ var s2 = ep.season || 1; subPlan.push({ fid: it.fid, season: s2, ep: ep.episode, lang: lang, orig: it.name, size: it.s || 0 }); return; }
       subPending.push({ it: it, lang: lang });
     });
-    subPending.forEach(function (sp, idx) {
-      var vp = vidPending[idx];
-      var epInfo = vp ? api.episodeOf(vp.name) : null;
-      var season = (epInfo && epInfo.season) || 1;
-      var matchVid = null;
-      for (var i = 0; i < vidPlan.length; i++){ if (vidPlan[i].orig === (vp && vp.name)){ matchVid = vidPlan[i]; break; } }
-      var epNo = matchVid ? matchVid.ep : nextEp(season);
-      subPlan.push({ fid: sp.it.fid, season: season, ep: epNo, lang: sp.lang, orig: sp.it.name, size: sp.it.s || 0 });
-    });
+    /* 待分配字幕（无集号）按季分组，从该季已识别的视频集号里循环取——
+       这样字幕会跟着已存在的视频走（不会继续往后编出 E13、E14…）。没有视频的季才往下补号。 */
+    if (subPending.length){
+      var subBySeason = {};
+      subPending.forEach(function (sp){
+        var epInfo = api.episodeOf(sp.it.name);
+        var s = (epInfo && epInfo.season) || 1;
+        if (!subBySeason[s]) subBySeason[s] = [];
+        subBySeason[s].push(sp);
+      });
+      Object.keys(subBySeason).forEach(function (sKey){
+        var s = parseInt(sKey, 10);
+        var pool = [];
+        for (var i = 0; i < vidPlan.length; i++){ if (vidPlan[i].season === s) pool.push(vidPlan[i].ep); }
+        pool.sort(function (a, b) { return a - b; });
+        var list = subBySeason[s];
+        for (var k = 0; k < list.length; k++){
+          var epNo = pool.length ? pool[k % pool.length] : nextEp(s);
+          var sp = list[k];
+          subPlan.push({ fid: sp.it.fid, season: s, ep: epNo, lang: sp.lang, orig: sp.it.name, size: sp.it.s || 0 });
+        }
+      });
+    }
     var renames = [];
     vidPlan.forEach(function (p) { renames.push({ fid: p.fid, name: api.tvVideoName(showTitle, p.season, p.ep, api.ext(p.orig)), orig: p.orig, size: p.size }); });
     subPlan.forEach(function (p) { renames.push({ fid: p.fid, name: api.tvSubName(showTitle, p.season, p.ep, p.lang, api.ext(p.orig)), orig: p.orig, size: p.size }); });

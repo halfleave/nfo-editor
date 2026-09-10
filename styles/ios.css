@@ -1350,6 +1350,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #magnetComboSheet .magnet-search-wrap input { width: 100%; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 36px 10px 16px; font-size: 15px; color: var(--label); }
 #magnetComboSheet .magnet-sheet-head input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 #magnetComboSheet .magnet-sheet-head button { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 14px; font-weight: 600; }
+#magnetComboSheet .magnet-quick-chips { display: flex; align-items: center; gap: 8px; padding: 0 0 12px; flex-wrap: wrap; }
+#magnetComboSheet .mqc-chip { border: 1px solid var(--sep); background: var(--card-fill); color: var(--label-2); border-radius: 980px; padding: 5px 14px; font-size: 13px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#magnetComboSheet .mqc-chip:active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+#magnetComboSheet .mqc-chip:disabled { opacity: 0.4; cursor: not-allowed; }
 #magnetComboSheet .magnet-sheet-head .magnet-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; background: transparent; color: var(--label-3); font-size: 18px; line-height: 1; }
 #magnetComboSheet .magnet-sheet-head .magnet-clear.show { display: flex; }
 #magnetComboSheet .magnet-sheet-head .magnet-clear:active { opacity: 0.5; }
