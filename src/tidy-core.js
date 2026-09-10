@@ -310,13 +310,115 @@
       for (var i = 0; i < kids.length; i++){
         if (lines.length >= maxLines){ return; }
         var k = kids[i], last = (i === kids.length - 1);
-        lines.push(prefix + (last ? '└─ ' : '├─ ') + k.name + (k.dir ? '/' : ''));
+        lines.push(prefix + (last ? '└─ ' : '├─ ') + k.name + (k.dir ? '/' : '') + (k.note ? ('　' + k.note) : ''));
         if (k.dir) walk(k, prefix + (last ? '   ' : '│  '));
       }
     }
     walk(node, '');
     if (lines.length >= maxLines) lines.push('…（目录过大，已截断）');
     return lines.join('\n');
+  }
+
+  /* ================= 一点八、官方「导出目录树」txt 解析（路子 A） =================
+     115 官方「导出目录树」的产物格式（已用真实 20 万行导出实测）：
+       · 编码 UTF-16LE + BOM（ff fe），换行是 \n
+       · 根行  `|——<名字>`（`——` 是两个 U+2014 长破折号）；其余行 `<缩进>|-<名字>`
+       · 缩进每层 2 个字符；一行里 `|-` 的下标 ÷ 2 = 该行的深度
+       · 名字里带换行的会被折成「续行」（不含 `|-` 的行），要拼回上一条
+       · **不区分文件/文件夹、也没有体积** —— 本层用「有没有子节点」反推目录
+         （空目录会被误判为文件，这是导出格式的固有限制，导出产物里无法区分）
+     本函数不发请求、不读全局，输入文本 → 输出树，便于 Node 侧单测。 */
+
+  /* 字节 → 文本。优先看 BOM；没有 BOM 时按「偶数位大量 0x00」判定 UTF-16LE。 */
+  function decodeTreeBytes(buf) {
+    var u8;
+    if (buf && buf.buffer) u8 = new Uint8Array(buf.buffer, buf.byteOffset || 0, buf.byteLength);
+    else if (buf instanceof Uint8Array) u8 = buf;
+    else u8 = new Uint8Array(0);
+    var enc = 'utf-16le';
+    if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) enc = 'utf-8';
+    else if (u8.length >= 2 && u8[0] === 0xFE && u8[1] === 0xFF) enc = 'utf-16be';
+    else if (u8.length >= 2 && u8[0] === 0xFF && u8[1] === 0xFE) enc = 'utf-16le';
+    else {
+      var zeros = 0, probe = Math.min(u8.length, 400);
+      for (var i = 0; i < probe; i++) { if (u8[i] === 0) zeros++; }
+      enc = zeros > probe * 0.15 ? 'utf-16le' : 'utf-8';
+    }
+    var txt = '';
+    try { txt = new TextDecoder(enc).decode(u8); }
+    catch (e) {
+      /* 环境没有 TextDecoder 时的兜底：手工按 UTF-16LE 拼（够解析 ASCII/常用中文） */
+      var out = [];
+      for (var j = 0; j + 1 < u8.length; j += 2) out.push(String.fromCharCode(u8[j] | (u8[j + 1] << 8)));
+      txt = out.join('');
+    }
+    return String(txt).replace(/^\uFEFF/, '');
+  }
+
+  /* 递归统计后代节点数（折叠提示用） */
+  function countNodes(n) {
+    var kids = (n && n.children) || [], n2 = 0;
+    for (var i = 0; i < kids.length; i++) n2 += 1 + countNodes(kids[i]);
+    return n2;
+  }
+
+  /* 导出 txt → 树。返回 { ok, name(根名), count, tree }
+     容错：跳级的坏数据按「挂到已知最深父级」处理，不抛错。 */
+  function parseExportTree(text) {
+    var lines = String(text == null ? '' : text).split(/\r?\n/);
+    var root = { name: '', dir: true, children: [] };
+    var stack = [root], count = 0, lastNode = null;
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      if (!raw) continue;
+      var name = '', depth = -1;
+      if (raw.indexOf('|——') === 0) { name = raw.slice(3); depth = 0; }
+      else {
+        var idx = raw.indexOf('|-');
+        if (idx >= 0) { name = raw.slice(idx + 2); depth = idx / 2; }
+        else {
+          /* 续行：名字里带换行被折下来的，拼回上一条 */
+          if (lastNode) lastNode.name += '\n' + raw;
+          continue;
+        }
+      }
+      if (depth <= 0) { root.name = name || root.name; stack = [root]; lastNode = null; continue; }
+      if (depth > stack.length) depth = stack.length;      // 跳级坏数据 → 挂到最深已知父级
+      stack = stack.slice(0, depth);
+      var node = { name: name, dir: false, children: [] };
+      (stack[depth - 1] || root).children.push(node);
+      stack.push(node);
+      lastNode = node;
+      count++;
+    }
+    (function mark(n) {
+      var k = n.children || [];
+      n.dir = k.length > 0;
+      for (var m = 0; m < k.length; m++) mark(k[m]);
+    })(root);
+    return { ok: count > 0, name: root.name, count: count, tree: root };
+  }
+
+  /* 剪枝：只保留前 maxDepth 层、最多 maxNodes 个节点，被折叠的节点挂 note 说明。
+     目的：把可能上万行的目录树压成「AI 能一次读完」的规模。 */
+  function trimTree(root, opts) {
+    opts = opts || {};
+    var maxDepth = typeof opts.maxDepth === 'number' ? opts.maxDepth : 4;
+    var budget = typeof opts.maxNodes === 'number' ? opts.maxNodes : 1500;
+    var used = 0;
+    function walk(n, d) {
+      var out = { name: n.name, dir: !!n.dir, children: [] };
+      var kids = n.children || [];
+      if (!kids.length) return out;
+      if (d >= maxDepth) { out.note = '共 ' + countNodes(n) + ' 项，已折叠'; return out; }
+      for (var i = 0; i < kids.length; i++) {
+        if (used >= budget) { out.note = '还有 ' + (kids.length - i) + ' 项已折叠'; break; }
+        used++;
+        out.children.push(walk(kids[i], d + 1));
+      }
+      return out;
+    }
+    return walk(root, 0);
   }
 
   /* ================= 二、规则注册表 ================= */
@@ -494,6 +596,10 @@
     parseTidyJson: parseTidyJson,
     planJsonItems: planJsonItems,
     renderTreeText: renderTreeText,
+    decodeTreeBytes: decodeTreeBytes,
+    parseExportTree: parseExportTree,
+    trimTree: trimTree,
+    countNodes: countNodes,
     TASK_STEPS: TASK_STEPS,
     newSteps: newSteps,
     stepSet: stepSet

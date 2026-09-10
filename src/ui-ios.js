@@ -1139,6 +1139,12 @@ async function c115ProxyFetch(targetUrl, opts){
     cache: 'no-store'
   }).then(function(r){
     c115FailStreak = r.ok ? 0 : Math.min(c115FailStreak + 1, 4); // 成功即复位；HTTP 失败才累加
+    if (opts.raw){ /* 原始字节响应（115「导出目录树」txt 是 UTF-16，必须拿原始字节自行解码）*/
+      return r.arrayBuffer().then(function(buf){
+        if (!r.ok){ var e2 = new Error('HTTP ' + r.status); e2.status = r.status; throw e2; }
+        return { ok: r.ok, status: r.status, d: {}, raw: '', bytes: new Uint8Array(buf) };
+      });
+    }
     if (opts.bin){ /* 二进制响应（115 4.0 加密回包）：以 base64 转交，避免 r.text() 损坏字节 */
       return r.arrayBuffer().then(function(buf){
         return { ok: r.ok, status: r.status, d: {}, raw: '', bin: c115BytesToB64(new Uint8Array(buf)) };
@@ -8012,7 +8018,11 @@ var tidyState = {
   jsonEntry: false,  // 这次选 JSON 是从入口页点的（选完直接进预览，不回规则页）
   preview: null,     // 预览待执行的 op 列表
   open: {},          // 任务列表展开态 { taskId: true }
-  pendingTask: null  // 已开始「读取+计划」但还没点执行的规则任务 id
+  pendingTask: null, // 已开始「读取+计划」但还没点执行的规则任务 id
+  pendingKind: null, // 上面这个任务属于哪一类：rule / json / ai（ai 取消时不能删任务，会话要留着）
+  treeFetching: false,// 正在获取目录树（防连点）
+  chatSending: false, // AI 正在应答（防连发）
+  aiPlan: null        // AI 给出的待执行整理清单（用于执行时判定任务类型）
 };
 
 function tidyLoad(key, fallback){
@@ -8279,10 +8289,11 @@ function openTidyChat(taskId){
     tidyState.chatId = null;
     tidyState.chatDraft = [
       { role: 'sys', text: tidyState.folder ? ('目标文件夹：' + (tidyState.folder.path || tidyState.folder.name)) : '尚未选择文件夹（可先返回选择）' },
-      { role: 'ai', text: '先点右上角「获取目录树」，把当前文件夹的结构读出来；然后告诉我你想怎么整理。\n（AI 对话通道正在接入，先把目录树和会话结构跑通）' }
+      { role: 'ai', text: '先点右上角「获取目录树」，把当前文件夹的结构读出来；然后告诉我你想怎么整理（比如「把文件名里的站点水印清掉」「番号统一大写」）。' }
     ];
   }
   tidyState.tree = '';
+  tidyState.chatSending = false;
   var titleEl = document.getElementById('tidyChatTitle');
   if (titleEl) titleEl.textContent = tidyFolderName();
   renderTidyChat();
@@ -8304,6 +8315,14 @@ function renderTidyChat(){
   var box = document.getElementById('tidyChatScroll');
   if (!box) return;
   box.innerHTML = tidyChatMsgs().map(function (m){
+    if (m && m.role === 'tree'){
+      /* 目录树本身太长，气泡里只放一行摘要；完整文本留在消息里，发送时随请求带给 AI */
+      return '<div class="tidy-msg sys">已获取目录树（' + (m.lines || 0) + ' 行）</div>';
+    }
+    if (m && m.role === 'plan'){
+      return '<div class="tidy-msg plan"><span class="tp-tx">整理清单已就绪（' + (m.count || 0) + ' 项）</span>' +
+        '<button class="tp-btn" onclick="tidyAiPlanOpen()">查看并执行</button></div>';
+    }
     var cls = m.role === 'me' ? 'me' : (m.role === 'ai' ? 'ai' : 'sys');
     return '<div class="tidy-msg ' + cls + '">' + escapeHtml(m.text) + '</div>';
   }).join('');
@@ -8315,49 +8334,166 @@ function tidyChatAppend(msg){
   tidyChatSetMsgs(msgs);
   renderTidyChat();
 }
-/* 获取目录树（用户手动触发）：递归读当前文件夹 → 渲染成文本树发给会话 */
+/* 就地替换第 idx 条（用于「正在…」这类会被结果覆盖的占位消息） */
+function tidyChatReplace(idx, msg){
+  var msgs = tidyChatMsgs();
+  if (idx < 0 || idx >= msgs.length) msgs.push(msg); else msgs[idx] = msg;
+  tidyChatSetMsgs(msgs);
+  renderTidyChat();
+}
+/* ================= 获取目录树（用户手动触发）=================
+   只走 115 官方「导出目录树」接口：
+     ① POST webapi.115.com/files/export_dir  { file_ids, target=U_1_0 }  → export_id
+     ② GET  同地址 ?export_id= 轮询 → { file_id, file_name, pick_code }
+     ③ GET  webapi.115.com/files/download?pickcode= → 原始字节（UTF-16LE）→ 解析
+     ④ 用完把产物删掉（丢进回收站，可恢复），免得根目录堆一堆「目录树.txt」
+   注意：115 同一时间只允许一个导出任务，且超时不会自动取消 —— 失败就如实报错、让用户稍后重试，
+   不做「逐层递归读取」的兜底（那条路风控高、对大库也慢）。 */
+var TIDY_TREE_POLL_MS = 2000;   // 轮询间隔
+var TIDY_TREE_POLL_MAX = 30;    // 最多轮询 30 次（约 60 秒）
+var TIDY_TREE_CHAR_CAP = 20000; // 发给 AI 的目录树字符上限（服务端还会再兜一层）
+
+/* ① 提交导出任务 → export_id */
+function tidyExportStart(cid){
+  return auto115Post('https://webapi.115.com/files/export_dir',
+    'file_ids=' + encodeURIComponent(cid || '0') + '&target=' + encodeURIComponent('U_1_0')
+  ).then(function (res){
+    var d = (res && res.d) || {};
+    var eid = d.export_id || (d.data && d.data.export_id);
+    if (!eid) throw new Error((d.error || d.msg || '提交导出任务被拒绝'));
+    return String(eid);
+  });
+}
+/* ② 轮询导出状态 → { pickCode, fileId, fileName } */
+function tidyExportPoll(eid, left){
+  var url = 'https://webapi.115.com/files/export_dir?export_id=' + encodeURIComponent(eid);
+  return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } }).then(function (res){
+    var d = (res && res.d) || {};
+    var info = d.data || d;
+    if (info && (info.pick_code || info.pickcode)) {
+      return { pickCode: String(info.pick_code || info.pickcode), fileId: String(info.file_id || ''), fileName: String(info.file_name || '') };
+    }
+    if (left <= 0) throw new Error('导出超时（115 同一时间只允许一个导出任务）');
+    return c115Sleep(TIDY_TREE_POLL_MS).then(function (){ return tidyExportPoll(eid, left - 1); });
+  });
+}
+/* ③ 按提取码下载产物 → 原始文本 */
+function tidyExportDownload(pickCode){
+  return c115ProxyFetch('https://webapi.115.com/files/download?pickcode=' + encodeURIComponent(pickCode),
+    { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true }
+  ).then(function (res){
+    var u8 = (res && res.bytes) || new Uint8Array(0);
+    if (!u8.length) throw new Error('下载到的目录树是空的');
+    var txt = (typeof TidyCore !== 'undefined' && TidyCore.decodeTreeBytes)
+      ? TidyCore.decodeTreeBytes(u8)
+      : new TextDecoder('utf-16le').decode(u8);
+    if (!txt) throw new Error('目录树解码失败');
+    return txt;
+  });
+}
+/* ④ 删掉导出产物（失败不影响主流程；走回收站，可恢复） */
+function tidyExportCleanup(fileId){
+  if (!fileId) return;
+  auto115Post('https://webapi.115.com/rb/delete', 'fid=' + encodeURIComponent(fileId) + '&pid=0')
+    .catch(function (){ /* 删不掉就留着，不打扰用户 */ });
+}
+/* 导出 txt → 剪枝后的树文本。
+   规模自适应：先按节点上限剪枝，太长就逐步收紧上限，直到能整段塞进请求（LLM 一次读得完）。 */
+function tidyTreeFromExport(rawText){
+  var T = (typeof TidyCore !== 'undefined') ? TidyCore : null;
+  if (!T || !T.parseExportTree) return { text: rawText, count: 0 };
+  var parsed = T.parseExportTree(rawText);
+  if (!parsed.ok) return { text: '', count: 0 };
+  var caps = [900, 700, 500, 380, 280, 200, 140, 90, 60];
+  var text = '';
+  for (var i = 0; i < caps.length; i++){
+    var tr = T.trimTree(parsed.tree, { maxDepth: 4, maxNodes: caps[i] });
+    text = T.renderTreeText(tr, { maxLines: 1200 }) || '';
+    if (text.length <= TIDY_TREE_CHAR_CAP) break;
+  }
+  if (text.length > TIDY_TREE_CHAR_CAP) text = text.slice(0, TIDY_TREE_CHAR_CAP) + '\n…（已截断）';
+  return { text: text, count: parsed.count };
+}
+
+/* 获取目录树：只走 115 官方「导出目录树」接口，不成功就如实报错（无兜底） */
 function tidyTreeFetch(){
   if (!tidyState.folder){ showToast('请先选择要整理的文件夹', 'error'); return; }
+  if (!(state.c115Cookie || '')){ showToast('请先到「设置 → 应用配置 → 115 配置」登录', 'error'); return; }
   if (tidyState.treeFetching) return;
   tidyState.treeFetching = true;
   var id = tidyState.chatId;
-  if (id) tidyTaskStep(id, 'tree', 'running', '');
-  showToast('正在读取目录树…', 'info');
-  tidyBuildTree(tidyState.folder.cid, 6, { n: 0, max: 800 }).then(function (node){
-    var text = (typeof TidyCore !== 'undefined' && TidyCore.renderTreeText) ? TidyCore.renderTreeText(node, { maxLines: 2000 }) : '';
-    var lines = text ? text.split('\n').length : 0;
-    tidyState.tree = text;
-    tidyChatAppend({ role: 'sys', text: '已获取目录树（' + lines + ' 行）：\n' + (text || '（这个文件夹是空的）') });
-    if (id) tidyTaskStep(id, 'tree', 'ok', '共 ' + lines + ' 行');
-    showToast('目录树已获取（' + lines + ' 行）', 'success');
+  if (id) tidyTaskStep(id, 'tree', 'running', '正在获取');
+  var btn = document.getElementById('tidyTreeBtn');
+  if (btn){ btn.disabled = true; btn.textContent = '获取中…'; }
+  var idx = tidyChatMsgs().length;
+  tidyChatAppend({ role: 'sys', text: '正在向 115 提交「导出目录树」任务…' });
+  function say(t){ tidyChatReplace(idx, { role: 'sys', text: t }); }
+  function finish(){
+    tidyState.treeFetching = false;
+    if (btn){ btn.disabled = false; btn.textContent = '获取目录树'; }
+  }
+  tidyExportStart(tidyState.folder.cid).then(function (eid){
+    say('115 正在后台导出目录树…（文件夹大的话可能要等一会儿，最多等约 1 分钟）');
+    return tidyExportPoll(eid, TIDY_TREE_POLL_MAX);
+  }).then(function (info){
+    say('导出完成，正在下载并解析…');
+    tidyExportCleanup(info.fileId);
+    return tidyExportDownload(info.pickCode);
+  }).then(function (raw){
+    var r = tidyTreeFromExport(raw);
+    if (!r.text) throw new Error('目录树解析结果为空');
+    var lines = r.text.split('\n').length;
+    tidyState.tree = r.text;
+    say('导出完成：共 ' + (r.count || 0) + ' 项，已折叠到前 4 层');
+    /* 同一会话只留最新一份目录树，反复获取时不会越堆越多 */
+    var msgs = tidyChatMsgs().filter(function (m){ return m && m.role !== 'tree'; });
+    msgs.push({ role: 'tree', text: r.text, lines: lines });
+    tidyChatSetMsgs(msgs);
+    renderTidyChat();
+    if (id) tidyTaskStep(id, 'tree', 'ok', lines + ' 行');
+    showToast('目录树已就绪（' + lines + ' 行）', 'success');
+    finish();
   }).catch(function (e){
     var m = (e && e.message) || '网络错误';
+    say('获取失败：' + m + '\n（115 同一时间只允许一个导出任务，稍等一会儿再点一次）');
     if (id) tidyTaskStep(id, 'tree', 'fail', m);
-    showToast('获取失败：' + m, 'error');
-  }).then(function (){ tidyState.treeFetching = false; });
+    showToast('获取目录树失败：' + m, 'error');
+    finish();
+  });
 }
-/* 递归读目录（带深度与节点上限，避免大库把请求打爆；目录优先保持原顺序） */
-function tidyBuildTree(cid, depth, budget){
-  budget = budget || { n: 0, max: 600 };
-  return auto115ListDirAll(cid, 800).then(function (list){
-    var nodes = [], cids = [];
-    (list || []).forEach(function (it){
-      var n = it.n || it.name || '';
-      if (!n) return;
-      var isDir = !!(it.cid && !it.fid);
-      nodes.push({ name: n, dir: isDir, children: [] });
-      cids.push(isDir ? String(it.cid) : '');
+/* 本次会话的目录树文本：优先内存，其次从会话里最后一条 tree 消息取回
+   （从任务列表回到旧会话时内存是空的，靠这条回捞） */
+function tidyCurrentTree(){
+  if (tidyState.tree) return tidyState.tree;
+  var msgs = tidyChatMsgs(), hit = '';
+  for (var i = 0; i < msgs.length; i++) if (msgs[i] && msgs[i].role === 'tree') hit = msgs[i].text || '';
+  return hit;
+}
+/* AI 整理请求：把「目录树 + 目标文件夹 + 整段对话」一起发给 Worker 的 /ai/tidy。
+   无状态多轮：每轮都把完整 messages 带回去，服务端不存会话。 */
+function tidyAiRequest(){
+  var base = (state.magnetWorker || DEFAULT_WORKER || '').replace(/\/+$/, '');
+  if (!base) return Promise.reject(new Error('未配置 Worker 代理地址'));
+  var hist = tidyChatMsgs().filter(function (m){ return m && (m.role === 'me' || m.role === 'ai'); })
+    .map(function (m){ return { role: m.role === 'me' ? 'user' : 'assistant', content: m.text }; });
+  if (!hist.length || hist[hist.length - 1].role !== 'user') return Promise.reject(new Error('没有可发送的内容'));
+  var payload = {
+    folder: tidyState.folder ? (tidyState.folder.path || tidyState.folder.name) : '',
+    tree: tidyCurrentTree(),
+    messages: hist
+  };
+  return getActivationCode().then(function (code){
+    var url = base + '/ai/tidy' + (code ? ('?code=' + encodeURIComponent(code)) : '');
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: 'no-store'
     });
-    budget.n += nodes.length;
-    var chain = Promise.resolve();
-    nodes.forEach(function (node, i){
-      if (!node.dir || depth <= 1) return;
-      chain = chain.then(function (){
-        if (budget.n >= budget.max) return null;
-        return tidyBuildTree(cids[i], depth - 1, budget).then(function (sub){ node.children = sub.children; });
-      });
-    });
-    return chain.then(function (){ return { children: nodes }; });
+  }).then(function (r){ return r.json(); }).then(function (d){
+    if (d && d.error) throw new Error(d.error);
+    if (!d || !d.ok) throw new Error('整理服务没有正常返回');
+    return d;
   });
 }
 function tidyChatSend(){
@@ -8365,6 +8501,7 @@ function tidyChatSend(){
   if (!inp) return;
   var text = (inp.value || '').trim();
   if (!text) return;
+  if (tidyState.chatSending){ showToast('AI 正在回答，稍等一下', 'info'); return; }
   var msgs = tidyChatMsgs();
   msgs.push({ role: 'me', text: text });
   /* 第一条消息发出时才真正建任务（此前返回 = 不留任何记录） */
@@ -8372,15 +8509,43 @@ function tidyChatSend(){
     var task = tidyNewTask('ai', tidyFolderName(), 'ai');
     tidyState.chatId = task.id;
     tidyState.chatDraft = null;
+    if (tidyCurrentTree()) tidyTaskStep(task.id, 'tree', 'ok', '');
     tidyTaskStep(task.id, 'chat', 'running', '');
   }
-  // TODO(M4 后续)：接 Worker 的 AI 整理通道 —— 与翻译共用模型、换一套 tidy 系统提示语，
-  // 把 tidyState.tree 作为上下文多轮对话，收口时要求输出 nfo115.tidy/v1 的 JSON。当前先回占位。
-  msgs.push({ role: 'ai', text: '（AI 整理通道尚未接通。接通后会结合上面的目录树给出整理清单，并可一键执行。）' });
   tidyChatSetMsgs(msgs);
   inp.value = '';
   tidyUpdateTask(tidyState.chatId, { detail: text.slice(0, 40) });
   renderTidyChat();
+
+  var cid = tidyState.chatId;
+  var idx = tidyChatMsgs().length;
+  tidyChatAppend({ role: 'sys', text: 'AI 正在思考…' });
+  tidyState.chatSending = true;
+  var sendBtn = document.getElementById('tidyChatSendBtn');
+  if (sendBtn) sendBtn.disabled = true;
+
+  tidyAiRequest().then(function (res){
+    tidyChatReplace(idx, { role: 'ai', text: res.reply || '（AI 没有给出内容）' });
+    if (typeof NfoCore !== 'undefined' && NfoCore.quotaInc) NfoCore.quotaInc('tidy115');
+    var items = (res.plan && res.plan.items) ? res.plan.items : [];
+    if (items.length){
+      /* 清单可能很长，落盘前先截断，避免把 localStorage 撑爆 */
+      var slim = { root: res.plan.root || '', items: items.slice(0, 800) };
+      tidyChatAppend({ role: 'plan', text: '整理清单', count: items.length, plan: slim });
+      tidyTaskStep(cid, 'chat', 'ok', '');
+      tidyTaskStep(cid, 'plan', 'ok', items.length + ' 项');
+      showToast('AI 已生成整理清单（' + items.length + ' 项）', 'success');
+    } else {
+      tidyTaskStep(cid, 'chat', 'ok', '');
+    }
+  }, function (e){
+    var m = (e && e.message) || '网络错误';
+    tidyChatReplace(idx, { role: 'ai', text: '出错了：' + m });
+    tidyTaskStep(cid, 'chat', 'fail', m);
+  }).then(function (){
+    tidyState.chatSending = false;
+    if (sendBtn) sendBtn.disabled = false;
+  });
 }
 
 /* —— 规则页 —— */
@@ -8503,6 +8668,7 @@ function tidyJsonRun(){
   var j = tidyState.json;
   var task = tidyNewTask('rule', tidyFolderName(), 'json');
   tidyState.pendingTask = task.id;
+  tidyState.pendingKind = 'json';
   tidyTaskStep(task.id, 'read', 'ok', '共 ' + j.items.length + ' 条清单');
   tidyTaskStep(task.id, 'locate', 'running', '');
   showToast('正在定位清单里的文件…', 'info');
@@ -8512,7 +8678,7 @@ function tidyJsonRun(){
     if (!plan.ops.length){
       tidyTaskStep(task.id, 'locate', 'fail', '没匹配到文件');
       tidyUpdateTask(task.id, { state: 'fail', detail: '没匹配到可改名的文件' });
-      tidyState.pendingTask = null;
+      tidyState.pendingTask = null; tidyState.pendingKind = null;
       showToast('没匹配到：清单里的文件在当前文件夹找不到', 'error');
       return;
     }
@@ -8524,7 +8690,68 @@ function tidyJsonRun(){
     var m = (e && e.message) || '网络错误';
     tidyTaskStep(task.id, 'locate', 'fail', m);
     tidyUpdateTask(task.id, { state: 'fail', detail: '定位失败' });
-    tidyState.pendingTask = null;
+    tidyState.pendingTask = null; tidyState.pendingKind = null;
+    showToast('定位失败：' + m, 'error');
+  });
+}
+
+/* —— AI 整理：把 AI 给的清单落到「定位 → 预览 → 执行」这条同动线上 ——
+   清单结构和 JSON 整理完全一致（{ root, items:[{dir,from,to}] }），所以直接复用那一套。 */
+function tidyAiPlanOpen(){
+  var msgs = tidyChatMsgs(), plan = null;
+  for (var i = msgs.length - 1; i >= 0; i--){
+    if (msgs[i] && msgs[i].role === 'plan' && msgs[i].plan){ plan = msgs[i].plan; break; }
+  }
+  if (!plan || !plan.items || !plan.items.length){ showToast('没有可执行的清单', 'error'); return; }
+  if (!tidyState.folder){ showToast('请先选择目标文件夹', 'error'); return; }
+  tidyState.aiPlan = plan;
+  tidyAiRun(plan);
+}
+/* 清单里的 dir 可能带、也可能不带目标文件夹名（AI 两种写法都常见），统一剥掉，保证能落到真实目录 */
+function tidyNormalizeAiEntries(plan){
+  var root = String(plan.root || '').replace(/^\/+|\/+$/g, '');
+  var fname = (tidyState.folder && tidyState.folder.name) ? tidyState.folder.name : '';
+  return (plan.items || []).map(function (en){
+    var d = String(en.dir || '').replace(/^\/+|\/+$/g, '');
+    [root, fname].forEach(function (pre){
+      if (!pre) return;
+      if (d === pre) d = '';
+      else if (d.indexOf(pre + '/') === 0) d = d.slice(pre.length + 1);
+    });
+    return { dir: d, from: en.from, to: en.to };
+  });
+}
+function tidyAiRun(plan){
+  var taskId = tidyState.chatId;
+  if (!taskId){ taskId = tidyNewTask('ai', tidyFolderName(), 'ai').id; tidyState.chatId = taskId; }
+  tidyState.pendingTask = taskId;
+  tidyState.pendingKind = 'ai';
+  tidyTaskStep(taskId, 'tree', 'ok', '');
+  tidyTaskStep(taskId, 'chat', 'ok', '');
+  tidyTaskStep(taskId, 'plan', 'ok', '共 ' + plan.items.length + ' 项');
+  tidyTaskStep(taskId, 'exec', 'running', '正在定位文件');
+  showToast('正在定位清单里的文件…', 'info');
+  var entries = tidyNormalizeAiEntries(plan);
+  tidyJsonSnapshots(tidyState.folder.cid, entries).then(function (byDir){
+    var res = TidyCore.planRule('jsonPlan', [], { entries: entries, root: '', byDir: byDir });
+    var miss = res.miss || [];
+    if (!res.ops.length){
+      tidyTaskStep(taskId, 'exec', 'fail', '没匹配到文件');
+      tidyUpdateTask(taskId, { state: 'fail', detail: '清单里的名字在当前文件夹找不到' });
+      tidyState.pendingTask = null; tidyState.pendingKind = null;
+      showToast('没匹配到：清单里的名字在当前文件夹找不到', 'error');
+      return;
+    }
+    tidyTaskStep(taskId, 'exec', 'running', '待整理 ' + res.ops.length + ' 项' + (miss.length ? ('，未匹配 ' + miss.length + ' 项') : ''));
+    tidyState.preview = res.ops;
+    renderTidyPreview(res.ops);
+    tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
+    if (miss.length) showToast('有 ' + miss.length + ' 项名字在文件夹里找不到，已跳过', 'info');
+  }).catch(function (e){
+    var m = (e && e.message) || '网络错误';
+    tidyTaskStep(taskId, 'exec', 'fail', m);
+    tidyUpdateTask(taskId, { state: 'fail', detail: '定位失败' });
+    tidyState.pendingTask = null; tidyState.pendingKind = null;
     showToast('定位失败：' + m, 'error');
   });
 }
@@ -8595,6 +8822,7 @@ function tidyPreviewRun(){
   }
   var task = tidyNewTask('rule', tidyFolderName(), 'rule');
   tidyState.pendingTask = task.id;
+  tidyState.pendingKind = 'rule';
   tidyTaskStep(task.id, 'scan', 'running', '');
   showToast('正在读取文件夹…', 'info');
   auto115ListDirAll(tidyState.folder.cid).then(function (list){
@@ -8607,14 +8835,14 @@ function tidyPreviewRun(){
     if (!plan.ok){
       tidyTaskStep(task.id, 'plan', 'fail', plan.reason || '该规则暂不可用');
       tidyUpdateTask(task.id, { state: 'fail', detail: plan.reason || '该规则暂不可用' });
-      tidyState.pendingTask = null;
+      tidyState.pendingTask = null; tidyState.pendingKind = null;
       showToast(plan.reason || '该规则暂不可用', 'error'); return;
     }
     if (!plan.ops.length){
       tidyTaskStep(task.id, 'plan', 'ok', '无需整理');
       tidyTaskStep(task.id, 'exec', 'skip', '没有需要整理的项目');
       tidyUpdateTask(task.id, { state: 'done', detail: '没有需要整理的项目' });
-      tidyState.pendingTask = null;
+      tidyState.pendingTask = null; tidyState.pendingKind = null;
       showToast('没有需要整理的项目', 'success'); return;
     }
     tidyTaskStep(task.id, 'plan', 'ok', '待整理 ' + plan.ops.length + ' 项');
@@ -8625,17 +8853,22 @@ function tidyPreviewRun(){
     var m = (e && e.message) || '网络错误';
     tidyTaskStep(task.id, 'scan', 'fail', m);
     tidyUpdateTask(task.id, { state: 'fail', detail: '读取失败' });
-    tidyState.pendingTask = null;
+    tidyState.pendingTask = null; tidyState.pendingKind = null;
     showToast('读取失败：' + m, 'error');
   });
 }
 function closeTidyPreview(){
   tidySheetClose('tidyPreviewMask', 'tidyPreviewSheet');
-  // 用户在预览里点了取消：这次整理没发生，任务也不该留在列表里
-  if (tidyState.pendingTask){
-    tidyTaskRemove(tidyState.pendingTask);
-    tidyState.pendingTask = null;
+  /* 用户在预览里点了取消：这次整理没发生。
+     规则 / JSON 任务是为这一次整理建的 → 直接删掉；
+     AI 任务承载着整段对话 → 必须保留，只把「执行」步复位。 */
+  var id = tidyState.pendingTask, kind = tidyState.pendingKind;
+  if (id){
+    if (kind === 'ai') tidyTaskStep(id, 'exec', 'idle', '');
+    else tidyTaskRemove(id);
   }
+  tidyState.pendingTask = null;
+  tidyState.pendingKind = null;
 }
 function renderTidyPreview(ops){
   var box = document.getElementById('tidyPreviewList');
@@ -8658,14 +8891,19 @@ function tidyExecute(){
   if (btn){ btn.disabled = true; btn.textContent = '正在整理…'; }
   /* 任务在「预览」阶段就已建好（读取/计划两步已完成），这里接着跑执行步 */
   var taskId = tidyState.pendingTask;
+  var kind = tidyState.pendingKind || 'rule';
   tidyState.pendingTask = null;
+  tidyState.pendingKind = null;
   if (!taskId){
-    var kind = (tidyState.ruleId === 'jsonPlan') ? 'json' : 'rule';
-    var t0 = tidyNewTask('rule', tidyFolderName(), kind);
+    var t0 = tidyNewTask(kind === 'ai' ? 'ai' : 'rule', tidyFolderName(), kind);
     taskId = t0.id;
     if (kind === 'json'){
       tidyTaskStep(taskId, 'read', 'ok', '');
       tidyTaskStep(taskId, 'locate', 'ok', '待整理 ' + ops.length + ' 项');
+    } else if (kind === 'ai'){
+      tidyTaskStep(taskId, 'tree', 'ok', '');
+      tidyTaskStep(taskId, 'chat', 'ok', '');
+      tidyTaskStep(taskId, 'plan', 'ok', '待整理 ' + ops.length + ' 项');
     } else {
       tidyTaskStep(taskId, 'scan', 'ok', '');
       tidyTaskStep(taskId, 'plan', 'ok', '待整理 ' + ops.length + ' 项');
@@ -8678,7 +8916,11 @@ function tidyExecute(){
       var detail = '成功 ' + done + ' 项' + (failed ? '，失败 ' + failed + ' 项' : '');
       tidyTaskStep(taskId, 'exec', failed ? 'fail' : 'ok', detail);
       tidyUpdateTask(taskId, { state: failed ? 'fail' : 'done', detail: detail });
+      /* 规则 / JSON 整理是纯客户端动作（服务端不参与）→ 由客户端自报一次「文件整理」配额；
+         AI 整理在对话那一步已经由服务端计过数，这里不重复计。 */
+      if (kind !== 'ai' && done > 0){ NfoCore.quotaInc('tidy115'); reportQuotaUse('tidy115'); }
       tidyState.preview = null;
+      tidyState.aiPlan = null;
       closeTidyPreview();
       if (btn){ btn.disabled = false; btn.textContent = '预览并整理'; }
       showToast('整理完成：' + detail, failed ? 'error' : 'success');

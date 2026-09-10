@@ -1659,6 +1659,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-msg.ai { background: var(--card-fill); color: var(--label); border-bottom-left-radius: 5px; }
 .tidy-msg.me { margin-left: auto; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
 .tidy-msg.sys { max-width: 100%; background: transparent; color: var(--label-3); font-size: 12.5px; text-align: center; padding: 6px 0; }
+/* AI 给出整理清单后的操作卡（左文案 + 右侧执行按钮） */
+.tidy-msg.plan { max-width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 0.5px solid var(--sep); }
+.tidy-msg.plan .tp-tx { flex: 1; min-width: 0; font-size: 14px; color: var(--label); }
+.tidy-msg.plan .tp-btn { flex: none; border: none; border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; color: #fff; background: #5856D6; }
+.tidy-msg.plan .tp-btn:active { opacity: .8; }
+.tidy-chat-send[disabled] { opacity: .5; }
 .tidy-chat-bar { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); border-top: 0.5px solid var(--sep); background: var(--bg); }
 .tidy-chat-input { flex: 1; min-height: 38px; max-height: 120px; border: none; background: var(--card-fill); border-radius: 19px; padding: 9px 14px; font-size: 15px; line-height: 1.4; color: var(--label); resize: none; -webkit-user-select: text; }
 .tidy-chat-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }

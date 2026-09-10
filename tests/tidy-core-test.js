@@ -206,3 +206,44 @@ assert(TidyCore.findRule('jsonPlan') && TidyCore.findRule('jsonPlan').rule.done 
 assert(TidyCore.RULE_GROUPS[1].rules.every(function (r) { return r.done === true; }), '注册表：A 组 9 条全部已实现');
 assert(TidyCore.PRESETS.length === 6, '注册表：6 个预设包');
 assert(TidyCore.PRESETS[0].rules.indexOf('watermark') >= 0, '注册表：安全快修包含水印清洗');
+
+/* ================= 官方「导出目录树」解析（路子 A） ================= */
+/* 造一段与 115 真实产物同格式的文本：根行 |——根名，其余 <缩进>|-名字（缩进每层 2 字符） */
+const expTxt = [
+  '|——根目录',
+  '| |-云下载',
+  '| | |-OPUD-008 一部片',
+  '| | | |-OPUD-008.wmv',
+  '| | |-RKI-481 又一部',
+  '| | | |-RKI-481.mp4',
+  '| | | |-RKI-481.srt',
+  '| |-影视',
+  '| | |-电影'
+].join('\n');
+const exp = TidyCore.parseExportTree(expTxt);
+assert(exp.ok && exp.name === '根目录', '导出树：能读到根名');
+assert(exp.count === 8, '导出树：条目数正确（8 条，不含根行）');
+assert(exp.tree.children.length === 2 && exp.tree.children[0].name === '云下载', '导出树：一级挂在根下');
+assert(exp.tree.children[0].dir === true && exp.tree.children[0].children.length === 2, '导出树：有子节点的反推为目录');
+assert(exp.tree.children[1].children[0].name === '电影' && exp.tree.children[1].children[0].dir === false, '导出树：叶子节点视为文件');
+assert(exp.tree.children[0].children[0].children[0].name === 'OPUD-008.wmv', '导出树：深层嵌套正确');
+assert(TidyCore.parseExportTree('').ok === false, '导出树：空文本返回 ok=false');
+/* 多余的缩进（跳级坏数据）不该抛错，挂到已知最深父级 */
+assert(TidyCore.parseExportTree(['|——根', '| | | |-跳级'].join('\n')).count === 1, '导出树：跳级坏数据不抛错');
+/* 续行（名字里带换行被折下来）要拼回上一条 */
+const expFold = TidyCore.parseExportTree(['|——根', '| |-A', '| | |-名字前半', '后半'].join('\n'));
+assert(expFold.tree.children[0].children[0].name === '名字前半\n后半', '导出树：续行拼回上一条名字');
+/* 编码：UTF-16LE 带 BOM / UTF-8 带 BOM */
+const u16 = new Uint8Array([0xFF, 0xFE, 0x61, 0x00, 0x62, 0x00]);
+assert(TidyCore.decodeTreeBytes(u16) === 'ab', '导出树：UTF-16LE + BOM 解码');
+const u8b = new Uint8Array([0xEF, 0xBB, 0xBF, 0x61, 0x62]);
+assert(TidyCore.decodeTreeBytes(u8b) === 'ab', '导出树：UTF-8 + BOM 解码');
+
+/* 剪枝：超层 / 超节点都折叠并挂 note */
+const big = TidyCore.parseExportTree(['|——R', '| |-A', '| | |-B', '| | | |-C', '| | | | |-D'].join('\n')).tree;
+const trimmed = TidyCore.trimTree(big, { maxDepth: 2, maxNodes: 50 });
+assert(trimmed.children[0].name === 'A' && trimmed.children[0].children[0].name === 'B', '剪枝：保留到 maxDepth 层');
+assert(trimmed.children[0].children[0].note && trimmed.children[0].children[0].note.indexOf('2 项') >= 0, '剪枝：超层节点挂 note');
+assert(TidyCore.renderTreeText(trimmed).indexOf('已折叠') >= 0, '剪枝：note 会渲染进树文本');
+assert(JSON.stringify(TidyCore.trimTree(big, { maxDepth: 9, maxNodes: 1 })).indexOf('已折叠') >= 0, '剪枝：节点上限触发折叠');
+assert(TidyCore.countNodes(big) === 4, '剪枝：countNodes 统计后代数');
