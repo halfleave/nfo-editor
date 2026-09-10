@@ -400,13 +400,33 @@ function flushPendingTranslate(id){
 function persistApiSettings(allowClear){
   try {
     var apiKey = (document.getElementById('apiKeyInput').value || '').trim();
+    var codeEl = document.getElementById('activationCodeInput');
+    var code = codeEl ? (codeEl.value || '').trim() : (state.activationCode || '');
     // 自动保存（失焦 / 关闭面板）时，空值不覆盖已保存的非空配置，避免误清空全局设置；
     // 仅显式点「保存」(allowClear=true) 才允许用空值清空某项。
     if (allowClear || apiKey || !state.apiKey) state.apiKey = apiKey;
+    // AI 翻译三输入框（已并入「应用配置」弹窗）：输入框存在则读入，不存在则保留原值
+    var tBase = document.getElementById('translateBaseUrl');
+    var tKey = document.getElementById('translateApiKey');
+    var tModel = document.getElementById('translateModel');
+    if (tBase){ var vb = (tBase.value || '').trim(); if (allowClear || vb || !state.translateBaseUrl) state.translateBaseUrl = vb; }
+    if (tKey){ var vk = (tKey.value || '').trim(); if (allowClear || vk || !state.translateApiKey) state.translateApiKey = vk; }
+    if (tModel){ var vm = (tModel.value || '').trim(); if (allowClear || vm || !state.translateModel) state.translateModel = vm; }
+    var prevCode = state.activationCode;
+    if (allowClear || code || !state.activationCode) state.activationCode = code;
+    // 激活码清空或变更（未点验证）时档位失效：清空则真正降级为免费，变更则待验证后再生效。
+    // 以「持久化后的 state.activationCode」为准——仅失焦空输入（未点保存）不会误清档位。
+    if (!state.activationCode || state.activationCode !== prevCode) state.tier = '';
     return Promise.all([
       setTMDBKey(state.apiKey),
-      setMagnetConfig({ worker: state.magnetWorker, category: 'video' })
-    ]).then(function(){ updateSubtitleBtn(); });
+      setMagnetConfig({ worker: state.magnetWorker, category: 'video' }),
+      setActivationCode(state.activationCode),
+      setTier(state.tier),
+      setTranslateConfig({ baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel })
+    ]).then(function(){
+      updateSubtitleBtn();
+      if (typeof renderQuotaInfo === 'function') renderQuotaInfo();
+    });
   } catch(e) { return Promise.reject(e); }
 }
 

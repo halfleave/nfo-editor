@@ -11,7 +11,7 @@ function switchPage(page) {
   if (from && from !== 'detail' && page === 'detail') resumeDetailBgZoom();
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
   var tb = document.getElementById('tabBar');
-  if (tb) tb.style.display = (page === 'auto') ? 'none' : ''; // 自动化页为三级页：隐藏底部 tab 栏
+  if (tb) tb.style.display = (page === 'auto' || page === 'toolbox' || page === 'toolbox-magnet') ? 'none' : ''; // 自动化页 / 工具箱及其工具页为三级页：隐藏底部 tab 栏
   if (page === 'search'){
     // 普通模式（themeHidden=false）强制只能用 TMDB，里模式保留上次源
     if (!state.themeHidden){
@@ -1523,14 +1523,16 @@ function persistApiSettings(allowClear){
     if (allowClear || tBase || !state.translateBaseUrl) state.translateBaseUrl = tBase;
     if (allowClear || tKey || !state.translateApiKey) state.translateApiKey = tKey;
     if (allowClear || tModel || !state.translateModel) state.translateModel = tModel;
-    // 激活码清空或变更（未点验证）时，档位需重验证：清空则降级，变更则待验证后再生效
-    if (!code || code !== prevCode) state.tier = '';
+    // 激活码清空或变更（未点验证）时档位失效：清空则真正降级为免费，变更则待验证后再生效。
+    // 以「持久化后的 state.activationCode」为准——仅失焦空输入（未点保存）不会误清档位。
+    if (!state.activationCode || state.activationCode !== prevCode) state.tier = '';
     Promise.all([
       setTMDBKey(state.apiKey),
       setMagnetConfig({ worker: state.magnetWorker, category: 'video' }),
       setActivationCode(state.activationCode),
+      setTier(state.tier),
       setTranslateConfig({ baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel })
-    ]).then(function(){ updateSubtitleBtn(); updateActivationStatus(); }).catch(function(){});
+    ]).then(function(){ updateSubtitleBtn(); updateActivationStatus(); renderQuotaInfo(); }).catch(function(){});
   } catch(e) {}
 }
 function saveApiKey(){
@@ -1593,7 +1595,7 @@ function verifyActivationCode(){
     .catch(function(){ showToast('验证失败，请稍后重试', 'error'); });
 }
 /* 激活码下方「剩余次数」：免费/中级档按天显示各配额桶剩余，高级档显示已解锁；
-   主行 = TMDB搜索｜TMDB保存｜115整理；里模式追加第二行 JAV搜索｜JAV保存。
+   主行 = TMDB搜索｜TMDB保存｜文件整理；里模式追加第二行 JAV搜索｜JAV保存。
    先本地计数即时渲染，再拉服务端 /quota 覆盖为「同档位所有用户共享」的真实剩余。 */
 function renderQuotaInfo(){
   var el = document.getElementById('quotaInfo');
@@ -1751,8 +1753,11 @@ function clearMagnetQuery(){
   if (box) box.innerHTML = '';
 }
 function searchMagnet(){
-  var q = (document.getElementById('magnetQueryInput').value || '').trim();
-  var box = document.getElementById('magnetResults');
+  magnetSearchTo((document.getElementById('magnetQueryInput').value || '').trim(), document.getElementById('magnetResults'));
+}
+/* 磁力搜索主流程：q = 关键词，box = 结果容器（上下文版弹窗 / 工具箱通用页共用同一套逻辑） */
+function magnetSearchTo(q, box){
+  if (!box) return;
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
   if (!w){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → 应用配置」填写代理服务地址。</div>'; return; }
@@ -1782,8 +1787,9 @@ function searchMagnet(){
     })
     .finally(function(){ clearTimeout(to); stopLoadingRotator(); });
 }
-function renderMagnetResults(items){
-  var box = document.getElementById('magnetResults');
+function renderMagnetResults(items, box){
+  box = box || document.getElementById('magnetResults');
+  if (!box) return;
   if (!items || !items.length){ box.innerHTML = '<div class="tmdb-msg">未找到磁力链接</div>'; return; }
   var html = '';
   for (var i = 0; i < items.length; i++){
@@ -1841,12 +1847,14 @@ function openMagnetOp(el){
     // 任何位置的「115离线」都走自动化流水线：创建任务→自动跑六步，不再裸调离线接口
     var layer = document.createElement('div');
     layer.className = 'magnet-inline-actions';
+    // 「115离线」按影片建档（自动化任务），需已打开某部影片；未打开影片（如工具箱通用搜索）只给「复制」
+    var can115 = !!currentDetailFilm;
     layer.innerHTML = '<button type="button" class="magnet-inline-copy">复制</button>'
-      + '<button type="button" class="magnet-inline-115">115离线</button>';
+      + (can115 ? '<button type="button" class="magnet-inline-115">115离线</button>' : '');
     // 蒙版与按钮均不触发整行的 openMagnetOp
     layer.addEventListener('click', function(ev){ ev.stopPropagation(); });
     layer.querySelector('.magnet-inline-copy').addEventListener('click', function(ev){ ev.stopPropagation(); magnetOpCopy(); });
-    layer.querySelector('.magnet-inline-115').addEventListener('click', function(ev){
+    if (can115) layer.querySelector('.magnet-inline-115').addEventListener('click', function(ev){
       ev.stopPropagation();
       closeAllSheets(); /* 从磁力弹窗的搜索页发起时，顺手收起弹窗露出自动化页 */
       auto115AddFromOp();
@@ -4210,9 +4218,16 @@ function auto115AddFromOp(){
 }
 /* 添加磁力 弹窗：手动粘贴磁力链做 115 离线——与「115 离线」入口等价，只是磁力来源是用户粘贴而非数据源；绑定当前影片，改名/整理按详情页标题·番号 */
 function openMagnetCombo(tab){
-  switchMagnetComboTab(tab === 'search' ? 'search' : 'add');
+  // 磁力搜索（服务端 bt4g）仅高级档：非高级隐藏「搜索」页签，只留「添加磁力」（该功能对三档开放）
+  var isFull = (state.tier || '') === 'full';
+  var tabs = document.querySelectorAll('#magnetComboSheet .mc-tab');
+  for (var i = 0; i < tabs.length; i++){
+    if (tabs[i].getAttribute('data-tab') === 'search') tabs[i].style.display = isFull ? '' : 'none';
+  }
+  var want = (tab === 'search' && isFull) ? 'search' : 'add';
+  switchMagnetComboTab(want);
   // 添加磁力：每次进入都清空，避免残留上次粘贴的内容
-  if (tab !== 'search'){
+  if (want !== 'search'){
     var mInp = document.getElementById('magnetInput');
     if (mInp) mInp.value = '';
   }
@@ -7641,6 +7656,7 @@ function closeTrailer(){
 }
 /* —— 详情页底部胶囊按钮下的图标操作 —— */
 var editReturnToDetail = false;
+var editReturnToToolbox = false; // 从工具箱「新增 NFO」进入编辑页 → 返回时回工具箱（而非搜索页）
 function goAfterEdit(id){
   if (editReturnToDetail && id){
     editReturnToDetail = false;
@@ -7650,6 +7666,12 @@ function goAfterEdit(id){
   }
 }
 function editPageBack(){
+  if (editReturnToToolbox){   // 从工具箱进来 → 回工具箱（顺带刷新卡片，配额可能已变）
+    editReturnToToolbox = false;
+    renderToolbox();
+    switchPage('toolbox');
+    return;
+  }
   if (editReturnToDetail && currentFilmId){
     editReturnToDetail = false;
     openFilmDetail(encodeURIComponent(currentFilmId));
@@ -7711,7 +7733,85 @@ function newFilm(adult){
 function openCustomEdit(){
   newFilm(false);
   state.source = 'custom';   // 自定义添加：来源标记为 custom，刷新置灰不可点
+  editReturnToToolbox = (currentPage === 'toolbox'); // 从工具箱进来的：返回时回工具箱
   switchPage('edit');
+}
+
+/* ===== 工具箱（M2）：读注册表 → 渲染卡片 → 点击分发 =====
+   纯逻辑在 src/toolbox-core.js（注册表 + canUse）；本处只做渲染与跳转。
+   卡片两态：可用 / 灰态（右上角「即将上线」角标，未实现与未达档位统一显示此文案）；
+   灰态卡片不隐藏，点击给提示（留转化口子）。卡片只显示 图标 + 名称，不显示小字说明。 */
+var TOOL_ICONS = {
+  doc:    '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  sub:    '<rect x="3" y="5" width="18" height="13" rx="2"/><path d="M7 10h4M7 13.5h6M14 10h3"/>',
+  magnet: '<path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/>',
+  folder: '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/><path d="M7.5 11.5h9M7.5 15h6"/>',
+  image:  '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4 4 3-2 4 4"/>'
+};
+var TOOL_ICON_COLORS = { doc: '#5856D6', sub: '#0A84FF', magnet: '#FF6B00', folder: '#34C759', image: '#AF52DE' };
+function toolboxUsage(){
+  return (typeof NfoCore !== 'undefined' && NfoCore.quotaData) ? NfoCore.quotaData(state.tier || 'free') : null;
+}
+function toolboxIconHtml(key){
+  var body = TOOL_ICONS[key] || TOOL_ICONS.doc;
+  var color = TOOL_ICON_COLORS[key] || '#8E8E93';
+  return '<span class="tc-icon" style="background:' + color + ';">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + body + '</svg></span>';
+}
+function renderToolbox(){
+  var grid = document.getElementById('toolGrid');
+  if (!grid || typeof ToolboxCore === 'undefined') return;
+  var list = ToolboxCore.visibleTools(state.tier || '', toolboxUsage());
+  grid.innerHTML = list.map(function(item){
+    var t = item.tool;
+    // 卡片 = 图标 + 名称（不显示小字说明）；不可用时右上角角标显示原因（即将上线 / 今日次数已用完）
+    var badge = item.ok ? '' : '<span class="tc-soon">' + escapeHtml(item.reason || '即将上线') + '</span>';
+    return '<button class="tool-card' + (item.ok ? '' : ' locked') + '" onclick="toolboxOpen(\'' + t.id + '\')">' +
+      badge + toolboxIconHtml(t.icon) +
+      '<span class="tc-name">' + t.name + '</span>' +
+      '</button>';
+  }).join('');
+}
+function openToolbox(){
+  renderToolbox();
+  switchPage('toolbox');
+}
+function toolboxOpen(id){
+  if (typeof ToolboxCore === 'undefined') return;
+  var hit = null;
+  ToolboxCore.visibleTools(state.tier || '', toolboxUsage()).forEach(function(item){ if (item.tool.id === id) hit = item; });
+  if (!hit){ showToast('未知工具', 'error'); return; }
+  if (!hit.ok){ showToast(hit.reason || '暂不可用', 'success'); return; }
+  switch (hit.tool.page){
+    case 'newNfo': openCustomEdit(); return;           // T1 新增 NFO：复用「自定义添加」动线（清空 → 编辑页）
+    case 'magnet': openToolboxMagnet(); return;         // T3 磁力搜索 · 通用版（M3）：不绑影片的关键词搜索页
+    default: showToast('即将上线', 'success'); return;  // T2 / T4 / T5 在 M4-M6 接入
+  }
+}
+/* —— 工具箱 · 磁力搜索（通用版，M3）：不绑影片，进页清空输入与结果 —— */
+function openToolboxMagnet(){
+  var inp = document.getElementById('tbmQueryInput');
+  var box = document.getElementById('tbmResults');
+  if (inp) inp.value = '';
+  if (box) box.innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
+  toggleTbmClear();
+  switchPage('toolbox-magnet');
+}
+function toggleTbmClear(){
+  var inp = document.getElementById('tbmQueryInput');
+  var btn = document.getElementById('tbmClear');
+  if (inp && btn) btn.classList.toggle('show', (inp.value || '').length > 0);
+}
+function clearTbmQuery(){
+  var inp = document.getElementById('tbmQueryInput');
+  if (inp){ inp.value = ''; inp.focus(); }
+  var box = document.getElementById('tbmResults');
+  if (box) box.innerHTML = '';
+  toggleTbmClear();
+}
+function toolboxMagnetSearch(){
+  var inp = document.getElementById('tbmQueryInput');
+  magnetSearchTo(((inp && inp.value) || '').trim(), document.getElementById('tbmResults'));
 }
 
 /* —— 概览长按操作：iOS 原生风格底部 Action Sheet —— */

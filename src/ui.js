@@ -90,7 +90,6 @@ function closeAllSheets(){
   hideContextMenu();
 }
 function showAboutModal(){ openSheet('aboutModal'); }
-function openApiHelp(){ openSheet('apiHelpSheet'); }
 
 /* ---------- 通用确认对话框 ---------- */
 var _confirmCb = null;
@@ -385,25 +384,11 @@ function toggleSettingsMenu(){
   if (!m) return;
   _menuOpen = !_menuOpen;
   m.classList.toggle('show', _menuOpen);
-  if (_menuOpen) updateSettingsMenuThemeHidden();
 }
 function closeSettingsMenu(){
   var m = document.getElementById('settingsMenu');
   if (m) m.classList.remove('show');
   _menuOpen = false;
-}
-function updateSettingsMenuThemeHidden(){
-  var el = document.getElementById('smThemeHiddenState');
-  if (el){ el.textContent = state.themeHidden ? '开' : '关'; el.classList.toggle('on', !!state.themeHidden); }
-}
-function toggleThemeHiddenFromMenu(){
-  state.themeHidden = !state.themeHidden;
-  setThemeHidden(state.themeHidden);
-  syncThemeHiddenSwitch(); updateHiddenBadge(); updateOverviewTabVisibility();
-  updateSearchPlaceholder(); syncSearchSourceUI(); syncLibSearchUI(); syncAdultPhraseRow();
-  renderOverview();
-  updateSettingsMenuThemeHidden();
-  showToast(state.themeHidden ? '里模式已开启' : '里模式已关闭', 'success');
 }
 function openSettingsItem(key){
   closeSettingsMenu();
@@ -832,7 +817,7 @@ function libSearchJAV(q){
   if (!dd) return;
   var base = javbusApiBase();
   if (!base){
-    dd.innerHTML = '<div class="lib-search-empty">未配置 Worker 代理地址，请到「设置 → API 配置」<a href="javascript:void(0)" onclick="openApiKeySheet()">去配置</a></div>';
+    dd.innerHTML = '<div class="lib-search-empty">未配置 Worker 代理地址，请到「设置 → 应用配置」<a href="javascript:void(0)" onclick="openApiKeySheet()">去配置</a></div>';
     dd.classList.remove('hidden');
     return;
   }
@@ -1088,7 +1073,7 @@ function searchJAV(){
   var box = document.getElementById('tmdbResults');
   var base = javbusApiBase();
   if (!base){
-    box.innerHTML = '<div class="loading-bar">未配置 Worker 代理地址，请到「设置 → API 配置」<a href="javascript:void(0)" onclick="openApiKeySheet()">去配置</a></div>';
+    box.innerHTML = '<div class="loading-bar">未配置 Worker 代理地址，请到「设置 → 应用配置」<a href="javascript:void(0)" onclick="openApiKeySheet()">去配置</a></div>';
     showToast('请先配置 Worker 代理地址', 'error');
     return;
   }
@@ -2767,10 +2752,15 @@ function openApiKeySheet(){
   var set = function(id, v){ var el = document.getElementById(id); if (el) el.value = v || ''; };
   set('apiKeyInput', state.apiKey);
   set('activationCodeInput', state.activationCode);
-  toggleApiClear(); toggleActivationClear();
+  set('translateBaseUrl', state.translateBaseUrl);
+  set('translateApiKey', state.translateApiKey);
+  set('translateModel', state.translateModel);
+  toggleApiClear(); toggleActivationClear(); toggleTranslateClear();
   updateActivationStatus();
   renderQuotaInfo();
   openSheet('apiSheet');
+  /* 115 网盘组：回填 Cookie / 代理令牌并刷新授权状态（同一弹窗内） */
+  if (window.PC115 && typeof PC115.fillConfig === 'function') PC115.fillConfig();
 }
 function _toggleClear(inputId, btnId){
   var i = document.getElementById(inputId);
@@ -2818,7 +2808,7 @@ function verifyActivationCode(){
 }
 
 /* 激活码下方「剩余次数」：免费/中级档按天显示各配额桶剩余，高级档显示已解锁；
-   主行 = TMDB搜索｜TMDB保存｜115整理；里模式追加第二行 JAV搜索｜JAV保存。
+   主行 = TMDB搜索｜TMDB保存｜文件整理；里模式追加第二行 JAV搜索｜JAV保存。
    先本地计数即时渲染，再拉服务端 /quota 覆盖为「同档位所有用户共享」的真实剩余。 */
 function renderQuotaInfo(){
   var el = document.getElementById('quotaInfo');
@@ -2855,15 +2845,7 @@ function renderQuotaInfo(){
 }
 window.addEventListener('nfo:quota-changed', function(){ renderQuotaInfo(); });
 
-/* 翻译配置弹窗：回填输入框 */
-function openTranslateSheet(){
-  var set = function(id, v){ var el = document.getElementById(id); if (el) el.value = v || ''; };
-  set('translateBaseUrl', state.translateBaseUrl);
-  set('translateApiKey', state.translateApiKey);
-  set('translateModel', state.translateModel);
-  toggleTranslateClear();
-  openSheet('translateSheet');
-}
+/* AI 翻译输入框（已并入「应用配置」弹窗）：清除按钮显隐与清空 */
 function toggleTranslateClear(){
   var map = [['translateBaseUrl','translateBaseClear'],['translateApiKey','translateKeyClear'],['translateModel','translateModelClear']];
   map.forEach(function(p){
@@ -2874,22 +2856,6 @@ function toggleTranslateClear(){
 function clearTranslateBase(){ var i=document.getElementById('translateBaseUrl'); if(i){i.value='';toggleTranslateClear();i.focus();} }
 function clearTranslateKey(){ var i=document.getElementById('translateApiKey'); if(i){i.value='';toggleTranslateClear();i.focus();} }
 function clearTranslateModel(){ var i=document.getElementById('translateModel'); if(i){i.value='';toggleTranslateClear();i.focus();} }
-/* 读取翻译配置输入并持久化（静默） */
-function persistTranslateConfig(allowClear){
-  try {
-    var base = (document.getElementById('translateBaseUrl').value||'').trim();
-    var key = (document.getElementById('translateApiKey').value||'').trim();
-    var model = (document.getElementById('translateModel').value||'').trim();
-    if (allowClear || base || !state.translateBaseUrl) state.translateBaseUrl = base;
-    if (allowClear || key || !state.translateApiKey) state.translateApiKey = key;
-    if (allowClear || model || !state.translateModel) state.translateModel = model;
-    setTranslateConfig({ baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel }).catch(function(){});
-  } catch(e){}
-}
-function saveTranslateConfig(){
-  try { persistTranslateConfig(true); closeAllSheets(); showToast('已保存','success'); }
-  catch(e){ showToast('保存失败','error'); }
-}
 
 /* ===================================================================
    恢复初始状态

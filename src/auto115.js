@@ -127,11 +127,11 @@
     el.textContent = text || '';
     el.className = 'c115-status' + (type ? ' ' + type : '');
   }
-  function pc115OpenSheet() {
-    closeAllSheets();
+  /* 回填「应用配置 → 115 网盘」组（Cookie / 代理令牌 / 授权状态）。
+     115 配置已并入「应用配置」弹窗，本函数不再自行开弹窗。 */
+  function pc115FillConfig() {
     var ta = document.getElementById('c115CookiePc');
     if (ta) ta.value = '';
-    openSheet('pc115Sheet');
     pc115RefreshOpenStatus();
     idbGet('kv', C115_COOKIE_KEY).then(function (v) {
       var cookie = (typeof v === 'string') ? v : (v && v.cookie) || '';
@@ -148,6 +148,12 @@
     }).catch(function () { state.c115ProxyToken = C115_PROXY_TOKEN; });
     var vEl = document.getElementById('c115VerifyPc');
     if (vEl) { vEl.textContent = ''; vEl.className = 'c115-verify'; }
+  }
+  /* 兼容入口：115 配置已并入「应用配置」弹窗，统一走同一个打开动线（含各输入框回填） */
+  function pc115OpenSheet() {
+    if (typeof openApiKeySheet === 'function') { openApiKeySheet(); return; }
+    if (typeof openSheet === 'function') openSheet('apiSheet');
+    pc115FillConfig();
   }
   function pc115StartLogin() {
     if (c115QrTimer) { clearTimeout(c115QrTimer); c115QrTimer = null; }
@@ -1665,6 +1671,7 @@
     closeAutoPanel: pc115CloseAutoPanel,
     onDetailOpen: pc115OnDetailOpen,
     openConfig: pc115OpenSheet,
+    fillConfig: pc115FillConfig,
     startLogin: pc115StartLogin,
     verify: pc115Verify,
     tokenInput: pc115TokenInput,

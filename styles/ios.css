@@ -1547,6 +1547,25 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-topbar button svg { width: 22px; height: 22px; }
 .auto-topbar-title { position: absolute; left: 0; right: 0; pointer-events: none; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); }
 .auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
+/* 工具箱（M2）：二级页卡片网格（复用 .auto-topbar / .auto-scroll 作外壳） */
+.tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 6px 0 8px; }
+.tool-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; background: var(--card); border: none; border-radius: var(--radius-lg); padding: 14px; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.05); -webkit-tap-highlight-color: transparent; }
+.tool-card:active { background: var(--gray-fill); }
+.tool-card .tc-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+.tool-card .tc-icon svg { width: 19px; height: 19px; }
+.tool-card .tc-name { font-size: 15px; font-weight: 500; color: var(--label); }
+.tool-card.locked { opacity: .55; }
+.tool-card .tc-soon { position: absolute; top: 10px; right: 10px; font-size: 11px; line-height: 1.7; padding: 0 6px; border-radius: 999px; background: var(--gray-fill); color: var(--label-3); }
+/* 工具箱 · 磁力搜索（通用版，M3）：搜索行（视觉同磁力弹窗的搜索行；结果列表复用 .magnet-result） */
+#page-toolbox-magnet .tbm-search-row { display: flex; align-items: center; gap: 8px; padding: 4px 0 12px; }
+#page-toolbox-magnet .tbm-search-wrap { position: relative; flex: 1; min-width: 0; }
+#page-toolbox-magnet .tbm-search-wrap input { width: 100%; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 36px 10px 16px; font-size: 15px; color: var(--label); }
+#page-toolbox-magnet .tbm-search-wrap input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
+#page-toolbox-magnet .tbm-search-wrap .tbm-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; background: transparent; color: var(--label-3); font-size: 18px; line-height: 1; }
+#page-toolbox-magnet .tbm-search-wrap .tbm-clear.show { display: flex; }
+#page-toolbox-magnet .tbm-search-wrap .tbm-clear:active { opacity: .5; }
+#page-toolbox-magnet .tbm-go { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 14px; font-weight: 600; }
+#page-toolbox-magnet .tbm-list { padding-bottom: 8px; }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; text-align: center; }
 /* 上传入口：常驻在「目标」行上方，不依赖任何离线任务 */
 .auto-actions { display: flex; width: 60%; margin: 10px auto 12px; }

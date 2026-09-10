@@ -670,7 +670,7 @@ function normalizeJavbusFilm(d, opts){
   // ===== 本地按天配额计数（仅展示用，权威以服务端为准）=====
   // 字段：tmdbSearch / tmdbSave / javSearch / javSave / tidy115；档位 free=15、medium=30、full=不限
   var QUOTA_FIELDS = ['tmdbSearch', 'tmdbSave', 'javSearch', 'javSave', 'tidy115'];
-  var QUOTA_LABELS = { tmdbSearch: 'TMDB搜索', tmdbSave: 'TMDB保存', javSearch: 'JAV搜索', javSave: 'JAV保存', tidy115: '115整理' };
+  var QUOTA_LABELS = { tmdbSearch: 'TMDB搜索', tmdbSave: 'TMDB保存', javSearch: 'JAV搜索', javSave: 'JAV保存', tidy115: '文件整理' };
   var QUOTA_LIMITS = {
     free:   { tmdbSearch: 15, tmdbSave: 15, javSearch: 15, javSave: 15, tidy115: 15 },
     medium: { tmdbSearch: 30, tmdbSave: 30, javSearch: 30, javSave: 30, tidy115: 30 },

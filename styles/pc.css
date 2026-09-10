@@ -177,16 +177,13 @@ a:hover { text-decoration: underline; }
   gap: 12px;
 }
 
-/* 编辑弹窗内输入框统一小圆角（仅输入框，按钮/卡片等保持原样） */
-#page-edit .input,
-#page-edit .select,
-#page-edit .textarea { border-radius: var(--radius-xs); }
 .preset-chips .chip-add { cursor: pointer; user-select: none; }
 
+/* 输入框统一小圆角（搜索框除外——搜索框是 .search-field，不带 .input 类，仍是胶囊形） */
 .input, .textarea, .select {
   width: 100%; height: var(--control-h); padding: 0 10px;
   background: var(--surface); color: var(--text);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-xs);
   transition: border-color .12s, box-shadow .12s, background .12s;
 }
 .input::placeholder, .textarea::placeholder { color: var(--text-3); }
@@ -204,14 +201,14 @@ a:hover { text-decoration: underline; }
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236E6E73' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 9px center;
 }
-.input-sm { height: 26px; padding: 0 8px; font-size: 12px; border-radius: var(--radius-pill); }
-.select-sm { height: 26px; padding: 0 24px 0 8px; font-size: 12px; border-radius: var(--radius-pill); background-position: right 7px center; }
+.input-sm { height: 26px; padding: 0 8px; font-size: 12px; border-radius: var(--radius-xs); }
+.select-sm { height: 26px; padding: 0 24px 0 8px; font-size: 12px; border-radius: var(--radius-xs); background-position: right 7px center; }
 
 /* 输入带清除按钮 */
 .input-wrap { position: relative; display: flex; align-items: center; }
 .input-wrap .input { padding-right: 28px; }
 .input-wrap.has-title .input-title {
-  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
   width: auto; text-align: left; padding-right: 0;
   font-size: 13px; color: var(--text-2); pointer-events: none; white-space: nowrap;
 }
@@ -1860,9 +1857,7 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .auto-task-ops button { flex: 1; height: 28px; border-radius: 8px; font-size: 11.5px; font-weight: 500; background: var(--surface-hover); color: var(--text-2); }
 .auto-task-ops button.op-start { background: var(--accent, #007aff); color: #fff; }
 
-/* ==================== PC · 115 网盘配置弹窗 ==================== */
-.pc115-body { display: flex; flex-direction: column; gap: 14px; }
-.pc115-body .field { display: flex; flex-direction: column; gap: 6px; }
+/* ==================== PC · 115 网盘配置（已并入「应用配置」弹窗） ==================== */
 .pc115-cookie { width: 100%; resize: vertical; font-size: 12px; line-height: 1.5; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .field-ops { display: flex; gap: 6px; }
 .pc115-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
