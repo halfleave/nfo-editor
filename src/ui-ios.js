@@ -8181,44 +8181,115 @@ function renderTidyTarget(){
 function openTidyFolderPicker(){
   ensure115Cookie().then(function (ck){
     if (!ck){ showToast('请先到「设置 → 应用配置 → 115 配置」登录', 'error'); return; }
-    tidyState.pick = { cid: '0', name: '根目录', stack: [] };
+    tidyState.pick = { cid: '0', name: '根目录', stack: [], page: 0, noMore: false };
     tidyPickLoad();
     tidySheetOpen('tidyFolderMask', 'tidyFolderSheet');
   });
 }
 function closeTidyFolderPicker(){ tidySheetClose('tidyFolderMask', 'tidyFolderSheet'); }
+/* 每页条数（文件夹 + 文件混排，文件夹在前）。用 115 原生分页，不把整个目录拉下来 */
+var TIDY_PICK_PAGE_SIZE = 50;
+/* 读一页 → { items, count }；count 是 115 给的总条数（0 = 没给，只能用「本页是否满」推断还有没有） */
+function tidyPickFetchPage(cid, page){
+  var url = 'https://webapi.115.com/files?cid=' + encodeURIComponent(cid) +
+            '&offset=' + (page * TIDY_PICK_PAGE_SIZE) + '&limit=' + TIDY_PICK_PAGE_SIZE + '&show_dir=1';
+  return c115Call('read', function (){
+    return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } });
+  }).then(function (res){
+    var d = (res && res.d) || {};
+    var list = d.data || d.files || [];
+    if (!Array.isArray(list)) list = [];
+    return { items: list, count: Number(d.count || 0) || 0 };
+  });
+}
+/* 文件体积文本（文件行右侧小字） */
+function tidyPickSize(it){
+  var n = Number(it && (it.s != null ? it.s : it.size));
+  if (!isFinite(n) || n <= 0) return '';
+  var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+  while (n >= 1024 && i < u.length - 1){ n = n / 1024; i++; }
+  return (i === 0 ? String(Math.round(n)) : n.toFixed(n >= 100 ? 0 : 1)) + ' ' + u[i];
+}
+var TIDY_PICK_BACK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+var TIDY_PICK_DIR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/></svg>';
+var TIDY_PICK_FILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7.5A1.5 1.5 0 0 0 6 4.5v15A1.5 1.5 0 0 0 7.5 21h9a1.5 1.5 0 0 0 1.5-1.5V7z"/><path d="M14 3v4h4"/></svg>';
+/* 渲染一页：文件夹可点下钻，文件置灰只展示（选择器只选文件夹） */
+function tidyPickListHtml(items, pick, err){
+  var html = '';
+  if (pick.stack.length){
+    html += '<button class="tidy-pick-item" onclick="tidyPickUp()">' +
+      '<span class="tpi-ic">' + TIDY_PICK_BACK_SVG + '</span>' +
+      '<span class="tpi-name tpi-up">返回上一级</span></button>';
+  }
+  if (err){ return html + '<div class="tmdb-msg">读取失败：' + escapeHtml(err) + '</div>'; }
+  if (!items.length) html += '<div class="tmdb-msg">这个文件夹是空的</div>';
+  html += items.map(function (it){
+    var nm = (it && (it.n || it.name)) || '';
+    if (it && it.cid && !it.fid){
+      return '<button class="tidy-pick-item" onclick="tidyPickEnter(\'' + escapeAttr(String(it.cid)) + '\',\'' + escapeAttr(nm) + '\')">' +
+        '<span class="tpi-ic">' + TIDY_PICK_DIR_SVG + '</span>' +
+        '<span class="tpi-name">' + escapeHtml(nm) + '</span>' +
+        '<span class="tpi-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></button>';
+    }
+    var sz = tidyPickSize(it);
+    return '<div class="tidy-pick-item disabled">' +
+      '<span class="tpi-ic">' + TIDY_PICK_FILE_SVG + '</span>' +
+      '<span class="tpi-name">' + escapeHtml(nm) + '</span>' +
+      (sz ? '<span class="tpi-size">' + sz + '</span>' : '') + '</div>';
+  }).join('');
+  return html;
+}
+/* 底部翻页：只有一页就不显示 */
+function tidyPickPagerHtml(pick, page){
+  if (!pick.hasMore && page <= 0) return '';
+  var total = Number(pick.total || 0);
+  var label = total > 0
+    ? '第 ' + (page + 1) + ' / ' + Math.max(1, Math.ceil(total / TIDY_PICK_PAGE_SIZE)) + ' 页'
+    : '第 ' + (page + 1) + ' 页';
+  return '<button class="tpp-btn" onclick="tidyPickPrev()"' + (page <= 0 ? ' disabled' : '') + '>上一页</button>' +
+    '<span class="tpp-info">' + label + '</span>' +
+    '<button class="tpp-btn" onclick="tidyPickNext()"' + (pick.hasMore ? '' : ' disabled') + '>下一页</button>';
+}
 function tidyPickLoad(){
   var listEl = document.getElementById('tidyPickList');
   var pathEl = document.getElementById('tidyPickPath');
+  var pgEl = document.getElementById('tidyPickPager');
   var pick = tidyState.pick;
   if (!listEl || !pick) return;
+  var page = pick.page || 0;
   var trail = pick.stack.map(function (s) { return s.name; }).concat([pick.name]).join('/');
   if (pathEl) pathEl.textContent = tidyPathBrief(trail, 3);
+  if (pgEl) pgEl.innerHTML = '';
   listEl.innerHTML = '<div class="tmdb-msg">正在读取…</div>';
-  auto115ListDir(pick.cid).then(function (list){
-    var dirs = (list || []).filter(function (it) { return it && it.cid && !it.fid; });
-    var html = '';
-    if (pick.stack.length) html += '<button class="tidy-pick-item" onclick="tidyPickUp()">' +
-      '<span class="tpi-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>' +
-      '<span class="tpi-name tpi-up">返回上一级</span></button>';
-    if (!dirs.length && !pick.stack.length) html += '<div class="tmdb-msg">这里没有子文件夹</div>';
-    html += dirs.map(function (d){
-      var nm = d.n || d.name || '';
-      return '<button class="tidy-pick-item" onclick="tidyPickEnter(\'' + escapeAttr(String(d.cid)) + '\',\'' + escapeAttr(nm) + '\')">' +
-        '<span class="tpi-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/></svg></span>' +
-        '<span class="tpi-name">' + escapeHtml(nm) + '</span>' +
-        '<span class="tpi-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></button>';
-    }).join('');
-    listEl.innerHTML = html;
+  tidyPickFetchPage(pick.cid, page).then(function (r){
+    /* 翻过头了（末页刚好被翻走）→ 退回上一页，并记住没有下一页 */
+    if (!r.items.length && page > 0){ pick.page = page - 1; pick.noMore = true; tidyPickLoad(); return; }
+    pick.total = r.count;
+    pick.hasMore = pick.noMore ? false
+      : (r.count ? (page + 1) * TIDY_PICK_PAGE_SIZE < r.count : r.items.length >= TIDY_PICK_PAGE_SIZE);
+    listEl.innerHTML = tidyPickListHtml(r.items, pick, '');
+    listEl.scrollTop = 0;
+    if (pgEl) pgEl.innerHTML = tidyPickPagerHtml(pick, page);
   }).catch(function (e){
-    listEl.innerHTML = '<div class="tmdb-msg">读取失败：' + escapeHtml((e && e.message) || '网络错误') + '</div>';
+    listEl.innerHTML = tidyPickListHtml([], pick, (e && e.message) || '网络错误');
+    if (pgEl) pgEl.innerHTML = '';
   });
 }
+/* 翻页 */
+function tidyPickGo(page){
+  var pick = tidyState.pick;
+  if (!pick || page < 0) return;
+  pick.page = page;
+  tidyPickLoad();
+}
+function tidyPickPrev(){ var p = tidyState.pick; if (p && (p.page || 0) > 0) tidyPickGo(p.page - 1); }
+function tidyPickNext(){ var p = tidyState.pick; if (p && p.hasMore) tidyPickGo((p.page || 0) + 1); }
 function tidyPickEnter(cid, name){
   var pick = tidyState.pick;
   if (!pick) return;
   pick.stack.push({ cid: pick.cid, name: pick.name });
   pick.cid = String(cid); pick.name = name;
+  pick.page = 0; pick.noMore = false;
   tidyPickLoad();
 }
 function tidyPickUp(){
@@ -8226,6 +8297,7 @@ function tidyPickUp(){
   if (!pick || !pick.stack.length) return;
   var prev = pick.stack.pop();
   pick.cid = prev.cid; pick.name = prev.name;
+  pick.page = 0; pick.noMore = false;
   tidyPickLoad();
 }
 function tidyPickHere(){
@@ -8591,7 +8663,20 @@ function tidyStep(p, label){
   });
 }
 
-/* 获取目录树：只走 115 官方「导出目录树」接口，不成功就如实报错（无兜底） */
+/* ================= 目录树获取（B 方案：递归列目录拼树，绕开 CDN 403） ================= */
+var TIDY_TREE_MAX_FILES = 10000;  // 收集到的文件总数上限（只影响记进树的文件名数量，不增加请求）
+var TIDY_TREE_MAX_DIRS  = 300;    // 递归钻取的目录数上限（= 请求次数上限，直接决定耗时与风控姿态）
+var TIDY_TREE_MAX_DEPTH = 8;      // 递归深度上限
+var TIDY_TREE_MAX_NODES = 12000;  // 总节点（目录 + 文件）兜底上限，须 ≥ 文件上限才不会被提前截断
+/* 目录树节点 → 115 官方导出格式文本（根 |——名；子 <每层缩进2空格>|-名）。
+   下游 tidyTreeFromExport 解析它 → trim → render，AI 整理/JSON 整理零改动。 */
+function tidyNodeToExportText(node, depth, out){
+  if (depth === 0) out.push('|——' + (node.name || ''));
+  else out.push(new Array(depth * 2 + 1).join('  ') + '|-' + (node.name || ''));
+  var kids = node.children || [];
+  for (var i = 0; i < kids.length; i++) tidyNodeToExportText(kids[i], depth + 1, out);
+}
+/* 获取目录树：递归列目录拼树，绕开 115 的 CDN 文件下载（机房 IP 被 403 拦） */
 function tidyTreeFetch(){
   if (!tidyState.folder){ showToast('请先选择要整理的文件夹', 'error'); return; }
   if (!(state.c115Cookie || '')){ showToast('请先到「设置 → 应用配置 → 115 配置」登录', 'error'); return; }
@@ -8602,34 +8687,64 @@ function tidyTreeFetch(){
   var btn = document.getElementById('tidyTreeBtn');
   if (btn){ btn.disabled = true; btn.textContent = '获取中…'; }
   var idx = tidyChatMsgs().length;
-  tidyChatAppend({ role: 'sys', text: '正在向 115 提交「导出目录树」任务…' });
+  tidyChatAppend({ role: 'sys', text: '正在逐层读取目录…' });
   function say(t){ tidyChatReplace(idx, { role: 'sys', text: t }); }
   function finish(){
     tidyState.treeFetching = false;
     if (btn){ btn.disabled = false; btn.textContent = '获取目录树'; }
   }
-  tidyStep(tidyExportStart(tidyState.folder.cid), '提交导出任务').then(function (eid){
-    say('115 正在后台导出目录树…（文件夹大的话可能要等一会儿，最多等约 1 分半）');
-    return tidyStep(tidyExportPoll(eid, TIDY_TREE_POLL_MAX), '轮询导出状态');
-  }).then(function (info){
-    say('导出完成，正在下载并解析…');
-    /* 顺序关键：先下载、用完再删（失败也删，免得根目录越堆越多「目录树.txt」） */
-    return tidyStep(tidyExportDownload(info.pickCode), '下载目录树文件').then(function (raw){
-      tidyExportCleanup(info.fileId);
-      return raw;
-    }, function (err){
-      tidyExportCleanup(info.fileId);
-      throw err;
-    });
-  }).then(function (raw){
-    var r = tidyTreeFromExport(raw);
-    if (!r.text) {
-      var sniff = String(raw || '').replace(/\s+/g, ' ').slice(0, 200).trim();
-      throw new Error('目录树解析结果为空' + (sniff ? '（115 返回内容开头：' + sniff + '）' : '（下载到的内容为空）'));
-    }
+  /* 递归列目录自己拼树：彻底绕开 115 的 CDN 文件下载（机房 IP 被 403 拦）。
+     复用 auto115ListDirAll（已走防风控节流闸，所有 115 请求串行 0.35s 间隔）。
+     硬上限防超大目录卡死/过慢：文件 10000 / 目录 300 / 深度 8。
+     目录数 = 请求次数，直接决定耗时与「批量遍历」的风控姿态；文件数只影响记进树的文件名，不增加请求。 */
+  function isDirItem(it){ return !it.fid; }
+  var stats = { files: 0, nodes: 0, dirs: 0, omitted: 0, truncated: false };
+  function rec(cid, name, depth){
+    if (stats.truncated || depth > TIDY_TREE_MAX_DEPTH) return Promise.resolve(null);
+    if (stats.dirs >= TIDY_TREE_MAX_DIRS) { stats.omitted++; return Promise.resolve(null); }
+    stats.dirs++; stats.nodes++;
+    var node = { name: name, dir: true, children: [] };
+    return auto115ListDirAll(cid, 12000).then(function (list){
+      var dirs = [], files = [];
+      for (var i = 0; i < list.length; i++){
+        var it = list[i], nm = it.n || it.name || '';
+        if (!nm) continue;
+        if (isDirItem(it)){
+          if (stats.dirs < TIDY_TREE_MAX_DIRS && depth + 1 <= TIDY_TREE_MAX_DEPTH) dirs.push({ cid: it.cid || it.fid, nm: nm });
+          else stats.omitted++;
+        } else if (stats.files < TIDY_TREE_MAX_FILES){
+          files.push(nm); stats.files++;
+        } else { stats.omitted++; stats.truncated = true; }
+      }
+      var chain = Promise.resolve();
+      dirs.forEach(function (d){
+        chain = chain.then(function (){
+          if (stats.truncated) return;
+          return rec(d.cid, d.nm, depth + 1).then(function (child){ if (child) node.children.push(child); },
+            function (){ /* 单个目录读取失败不致命，继续 */ });
+        });
+      });
+      return chain.then(function (){
+        for (var j = 0; j < files.length; j++){
+          if (stats.nodes >= TIDY_TREE_MAX_NODES){ stats.truncated = true; break; }
+          node.children.push({ name: files[j], dir: false, children: [] });
+          stats.nodes++;
+        }
+        if (stats.truncated) node.note = '…（已达上限，还有约 ' + stats.omitted + ' 项未列出）';
+        return node;
+      });
+    }, function (){ node.note = '读取失败'; return node; });
+  }
+  say('正在逐层读取目录（最多约 ' + TIDY_TREE_MAX_FILES + ' 个文件）…');
+  rec(tidyState.folder.cid, tidyState.folder.name || '根目录', 0).then(function (root){
+    if (!root) throw new Error('递归读取目录树失败（目录可能为空或无权访问）');
+    say('已读取 ' + stats.dirs + ' 个目录、' + stats.files + ' 个文件' + (stats.truncated ? '（已达上限，部分未列出）' : '') + '，正在生成目录树…');
+    var raw = []; tidyNodeToExportText(root, 0, raw);
+    var r = tidyTreeFromExport(raw.join('\n'));
+    if (!r.text) throw new Error('目录树解析结果为空（' + (stats.files + stats.dirs) + ' 项，但未产出可读文本）');
     var lines = r.text.split('\n').length;
     tidyState.tree = r.text;
-    say('导出完成：共 ' + (r.count || 0) + ' 项，已折叠到前 4 层');
+    say('读取完成：共 ' + (r.count || 0) + ' 项' + (stats.truncated ? '（已截断到上限）' : '') + '，已折叠到前 4 层');
     /* 同一会话只留最新一份目录树，反复获取时不会越堆越多 */
     var msgs = tidyChatMsgs().filter(function (m){ return m && m.role !== 'tree'; });
     msgs.push({ role: 'tree', text: r.text, lines: lines });
