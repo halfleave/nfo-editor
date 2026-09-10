@@ -8418,7 +8418,10 @@ function renderTidyChat(){
         '<button class="tp-btn" onclick="tidyAiPlanOpen()">查看并执行</button></div>';
     }
     var cls = m.role === 'me' ? 'me' : (m.role === 'ai' ? 'ai' : 'sys');
-    return '<div class="tidy-msg ' + cls + '">' + escapeHtml(m.text) + '</div>';
+    var txt = String(m.text == null ? '' : m.text);
+    if (!txt.trim()) return '';                              /* 空消息不渲染，避免出现一条空白行 */
+    if (m.role !== 'me') txt = txt.replace(/\n{2,}/g, '\n'); /* AI / 系统消息里的连续空行压掉 */
+    return '<div class="tidy-msg ' + cls + '">' + escapeHtml(txt) + '</div>';
   }).join('');
   box.scrollTop = box.scrollHeight;
 }
@@ -8486,11 +8489,38 @@ function tidyExportPoll(eid, left){
   });
 }
 /* 取任意地址的原始字节（115 给的 CDN 下载地址也走同一条代理通道）。
-   noRef：代理侧不设 Referer/Origin —— 115 的 CDN 常因「外部 Referer」直接 403，去掉它是最常见的解法 */
+   115 的 CDN 会按「像不像浏览器」拦截服务器侧下载，且常见甩一个空 body 的 403。
+   逐一试不同伪装组合，命中即止（读请求风控低，失败才继续）：
+     ① 浏览器 UA + 去 Referer（代理默认可能是 Node UA，被 CDN 当爬虫）
+     ② 浏览器 UA + 带 115 的 Referer/Origin（部分 CDN 要求同源来源）
+     ③ 浏览器 UA + 去 Referer + 不带 Cookie（部分 CDN 拒绝携带 webapi Cookie 的请求） */
 function tidyExportFetchBytes(url){
-  return c115Call('read', function (){
-    return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true, noRef: true });
-  }).then(function (res){ return (res && res.bytes) || new Uint8Array(0); });
+  var UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+  var ck = state.c115Cookie || '';
+  var plans = [
+    { ck: true,  opts: { raw: true, noRef: true, ua: UA } },
+    { ck: true,  opts: { raw: true, ua: UA, xs: { 'Referer': 'https://115.com/', 'Origin': 'https://115.com' } } },
+    { ck: false, opts: { raw: true, noRef: true, ua: UA } }
+  ];
+  function go(i){
+    if (i >= plans.length){
+      var e = new Error('115 CDN 仍拒绝（已试 UA / 115 来源 / 去 Cookie 三种方式）');
+      e.status = 403;
+      throw e;
+    }
+    var p = plans[i];
+    var opts = { raw: true, noRef: p.opts.noRef, ua: p.opts.ua };
+    if (p.opts.xs) opts.xs = p.opts.xs;
+    if (p.ck) opts.headers = { 'X-115-Cookie': ck };
+    return c115Call('read', function (){ return c115ProxyFetch(url, opts); })
+      .then(function (res){
+        var u8 = (res && res.bytes) || new Uint8Array(0);
+        if (u8.length) return u8;
+        throw new Error('空响应');
+      })
+      .catch(function (){ return go(i + 1); });
+  }
+  return go(0);
 }
 /* ③ 按提取码取产物内容 → 文本。
    115 的 files/download 正常回 JSON（{state:true,file_url:"…"}），异常也回 JSON
