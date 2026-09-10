@@ -374,21 +374,26 @@
          （空目录会被误判为文件，这是导出格式的固有限制，导出产物里无法区分）
      本函数不发请求、不读全局，输入文本 → 输出树，便于 Node 侧单测。 */
 
-  /* 字节 → 文本。优先看 BOM；没有 BOM 时按「偶数位大量 0x00」判定 UTF-16LE。 */
+  /* 字节 → 文本。优先看 BOM；没有 BOM 时按「奇数位（每个 UTF-16LE 字符的高字节）大量为 0x00」判定 UTF-16LE。
+     为什么用奇数位而不是全部字节：中文为主的目录树里，ASCII 标记（| - / 数字 扩展名）少、中文多，
+     若按「全部字节 0x00 占比」算，中文多时会低于阈值被误判成 UTF-8，解出来 | 与 - 之间夹着 NUL → 解析不到标记 → 空树。
+     而 UTF-16LE 下 ASCII 字符一定是 <字节> 00，奇数位必为 0x00；UTF-8 文本几乎不出现 0x00，因此奇数位 0x00 占比是稳的判别信号。 */
   function decodeTreeBytes(buf) {
     var u8;
     if (buf && buf.buffer) u8 = new Uint8Array(buf.buffer, buf.byteOffset || 0, buf.byteLength);
     else if (buf instanceof Uint8Array) u8 = buf;
     else u8 = new Uint8Array(0);
-    var enc = 'utf-16le';
-    if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) enc = 'utf-8';
-    else if (u8.length >= 2 && u8[0] === 0xFE && u8[1] === 0xFF) enc = 'utf-16be';
-    else if (u8.length >= 2 && u8[0] === 0xFF && u8[1] === 0xFE) enc = 'utf-16le';
-    else {
-      var zeros = 0, probe = Math.min(u8.length, 400);
-      for (var i = 0; i < probe; i++) { if (u8[i] === 0) zeros++; }
-      enc = zeros > probe * 0.15 ? 'utf-16le' : 'utf-8';
-    }
+    /* 1) BOM 优先（115 真实导出是 UTF-16LE + BOM；代理若把字节重新编码可能丢 BOM，落到下面的无 BOM 分支） */
+    if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF)
+      return String(new TextDecoder('utf-8').decode(u8.subarray(3))).replace(/^\uFEFF/, '');
+    if (u8.length >= 2 && u8[0] === 0xFE && u8[1] === 0xFF)
+      return String(new TextDecoder('utf-16be').decode(u8)).replace(/^\uFEFF/, '');
+    if (u8.length >= 2 && u8[0] === 0xFF && u8[1] === 0xFE)
+      return String(new TextDecoder('utf-16le').decode(u8)).replace(/^\uFEFF/, '');
+    /* 2) 无 BOM：奇数位 0x00 占比高 → UTF-16LE（阈值 0.2 给中文为主的目录树留出空间） */
+    var oddZero = 0, probe = Math.min(u8.length, 600);
+    for (var i = 1; i < probe; i += 2) { if (u8[i] === 0) oddZero++; }
+    var enc = (probe > 0 && oddZero > probe * 0.2) ? 'utf-16le' : 'utf-8';
     var txt = '';
     try { txt = new TextDecoder(enc).decode(u8); }
     catch (e) {
@@ -396,6 +401,10 @@
       var out = [];
       for (var j = 0; j + 1 < u8.length; j += 2) out.push(String.fromCharCode(u8[j] | (u8[j + 1] << 8)));
       txt = out.join('');
+    }
+    /* 3) 兜底：解出来没有任何目录树标记、且奇数位 0x00 偏多（疑似被当 UTF-8 解坏的 UTF-16LE），改用 UTF-16LE 再解一次 */
+    if (txt.indexOf('|——') < 0 && txt.indexOf('|-') < 0 && enc === 'utf-8' && oddZero > probe * 0.08) {
+      try { txt = new TextDecoder('utf-16le').decode(u8); } catch (e2) {}
     }
     return String(txt).replace(/^\uFEFF/, '');
   }

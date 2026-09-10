@@ -8480,7 +8480,10 @@ function tidyExportDownload(pickCode){
     var txt = (typeof TidyCore !== 'undefined' && TidyCore.decodeTreeBytes)
       ? TidyCore.decodeTreeBytes(u8)
       : new TextDecoder('utf-16le').decode(u8);
-    if (!txt) throw new Error('目录树解码失败');
+    if (!txt) {
+      var sniff = (function(){ try { return new TextDecoder('utf-16le').decode(u8).replace(/\s+/g,' ').slice(0,160).trim(); } catch(e){ return ''; } })();
+      throw new Error('目录树解码失败' + (sniff ? '（UTF-16LE 试解开头：' + sniff + '）' : ''));
+    }
     return txt;
   });
 }
@@ -8534,7 +8537,10 @@ function tidyTreeFetch(){
     return tidyExportDownload(info.pickCode);
   }).then(function (raw){
     var r = tidyTreeFromExport(raw);
-    if (!r.text) throw new Error('目录树解析结果为空');
+    if (!r.text) {
+      var sniff = String(raw || '').replace(/\s+/g, ' ').slice(0, 200).trim();
+      throw new Error('目录树解析结果为空' + (sniff ? '（115 返回内容开头：' + sniff + '）' : '（下载到的内容为空）'));
+    }
     var lines = r.text.split('\n').length;
     tidyState.tree = r.text;
     say('导出完成：共 ' + (r.count || 0) + ' 项，已折叠到前 4 层');
