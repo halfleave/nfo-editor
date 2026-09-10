@@ -8435,8 +8435,11 @@ function tidyChatReplace(idx, msg){
    只走 115 官方「导出目录树」接口：
      ① POST webapi.115.com/files/export_dir  { file_ids, target=U_1_0 }  → export_id
      ② GET  同地址 ?export_id= 轮询 → { file_id, file_name, pick_code }
-     ③ GET  webapi.115.com/files/download?pickcode= → 原始字节（UTF-16LE）→ 解析
-     ④ 用完把产物删掉（丢进回收站，可恢复），免得根目录堆一堆「目录树.txt」
+     ③ GET  webapi.115.com/files/download?pickcode= → 115 一般回 JSON（里面给 file_url），
+        据此再取原始字节；个别情况直接回字节 —— 两种形态都认。产物是 UTF-16，自行解码。
+     ④ 下载结束（成功或失败）之后才把产物删掉（丢回收站，可恢复），免得根目录堆「目录树.txt」
+   ⚠️ ③ 必须早于 ④：先删再下 = 下载那一刻产物已进回收站，115 回
+      {state:false,msg:"文件不存在或已删除",msg_code:70005}（v303 之前就是这个顺序 bug）。
    注意：115 同一时间只允许一个导出任务，且超时不会自动取消 —— 失败就如实报错、让用户稍后重试，
    不做「逐层递归读取」的兜底（那条路风控高、对大库也慢）。 */
 var TIDY_TREE_POLL_MS = 3000;   // 轮询间隔（放慢到 3s：导出是异步任务，没必要 2s 一探）
@@ -8450,7 +8453,7 @@ function tidyExportStart(cid){
   ).then(function (res){
     var d = (res && res.d) || {};
     var eid = d.export_id || (d.data && d.data.export_id);
-    if (!eid) throw new Error((d.error || d.msg || '提交导出任务被拒绝'));
+    if (!eid) throw new Error('提交导出任务被拒绝：' + (d.error || d.msg || '115 未返回 export_id') + (d.msg_code ? '（' + d.msg_code + '）' : ''));
     return String(eid);
   });
 }
@@ -8465,17 +8468,48 @@ function tidyExportPoll(eid, left){
     if (info && (info.pick_code || info.pickcode)) {
       return { pickCode: String(info.pick_code || info.pickcode), fileId: String(info.file_id || ''), fileName: String(info.file_name || '') };
     }
-    if (left <= 0) throw new Error('导出超时（115 同一时间只允许一个导出任务）');
+    /* 115 明确回绝（state:false / 带 msg）→ 当场如实报错，不白等两分半。
+       正常「任务进行中」是 state:true + data 为空，会继续往下轮询。 */
+    if (d && (d.state === false || d.state === 0) && (d.msg || d.error)){
+      var m0 = String(d.msg || d.error);
+      /* 那句话本身表示「还在跑」就继续轮询（别把正常流程误判成失败） */
+      if (!/进行中|处理中|导出中|等待|正在|请稍/.test(m0)){
+        throw new Error('115：' + m0 + (d.msg_code ? '（' + d.msg_code + '）' : ''));
+      }
+    }
+    if (left <= 0) throw new Error('导出超时：115 后台导出没在两分半内完成，稍后再点一次（同一时间只允许一个导出任务）');
     return c115Sleep(TIDY_TREE_POLL_MS).then(function (){ return tidyExportPoll(eid, left - 1); });
   });
 }
-/* ③ 按提取码下载产物 → 原始文本 */
+/* 取任意地址的原始字节（115 给的 CDN 下载地址也走同一条代理通道） */
+function tidyExportFetchBytes(url){
+  return c115Call('read', function (){
+    return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true });
+  }).then(function (res){ return (res && res.bytes) || new Uint8Array(0); });
+}
+/* ③ 按提取码取产物内容 → 文本。
+   115 的 files/download 正常回 JSON（{state:true,file_url:"…"}），异常也回 JSON
+   （{state:false,msg,msg_code}）；个别情况下直接回文件字节。三种都认：
+     · 给地址 → 顺地址取字节   · 明确拒绝 → 如实抛出 115 的中文原因   · 就是字节 → 直接用 */
 function tidyExportDownload(pickCode){
   return c115Call('read', function (){
     return c115ProxyFetch('https://webapi.115.com/files/download?pickcode=' + encodeURIComponent(pickCode),
       { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true });
   }).then(function (res){
     var u8 = (res && res.bytes) || new Uint8Array(0);
+    if (!u8.length) throw new Error('115 没返回内容（下载产物为空）');
+    var head = '';
+    try { head = new TextDecoder('utf-8').decode(u8.subarray(0, Math.min(u8.length, 400))); } catch (_){ head = ''; }
+    if (/^\s*[\[{]/.test(head)){
+      var j = null;
+      try { j = JSON.parse(new TextDecoder('utf-8').decode(u8)); } catch (_){ j = null; }
+      var u = (j && (j.file_url || (j.data && (j.data.file_url || j.data.url)))) || '';
+      if (u) return tidyExportFetchBytes(u);
+      var why = (j && (j.msg || j.error)) || '没给下载地址';
+      throw new Error('115 拒绝提供下载：' + why + ((j && j.msg_code) ? '（' + j.msg_code + '）' : ''));
+    }
+    return u8;   // 直接就是文件内容
+  }).then(function (u8){
     if (!u8.length) throw new Error('下载到的目录树是空的');
     var txt = (typeof TidyCore !== 'undefined' && TidyCore.decodeTreeBytes)
       ? TidyCore.decodeTreeBytes(u8)
@@ -8533,8 +8567,14 @@ function tidyTreeFetch(){
     return tidyExportPoll(eid, TIDY_TREE_POLL_MAX);
   }).then(function (info){
     say('导出完成，正在下载并解析…');
-    tidyExportCleanup(info.fileId);
-    return tidyExportDownload(info.pickCode);
+    /* 顺序关键：先下载、用完再删（失败也删，免得根目录越堆越多「目录树.txt」） */
+    return tidyExportDownload(info.pickCode).then(function (raw){
+      tidyExportCleanup(info.fileId);
+      return raw;
+    }, function (err){
+      tidyExportCleanup(info.fileId);
+      throw err;
+    });
   }).then(function (raw){
     var r = tidyTreeFromExport(raw);
     if (!r.text) {
@@ -8554,7 +8594,9 @@ function tidyTreeFetch(){
     finish();
   }).catch(function (e){
     var m = (e && e.message) || '网络错误';
-    say('获取失败：' + m + '\n（115 同一时间只允许一个导出任务，稍等一会儿再点一次）');
+    /* 只在真正跟「导出任务」有关时才加那句提示（以前无脑追加，会把编码/权限类失败也说成任务占用） */
+    var hint = /导出|任务|频繁/.test(m) ? '\n（115 同一时间只允许一个导出任务，稍等一会儿再点一次）' : '';
+    say('获取失败：' + m + hint);
     if (id) tidyTaskStep(id, 'tree', 'fail', m);
     showToast('获取目录树失败：' + m, 'error');
     finish();
