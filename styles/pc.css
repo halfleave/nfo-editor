@@ -1413,7 +1413,7 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .quota-info .quota-sep { margin: 0 7px; opacity: .3; }
 .quota-info .quota-low b { color: #d97706; }
 .quota-info .quota-zero b { color: #dc2626; }
-.quota-info .quota-full { padding: 2px 0; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--text-2, #6b7280); }
+.quota-info .quota-head { padding: 0 0 3px; font-size: 11px; line-height: 1.5; color: var(--text-3, #9ca3af); }
 
 /* 设置子面板：从右侧滑入的抽屉形态（替代居中弹窗） */
 .modal.drawer-right {

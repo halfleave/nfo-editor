@@ -2818,23 +2818,40 @@ function verifyActivationCode(){
 }
 
 /* 激活码下方「剩余次数」：免费/中级档按天显示各配额桶剩余，高级档显示已解锁；
-   主行 = TMDB搜索｜TMDB保存｜115整理；里模式追加第二行 JAV搜索｜JAV保存 */
+   主行 = TMDB搜索｜TMDB保存｜115整理；里模式追加第二行 JAV搜索｜JAV保存。
+   先本地计数即时渲染，再拉服务端 /quota 覆盖为「同档位所有用户共享」的真实剩余。 */
 function renderQuotaInfo(){
   var el = document.getElementById('quotaInfo');
   if (!el) return;
   var tier = (state.tier || '').trim();
-  if (tier === 'full'){ el.innerHTML = '<div class="quota-full">已解锁全部功能 · 不限次</div>'; return; }
-  var data = NfoCore.quotaData(tier || 'free');
-  function chip(it){
-    var cls = it.remaining <= 0 ? ' quota-zero' : (it.remaining <= 3 ? ' quota-low' : '');
-    return '<span class="quota-chip' + cls + '">' + it.label + ' <b>' + it.remaining + '/' + it.limit + '</b></span>';
+  if (tier === 'full'){ el.innerHTML = ''; return; } // 高级档不限次：整块不显示
+  function paint(list){
+    function chip(it){
+      var cls = it.remaining <= 0 ? ' quota-zero' : (it.remaining <= 3 ? ' quota-low' : '');
+      return '<span class="quota-chip' + cls + '">' + it.label + ' <b>' + it.remaining + '/' + it.limit + '</b></span>';
+    }
+    function row(l){ return '<div class="quota-row">' + l.map(chip).join('<span class="quota-sep">｜</span>') + '</div>'; }
+    var main = list.filter(function(it){ return it.field !== 'javSearch' && it.field !== 'javSave'; });
+    var jav  = list.filter(function(it){ return it.field === 'javSearch' || it.field === 'javSave'; });
+    var html = row(main);
+    if (state.themeHidden) html += row(jav);
+    el.innerHTML = '<div class="quota-head">公共额度 · 每日0点刷新</div>' + html;
   }
-  function row(list){ return '<div class="quota-row">' + list.map(chip).join('<span class="quota-sep">｜</span>') + '</div>'; }
-  var main = data.filter(function(it){ return it.field !== 'javSearch' && it.field !== 'javSave'; });
-  var jav  = data.filter(function(it){ return it.field === 'javSearch' || it.field === 'javSave'; });
-  var html = row(main);
-  if (state.themeHidden) html += row(jav);
-  el.innerHTML = html;
+  var local = NfoCore.quotaData(tier || 'free');
+  paint(local); // 即时：本地计数
+  getActivationCode().then(function(code){
+    var base = state.magnetWorker || DEFAULT_WORKER;
+    return fetch(base + '/quota?code=' + encodeURIComponent(code || ''), { cache: 'no-store' }).then(function(r){ return r.json(); });
+  }).then(function(d){
+    if (!d || !d.ok || !d.fields || !d.fields.length) return; // 服务端不可用：保留本地值
+    var map = {};
+    d.fields.forEach(function(f){ map[f.field] = f; });
+    paint(local.map(function(it){
+      var s = map[it.field];
+      if (!s) return it;
+      return { field: it.field, label: it.label, limit: s.limit, remaining: s.remaining };
+    }));
+  }).catch(function(){ /* 网络异常：保留本地值 */ });
 }
 window.addEventListener('nfo:quota-changed', function(){ renderQuotaInfo(); });
 
