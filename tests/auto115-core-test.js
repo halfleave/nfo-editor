@@ -87,7 +87,7 @@ const p3names = plan3.renames.map(r => r.name);
 assert(p3names.indexOf('Y.S01E01.mkv') >= 0 && p3names.indexOf('Y.S01E02.mkv') >= 0 && p3names.length === 2, 'tvPlan：认不出集号顺序补号不撞号（ep2 被 E02 规则命中）');
 const plan4 = api.tvPlan('Z', [{ fid: 'd1', name: 'D.第二部 第1集.mkv' }, { fid: 'd2', name: 'D.第1集.mkv' }]);
 assert(plan4.renames.some(r => r.name === 'Z.S02E01.mkv'), 'tvPlan：第二部 → S02');
-/* 无集号字幕跟已有视频走（循环对齐），不再往后编出 E13、E14 */
+/* 无集号字幕不兜底：不改名、不删除，保持原名 */
 const plan5 = api.tvPlan('竞女', [
   { fid: 'v10', name: '竞女.S01E10.mkv' },
   { fid: 'v11', name: '竞女.S01E11.mkv' },
@@ -100,8 +100,22 @@ const plan5 = api.tvPlan('竞女', [
   { fid: 's6', name: '竞女.ass' }
 ]);
 const subNames5 = plan5.renames.filter(r => r.name.endsWith('.und.ass')).map(r => r.name);
-assert(subNames5.length === 6 && !/E1[3-9]/.test(subNames5.join(',')), 'tvPlan：无集号字幕循环对齐到 E10–E12，不继续往后编');
-assert(subNames5.filter(n => /E10/.test(n)).length === 2 && subNames5.filter(n => /E11/.test(n)).length === 2 && subNames5.filter(n => /E12/.test(n)).length === 2, 'tvPlan：无集号字幕在 E10–E12 间均分');
+/* 纯数字标题 → 直接当集号（01.ass → S01E01）；4 位分辨率不被误判 */
+assert((api.episodeOf('01.ass') || {}).episode === 1, 'episodeOf：纯数字 01 → 第 1 集');
+assert((api.episodeOf('12.srt') || {}).episode === 12, 'episodeOf：纯数字 12 → 第 12 集');
+assert((api.episodeOf('竞女.03.ass') || {}).episode === 3, 'episodeOf：剧名.03 → 第 3 集');
+assert((api.episodeOf('竞女_05.srt') || {}).episode === 5, 'episodeOf：剧名_05 → 第 5 集');
+assert(api.episodeOf('720.mkv') === null && api.episodeOf('1080.mkv') === null, 'episodeOf：720/1080 不被当成集号');
+const plan6 = api.tvPlan('竞女', [
+  { fid: 'v1', name: '竞女.S01E10.mkv' },
+  { fid: 's1', name: '01.ass' },
+  { fid: 's2', name: '11.ass' }
+]);
+const p6names = plan6.renames.map(r => r.name);
+assert(p6names.indexOf('竞女.S01E01.und.ass') >= 0, 'tvPlan：数字字幕 01 → S01E01');
+assert(p6names.indexOf('竞女.S01E11.und.ass') >= 0, 'tvPlan：数字字幕 11 → S01E11');
+assert(subNames5.length === 0, 'tvPlan：认不出集号的字幕不改名（无兜底），不会编出 E13、E14');
+assert(plan5.deleteFids.indexOf('s1') < 0 && plan5.deleteFids.indexOf('s6') < 0, 'tvPlan：认不出集号的字幕仍然保留，不进删除清单');
 
 /* ---------- 分季阈值 ---------- */
 const mkPlan = (list) => ({ renames: list.map(n => ({ name: n })) });

@@ -227,6 +227,13 @@
     var season = seasonCn ? (api.cnNum(seasonCn[1]) || 1) : 1;
     if (epCn) return { season: season, episode: api.cnNum(epCn[1]) || 1 };
     if (seasonCn) return { season: season, episode: null };
+    /* 纯数字 / 末尾独立数字：01.ass、02.srt、剧名.03.ass → 直接当集号。
+       只认 1~2 位数字、或以 0 开头的 3 位数字（001/012），避开 720/1080 这类分辨率误判成集号。 */
+    var base = name.replace(/\.[a-z0-9]+$/i, '').trim();
+    var mn = base.match(/^(0\d{1,2}|[1-9]?\d)$/);
+    if (mn) return { season: 1, episode: +mn[1] };
+    mn = base.match(/[.\-_\s](0\d{1,2}|[1-9]?\d)$/);
+    if (mn) return { season: 1, episode: +mn[1] };
     return null;
   };
   api.ext = function (name) { var m = /\.[a-z0-9]+$/i.exec(name || ''); return m ? m[0] : ''; };
@@ -269,37 +276,16 @@
       var s = (ep && ep.season) || 1;
       vidPlan.push({ fid: it.fid, season: s, ep: nextEp(s), orig: it.name, size: it.s || 0 });
     });
-    var subPlan = [], subPending = [];
+    /* 字幕不做兜底：只有能从文件名里明确认出集号（S01E01 / 第1集 / 01.ass 等）才改名；
+       认不出的保持原名不动、仍然保留（绝不进删除清单），避免误配到错误的集。 */
+    var subPlan = [];
     subs.forEach(function (it) {
       var lang = api.subLang(it.name);
       if (!lang){ junk.push(it); return; }
       var ep = api.episodeOf(it.name);
-      if (ep && ep.episode){ var s2 = ep.season || 1; subPlan.push({ fid: it.fid, season: s2, ep: ep.episode, lang: lang, orig: it.name, size: it.s || 0 }); return; }
-      subPending.push({ it: it, lang: lang });
+      if (ep && ep.episode){ var s2 = ep.season || 1; subPlan.push({ fid: it.fid, season: s2, ep: ep.episode, lang: lang, orig: it.name, size: it.s || 0 }); }
+      // 认不出集号 → 不改
     });
-    /* 待分配字幕（无集号）按季分组，从该季已识别的视频集号里循环取——
-       这样字幕会跟着已存在的视频走（不会继续往后编出 E13、E14…）。没有视频的季才往下补号。 */
-    if (subPending.length){
-      var subBySeason = {};
-      subPending.forEach(function (sp){
-        var epInfo = api.episodeOf(sp.it.name);
-        var s = (epInfo && epInfo.season) || 1;
-        if (!subBySeason[s]) subBySeason[s] = [];
-        subBySeason[s].push(sp);
-      });
-      Object.keys(subBySeason).forEach(function (sKey){
-        var s = parseInt(sKey, 10);
-        var pool = [];
-        for (var i = 0; i < vidPlan.length; i++){ if (vidPlan[i].season === s) pool.push(vidPlan[i].ep); }
-        pool.sort(function (a, b) { return a - b; });
-        var list = subBySeason[s];
-        for (var k = 0; k < list.length; k++){
-          var epNo = pool.length ? pool[k % pool.length] : nextEp(s);
-          var sp = list[k];
-          subPlan.push({ fid: sp.it.fid, season: s, ep: epNo, lang: sp.lang, orig: sp.it.name, size: sp.it.s || 0 });
-        }
-      });
-    }
     var renames = [];
     vidPlan.forEach(function (p) { renames.push({ fid: p.fid, name: api.tvVideoName(showTitle, p.season, p.ep, api.ext(p.orig)), orig: p.orig, size: p.size }); });
     subPlan.forEach(function (p) { renames.push({ fid: p.fid, name: api.tvSubName(showTitle, p.season, p.ep, p.lang, api.ext(p.orig)), orig: p.orig, size: p.size }); });
