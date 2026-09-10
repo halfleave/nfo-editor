@@ -1213,24 +1213,28 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 #sheet115 .c115-login-btn:disabled { opacity: 0.5; }
 #sheet115 .api-group-title { font-size: 13px; font-weight: 600; color: var(--label-2); margin: 0; letter-spacing: 0.2px; }
 #sheet115 .api-group-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-/* 115 配置：输入框内右侧复制按钮（与应用配置搜索框/激活码框同款） */
-#sheet115 .c115-cookie-wrap { position: relative; }
-#sheet115 .c115-cookie-wrap .ios-input { padding-right: 52px; }
+/* 115 配置：输入框对齐应用配置外观（card-fill 背景 + 圆角），右侧放自检按钮故宽度收窄 */
+#sheet115 .c115-cookie-wrap { position: relative; display: flex; flex: 1; min-width: 0; }
+#sheet115 .c115-cookie-wrap .ios-input { flex: 1; min-width: 0; width: auto; background: var(--card-fill); border: none; outline: none; border-radius: var(--radius-sm); font-size: 15px; padding: 12px 52px 12px 14px; }
+#sheet115 .c115-cookie-wrap .ios-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 #sheet115 .c115-copy-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: none; background: transparent; color: var(--accent); font-size: 13px; font-weight: 600; padding: 4px 6px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 #sheet115 .c115-copy-btn:active { opacity: 0.6; }
-/* 自检按钮 + 状态语：cookie 输入框下方一行 */
-#sheet115 .c115-selfcheck-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+#sheet115 .c115-input-row { display: flex; align-items: center; gap: 10px; }
+/* 115 配置弹窗高度 85% */
+#sheet115 { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
+/* 自检按钮：与输入框同一行，在输入框右侧；状态语：在输入框下方 */
 #sheet115 .c115-selfcheck-btn { flex: none; border: 1px solid var(--accent); background: var(--card-fill); color: var(--accent); border-radius: 980px; font-size: 13px; font-weight: 600; padding: 5px 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 #sheet115 .c115-selfcheck-btn:active { background: var(--accent); color: #fff; }
-#sheet115 .c115-verify-inline { font-size: 13px; color: var(--label-2); }
+#sheet115 .c115-verify-inline { display: block; font-size: 13px; color: var(--label-2); margin-top: 6px; min-height: 18px; }
 #sheet115 .c115-verify-inline.ok { color: var(--accent); font-weight: 600; }
 #sheet115 .c115-verify-inline.err { color: #ff3b30; font-weight: 600; }
-/* 弹窗底部：授权状态条（钉在最下方） */
-#sheet115 .c115-auth-foot { flex-shrink: 0; font-size: 12px; color: var(--label-3); text-align: center; padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--sep); margin-top: 4px; }
-/* 115 配置弹窗 85% 高 + 刷新倒计时 */
-#sheet115 { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
-#sheet115 { display: flex; flex-direction: column; padding-bottom: calc(var(--sab, env(safe-area-inset-bottom)) + 14px); }
-#sheet115 .sheet-list { flex: 1 1 auto; min-height: 0; max-height: 72vh; max-height: 72dvh; }
+/* 分组间距：登录信息与扫码登录之间拉开 */
+#sheet115 .api-group { margin-bottom: 22px; }
+#sheet115 .api-group:last-child { margin-bottom: 0; }
+/* 底部授权状态：固定钉在弹窗最底部（参考 #listSheet 做法：sheet 本身 overflow:hidden，内容区 flex:1 滚动） */
+#sheet115 { display: flex; flex-direction: column; overflow: hidden; }
+#sheet115 .sheet-list { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
+#sheet115 .c115-auth-foot { flex-shrink: 0; font-size: 12px; color: var(--label-3); text-align: center; padding: 10px 4px calc(10px + env(safe-area-inset-bottom)); }
 #sheet115 .c115-countdown { font-size: 12px; color: var(--label-3); text-align: center; margin-top: 6px; min-height: 16px; }
 /* 磁力列表：点击展开 复制 / 115离线 */
 .magnet-result { flex-wrap: wrap; }
