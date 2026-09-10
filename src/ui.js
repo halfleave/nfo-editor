@@ -1841,13 +1841,8 @@ function handleNfoImport(ev){
 }
 
 /* ---------- 其它同步 ---------- */
-function updateSubtitleBtn(){
-  var b = document.getElementById('dtActSub');
-  // 有番号（如 JAV）的影片不显示字幕按钮；字幕搜索按标题匹配，仅无番号影片适用
-  var hasDvdId = !!(state.dvdId && String(state.dvdId).trim());
-  // 对齐手机端 v212：字幕按钮仅满级显示；有番号（AV）影片不显示（字幕按标题匹配）
-  if (b) b.style.display = ((state.tier || '') === 'full' && !hasDvdId) ? '' : 'none';
-}
+/* 详情页字幕按钮已移除（详情页只留 编辑 / 元数据 / 删除），此处保留空函数兼容旧调用点 */
+function updateSubtitleBtn(){}
 function updateAdultPhraseCount(){
   var ta = document.getElementById('adultPhraseInput');
   var el = document.getElementById('adultPhraseCount');
@@ -1998,7 +1993,7 @@ function renderFilmDetail(film){
     if (currentDetailTrailer){ tb.removeAttribute('disabled'); if (tbt) tbt.textContent = '播放预告片'; }
     else { tb.setAttribute('disabled', 'disabled'); if (tbt) tbt.textContent = '暂无预告片'; }
   }
-  var mb = document.getElementById('dtActMagnet');
+  var mb = document.getElementById('dtActMagnet');   // 详情页磁力按钮已移除；入口改在自动化弹窗底部图标
   if (mb) mb.style.display = (state.activationCode && (state.magnetWorker || DEFAULT_WORKER)) ? '' : 'none';
   updateSubtitleBtn();
 

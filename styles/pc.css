@@ -317,12 +317,13 @@ a:hover { text-decoration: underline; }
   margin: 0 0 8px; padding-left: 2px;
 }
 
-/* 激活码区 */
-.activation-row {
-  display: flex; align-items: center; gap: 10px; margin-top: 4px;
-}
+/* 激活码区：状态跟在「激活码」标题后（～ 分隔），验证按钮贴输入框右侧 */
+.act-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.act-row .input-wrap { flex: 1; min-width: 0; }
+.act-sep { margin: 0 6px; color: var(--text-3); font-weight: 400; }
+.section-title .activation-status { flex: none; font-weight: 500; text-transform: none; }
 .activation-status {
-  flex: 1; font-size: 12px; color: var(--text-3); line-height: 1.4;
+  font-size: 12px; color: var(--text-3); line-height: 1.4;
 }
 .activation-status.ok { color: #2faa6a; font-weight: 600; }
 .activation-status.warn { color: #d9912b; font-weight: 600; }
@@ -891,17 +892,17 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
 /* ===================================================================
    12. 编辑页 —— 弹窗 / 表单
    =================================================================== */
-.edit-head { background: var(--glass-bg); }
+/* 新建影片弹窗：头部与 tab 行都不画分隔线（通高一体），tab 切换居中 */
+.modal-head.edit-head { background: var(--glass-bg); border-bottom: none; }
 .edit-head .badge { margin-left: 6px; }
-.edit-head-actions { display: flex; align-items: center; gap: 8px; }
 
 .edit-body { display: flex; flex-direction: column; padding: 0 !important; overflow: hidden !important; }
 .edit-tabs {
-  flex: 0 0 auto; padding: 10px 20px 0; border-bottom: 1px solid var(--border);
-  background: transparent;
+  flex: 0 0 auto; padding: 6px 20px 10px; border-bottom: none;
+  background: transparent; display: flex; justify-content: center;
 }
 .edit-tabs .seg { margin-bottom: 0; }
-.edit-tabs .seg button { padding: 0 12px; }
+.edit-tabs .seg button { padding: 0 14px; }
 
 #tab-media .poster-grid {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;
@@ -1098,7 +1099,7 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
 .detail-act:hover { background: rgba(255,255,255,.26); }
 .detail-act.danger:hover { background: rgba(255,59,48,.75); }
 .detail-act svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.detail-act #dtActMagnet svg, .detail-act .da-solid { fill: currentColor; stroke: none; }
+.detail-act .da-solid { fill: currentColor; stroke: none; }
 
 .detail-plot { font-size: 13.5px; line-height: 1.75; color: rgba(255,255,255,.9); cursor: pointer; white-space: pre-line; }
 .detail-plot:empty { display: none; }
@@ -1379,7 +1380,7 @@ body.edit-modal-open #page-edit .edit-modal-card.show {
   transform: none;
 }
 body.edit-modal-open #page-edit .modal-head.edit-head {
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
   background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none;
 }
 body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
@@ -1784,7 +1785,7 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .auto-badge-ok { background: #34c759; }
 .auto-popover {
   position: absolute; top: 48px; right: 12px; z-index: 60;
-  width: 340px; max-width: calc(100vw - 28px); max-height: 70vh; overflow: hidden;
+  width: 340px; max-width: calc(100vw - 28px); height: 620px; max-height: 86vh; overflow: hidden;
   display: none; flex-direction: column;
   background: var(--glass-bg-strong); border: 1px solid var(--glass-border); border-radius: var(--radius-panel);
   box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow-modal);
@@ -1798,7 +1799,20 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .auto-pop-close { width: 24px; height: 24px; border-radius: var(--radius-pill); color: var(--text-2); display: flex; align-items: center; justify-content: center; }
 .auto-pop-close:hover { background: var(--surface-hover); color: var(--text); }
 .auto-pop-close svg { width: 14px; height: 14px; }
-.auto-film { flex: 0 0 auto; padding: 8px 12px 0; font-size: 11.5px; color: var(--text-2); }
+/* 上传元数据：常驻在「目标」行上方，居中 */
+.auto-up {
+  flex: 0 0 auto; align-self: center; margin-top: 10px;
+  min-width: 62%; height: 30px; padding: 0 16px; border-radius: 8px;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
+}
+.auto-up:hover { filter: brightness(1.06); }
+.auto-film { flex: 0 0 auto; padding: 8px 12px 0; font-size: 11.5px; color: var(--text-2); text-align: center; }
+/* 文件整理的候选列表（分数不够自动采用时出现） */
+.auto-tidy-pick { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 2px; max-height: 176px; overflow-y: auto; }
+.auto-tidy-cand { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border-radius: 9px; background: var(--surface-hover); font-size: 12px; color: var(--text); text-align: left; }
+.auto-tidy-cand:hover { filter: brightness(1.06); }
+.auto-tidy-cand .atc-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auto-tidy-cand .atc-s { flex: 0 0 auto; font-size: 11px; color: var(--text-3); }
 .auto-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 12px; }
 .auto-empty { padding: 14px 12px; text-align: center; font-size: 12.5px; color: var(--text-3); }
 .auto-login-tip {
@@ -1812,14 +1826,25 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 }
 .auto-magnet-input:focus { border-color: var(--accent); }
 .auto-add-row { display: flex; gap: 6px; }
-.auto-add-row .auto-paste { flex: 0 0 auto; padding: 0 12px; height: 30px; border-radius: 8px; background: var(--surface-hover); color: var(--text-2); font-size: 12px; font-weight: 500; }
 .auto-add-row .auto-add-btn { flex: 1; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; }
 .auto-add-row .auto-add-btn:hover { filter: brightness(1.06); }
-.auto-actions { flex: 0 0 auto; display: flex; gap: 6px; padding: 8px 12px 12px; }
-.auto-actions button { flex: 1; height: 30px; border-radius: 8px; font-size: 12px; font-weight: 500; }
-.auto-actions .auto-up { background: var(--accent); color: #fff; }
-.auto-actions .auto-clear { background: var(--surface-hover); color: var(--text-2); }
-.auto-actions .auto-cfg { background: var(--surface-hover); color: var(--text-2); }
+.auto-done-row { flex: 0 0 auto; display: flex; justify-content: center; padding: 6px 12px 8px; }
+.auto-done-row .auto-clear {
+  height: 28px; padding: 0 14px; border-radius: 8px;
+  background: var(--surface-hover); color: var(--text-2); font-size: 11.5px; font-weight: 500;
+}
+/* 底部快捷图标：文件整理 / 磁力 / 字幕 */
+.auto-icons {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-around;
+  gap: 8px; padding: 8px 12px 12px; border-top: 1px solid var(--border);
+}
+.auto-icon-btn {
+  width: 36px; height: 36px; border-radius: 10px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-2); background: var(--surface-hover);
+}
+.auto-icon-btn:hover { color: var(--text); filter: brightness(1.06); }
+.auto-icon-btn svg { width: 18px; height: 18px; }
 
 /* 任务卡 */
 .auto-task { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; background: var(--surface); }
@@ -1857,9 +1882,11 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .auto-task-ops button { flex: 1; height: 28px; border-radius: 8px; font-size: 11.5px; font-weight: 500; background: var(--surface-hover); color: var(--text-2); }
 .auto-task-ops button.op-start { background: var(--accent, #007aff); color: #fff; }
 
-/* ==================== PC · 115 网盘配置（已并入「应用配置」弹窗） ==================== */
-.pc115-cookie { width: 100%; resize: vertical; font-size: 12px; line-height: 1.5; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.field-ops { display: flex; gap: 6px; }
+/* ==================== PC · 115 配置（已并入「应用配置」弹窗） ==================== */
+.c115-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.c115-row .input-wrap { flex: 1; min-width: 0; }
+.c115-qr-toggle { margin-bottom: 12px; }
+.c115-auth-foot { font-size: 11.5px; color: var(--text-3); text-align: center; line-height: 1.5; }
 .pc115-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
 .pc115-qr { width: 168px; height: 168px; background: #fff; border-radius: 6px; padding: 6px; display: flex; align-items: center; justify-content: center; }
 .pc115-qr img, .pc115-qr canvas { display: block; }
@@ -1868,5 +1895,6 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .c115-status.err { color: #C0392B; }
 .c115-status.ok { color: #1F9D55; }
 .c115-verify { font-size: 12px; padding: 7px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
+.c115-verify:empty { display: none; }
 .c115-verify.ok { color: #1F9D55; border-color: rgba(31,157,85,.4); background: rgba(31,157,85,.12); }
 .c115-verify.err { color: #C0392B; border-color: rgba(192,57,43,.4); background: rgba(192,57,43,.1); }

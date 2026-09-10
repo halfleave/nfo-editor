@@ -1566,6 +1566,23 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #page-toolbox-magnet .tbm-search-wrap .tbm-clear:active { opacity: .5; }
 #page-toolbox-magnet .tbm-go { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 14px; font-weight: 600; }
 #page-toolbox-magnet .tbm-list { padding-bottom: 8px; }
+#page-toolbox-magnet .tbm-sec-head { padding: 14px 2px 7px; font-size: 13px; font-weight: 600; color: var(--label-2); }
+#page-toolbox-magnet .tbm-add-input { width: 100%; border: none; background: var(--card-fill); border-radius: var(--radius-lg); padding: 10px 12px; font-size: 14px; line-height: 1.5; color: var(--label); resize: none; -webkit-user-select: text; }
+#page-toolbox-magnet .tbm-add-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
+#page-toolbox-magnet .tbm-offline { display: block; width: 100%; margin-top: 8px; border: none; border-radius: 20px; padding: 11px 0; background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; }
+#page-toolbox-magnet .tbm-offline:active { opacity: .8; }
+#page-toolbox-magnet .tbm-offline.disabled { background: var(--card-fill); color: var(--label-3); }
+#page-toolbox-magnet .tbm-add.disabled .tbm-add-input { opacity: .55; }
+#page-toolbox-magnet .tbm-add-tip { display: none; padding: 7px 2px 0; font-size: 12px; line-height: 1.5; color: var(--label-3); }
+/* 新增 NFO：类型选择弹窗（电影 / 剧集） */
+#nfoTypeSheet .nfo-type-list { padding: 6px 16px calc(18px + env(safe-area-inset-bottom)); }
+#nfoTypeSheet .nfo-type-item { display: flex; align-items: center; gap: 13px; width: 100%; padding: 14px; margin-bottom: 10px; border: none; background: var(--card-fill); border-radius: var(--radius-lg); text-align: left; }
+#nfoTypeSheet .nfo-type-item:active { opacity: .75; }
+#nfoTypeSheet .nfo-type-icon { flex: none; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+#nfoTypeSheet .nfo-type-icon svg { width: 21px; height: 21px; }
+#nfoTypeSheet .nfo-type-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#nfoTypeSheet .nfo-type-text b { font-size: 16px; font-weight: 600; color: var(--label); }
+#nfoTypeSheet .nfo-type-text small { font-size: 12px; line-height: 1.4; color: var(--label-3); }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; text-align: center; }
 /* 上传入口：常驻在「目标」行上方，不依赖任何离线任务 */
 .auto-actions { display: flex; width: 60%; margin: 10px auto 12px; }

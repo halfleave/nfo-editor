@@ -58,6 +58,44 @@
     return xml;
   }
 
+  // 剧集 NFO（<tvshow>，Kodi 命名规范）生成：与 buildMovieXml 同风格（4 空格缩进、空字段不输出）。
+  // 剧集专属：<status>（连载中/已完结）、<season> 季号、<episode> 总集数；无番号/制作商/发行商/系列。
+  function buildTvShowXml(d) {
+    d = d || {};
+    var title = d.title || '', originaltitle = d.originaltitle || '',
+        year = d.year || '', premiered = d.premiered || '',
+        runtime = d.runtime || '', plot = d.plot || '', rating = d.rating || '',
+        mpaa = d.mpaa || '', status = d.status || '',
+        season = d.season || '', episode = d.episode || '';
+    var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<tvshow>\n';
+    if (title) xml += '    <title>' + escapeXml(title) + '</title>\n';
+    if (originaltitle) xml += '    <originaltitle>' + escapeXml(originaltitle) + '</originaltitle>\n';
+    if (year) xml += '    <year>' + escapeXml(year) + '</year>\n';
+    if (premiered) xml += '    <premiered>' + escapeXml(premiered) + '</premiered>\n';
+    if (runtime) xml += '    <runtime>' + escapeXml(runtime) + '</runtime>\n';
+    if (rating) xml += '    <rating>' + escapeXml(rating) + '</rating>\n';
+    if (status) xml += '    <status>' + escapeXml(status) + '</status>\n';
+    if (plot) xml += '    <plot>' + escapeXml(plot) + '</plot>\n';
+    (d.genres || []).forEach(function (g) { if (g) xml += '    <genre>' + escapeXml(g) + '</genre>\n'; });
+    (d.countries || []).forEach(function (c) { if (c) xml += '    <country>' + escapeXml(c) + '</country>\n'; });
+    if (mpaa) xml += '    <mpaa>' + escapeXml(mpaa) + '</mpaa>\n';
+    if (season) xml += '    <season>' + escapeXml(season) + '</season>\n';
+    if (episode) xml += '    <episode>' + escapeXml(episode) + '</episode>\n';
+    (d.directors || []).forEach(function (dir) { if (dir && dir.name) xml += '    <director>' + escapeXml(dir.name) + '</director>\n'; });
+    (d.actors || []).forEach(function (a, i) {
+      if (!a || !a.name) return;
+      xml += '    <actor>\n';
+      xml += '      <name>' + escapeXml(a.name) + '</name>\n';
+      if (a.role) xml += '      <role>' + escapeXml(a.role) + '</role>\n';
+      xml += '      <thumb>' + escapeXml(sanitizeName(a.name) + '-actor.jpg') + '</thumb>\n';
+      xml += '      <order>' + (i + 1) + '</order>\n';
+      xml += '    </actor>\n';
+    });
+    if (d.hasSubtitle) xml += '    <subtitles>字幕</subtitles>\n';
+    xml += '</tvshow>\n';
+    return xml;
+  }
+
   // ===== 翻译模块（纯逻辑，不碰 DOM/state）=====
   // 提示语：成人影视元数据 → 简体中文；含 8 条硬性规则（番号原样、含假名才翻、JSON 输出）
   var TRANSLATE_SYSTEM_PROMPT = [
@@ -702,6 +740,7 @@ function normalizeJavbusFilm(d, opts){
     escapeXml: escapeXml,
     sanitizeName: sanitizeName,
     buildMovieXml: buildMovieXml,
+    buildTvShowXml: buildTvShowXml,
     TRANSLATE_SYSTEM_PROMPT: TRANSLATE_SYSTEM_PROMPT,
     needsTranslation: needsTranslation,
     extractJsonObject: extractJsonObject,

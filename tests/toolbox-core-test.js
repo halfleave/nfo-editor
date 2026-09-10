@@ -27,18 +27,19 @@ assert(quotaTools.length === 1 && quotaTools[0].id === 'tidy115', '注册表：�
 /* —— canUse：免费档 —— */
 assert(ToolboxCore.canUse('newNfo', '').ok, '权限：免费可用「新增 NFO」');
 assert(!ToolboxCore.canUse('subtitle', '').ok && ToolboxCore.canUse('subtitle', '').reason === '即将上线', '权限：免费不可用「字幕下载」→ 即将上线');
-assert(!ToolboxCore.canUse('magnet', '').ok && ToolboxCore.canUse('magnet', '').reason === '即将上线', '权限：免费不可用「磁力搜索」→ 即将上线');
+assert(!ToolboxCore.canUse('magnet', '').ok && ToolboxCore.canUse('magnet', '').reason === '即将上线', '权限：免费不可用「磁力管理」→ 即将上线');
 assert(ToolboxCore.canUse('tidy115', '').ok, '权限：免费可用「文件整理」（额度未用完）');
 assert(!ToolboxCore.canUse('poster', '').ok && ToolboxCore.canUse('poster', '').reason === '即将上线', '权限：未实现的工具 → 即将上线');
 
 /* —— canUse：中级档 —— */
 assert(!ToolboxCore.canUse('subtitle', 'medium').ok && ToolboxCore.canUse('subtitle', 'medium').reason === '即将上线', '权限：中级仍不可用「字幕下载」（仅高级）→ 即将上线');
-assert(!ToolboxCore.canUse('magnet', 'medium').ok && ToolboxCore.canUse('magnet', 'medium').reason === '即将上线', '权限：中级仍不可用「磁力搜索」（仅高级）→ 即将上线');
+assert(!ToolboxCore.canUse('magnet', 'medium').ok && ToolboxCore.canUse('magnet', 'medium').reason === '即将上线', '权限：中级仍不可用「磁力管理」（仅高级）→ 即将上线');
 assert(ToolboxCore.canUse('newNfo', 'medium').ok, '权限：中级可用「新增 NFO」');
 
 /* —— canUse：高级档 —— */
 assert(ToolboxCore.canUse('subtitle', 'full').ok, '权限：高级可用「字幕下载」');
-assert(ToolboxCore.canUse('magnet', 'full').ok, '权限：高级可用「磁力搜索」');
+assert(ToolboxCore.canUse('magnet', 'full').ok, '权限：高级可用「磁力管理」');
+assert(ToolboxCore.findTool('magnet').name === '磁力管理', '注册表：磁力工具名称为「磁力管理」（M3.1 改名）');
 assert(ToolboxCore.canUse('tidy115', 'full').ok, '权限：高级可用「文件整理」');
 assert(!ToolboxCore.canUse('poster', 'full').ok, '权限：高级也进不去未实现的工具');
 
