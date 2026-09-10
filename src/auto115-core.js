@@ -217,6 +217,18 @@
     if (/360p/.test(n)) return '360p';
     return '';
   };
+  /* 同片多清晰度判定（v269）：去掉清晰度标记、站点水印（[...] 花括号段）和标点后，
+     名字主干一致 → 视为同一部片的不同清晰度版本（如 zjz6.720p.xxx 与 zjz6.1080p.xxx）。
+     视频名是拼音缩写、命中不了标题时，靠这个配对次清晰度版本。 */
+  api.sameQualityVersion = function (nameA, nameB) {
+    function base(n) {
+      return api.normWords(String(n || '').replace(/\[[^\]]*\]/g, '').replace(/【[^】]*】/g, ''))
+        .replace(/\s*(2160p|4k|1080p|1080i|720p|480p|360p)\s*/g, '')
+        .replace(/\s+/g, '');
+    }
+    var a = base(nameA), b = base(nameB);
+    return !!a && a === b;
+  };
   /* 真分碟标记：名字带 cd/disc/dvd/part/碟/盘 + 数字（v263）。全部命中才算分碟，
      否则同名多文件按「不同版本」处理（低清晰度的让位，不再一律 .cdN） */
   api.partMark = function (name) { return /(^|[^a-z0-9])(cd|disc|disk|dvd|part|碟|盘)\s*[:：]?\s*\d/i.test(name || ''); };
@@ -572,7 +584,9 @@
       var name = it.n || it.name || '';
       if (!cid || !name) continue;
       var score = api.tidyScore(name, titles, year);
-      if (score >= api.TIDY_MIN) items.push({ cid: cid, n: name, score: score });
+      /* fid/size 原样带上：散装视频候选（fid 存在）在 StartTidy 里要走「无文件夹只改名」分支，
+         只靠 cid 会把视频 fid 误当文件夹 cid（v267 修） */
+      if (score >= api.TIDY_MIN) items.push({ cid: cid, fid: it.fid ? String(it.fid) : '', n: name, size: Number(it.s) || 0, score: score });
     }
     items.sort(function (a, b) { return b.score - a.score; });
     var best = items[0] || null;
