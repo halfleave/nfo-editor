@@ -1537,9 +1537,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-topbar button svg { width: 22px; height: 22px; }
 .auto-topbar-title { position: absolute; left: 0; right: 0; pointer-events: none; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); }
 .auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
-.auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; }
-/* 上传入口：常驻在任务列表上方，不依赖任何离线任务 */
-.auto-actions { display: flex; width: 60%; margin: 14px auto 16px; }
+.auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; text-align: center; }
+/* 上传入口：常驻在「目标」行上方，不依赖任何离线任务 */
+.auto-actions { display: flex; width: 60%; margin: 10px auto 12px; }
 .auto-action-btn { flex: 1; border: none; border-radius: 980px; background: var(--accent); color: var(--accent-text); font-size: 14px; font-weight: 600; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
 .auto-action-btn:active { opacity: .75; }
 /* 添加磁力：右下角圆形浮动按钮（线形磁铁图标） */

@@ -1783,18 +1783,18 @@ function openMagnetOp(el){
     magnetOpRow = el;
     var titleEl = el.querySelector('.mr-title') || el.querySelector('.dm-title');
     magnetOpTitle = titleEl ? (titleEl.textContent || '').trim() : '';
-    // 详情页 → 走自动化流水线；其他位置（磁力搜索）→ 仅一键离线
-    var inDetail = (currentPage === 'detail');
+    // 任何位置的「115离线」都走自动化流水线：创建任务→自动跑六步，不再裸调离线接口
     var layer = document.createElement('div');
     layer.className = 'magnet-inline-actions';
     layer.innerHTML = '<button type="button" class="magnet-inline-copy">复制</button>'
-      + '<button type="button" class="magnet-inline-115">' + (inDetail ? '115离线' : '115 离线') + '</button>';
+      + '<button type="button" class="magnet-inline-115">115离线</button>';
     // 蒙版与按钮均不触发整行的 openMagnetOp
     layer.addEventListener('click', function(ev){ ev.stopPropagation(); });
     layer.querySelector('.magnet-inline-copy').addEventListener('click', function(ev){ ev.stopPropagation(); magnetOpCopy(); });
     layer.querySelector('.magnet-inline-115').addEventListener('click', function(ev){
       ev.stopPropagation();
-      if (inDetail) auto115AddFromOp(); else magnetOpOffline();
+      closeAllSheets(); /* 从磁力弹窗的搜索页发起时，顺手收起弹窗露出自动化页 */
+      auto115AddFromOp();
     });
     el.appendChild(layer);
   });
@@ -1820,12 +1820,6 @@ function magnetOpCopy(){
     showToast(ok ? '已复制 magnet 链接' : '复制失败，请长按链接手动复制', ok ? 'success' : 'error');
   });
 }
-function magnetOpOffline(){
-  var m = magnetOpCurrent;
-  if (!m){ closeMagnetOp(); showToast('没有可离线的链接', 'error'); return; }
-  // 复用 c115OfflineFromMagnet 的逻辑，但直接传 magnet 字符串
-  c115Offline(m);
-}
 /* 取 115 Cookie：内存没有就从 IndexedDB 读（首次打开 APP 未进过 115 配置页时内存是空的） */
 function ensure115Cookie(){
   if (state.c115Cookie) return Promise.resolve(state.c115Cookie);
@@ -1834,40 +1828,6 @@ function ensure115Cookie(){
     if (c) state.c115Cookie = c;
     return c;
   }).catch(function(){ return ''; });
-}
-function c115Offline(magnet){
-  closeMagnetOp();
-  ensure115Cookie().then(function(cookie){
-    if (!cookie){ showToast('请先到「设置 → 115 配置」登录', 'error'); return null; }
-    showToast('正在添加到 115 离线下载…', 'info');
-    var cid = C115_DEFAULT_DIR_CID;
-    var body = 'url=' + encodeURIComponent((magnet || '').trim()) + '&wp_path_id=' + encodeURIComponent(cid);
-    /* 网页端离线接口：115.com/web/lixian（明文表单+Cookie）。
-       注意不要用 clouddownload.115.com/lixianssp —— 那是 115 客户端加密通道接口，
-       明文参数会返回 {"state":false,"error":"decode fail!"}。 */
-    return c115ProxyFetch('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', {
-      method: 'POST',
-      headers: { 'X-115-Cookie': cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body
-    });
-  })
-  .then(function(res){
-    if (!res) return;
-    var d = res.d || {};
-    var ok = res.ok && (d.state === true || (d.data && (d.data.tid || d.data.task_id || d.data.infoid)));
-    /* errcode 10008 = 任务已存在，视为成功（提示一下即可） */
-    if (!ok && res.ok && d.errcode === 10008){ showToast('该任务已在 115 离线列表中', 'info'); return; }
-    if (ok){ showToast('已发送到 115 离线下载（默认目录）', 'success'); }
-    else {
-      var msg = (d.error || d.msg || (d.data && (d.data.error || d.data.msg)));
-      if (!msg && res.raw) msg = res.raw;
-      console.warn('[115离线]', msg); showToast('没能加到离线，稍后再试', 'error');
-    }
-  })
-  .catch(function(e){
-    var detail = (e && e.body) ? e.body.slice(0, 300) : '';
-    console.warn('[115离线]', e, detail); showToast('网络不太顺，稍后再试', 'error');
-  });
 }
 
 /* ===== 115 自动化：离线 → 建目录 → 移视频 → 改名 → 清理 =====
@@ -4011,15 +3971,8 @@ function auto115AddFromOp(){
 /* 添加磁力 弹窗：手动粘贴磁力链做 115 离线——与「115 离线」入口等价，只是磁力来源是用户粘贴而非数据源；绑定当前影片，改名/整理按详情页标题·番号 */
 function openMagnetCombo(tab){
   switchMagnetComboTab(tab === 'search' ? 'search' : 'add');
-  var search = (tab === 'search');
-  var qInp = document.getElementById('magnetQueryInput');
-  if (search && qInp){
-    var q = (auto115Doc && (auto115Doc.dvdId || auto115Doc.filmTitle)) || '';
-    qInp.value = q;
-    toggleMagnetClear();
-  }
   // 添加磁力：每次进入都清空，避免残留上次粘贴的内容
-  if (!search){
+  if (tab !== 'search'){
     var mInp = document.getElementById('magnetInput');
     if (mInp) mInp.value = '';
   }
@@ -4057,13 +4010,16 @@ function switchMagnetComboTab(tab){
   for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
   if (add) add.style.display = (tab === 'add') ? '' : 'none';
   if (search) search.style.display = (tab === 'search') ? '' : 'none';
-  // 切到搜索页时，若搜索框为空且当前影片有番号/标题，自动预填（不触发搜索）
+  // 每次进入搜索页：一律重新读取当前影片的番号（无则标题）填入（不触发搜索），
+  // 并清掉上一次的搜索结果，避免残留别的片子搜过的内容
   if (tab === 'search'){
     var qInp = document.getElementById('magnetQueryInput');
-    if (qInp && !qInp.value && auto115Doc){
-      qInp.value = auto115Doc.dvdId || auto115Doc.filmTitle || '';
+    if (qInp){
+      qInp.value = auto115Doc ? (auto115Doc.dvdId || auto115Doc.filmTitle || '') : '';
       toggleMagnetClear();
     }
+    var resBox = document.getElementById('magnetResults');
+    if (resBox) resBox.innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
   }
 }
 function auto115OpenMagnetModal(){
