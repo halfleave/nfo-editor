@@ -1442,8 +1442,12 @@ function computeTranslateNeed(film){ return NfoCore.computeTranslateNeed(film); 
    一次请求翻译 title + summary，按当前数据逐字段判定是否需要覆盖（简介可能晚于保存到达，故可重复调用）。 */
 function startFilmTranslation(id){
   if (state.translatingInFlight.has(id)) return;            // 已在翻译中：由在途任务负责收尾，不重复启动
-  if (!translateConfigReady()){ finishTranslation(id); return; } // 配置未就绪：清掉 markPendingTranslate 已显示的图标，避免卡死
-  loadFilm(id).then(function(f){
+  var ownCfg = { baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel };
+  // 既无自填 key、又非高级档（服务端翻译不可用）：直接结束，避免无谓请求
+  if (!translateConfigReady() && (state.tier || '') !== 'full'){ finishTranslation(id); return; }
+  getActivationCode().then(function(code){
+    var reqOpts = { ownCfg: ownCfg, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code || '' };
+    loadFilm(id).then(function(f){
     if (!f){ finishTranslation(id); return; }
     var need = computeTranslateNeed(f);
     if (!need.title && !need.plot){ finishTranslation(id); return; } // 无需翻译：清掉图标，避免永久卡住
@@ -1483,7 +1487,7 @@ function startFilmTranslation(id){
       showToast('【' + tLabel + ' 翻译失败】', 'error');
     });
   }).catch(function(){ finishTranslation(id); });
-}).catch(function(){ finishTranslation(id); });
+  }).catch(function(){ finishTranslation(id); });
 }
 function finishTranslation(id){
   if (typeof NfoCore !== 'undefined' && NfoCore.clearTranslatingFallback) NfoCore.clearTranslatingFallback(id); // 清掉 60s 兜底计时器
@@ -6254,6 +6258,17 @@ function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
             return d2;
           }).catch(function(){ return d2; });
         });
+      })
+      .then(function(d2){
+        state.tmdbMediaType = mediaType;
+        /* 华语片原始标题一律取英文标题（v274）：多拉一次 alternative_titles 挂上，
+           normalizeTmdbFilm（共享核心）从中挑 US/GB 等英文区标题填原始标题 */
+        if (NfoCore.tmdbIsChinese(d2)){
+          return NfoCore.tmdbRequest(dp + '/alternative_titles', {}, opts)
+            .then(function(at){ d2.alternative_titles = at || {}; return d2; })
+            .catch(function(){ return d2; });
+        }
+        return d2;
       })
       .then(function(d2){
         state.tmdbMediaType = mediaType;

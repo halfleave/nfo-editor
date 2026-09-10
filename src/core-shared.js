@@ -360,17 +360,47 @@ function normalizeJavbusFilm(d, opts){
     AR:'阿根廷', CL:'智利', CO:'哥伦比亚', PH:'菲律宾', SG:'新加坡', MY:'马来西亚',
     ID:'印度尼西亚', VN:'越南', EG:'埃及', AE:'阿联酋', SA:'沙特阿拉伯'
   };
+  /* 华语片判定（v274）：原产语言 zh，或原产国家/地区落在 CN/HK/TW/SG */
+  function tmdbIsChinese(d){
+    d = d || {};
+    if (d.original_language === 'zh') return true;
+    var oc = d.origin_country || [];
+    for (var i = 0; i < oc.length; i++){
+      if (oc[i] === 'CN' || oc[i] === 'HK' || oc[i] === 'TW' || oc[i] === 'SG') return true;
+    }
+    return false;
+  }
+  /* 从 alternative_titles 里挑英文标题（v274）：美/英/澳/新优先级，movie 用 titles、tv 用 results */
+  function tmdbEnTitle(d){
+    var at = (d && d.alternative_titles) || {};
+    var titles = at.titles || at.results || [];
+    var ccs = ['US', 'GB', 'AU', 'NZ'];
+    for (var i = 0; i < ccs.length; i++){
+      for (var j = 0; j < titles.length; j++){
+        var t = titles[j];
+        if (t && t.iso_3166_1 === ccs[i] && t.title && t.title.trim()) return t.title.trim();
+      }
+    }
+    return '';
+  }
   /* 归一化 TMDB 详情（movie/tv）→ 标准字段对象（纯逻辑，不碰 DOM/state）。
    * opts.isTV：当前是否为剧集详情（决定 name/first_air_date/episode_run_time/created_by/content_ratings）；不读全局 state。
    * opts.actorLimit：演员显示上限（手机端 5 / PC 端 11，分叉保留，由 UI 经 opts 传入）。
    * 图片仅返回 TMDB 原始 file_path（posterPaths/backdropPaths/logoPath）与已拼好的 galleryLinks（w1280 直连 URL）；
-   * 实际的 fetch→blob→dataURL 与 <img> DOM 由两端 UI 各自处理（不碰共享核心）。 */
+   * 实际的 fetch→blob→dataURL 与 <img> DOM 由两端 UI 各自处理（不碰共享核心）。
+   * 原始标题规则（v274）：华语片一律取英文标题——TMDB 的 original_title 对华语片就是中文，
+   * 与标题重复无信息量；d.alternative_titles（由 UI 预先拉取挂上）有英文区标题时改用它，
+   * 拉不到或非华语保持原行为（PC 端未挂 alternative_titles，行为不变）。 */
   function normalizeTmdbFilm(d, opts){
     opts = opts || {}; d = d || {};
     var isTV = !!opts.isTV;
     var actorLimit = opts.actorLimit || 5;
     var title = d.title || (isTV ? d.name : '') || d.original_title || (isTV ? d.original_name : '') || '';
     var orig = d.original_title || (isTV ? d.original_name : '') || d.title || (isTV ? d.name : '') || '';
+    if (tmdbIsChinese(d)){
+      var en = tmdbEnTitle(d);
+      if (en) orig = en;
+    }
     var date = d.release_date || d.first_air_date || '';
     var year = (date || '').slice(0, 4);
     var runtime = d.runtime || (d.episode_run_time && d.episode_run_time[0]) || '';
@@ -651,6 +681,8 @@ function normalizeJavbusFilm(d, opts){
     tmdbImgUrl: tmdbImgUrl,
     CC_MAP: CC_MAP,
     normalizeTmdbFilm: normalizeTmdbFilm,
+    tmdbIsChinese: tmdbIsChinese,
+    tmdbEnTitle: tmdbEnTitle,
     tmdbRequest: tmdbRequest,
     translateRequest: translateRequest,
     FILM_TYPE: FILM_TYPE,
