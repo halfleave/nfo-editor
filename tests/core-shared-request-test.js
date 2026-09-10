@@ -107,6 +107,31 @@ async function expectReject(name, p, re) {
   // 7. 无 ownCfg 且缺 Worker → reject（对齐 6.3 矩阵：中/免费无自填 key 不能走服务端翻译）
   await expectReject('translate/缺配置: 正确 reject', NfoCore.translateRequest('a', 'b', {}), /未配置翻译/);
 
+  /* —— 配额计数（本地按天，仅展示；权威以服务端为准）—— */
+  // 桩 localStorage / window（quotaInc 会用到；Node 无原生实现）
+  const store = {};
+  global.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+  global.window = global.window || {};
+  let quotaEvents = 0; global.window.dispatchEvent = () => { quotaEvents++; };
+
+  // 8. free 档：5 个桶、上限 15、含 JAV保存
+  const dFree = NfoCore.quotaData('free');
+  eq('quota/free: 5 个桶', dFree.length === 5);
+  eq('quota/free: 上限 15', dFree.every(x => x.limit === 15));
+  eq('quota/free: 含 JAV保存', dFree.some(x => x.field === 'javSave'));
+  // 9. medium 档：上限 30
+  eq('quota/medium: 上限 30', NfoCore.quotaData('medium').every(x => x.limit === 30));
+  // 10. full 档：无计数桶（不限次）
+  eq('quota/full: 无计数桶', NfoCore.quotaData('full').length === 0);
+  // 11. quotaInc 累加、remaining 递减
+  NfoCore.quotaInc('tmdbSearch'); NfoCore.quotaInc('tmdbSearch');
+  const qs = NfoCore.quotaData('free').find(x => x.field === 'tmdbSearch');
+  eq('quota/inc: 已用 2', qs.used === 2);
+  eq('quota/inc: 剩余 13', qs.remaining === 13);
+  // 12. quotaInc 派发 nfo:quota-changed（供 UI 实时刷新）
+  quotaEvents = 0; NfoCore.quotaInc('javSave');
+  eq('quota/inc: 派发事件', quotaEvents === 1);
+
   console.log('core-shared-request ' + (failed ? ('有 ' + failed + ' 项失败') : '全通过'));
   if (failed) process.exitCode = 1;
 })();

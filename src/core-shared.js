@@ -629,6 +629,15 @@ function normalizeJavbusFilm(d, opts){
     Object.keys(params || {}).forEach(function (k) { if (params[k] != null) wu.searchParams.set(k, params[k]); });
     var code = (opts.code || '').trim();
     if (code) wu.searchParams.set('code', code);
+    // 配额计数：仅服务端代理路径消耗共享配额（自填 key 直连不计数）。search/save 区分；/videos 与 /images 为读取不计；详情按 id 去重避免语言兜底重复计数
+    if (path.indexOf('/search') >= 0) quotaInc('tmdbSearch');
+    else if (path.indexOf('/videos') < 0 && path.indexOf('/images') < 0) {
+      var _m = path.match(/\/(movie|tv)\/(\d+)/); var _id = _m ? _m[2] : null; var _day = quotaDayKey();
+      if (!_id || !(quotaSaveSeen[_day] && quotaSaveSeen[_day][_id])) {
+        quotaInc('tmdbSave');
+        if (_id) { quotaSaveSeen[_day] = quotaSaveSeen[_day] || {}; quotaSaveSeen[_day][_id] = true; }
+      }
+    }
     return withTimeout(fetch(wu.toString(), { headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.json().then(function (d) { if (d && d.error) throw new Error(d.error); return d; }); }));
   }
@@ -658,6 +667,37 @@ function normalizeJavbusFilm(d, opts){
       });
   }
 
+  // ===== 本地按天配额计数（仅展示用，权威以服务端为准）=====
+  // 字段：tmdbSearch / tmdbSave / javSearch / javSave / tidy115；档位 free=15、medium=30、full=不限
+  var QUOTA_FIELDS = ['tmdbSearch', 'tmdbSave', 'javSearch', 'javSave', 'tidy115'];
+  var QUOTA_LABELS = { tmdbSearch: 'TMDB搜索', tmdbSave: 'TMDB保存', javSearch: 'JAV搜索', javSave: 'JAV保存', tidy115: '115整理' };
+  var QUOTA_LIMITS = {
+    free:   { tmdbSearch: 15, tmdbSave: 15, javSearch: 15, javSave: 15, tidy115: 15 },
+    medium: { tmdbSearch: 30, tmdbSave: 30, javSearch: 30, javSave: 30, tidy115: 30 },
+    full:   {}
+  };
+  var quotaSaveSeen = {}; // 按天去重，避免详情语言兜底下 tmdbSave 重复计数
+  function quotaDayKey(){ var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function quotaStoreKey(){ return 'nfo_quota_' + quotaDayKey(); }
+  function quotaLoad(){ try { return JSON.parse(localStorage.getItem(quotaStoreKey()) || '{}'); } catch (e) { return {}; } }
+  function quotaSave(o){ try { localStorage.setItem(quotaStoreKey(), JSON.stringify(o)); } catch (e) {} }
+  function quotaInc(field){
+    var o = quotaLoad(); o[field] = (o[field] || 0) + 1; quotaSave(o);
+    if (typeof window !== 'undefined' && window.dispatchEvent) { try { window.dispatchEvent(new Event('nfo:quota-changed')); } catch (e) {} }
+    return o[field];
+  }
+  function quotaGet(field){ return quotaLoad()[field] || 0; }
+  function quotaLimit(tier, field){ return (QUOTA_LIMITS[tier] && QUOTA_LIMITS[tier][field]) || 0; }
+  function quotaData(tier){
+    var t = tier || 'free'; var out = [];
+    QUOTA_FIELDS.forEach(function (f) {
+      var lim = quotaLimit(t, f); if (!lim) return;
+      var used = quotaGet(f);
+      out.push({ field: f, label: QUOTA_LABELS[f], used: used, limit: lim, remaining: Math.max(0, lim - used) });
+    });
+    return out;
+  }
+
   global.NfoCore = {
     escapeXml: escapeXml,
     sanitizeName: sanitizeName,
@@ -685,6 +725,8 @@ function normalizeJavbusFilm(d, opts){
     tmdbEnTitle: tmdbEnTitle,
     tmdbRequest: tmdbRequest,
     translateRequest: translateRequest,
+    quotaInc: quotaInc,
+    quotaData: quotaData,
     FILM_TYPE: FILM_TYPE,
     isAdultByRating: isAdultByRating,
     filmKey: filmKey,

@@ -1101,6 +1101,7 @@ function fetchJavbusSearch(q, box){
   // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
   var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
   var url = base + path + '?keyword=' + encodeURIComponent(q) + '&_=' + Date.now();
+  NfoCore.quotaInc('javSearch');
   fetch(url, { cache: 'no-store' })
     .then(function(r){
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1604,6 +1605,7 @@ function setThemeHidden(hidden){
   syncThemeHiddenSwitch();
   syncAdultPhraseRow();
   idbPut('kv', 'themeHidden', state.themeHidden).catch(function(){});
+  if (typeof renderQuotaInfo === 'function') renderQuotaInfo();
 }
 
 function getAutoClearMode(){ return idbGet('kv', 'autoClear').then(function(v){ return v || 'never'; }); }

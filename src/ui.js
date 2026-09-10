@@ -1177,6 +1177,7 @@ function applyJavbusResult(i){
     return;
   }
   var base = javbusApiBase();
+  NfoCore.quotaInc('javSave');
   showToast('加载详情中…');
   fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(it.id))
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -2768,6 +2769,7 @@ function openApiKeySheet(){
   set('activationCodeInput', state.activationCode);
   toggleApiClear(); toggleActivationClear();
   updateActivationStatus();
+  renderQuotaInfo();
   openSheet('apiSheet');
 }
 function _toggleClear(inputId, btnId){
@@ -2803,6 +2805,7 @@ function verifyActivationCode(){
         state.tier = d.tier || '';
         Promise.all([ setActivationCode(code), setTier(state.tier) ]).then(function(){
           updateActivationStatus();
+          renderQuotaInfo();
           showToast('已激活', 'success');
           // 验证后按新权限补载头像 / 剧照（若正在看详情页）
           if (typeof currentDetailFilm !== 'undefined' && currentDetailFilm){ loadCurrentCastPhotos(); renderFilmDetail(currentDetailFilm); }
@@ -2813,6 +2816,24 @@ function verifyActivationCode(){
     })
     .catch(function(){ showToast('验证失败，请检查 Worker 地址', 'error'); });
 }
+
+/* 激活码下方「剩余次数」：免费/中级档按天显示各配额桶剩余，高级档显示已解锁；JAV 两项仅里模式显示 */
+function renderQuotaInfo(){
+  var el = document.getElementById('quotaInfo');
+  if (!el) return;
+  var tier = (state.tier || '').trim();
+  if (tier === 'full'){ el.innerHTML = '<div class="quota-full">已解锁全部功能 · 不限次</div>'; return; }
+  var data = NfoCore.quotaData(tier || 'free').filter(function(it){
+    return (it.field !== 'javSearch' && it.field !== 'javSave') || state.themeHidden;
+  });
+  var html = data.map(function(it){
+    var cls = it.remaining <= 0 ? 'quota-zero' : (it.remaining <= 3 ? 'quota-low' : '');
+    return '<div class="quota-line ' + cls + '"><span class="quota-name">' + it.label + '</span><span class="quota-num">' + it.remaining + '/' + it.limit + '</span></div>';
+  }).join('');
+  html += '<div class="quota-hint">AI翻译 · 磁力搜索 · 字幕下载：高级档专属</div>';
+  el.innerHTML = html;
+}
+window.addEventListener('nfo:quota-changed', function(){ renderQuotaInfo(); });
 
 /* 翻译配置弹窗：回填输入框 */
 function openTranslateSheet(){

@@ -1404,6 +1404,16 @@ body.edit-modal-open #page-edit .edit-body { overflow: hidden; }
 .modal-wide { max-width: 760px; }
 .modal-narrow { max-width: 400px; }
 .modal-tall { max-height: 86vh; }
+#apiSheet { max-height: 85vh; max-height: 85dvh; }
+/* 激活码下方配额显示（免费/中级档剩余次数） */
+.quota-info { margin: 6px 0 12px; }
+.quota-info .quota-line { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 13px; color: var(--text-2, #6b7280); }
+.quota-info .quota-name { opacity: .85; }
+.quota-info .quota-num { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-1, #111); }
+.quota-info .quota-low .quota-num { color: #d97706; }
+.quota-info .quota-zero .quota-num { color: #dc2626; }
+.quota-info .quota-full { color: var(--accent, #E86A92); font-weight: 600; padding: 3px 0; }
+.quota-info .quota-hint { margin-top: 6px; font-size: 12px; color: var(--text-3, #9ca3af); }
 
 /* 设置子面板：从右侧滑入的抽屉形态（替代居中弹窗） */
 .modal.drawer-right {

@@ -979,6 +979,7 @@ function openApiKeySheet(){
   document.getElementById('translateModel').value = state.translateModel || '';
   toggleTranslateClear();
   updateActivationStatus();
+  renderQuotaInfo();
   openSheet('apiSheet');
 }
 
@@ -1573,6 +1574,7 @@ function verifyActivationCode(){
         state.tier = d.tier; state.activationCode = code;
         Promise.all([ setActivationCode(code), setTier(d.tier) ]).then(function(){
           updateActivationStatus();
+          renderQuotaInfo();
           showToast('已激活', 'success');
           // 满级解锁后补载演职人员头像（TMDB _profile + JavBus 图床）；当前详情页若打开则刷新
           if ((state.tier || '') === 'full'){
@@ -1584,11 +1586,29 @@ function verifyActivationCode(){
         state.tier = ''; state.activationCode = '';
         setTier('').catch(function(){}); setActivationCode('').catch(function(){});
         updateActivationStatus();
+        renderQuotaInfo();
         showToast('激活码无效', 'error');
       }
     })
     .catch(function(){ showToast('验证失败，请稍后重试', 'error'); });
 }
+/* 激活码下方「剩余次数」：免费/中级档按天显示各配额桶剩余，高级档显示已解锁；JAV 两项仅里模式显示 */
+function renderQuotaInfo(){
+  var el = document.getElementById('quotaInfo');
+  if (!el) return;
+  var tier = (state.tier || '').trim();
+  if (tier === 'full'){ el.innerHTML = '<div class="quota-full">已解锁全部功能 · 不限次</div>'; return; }
+  var data = NfoCore.quotaData(tier || 'free').filter(function(it){
+    return (it.field !== 'javSearch' && it.field !== 'javSave') || state.themeHidden;
+  });
+  var html = data.map(function(it){
+    var cls = it.remaining <= 0 ? 'quota-zero' : (it.remaining <= 3 ? 'quota-low' : '');
+    return '<div class="quota-line ' + cls + '"><span class="quota-name">' + it.label + '</span><span class="quota-num">' + it.remaining + '/' + it.limit + '</span></div>';
+  }).join('');
+  html += '<div class="quota-hint">AI翻译 · 磁力搜索 · 字幕下载：高级档专属</div>';
+  el.innerHTML = html;
+}
+window.addEventListener('nfo:quota-changed', function(){ renderQuotaInfo(); });
 /* API 分组帮助数据（中间弹窗） */
 var apiGroupHelpData = {
   metadata: {
@@ -4424,6 +4444,7 @@ function auto115PickTidyDir(cid){
   auto115StartTidy(hit);
 }
 function auto115StartTidy(dir){
+  NfoCore.quotaInc('tidy115');
   return auto115EnsureDoc().then(function(doc){
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -7867,6 +7888,7 @@ function setThemeHidden(hidden){
   syncThemeHiddenSwitch();
   syncAdultPhraseRow();
   idbPut('kv', 'themeHidden', state.themeHidden).catch(function(){});
+  if (typeof renderQuotaInfo === 'function') renderQuotaInfo();
 }
 /* 设置页「里模式」开关：一键切换里模式，复用 setThemeHidden 统一收口 UI 与持久化 */
 function toggleThemeHidden(checkbox){

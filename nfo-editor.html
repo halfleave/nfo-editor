@@ -12,7 +12,7 @@
 <meta name="color-scheme" content="light dark" data-page-node-id="jErD6Cqs5fcGpZCZFDZMjC">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzAwN0FGRiIvPjxwYXRoIGQ9Ik0xMiAxMGwxMCA2LTEwIDZ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+" data-page-node-id="YEPH7RjM30f9lDAmrM7Exz">
 <title>NFO 编辑器</title>
-  <link rel="stylesheet" href="./styles/pc.css?v=276" data-page-node-id="McivyXH0xfpFASamTE8Ha4">
+  <link rel="stylesheet" href="./styles/pc.css?v=277" data-page-node-id="McivyXH0xfpFASamTE8Ha4">
   <script>
   /* 首屏同步应用主题色，避免刷新瞬间默认蓝 → 主题色的闪烁 (FOUC)。
      主题色权威值存于 IndexedDB（异步），这里仅用 localStorage 镜像做首屏兜底。 */
@@ -788,17 +788,6 @@
     </button>
   </div>
   <div class="modal-body" data-page-node-id="sSss5fdUig8wG1bjnEYcDA">
-    <div class="section-title" data-page-node-id="sE7I6vHBUjVUl0Xyq9Iq1h">元数据</div>
-    <div class="field mb-12" data-page-node-id="Ipw1lhD32RevH90ghPJfB2">
-      <div class="input-wrap has-title" data-page-node-id="h9AuLjPyC6tADi7jWYbDAU">
-        <span class="input-title" data-page-node-id="i6r8lTbUnnS0nOc1XV4y7F">TMDB</span>
-        <input class="input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" style="padding-left: 58px;" oninput="toggleApiClear()" data-page-node-id="Ro4W5LR1BJxmklnPaQuopY">
-        <button class="input-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" data-page-node-id="TJHKU8culWiAvEywEVRwVn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" data-page-node-id="FAaJFo5ILhTZoApGuxegbV"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="IBRAFrfOWLt32wdkuPDBVd"/></svg>
-        </button>
-      </div>
-    </div>
-
     <div class="section-title" data-page-node-id="EgaSEaU4Pwp0HpMGmWtRdZ">激活码</div>
     <div class="field mb-12" data-page-node-id="HRC8SsvrHsDNh15S7xwl51">
       <div class="input-wrap has-title" data-page-node-id="gxwHbh1p2ib3TbPukuP9TG">
@@ -812,6 +801,18 @@
     <div class="activation-row" data-page-node-id="vmeX8KWFWawW9veFEAADMM">
       <span id="activationStatus" class="activation-status" data-page-node-id="d47rfGsJGyEIwDYKDrHR9L">未激活</span>
       <button class="btn btn-default btn-sm" onclick="verifyActivationCode()" data-page-node-id="yzYhyBdF2Na2RHEVyBjWUs">验证</button>
+    </div>
+    <div id="quotaInfo" class="quota-info" data-page-node-id="quotaInfoBox"></div>
+
+    <div class="section-title" data-page-node-id="sE7I6vHBUjVUl0Xyq9Iq1h">元数据</div>
+    <div class="field mb-12" data-page-node-id="Ipw1lhD32RevH90ghPJfB2">
+      <div class="input-wrap has-title" data-page-node-id="h9AuLjPyC6tADi7jWYbDAU">
+        <span class="input-title" data-page-node-id="i6r8lTbUnnS0nOc1XV4y7F">TMDB</span>
+        <input class="input" type="text" id="apiKeyInput" placeholder="粘贴 API Key" style="padding-left: 58px;" oninput="toggleApiClear()" data-page-node-id="Ro4W5LR1BJxmklnPaQuopY">
+        <button class="input-clear" id="apiClearBtn" onclick="clearApiInput()" aria-label="清除" data-page-node-id="TJHKU8culWiAvEywEVRwVn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" data-page-node-id="FAaJFo5ILhTZoApGuxegbV"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="IBRAFrfOWLt32wdkuPDBVd"/></svg>
+        </button>
+      </div>
     </div>
   </div>
   <div class="modal-foot" data-page-node-id="Xfgdz5Uidh4GKjP6QsNcvW">
@@ -1168,11 +1169,11 @@
 
 <!-- ==================== Toast ==================== -->
 <div class="toasts" id="toasts" data-page-node-id="TD9n03wFqRdZX4PS2qQlOt"></div>
-  <script src="./src/core-shared.js?v=276"></script>
-  <script src="./src/auto115-core.js?v=276"></script>
-  <script src="./src/core.js?v=276"></script>
-  <script src="./src/ui.js?v=276"></script>
-  <script src="./src/auto115.js?v=276"></script>
-  <script src="./src/main.js?v=276"></script>
+  <script src="./src/core-shared.js?v=277"></script>
+  <script src="./src/auto115-core.js?v=277"></script>
+  <script src="./src/core.js?v=277"></script>
+  <script src="./src/ui.js?v=277"></script>
+  <script src="./src/auto115.js?v=277"></script>
+  <script src="./src/main.js?v=277"></script>
 </body>
 </html>
