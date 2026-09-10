@@ -206,6 +206,16 @@ assert(jr5.ops.length === 0, 'JSON：原名=新名且同目录视为无变化跳
 assert(TidyCore.planRule('jsonPlan', [], {}).ok === false, 'JSON：没导入清单时 planRule 明确报错');
 assert(TidyCore.planRule('jsonPlan', [], { entries: [{ oldDir: '', oldName: 'a', newDir: '', newName: 'b' }], byDir: { '': [{ fid: '1', name: 'a' }] } }).ops.length === 1, 'JSON：planRule 走通 jsonPlan');
 
+/* ================= AI 整理：清单不进气泡（剥 JSON 块） / 清单可导出 ================= */
+const sb1 = TidyCore.stripJsonBlock('好的，我按这个方案改。\n```json\n{"items":[{"旧名":"a","新名":"b"}]}\n```');
+assert(sb1 === '好的，我按这个方案改。', 'AI：气泡剥掉 ```json 代码块，只留人话');
+assert(TidyCore.stripJsonBlock('```json\n{"items":[]}\n```') === '', 'AI：只给清单时气泡内容为空（不渲染）');
+assert(TidyCore.stripJsonBlock('说明\n```\n未闭合').indexOf('```') < 0, 'AI：未闭合的围栏尾巴也一并清掉');
+const ex1 = JSON.parse(TidyCore.planToJson({ root: '影视', total: 300, items: [{ oldDir: '', oldName: 'a.mp4', newDir: '夹', newName: 'b.mp4' }] }));
+assert(ex1.items[0]['旧文件路径'] === '' && ex1.items[0]['旧名'] === 'a.mp4' && ex1.items[0]['新文件路径'] === '夹' && ex1.items[0]['新名'] === 'b.mp4', '导出：清单转成四字段 JSON 文本');
+assert(ex1.total === 300, '导出：还有未列出的条目时保留 total');
+assert(JSON.parse(TidyCore.planToJson({ items: [{ oldDir: '', oldName: 'a', newDir: '', newName: 'b' }] })).total === undefined, '导出：没有剩余条数时不写 total');
+
 /* ================= 目录树文本 ================= */
 const treeTxt = TidyCore.renderTreeText({ children: [{ name: '夹', dir: true, children: [{ name: 'a.mp4' }] }, { name: 'b.txt' }] });
 assert(treeTxt.indexOf('夹/') >= 0 && treeTxt.indexOf('a.mp4') >= 0 && treeTxt.indexOf('b.txt') >= 0, '目录树：渲染出层级与文件名');

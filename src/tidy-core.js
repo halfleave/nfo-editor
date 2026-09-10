@@ -114,7 +114,7 @@
   function joinExt(base, ext){ return ext ? (base + '.' + ext) : base; }
 
   function mkRename(it, orig, name, why){
-    return { op: 'rename', fid: idOf(it), orig: orig, name: name, why: why };
+    return { op: 'rename', fid: idOf(it), orig: orig, name: name, oldDir: '', newDir: '', why: why };
   }
 
   /* 通用推进：逐条算新名，变了才产 op */
@@ -280,6 +280,32 @@
     }
     return d;
   }
+  /* 从 AI 回复里剥掉 ```json … ``` 代码块 —— 聊天气泡只留人话，清单另以卡片呈现。
+     未闭合的围栏尾巴也一并清掉，免得半截 JSON 露在聊天里。 */
+  function stripJsonBlock(text){
+    var s = String(text == null ? '' : text);
+    s = s.replace(/```[a-zA-Z]*\s*[\s\S]*?```/g, '\n');
+    s = s.replace(/```[\s\S]*$/, '\n');
+    return s.replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim();
+  }
+
+  /* 清单 → 可导出 / 留档的 JSON 文本（固定四字段顺序，便于外部 AI 复用） */
+  function planToJson(plan){
+    var items = ((plan && plan.items) || []).map(function (en){
+      return {
+        '旧文件路径': String(en.oldDir || ''),
+        '旧名': String(en.oldName || ''),
+        '新文件路径': String(en.newDir == null ? (en.oldDir || '') : en.newDir),
+        '新名': String(en.newName || '')
+      };
+    });
+    var out = { root: String((plan && plan.root) || '') };
+    var total = (plan && plan.total) ? Number(plan.total) : 0;
+    if (total && total > items.length) out.total = total;
+    out.items = items;
+    return JSON.stringify(out, null, 2);
+  }
+
   function parseTidyJson(text){
     var raw;
     try { raw = (typeof text === 'string') ? JSON.parse(text) : text; }
@@ -336,11 +362,11 @@
       }
       if (!hit){ miss.push((oldDir ? oldDir + '/' : '') + oname); return; }
       if (oldDir === newDir){
-        ops.push({ op: 'rename', fid: idOf(hit), orig: oname, name: nname, why: 'JSON 整理' });
+        ops.push({ op: 'rename', fid: idOf(hit), orig: oname, name: nname, oldDir: oldDir, newDir: oldDir, why: 'JSON 整理' });
       } else {
         var tcid = dirCid[newDir];
         if (!tcid){ miss.push('→ ' + (newDir ? newDir + '/' : '') + nname + '（目标目录不存在）'); return; }
-        ops.push({ op: 'move', fid: idOf(hit), orig: oname, name: nname, toDir: newDir, toCid: tcid, why: 'JSON 整理' });
+        ops.push({ op: 'move', fid: idOf(hit), orig: oname, name: nname, oldDir: oldDir, newDir: newDir, toDir: newDir, toCid: tcid, why: 'JSON 整理' });
       }
     });
     return { ops: ops, miss: miss };
@@ -694,6 +720,8 @@
     planImageSeq: planImageSeq,
     parseTidyJson: parseTidyJson,
     planJsonItems: planJsonItems,
+    stripJsonBlock: stripJsonBlock,
+    planToJson: planToJson,
     renderTreeText: renderTreeText,
     decodeTreeBytes: decodeTreeBytes,
     parseExportTree: parseExportTree,

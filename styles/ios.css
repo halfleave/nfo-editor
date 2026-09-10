@@ -1655,17 +1655,29 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #page-tidy-chat { display: none; flex-direction: column; }
 #page-tidy-chat.active { display: flex; }
 .tidy-chat-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 16px 12px; }
-.tidy-msg { max-width: 84%; margin-bottom: 12px; padding: 10px 13px; border-radius: 16px; font-size: 14.5px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; }
+.tidy-msg { width: -webkit-fit-content; width: fit-content; max-width: 84%; margin-bottom: 12px; padding: 10px 13px; border-radius: 16px; font-size: 14.5px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; }
 .tidy-msg.ai { background: var(--card-fill); color: var(--label); border-bottom-left-radius: 5px; }
 .tidy-msg.me { margin-left: auto; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
-.tidy-msg.sys { max-width: 100%; background: transparent; color: var(--label-3); font-size: 12.5px; text-align: center; padding: 6px 0; }
-/* AI 给出整理清单后的操作卡（左文案 + 右侧执行按钮） */
-.tidy-msg.plan { max-width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 0.5px solid var(--sep); }
-.tidy-msg.plan .tp-tx { flex: 1; min-width: 0; font-size: 14px; color: var(--label); }
-.tidy-msg.plan .tp-btn { flex: none; border: none; border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; color: #fff; background: #5856D6; }
-.tidy-msg.plan .tp-btn:active { opacity: .8; }
+.tidy-msg.sys { width: auto; max-width: 100%; margin: 0 auto; background: transparent; color: var(--label-3); font-size: 12.5px; text-align: center; padding: 6px 0; }
+/* AI 给出整理清单后的小卡片（像附件文件）：整卡可点 → 预览弹窗；右侧「导出」存成文件 */
+.tidy-msg.plan { width: 100%; max-width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 0.5px solid var(--sep); }
+.tidy-msg.plan:active { opacity: .88; }
+.tidy-msg.plan .tp-ic { flex: none; width: 34px; height: 34px; border-radius: 9px; background: rgba(88,86,214,.12); color: #5856D6; display: flex; align-items: center; justify-content: center; }
+.tidy-msg.plan .tp-ic svg { width: 18px; height: 18px; }
+.tidy-msg.plan .tp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tidy-msg.plan .tp-tx { font-size: 14px; font-weight: 600; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-msg.plan .tp-sub { font-size: 11.5px; color: var(--label-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-msg.plan .tp-dl { flex: none; border: none; border-radius: 999px; padding: 6px 11px; font-size: 12.5px; font-weight: 600; color: #5856D6; background: rgba(88,86,214,.1); }
+.tidy-msg.plan .tp-dl:active { opacity: .7; }
+.tidy-msg.plan .tp-go { flex: none; width: 16px; height: 16px; color: var(--label-3); }
+.tidy-msg.plan .tp-go svg { width: 16px; height: 16px; }
 .tidy-chat-send[disabled] { opacity: .5; }
-.tidy-chat-bar { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); border-top: 0.5px solid var(--sep); background: var(--bg); }
+/* 输入框上方的「确认结果」按钮：点了才让 AI 出清单（平时只聊天，不吐 JSON） */
+.tidy-chat-acts { flex: none; display: flex; justify-content: flex-start; padding: 8px 14px 0; border-top: 0.5px solid var(--sep); background: var(--bg); }
+.tidy-confirm-btn { flex: none; align-self: flex-start; border: 0.5px solid rgba(88,86,214,.28); border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 600; color: #5856D6; background: rgba(88,86,214,.1); -webkit-tap-highlight-color: transparent; }
+.tidy-confirm-btn:active { opacity: .75; }
+.tidy-confirm-btn[disabled] { opacity: .45; }
+.tidy-chat-bar { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); }
 .tidy-chat-input { flex: 1; min-height: 38px; max-height: 120px; border: none; background: var(--card-fill); border-radius: 19px; padding: 9px 14px; font-size: 15px; line-height: 1.4; color: var(--label); resize: none; -webkit-user-select: text; }
 .tidy-chat-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .tidy-chat-send { flex: none; border: none; border-radius: 19px; padding: 9px 18px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; }
@@ -1749,12 +1761,31 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-preview-ops .tidy-run-btn { flex: 1; }
 .tidy-preview-ops .sheet-btn { flex: none; padding-left: 22px; padding-right: 22px; }
 
-/* 预览列表 */
-.tidy-preview-list { max-height: 52vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 0; }
-.tidy-pv-row { padding: 9px 0; border-bottom: 0.5px solid var(--sep); font-size: 12.5px; line-height: 1.5; }
-.tidy-pv-row .pv-old { color: var(--label-3); text-decoration: line-through; word-break: break-all; }
-.tidy-pv-row .pv-new { color: var(--label); word-break: break-all; margin-top: 2px; }
+/* 预览列表（弹窗固定 85% 高，列表撑满、底部按钮固定） */
+#tidyPreviewSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; display: flex; flex-direction: column; padding-bottom: calc(var(--sab) + 16px); }
+#tidyPreviewSheet .sheet-bar { flex: none; }
+.tidy-preview-list { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 0; }
+#tidyPreviewList { flex: 1; min-height: 0; }
+.tidy-preview-ops { flex: none; }
+/* 每一行可点 → 弹出输入框手动改这一项的新名 */
+.tidy-pv-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 0; border: none; border-bottom: 0.5px solid var(--sep); background: none; text-align: left; font-size: 12.5px; line-height: 1.5; color: inherit; -webkit-tap-highlight-color: transparent; }
+.tidy-pv-row:active { opacity: .55; }
+.tidy-pv-row .pv-main { flex: 1; min-width: 0; }
+.tidy-pv-row .pv-old { display: block; color: var(--label-3); text-decoration: line-through; word-break: break-all; }
+.tidy-pv-row .pv-new { display: block; color: var(--label); word-break: break-all; margin-top: 2px; }
+.tidy-pv-row .pv-edit { flex: none; width: 16px; height: 16px; color: var(--label-3); opacity: .6; }
+.tidy-pv-row .pv-edit svg { width: 16px; height: 16px; }
 .tidy-pv-more { padding: 10px 0; font-size: 12px; color: var(--label-3); text-align: center; }
+/* 改名单项弹窗：内容自适应高度（覆写通用 44dvh 最小高，不留空） */
+.sheet-tidy-name { min-height: 0; height: auto; max-height: 70vh; max-height: 70dvh; padding-bottom: calc(var(--sab) + 16px); }
+.tidy-name-body { padding: 2px 0 4px; }
+.tidy-name-row { margin-bottom: 12px; }
+.tidy-name-row .tn-label { display: block; font-size: 12px; color: var(--label-3); margin-bottom: 5px; }
+.tidy-name-old { font-size: 14px; color: var(--label-2); word-break: break-all; line-height: 1.45; }
+.tidy-name-old.empty::after { content: '（根目录）'; color: var(--label-4); }
+.tidy-name-input { width: 100%; box-sizing: border-box; border: none; outline: none; background: var(--card-fill); color: var(--label); border-radius: var(--radius-sm); font-size: 16px; padding: 12px 14px; -webkit-appearance: none; }
+.tidy-name-input::placeholder { color: var(--label-4); }
+.tidy-name-input:focus { box-shadow: 0 0 0 2px var(--accent-fg); }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; text-align: center; }
 /* 上传入口：常驻在「目标」行上方，不依赖任何离线任务 */
 .auto-actions { display: flex; width: 60%; margin: 10px auto 12px; }
