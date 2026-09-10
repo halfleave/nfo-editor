@@ -544,7 +544,8 @@ function normalizeJavbusFilm(d, opts){
   }
   function markPendingTranslate(id){
     if (state.metaSource === 'tmdb') return; // TMDB 来源影片保存时不自动触发翻译
-    if (!translateConfigReady()) return;
+    // 自填 key 或高级档（服务端翻译）才自动触发；免费/中级无 key 则不自动翻
+    if (!translateConfigReady() && (state.tier || '') !== 'full') return;
     state.translatingIds.add(id);
     armTranslatingFallback(id);   // 起 60s 兜底：最多 60 秒后图标强制消失
     renderOverview();
@@ -566,6 +567,65 @@ function normalizeJavbusFilm(d, opts){
         renderMediaThumb(type, cropped);
       });
     }).catch(function(){ /* 图片拉取失败不阻塞导入 */ });
+  }
+
+  // ===== TMDB / 翻译 代理请求（纯逻辑，自填 key 优先，无则走服务端代理）=====
+  // 「一个激活码搞定」混合模型：
+  // - 用户自填 TMDB Key → 直连 api.themoviedb.org（不占服务端配额、不限流）
+  // - 未填 → 走 Worker /tmdb 代理（服务端持有 key，按档位全局共享配额）
+  // path 形如 '/search/movie' 或 '/movie/123'；params 为查询参数对象（不含 api_key）；
+  // opts = { ownKey, workerBase, code }；返回 Promise<解析后的 JSON>
+  function tmdbRequest(path, params, opts) {
+    opts = opts || {};
+    var ownKey = (opts.ownKey || '').trim();
+    var timeout = (typeof opts.timeout === 'number') ? opts.timeout : 15000;
+    function withTimeout(p) {
+      if (!timeout) return p;
+      return new Promise(function (resolve, reject) {
+        var tid = setTimeout(function () { reject(new Error('TMDB 请求超时')); }, timeout);
+        p.then(function (v) { clearTimeout(tid); resolve(v); }, function (e) { clearTimeout(tid); reject(e); });
+      });
+    }
+    if (ownKey) {
+      var u = new URL(TMDB_API_BASE + path);
+      Object.keys(params || {}).forEach(function (k) { if (params[k] != null) u.searchParams.set(k, params[k]); });
+      u.searchParams.set('api_key', ownKey);
+      return withTimeout(fetch(u.toString(), { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { if (!r.ok) throw new Error('TMDB ' + r.status); return r.json(); }));
+    }
+    var base = (opts.workerBase || '').replace(/\/+$/, '');
+    if (!base) return Promise.reject(new Error('未配置 TMDB：请填写 TMDB Key 或 Worker 地址'));
+    var wu = new URL(base + '/tmdb' + path);
+    Object.keys(params || {}).forEach(function (k) { if (params[k] != null) wu.searchParams.set(k, params[k]); });
+    var code = (opts.code || '').trim();
+    if (code) wu.searchParams.set('code', code);
+    return withTimeout(fetch(wu.toString(), { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json().then(function (d) { if (d && d.error) throw new Error(d.error); return d; }); }));
+  }
+
+  // AI 翻译：自填配置优先（直连，复用 translateMeta）；无则走服务端代理（仅高级档）
+  // title/plot 为待翻译文本；opts = { ownCfg:{baseUrl,apiKey,model}, workerBase, code }
+  // 返回 Promise<{title, summary}>（两条路径均经 stripTitleParens + cleanTranslatedText 清洗，结果一致）
+  function translateRequest(title, plot, opts) {
+    opts = opts || {};
+    var own = opts.ownCfg || {};
+    if (own.baseUrl && own.apiKey && own.model) {
+      return translateMeta(title, plot, own);
+    }
+    var base = (opts.workerBase || '').replace(/\/+$/, '');
+    if (!base) return Promise.reject(new Error('未配置翻译：请填写翻译配置或升级高级档'));
+    var url = base + '/translate' + ((opts.code ? ('?code=' + encodeURIComponent(opts.code)) : ''));
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title || '', plot: plot || '' })
+    }).then(function (r) { return r.json().then(function (d) { if (d && d.error) throw new Error(d.error); return d; }); })
+      .then(function (d) {
+        var res = { title: (d && d.title) || '', summary: (d && d.summary) || '' };
+        if (res.title) res.title = stripTitleParens(cleanTranslatedText(res.title));
+        if (res.summary) res.summary = cleanTranslatedText(res.summary);
+        return res;
+      });
   }
 
   global.NfoCore = {
@@ -591,6 +651,8 @@ function normalizeJavbusFilm(d, opts){
     tmdbImgUrl: tmdbImgUrl,
     CC_MAP: CC_MAP,
     normalizeTmdbFilm: normalizeTmdbFilm,
+    tmdbRequest: tmdbRequest,
+    translateRequest: translateRequest,
     FILM_TYPE: FILM_TYPE,
     isAdultByRating: isAdultByRating,
     filmKey: filmKey,

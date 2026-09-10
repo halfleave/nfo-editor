@@ -809,32 +809,21 @@ function libSearchDataSource(q){
 function libSearchTMDB(q){
   var dd = document.getElementById('libSearchDropdown');
   if (!dd) return;
-  getTMDBKey().then(function(key){
-    if (!key){
-      dd.innerHTML = '<div class="lib-search-empty">未配置 TMDB Key，请到「设置 → API 配置」<a href="javascript:void(0)" onclick="openApiKeySheet()">去配置</a></div>';
-      dd.classList.remove('hidden');
-      return;
-    }
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
     var adult = state.themeHidden ? 'true' : 'false';
     var mt = (state.tmdbMediaType === 'tv') ? 'tv' : 'movie';
     var path = mt === 'tv' ? '/search/tv' : '/search/movie';
-    var url = TMDB_API_BASE + path + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
-    var ctrl = new AbortController();
-    var t = setTimeout(function(){ ctrl.abort(); }, 15000);
-    fetch(url, { signal: ctrl.signal })
-      .then(function(r){
-        clearTimeout(t);
-        if (!r.ok){ if (r.status === 401) throw new Error('TMDB API Key 无效或已过期，请到「设置 → API 配置」重新填写'); throw new Error('HTTP ' + r.status); }
-        return r.json();
-      })
+    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
       .then(function(data){ renderLibSearchDropdown(data && data.results ? data.results : [], q, 'tmdb'); })
       .catch(function(err){
-        var msg = (err && err.name === 'AbortError') ? '请求超时，请检查网络或稍后重试' : ((err && err.message) || '请求失败');
+        var msg = ((err && err.message) || '请求失败');
         dd.innerHTML = '<div class="lib-search-empty">搜索失败：' + escapeHtml(msg) + '</div>';
         dd.classList.remove('hidden');
       });
   }).catch(function(err){
-    dd.innerHTML = '<div class="lib-search-empty">读取 Key 失败：' + escapeHtml((err && err.message) || '未知错误') + '</div>';
+    dd.innerHTML = '<div class="lib-search-empty">读取配置失败：' + escapeHtml((err && err.message) || '未知错误') + '</div>';
     dd.classList.remove('hidden');
   });
 }
@@ -995,17 +984,18 @@ function ensureTrailerHas(id, mediaType){
   var type = mediaType || 'movie';
   return idbGet('kv', trailerCacheKey(id, type)).then(function(cached){
     if (cached && typeof cached.has === 'boolean') return cached.has;
-    return getTMDBKey().then(function(key){
-      if (!key) return false;
+    return Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+      var key = res[0] || '', code = res[1] || '';
+      var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
       // 不带 language 参数：返回全部语言 videos，覆盖中文/英文预告
-      var url = TMDB_API_BASE + '/' + (type === 'tv' ? 'tv' : 'movie') + '/' + id + '/videos?api_key=' + encodeURIComponent(key);
-      return fetch(url).then(function(r){ return r.ok ? r.json() : null; })
+      var dp = '/' + type + '/' + id + '/videos';
+      return NfoCore.tmdbRequest(dp, {}, opts)
         .then(function(j){
           var has = !!(j && j.results && j.results.some(function(v){ return v.site === 'YouTube' && v.key; }));
           idbPut('kv', trailerCacheKey(id, type), { has: has }).catch(function(){});
           return has;
         }).catch(function(){ return false; });
-    });
+    }).catch(function(){ return false; });
   });
 }
 function fetchTrailersForResults(results, mediaType){

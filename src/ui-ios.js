@@ -1453,7 +1453,9 @@ function startFilmTranslation(id){
     renderOverview(); // 显示加载图标
     var title = (f.data && f.data.title) || f.title || '';
     var plot = (f.data && f.data.plot) || '';
-    translateMeta(title, plot).then(function(res){
+    // 翻译统一入口 NfoCore.translateRequest：自填配置完整 → 直连；否则回退 Worker 代理（reqOpts 已含 ownCfg + workerBase + code）
+    // 直接使用外层 reqOpts（已含 ownCfg + workerBase + code），不再重新声明，避免丢失高级档 Worker 代理路径
+    NfoCore.translateRequest(title, plot, reqOpts).then(function(res){
       loadFilm(id).then(function(ff){
         if (!ff){ finishTranslation(id); return; }
         var newTitle = (typeof res.title === 'string') ? res.title : '';
@@ -1480,7 +1482,8 @@ function startFilmTranslation(id){
       var tLabel = tDvd ? String(tDvd).trim() : (f && (f.title || ''));
       showToast('【' + tLabel + ' 翻译失败】', 'error');
     });
-  }).catch(function(){});
+  }).catch(function(){ finishTranslation(id); });
+}).catch(function(){ finishTranslation(id); });
 }
 function finishTranslation(id){
   if (typeof NfoCore !== 'undefined' && NfoCore.clearTranslatingFallback) NfoCore.clearTranslatingFallback(id); // 清掉 60s 兜底计时器
@@ -2516,7 +2519,7 @@ function auto115StepTvGetItems(t){
     /* 始终穿透子文件夹（种子套层结构） */
     return auto115FlattenSubDirs(t, list);
   }).then(function(list){
-    return list.map(function(it){ return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString() }; }).filter(function(it){ return (it.fid || it.cid) && it.name; });
+    return list.map(function(it){ var sz = it.s || 0; return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: sz, size: sz }; }).filter(function(it){ return (it.fid || it.cid) && it.name; });
   });
 }
 function auto115StepTvCleanupFiles(t){
@@ -2630,31 +2633,59 @@ function auto115TvLeftoverJobs(t, plan){
     });
   });
 }
+/* 剧集平铺收尾：把「搬空了的子文件夹」删掉（如原有的 Outlander.S01–S05 老季夹——
+   里面的视频已全部搬到剧集根）。只删**空夹**：里面还留着文件（遗留/认不出的）一律不动。 */
+function auto115RemoveEmptySubDirs(t, dirCid){
+  if (!dirCid || dirCid === C115_DEFAULT_DIR_CID) return Promise.resolve(null);
+  return auto115ListDir(dirCid).then(function(list){
+    var subs = (list || []).filter(function(it){ return it && it.cid && !it.fid; });
+    if (!subs.length) return null;
+    return Promise.all(subs.map(function(s){
+      return auto115ListDir(s.cid).then(function(inner){
+        if (inner && inner.length) return null;                    // 还有东西 → 保留
+        return auto115DeleteBatch(dirCid, [String(s.cid)]).catch(function(){ return null; });
+      }).catch(function(){ return null; });
+    })).then(function(){ return null; });
+  }).catch(function(){ return null; });
+}
 function auto115StepTvMoveVideos(t){
   auto115Set(t, 'move2', 'running', '正在整理文件位置…');
   var plan = t.tvPlan, map = t.tvSeasonMap;
   if (!plan){ auto115Set(t, 'move2', 'fail', '缺少整理计划'); auto115Finish(t); return Promise.resolve(null); }
   var flatName = t.finalDirName || auto115TvDirName(auto115Doc.filmTitle);
-  /* 不分季模式：文件平铺在剧集根文件夹（命名仍带 SxxExx）；
-     只有当它们现在不在剧集根里（单文件落地 / 并入同名剧集夹）才需要移动 */
+  /* 不分季模式：文件统一平铺到剧集根文件夹（命名仍带 SxxExx）。
+     注意文件可能嵌在根下的子文件夹里（v271 穿透扫描后种子套层很常见），
+     所以**不能因为「目标=当前夹」就跳过**——照常发起移动，planMoveJobs 会把
+     已在目标里同名同大小的文件自动跳过，只有真正嵌在子夹里的才会搬上来。 */
   if (t.tvFlat){
-    var curParent = t.noFolder ? C115_DEFAULT_DIR_CID : t.offlineDirCid;
-    var flatTarget = t.tvRootCid || curParent;
-    if (!flatTarget || flatTarget === curParent || !plan.renames.length){
-      auto115Set(t, 'move2', 'skip', '文件已在「' + flatName + '」内，无需移动');
+    var flatTarget = t.tvRootCid || (t.noFolder ? C115_DEFAULT_DIR_CID : t.offlineDirCid);
+    if (!flatTarget || !plan.renames.length){
+      auto115Set(t, 'move2', 'skip', '没有需要移动的文件');
+      auto115Finish(t);
+      return Promise.resolve(null);
+    }
+    if (t.noFolder){
+      /* 散装剧集本来就在根目录且已改好名，无需移动 */
+      auto115Set(t, 'move2', 'skip', '文件已在云下载根目录，无需移动');
       auto115Finish(t);
       return Promise.resolve(null);
     }
     var flatJobs = plan.renames.map(function(r){ return { fid: r.fid, name: r.name, orig: r.name, size: r.size }; });
     return auto115MoveInto(t, flatJobs, flatTarget).then(function(res){
-      auto115Set(t, 'move2', 'ok', '已把 ' + res.moved + ' 个文件放到「' + flatName + '」'
-        + (res.skipped ? ('（跳过 ' + res.skipped + ' 个已存在的相同文件）') : ''));
+      /* moved=0：文件本来就都在剧集根（原地改名后同名同大小被跳过）→ 换个说法避免误导 */
+      auto115Set(t, 'move2', 'ok', res.moved
+        ? ('已把 ' + res.moved + ' 个文件放到「' + flatName + '」' + (res.skipped ? ('（跳过 ' + res.skipped + ' 个已存在的相同文件）') : ''))
+        : ('文件已在「' + flatName + '」内，无需移动' + (res.skipped ? ('（核对 ' + res.skipped + ' 个文件）') : '')));
       auto115Finish(t);
+      /* 收尾：把搬空了的老季文件夹（Outlander.S01 等）删掉；里面还有遗留文件的不动 */
+      var tidy = auto115RemoveEmptySubDirs(t, t.offlineDirCid);
       /* 并入同名剧集夹：夹里有遗留文件（认不出集号被保留的）→ 临时夹整体保留不动 */
       if (t.tvMergeCid){
-        return auto115TvLeftoverJobs(t, plan).then(function(leftJobs){
-          if (leftJobs.length) return null;
-          return auto115RemoveTmpDir(t).then(function(){ return null; });
+        return tidy.then(function(){
+          return auto115TvLeftoverJobs(t, plan).then(function(leftJobs){
+            if (leftJobs.length) return null;
+            return auto115RemoveTmpDir(t).then(function(){ return null; });
+          });
         });
       }
       if (t.noFolder) return auto115RemoveTmpDir(t).then(function(){ return null; });
@@ -5661,24 +5692,17 @@ function searchTMDB(){
   addSearchHistory(q);
   var box = document.getElementById('tmdbResults');
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
-  getTMDBKey().then(function(key){
-    if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → 应用配置」填写 TMDB Key', 'error'); stopLoadingRotator(); return; }
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
     // TMDB 成人内容：里模式解锁后包含，否则不包含
     var adult = state.themeHidden ? 'true' : 'false';
     var mt = state.tmdbMediaType;
     var path = mt === 'tv' ? '/search/tv' : '/search/movie';
-    var url = TMDB_API_BASE + path + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
-    fetch(url)
-      .then(function(r){
-        if (!r.ok){
-          if (r.status === 401) throw new Error('TMDB API Key 无效或已过期，请去「设置 → 应用配置」重新填写');
-          throw new Error('HTTP ' + r.status);
-        }
-        return r.json();
-      })
+    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
       .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
       .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; }).finally(function(){ stopLoadingRotator(); });
-  });
+  }).catch(function(){ stopLoadingRotator(); });
 }
 
 /* ===== R18.dev 元数据搜索（AV 元数据来源，经 Worker 代理） ===== */
@@ -6206,35 +6230,26 @@ function selectTMDB(id){
 // posterHint：搜索列表已展示过的 poster_path，用于保存时直接复用已加载封面、免去再次拉取
 function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
   mediaType = mediaType || state.tmdbMediaType || 'movie';
-  getTMDBKey().then(function(key){
-    if (!key) return;
+  // 「一个激活码搞定」：自填 TMDB Key 优先（直连），无则走 Worker /tmdb 代理（需激活码档位配额）
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
+    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
+    var dp = (mediaType === 'tv' ? '/tv/' : '/movie/') + id;
     showToast('正在获取详情…', 'success');
-    var path = mediaType === 'tv' ? '/tv/' : '/movie/';
-    var base = TMDB_API_BASE + path + id;
-    var url = base + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=true&append_to_response=images,release_dates,content_ratings,credits,videos&include_image_language=null,en,zh';
-    // 语言无关地获取预告片：分别拉 en-US 与 zh-CN 视频，合并去重
-    var videoUrls = [
-      base + '/videos?api_key=' + encodeURIComponent(key),
-      base + '/videos?api_key=' + encodeURIComponent(key) + '&language=zh-CN'
-    ];
-    fetch(url)
-      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    NfoCore.tmdbRequest(dp, { language:'zh-CN', include_adult:true, append_to_response:'images,release_dates,content_ratings,credits,videos', include_image_language:'null,en,zh' }, opts)
       .then(function(d){
         // 语言兜底：zh-CN 无剧情简介（或标题）时回落 en-US，避免简介变空白
         var p = Promise.resolve(d);
         if (!d.overview || !d.overview.trim()){
-          var fbUrl = base + '?api_key=' + encodeURIComponent(key) + '&language=en-US&include_adult=true';
-          p = fetch(fbUrl).then(function(r){ return r.ok ? r.json() : null; })
-            .then(function(en){
-              if (en){
-                if (!d.overview || !d.overview.trim()) d.overview = en.overview || '';
-                if (!d.title || !d.title.trim()) d.title = en.title || d.title;
-              }
-              return d;
-            }).catch(function(){ return d; });
+          p = NfoCore.tmdbRequest(dp, { language:'en-US', include_adult:true }, opts)
+            .then(function(en){ if (en){ if (!d.overview || !d.overview.trim()) d.overview = en.overview || ''; if (!d.title || !d.title.trim()) d.title = en.title || d.title; } return d; })
+            .catch(function(){ return d; });
         }
         return p.then(function(d2){
-          return fetchVideosMerged(videoUrls).then(function(merged){
+          return fetchVideosMerged([
+            { path: dp + '/videos', params: {} },
+            { path: dp + '/videos', params: { language:'zh-CN' } }
+          ], opts).then(function(merged){
             if (merged.length) d2.videos = { results: merged };
             return d2;
           }).catch(function(){ return d2; });
@@ -6255,7 +6270,7 @@ function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
         return imgP.then(function(){ if (afterApply) afterApply(); }).catch(function(){ if (afterApply) afterApply(); });
       })
       .catch(function(err){ showToast('获取详情失败：' + ((err&&err.message)||'请求失败'), 'error'); });
-  });
+  }).catch(function(err){ showToast('获取详情失败：' + ((err&&err.message)||'请求失败'), 'error'); });
 }
 // 长按菜单「刷新」总入口：按影片来源 source 路由到对应源的刷新逻辑；
 // 自定义（custom）来源在菜单里已置灰不可点，不会走到这里
@@ -6287,14 +6302,13 @@ function refreshFromTMDB(film){
 // 按标题在 TMDB 静默搜索：优先取标题（title/original_title）与当前标题一致的项，
 // 没有一致的再取搜索结果第一项。回调返回选中的 id，未找到返回 null
 function searchTMDBIdByTitle(q, cb, mediaType){
-  getTMDBKey().then(function(key){
-    if (!key) return cb(null);
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
     var adult = state.themeHidden ? 'true' : 'false';
     var type = mediaType || 'movie';
     var path = type === 'tv' ? '/search/tv' : '/search/movie';
-    var url = TMDB_API_BASE + path + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
-    fetch(url)
-      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
       .then(function(data){
         var results = (data && data.results) || [];
         if (!results.length) return cb(null);
@@ -6309,7 +6323,7 @@ function searchTMDBIdByTitle(q, cb, mediaType){
         cb((exact || results[0]).id);
       })
       .catch(function(){ cb(null); });
-  });
+  }).catch(function(){ cb(null); });
 }
 // 用给定 TMDB id 重新拉取并覆盖保存该影片元数据
 function doApplyRefresh(film, tid, mediaType){
@@ -6354,9 +6368,9 @@ function refreshFromJavbus(film){
       showToast(err && err.message ? err.message : '刷新失败', 'error');
     });
 }
-function fetchVideosMerged(urls){
-  return Promise.all(urls.map(function(u){
-    return fetch(u).then(function(r){ return r.ok ? r.json() : null; })
+function fetchVideosMerged(specs, opts){
+  return Promise.all((specs || []).map(function(s){
+    return NfoCore.tmdbRequest(s.path, s.params || {}, opts)
       .then(function(j){ return (j && j.results) || []; })
       .catch(function(){ return []; });
   })).then(function(lists){
@@ -6389,17 +6403,18 @@ function ensureTrailerHas(id, mediaType){
   var type = mediaType || 'movie';
   return idbGet('kv', trailerCacheKey(id, type)).then(function(cached){
     if (cached && typeof cached.has === 'boolean') return cached.has;
-    return getTMDBKey().then(function(key){
-      if (!key) return false;
+    return Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+      var key = res[0] || '', code = res[1] || '';
+      var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
       // 不带 language 参数：返回全部语言的 videos，覆盖中文/英文预告
-      var url = TMDB_API_BASE + '/' + (type === 'tv' ? 'tv' : 'movie') + '/' + id + '/videos?api_key=' + encodeURIComponent(key);
-      return fetch(url).then(function(r){ return r.ok ? r.json() : null; })
+      var dp = '/' + type + '/' + id + '/videos';
+      return NfoCore.tmdbRequest(dp, {}, opts)
         .then(function(j){
           var has = !!(j && j.results && j.results.some(function(v){ return v.site === 'YouTube' && v.key; }));
           idbPut('kv', trailerCacheKey(id, type), { has: has }).catch(function(){});
           return has;
         }).catch(function(){ return false; });
-    });
+    }).catch(function(){ return false; });
   });
 }
 // 列表渲染完成后，后台并发解析每个结果的预告状态，命中后点亮角标

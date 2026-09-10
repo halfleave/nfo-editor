@@ -729,7 +729,14 @@ const lz4LiteralForTest = (bytes) => {
           { fid: 'J1', n: 'sample.mp4', s: 5000 }
         ] };
       }
-      return { state: true, data: [] };   // 第二次：检查 S01 是否存在，返回空
+      /* 第二次起：move2 的 MoveInto / 空季夹探测再列目录——原地改名后同名同大小 → 全部跳过不搬 */
+      return { state: true, data: [
+        { fid: 'V1', n: '权力的游戏.S01E01.mkv', s: 900 },
+        { fid: 'V2', n: '权力的游戏.S01E02.mkv', s: 900 },
+        { fid: 'SU1', n: '权力的游戏.S01E01.zh.srt', s: 10 },
+        { fid: 'SU2', n: '权力的游戏.S01E02.und.srt', s: 10 },
+        { fid: 'J1', n: 'sample.mp4', s: 5000 }
+      ] };
     },
     'files/add': { state: true, data: { cid: 'SEASON01' } },
     'files/move': { state: true },
@@ -745,7 +752,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115GetStep(ttv, 'move').state === 'ok', 'TV 清除无关文件 move = ok');
   assert(ctx.auto115GetStep(ttv, 'mkdir2').state === 'skip', 'TV 只有一季 → 不分季（mkdir2 skip）');
   assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 修改视频名称 rename = ok（命名仍带 SxxExx）');
-  assert(ctx.auto115GetStep(ttv, 'move2').state === 'skip', 'TV 不分季时文件留在剧集根文件夹（move2 skip）');
+  assert(ctx.auto115GetStep(ttv, 'move2').state === 'ok' && ctx.auto115GetStep(ttv, 'move2').msg.indexOf('无需移动') >= 0, 'TV 不分季且文件已在剧集根 → 无需移动（' + ctx.auto115GetStep(ttv, 'move2').msg + '）');
   const editBodies = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.mkv') >= 0), '改名含 权力的游戏.S01E01.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.mkv') >= 0), '改名含 权力的游戏.S01E02.mkv');
@@ -759,6 +766,42 @@ const lz4LiteralForTest = (bytes) => {
   assert(!delBodies.some(b => b.indexOf('SU2') >= 0), '不再删除英文字幕 SU2');
   assert(delBodies.some(b => b.indexOf('J1') >= 0), '删除 sample J1');
   assert(!delBodies.some(b => b.indexOf('SU1') >= 0), '不删除简中字幕 SU1');
+  ctx.auto115Doc.type = 'movie'; ctx.auto115Doc.filmTitle = '测试影片'; ctx.auto115Doc.dvdId = 'IPX-486';
+
+  // 9i. 古战场传奇场景（v273）：视频嵌在老季夹（Outlander.Sxx）里 → 不分季平铺时搬到剧集根 + 清掉搬空的季夹
+  ctx.auto115Doc.type = 'tv'; ctx.auto115Doc.filmTitle = '古战场传奇'; ctx.auto115Doc.dvdId = '';
+  let otS1Calls = 0, otS2Calls = 0;
+  script = {
+    'files?cid=DIROT': { state: true, data: [
+      { cid: 'OTS1', n: 'Outlander.S01' },
+      { cid: 'OTS2', n: 'Outlander.S02' }
+    ] },
+    'files?cid=OTS1': function(){
+      otS1Calls++;
+      /* 第 1 次：整理扫描看到视频；第 2 次：move2 收尾探测空夹 → 已搬空 */
+      return otS1Calls === 1 ? { state: true, data: [ { fid: 'O1', n: 'Outlander.S01E01.mkv', s: 800 } ] } : { state: true, data: [] };
+    },
+    'files?cid=OTS2': function(){
+      otS2Calls++;
+      return otS2Calls === 1 ? { state: true, data: [
+        { fid: 'O2', n: 'Outlander.S02E01.mkv', s: 800 },
+        { fid: 'O3', n: 'Outlander.S02E01.chs.srt', s: 9 }
+      ] } : { state: true, data: [] };
+    },
+    'files/edit': { state: true },
+    'files/move': { state: true },
+    'rb/delete': { state: true }
+  };
+  const ttot = { id: 'ttot', magnet: 'magnet:?xt=urn:btih:ot333333333333333333333333333333333333333', magnetTitle: '古战场传奇磁力', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIROT', offlineDirName: '古战场传奇', fv: 2 };
+  ['submit', 'wait', 'mkdir'].forEach(k => { ctx.auto115GetStep(ttot, k).state = 'ok'; });
+  calls.length = 0;
+  await ctx.auto115StepCleanup(ttot);
+  assert(ctx.auto115GetStep(ttot, 'mkdir2').state === 'skip' && ctx.auto115GetStep(ttot, 'mkdir2').msg.indexOf('无需分季') >= 0, '古战场传奇：2 季不足阈值 → 不分季平铺');
+  assert(ctx.auto115GetStep(ttot, 'move2').state === 'ok' && ctx.auto115GetStep(ttot, 'move2').msg.indexOf('已把 3 个文件') >= 0, '古战场传奇：嵌在老季夹里的 3 个文件搬到剧集根（' + ctx.auto115GetStep(ttot, 'move2').msg + '）');
+  const otMoves = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(otMoves.every(b => b.indexOf('pid=DIROT') >= 0) && ['O1', 'O2', 'O3'].every(f => otMoves.some(b => b.indexOf('fid=' + f) >= 0)), '古战场传奇：O1/O2/O3 全部移入「古战场传奇」根');
+  const otDels = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(otDels.some(b => b.indexOf('pid=DIROT') >= 0 && b.indexOf('OTS1') >= 0) && otDels.some(b => b.indexOf('pid=DIROT') >= 0 && b.indexOf('OTS2') >= 0), '古战场传奇：搬空的老季夹 OTS1/OTS2 被删除');
   ctx.auto115Doc.type = 'movie'; ctx.auto115Doc.filmTitle = '测试影片'; ctx.auto115Doc.dvdId = 'IPX-486';
 
   // 9h. 脏 runningId 自动清理：runningId 指向已完成/已删任务时，新任务应能启动（不死锁）

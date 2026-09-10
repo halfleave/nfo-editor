@@ -335,8 +335,12 @@ function computeTranslateNeed(film){
    一次请求翻译 title + summary，按当前数据逐字段判定是否需要覆盖（简介可能晚于保存到达，故可重复调用）。 */
 function startFilmTranslation(id){
   if (state.translatingInFlight.has(id)) return;            // 已在翻译中：由在途任务负责收尾
-  if (!translateConfigReady()){ finishTranslation(id); return; } // 配置未就绪：清掉 markPendingTranslate 已显示的图标，避免卡死
-  loadFilm(id).then(function(f){
+  var ownCfg = { baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel };
+  // 既无自填 key、又非高级档（服务端翻译不可用）：直接结束，避免无谓请求
+  if (!translateConfigReady() && (state.tier || '') !== 'full'){ finishTranslation(id); return; }
+  getActivationCode().then(function(code){
+    var reqOpts = { ownCfg: ownCfg, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code || '' };
+    loadFilm(id).then(function(f){
     if (!f){ finishTranslation(id); return; }
     var need = computeTranslateNeed(f);
     if (!need.title && !need.plot){ finishTranslation(id); return; } // 无需翻译：清掉图标，避免永久卡住
@@ -373,7 +377,8 @@ function startFilmTranslation(id){
       var tLabel = tDvd ? String(tDvd).trim() : (f && (f.title || ''));
       showToast('【' + tLabel + ' 翻译失败】', 'error');
     });
-  }).catch(function(){});
+    });
+  }).catch(function(){ finishTranslation(id); });
 }
 function finishTranslation(id){
   if (typeof NfoCore !== 'undefined' && NfoCore.clearTranslatingFallback) NfoCore.clearTranslatingFallback(id);
@@ -626,14 +631,14 @@ function populateFromTMDB(d){
 }
 
 function searchTMDBIdByTitle(q, cb, mediaType){
-  getTMDBKey().then(function(key){
-    if (!key) return cb(null);
+  // 「一个激活码搞定」：自填 TMDB Key 优先（直连），无则走 Worker /tmdb 代理（需激活码档位配额）
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
     var adult = state.themeHidden ? 'true' : 'false';
     var type = mediaType || 'movie';
     var path = type === 'tv' ? '/search/tv' : '/search/movie';
-    var url = TMDB_API_BASE + path + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
-    fetch(url)
-      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
       .then(function(data){
         var results = (data && data.results) || [];
         if (!results.length) return cb(null);
@@ -648,7 +653,7 @@ function searchTMDBIdByTitle(q, cb, mediaType){
         cb((exact || results[0]).id);
       })
       .catch(function(){ cb(null); });
-  });
+  }).catch(function(){ cb(null); });
 }
 
 function refreshFilm(id){
@@ -847,35 +852,26 @@ function setMpaa(val){
 
 function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
   mediaType = mediaType || state.tmdbMediaType || 'movie';
-  getTMDBKey().then(function(key){
-    if (!key) return;
+  // 「一个激活码搞定」：自填 TMDB Key 优先（直连），无则走 Worker /tmdb 代理（需激活码档位配额）
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
+    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
+    var dp = (mediaType === 'tv' ? '/tv/' : '/movie/') + id;
     showToast('正在获取详情…', 'success');
-    var path = mediaType === 'tv' ? '/tv/' : '/movie/';
-    var base = TMDB_API_BASE + path + id;
-    var url = base + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=true&append_to_response=images,release_dates,content_ratings,credits,videos&include_image_language=null,en,zh';
-    // 语言无关地获取预告片：分别拉 en-US 与 zh-CN 视频，合并去重
-    var videoUrls = [
-      base + '/videos?api_key=' + encodeURIComponent(key),
-      base + '/videos?api_key=' + encodeURIComponent(key) + '&language=zh-CN'
-    ];
-    fetch(url)
-      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    NfoCore.tmdbRequest(dp, { language:'zh-CN', include_adult:true, append_to_response:'images,release_dates,content_ratings,credits,videos', include_image_language:'null,en,zh' }, opts)
       .then(function(d){
         // 语言兜底：zh-CN 无剧情简介（或标题）时回落 en-US，避免简介变空白
         var p = Promise.resolve(d);
         if (!d.overview || !d.overview.trim()){
-          var fbUrl = base + '?api_key=' + encodeURIComponent(key) + '&language=en-US&include_adult=true';
-          p = fetch(fbUrl).then(function(r){ return r.ok ? r.json() : null; })
-            .then(function(en){
-              if (en){
-                if (!d.overview || !d.overview.trim()) d.overview = en.overview || '';
-                if (!d.title || !d.title.trim()) d.title = en.title || d.title;
-              }
-              return d;
-            }).catch(function(){ return d; });
+          p = NfoCore.tmdbRequest(dp, { language:'en-US', include_adult:true }, opts)
+            .then(function(en){ if (en){ if (!d.overview || !d.overview.trim()) d.overview = en.overview || ''; if (!d.title || !d.title.trim()) d.title = en.title || d.title; } return d; })
+            .catch(function(){ return d; });
         }
         return p.then(function(d2){
-          return fetchVideosMerged(videoUrls).then(function(merged){
+          return fetchVideosMerged([
+            { path: dp + '/videos', params: {} },
+            { path: dp + '/videos', params: { language:'zh-CN' } }
+          ], opts).then(function(merged){
             if (merged.length) d2.videos = { results: merged };
             return d2;
           }).catch(function(){ return d2; });
@@ -896,7 +892,7 @@ function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
         return imgP.then(function(){ if (afterApply) afterApply(); }).catch(function(){ if (afterApply) afterApply(); });
       })
       .catch(function(err){ showToast('获取详情失败：' + ((err&&err.message)||'请求失败'), 'error'); });
-  });
+  }).catch(function(err){ showToast('获取详情失败：' + ((err&&err.message)||'请求失败'), 'error'); });
 }
 
 function loadImageFromTMDB(posterPath, type, size){
@@ -1042,9 +1038,9 @@ function cropToRatio(dataUrl, ratio){
   });
 }
 
-function fetchVideosMerged(urls){
-  return Promise.all(urls.map(function(u){
-    return fetch(u).then(function(r){ return r.ok ? r.json() : null; })
+function fetchVideosMerged(specs, opts){
+  return Promise.all((specs || []).map(function(s){
+    return NfoCore.tmdbRequest(s.path, s.params || {}, opts)
       .then(function(j){ return (j && j.results) || []; })
       .catch(function(){ return []; });
   })).then(function(lists){
@@ -1297,31 +1293,21 @@ function searchTMDB(){
   addSearchHistory(q);
   var box = document.getElementById('tmdbResults');
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
-  getTMDBKey().then(function(key){
-    if (!key){ box.innerHTML = '<div class="tmdb-msg">未配置 API Key</div>'; showToast('请先在「设置 → API 配置」填写 TMDB Key', 'error'); stopLoadingRotator(); return; }
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
     // TMDB 成人内容：里模式解锁后包含，否则不包含
     var adult = state.themeHidden ? 'true' : 'false';
     var mt = state.tmdbMediaType;
     var path = mt === 'tv' ? '/search/tv' : '/search/movie';
-    var url = TMDB_API_BASE + path + '?api_key=' + encodeURIComponent(key) + '&language=zh-CN&include_adult=' + adult + '&query=' + encodeURIComponent(q);
-    var ctrl = new AbortController();
-    var t = setTimeout(function(){ ctrl.abort(); }, 15000);
-    fetch(url, { signal: ctrl.signal })
-      .then(function(r){
-        clearTimeout(t);
-        if (!r.ok){
-          if (r.status === 401) throw new Error('TMDB API Key 无效或已过期，请去「设置 → API 配置」重新填写');
-          throw new Error('HTTP ' + r.status);
-        }
-        return r.json();
-      })
+    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
       .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
       .catch(function(err){
-        var msg = (err && err.name === 'AbortError') ? '请求超时，请检查网络或稍后重试' : ((err && err.message) || '请求失败');
+        var msg = ((err && err.message) || '请求失败');
         box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(msg) + '</div>';
       }).finally(function(){ stopLoadingRotator(); });
   }).catch(function(err){
-    box.innerHTML = '<div class="tmdb-msg">读取 API Key 失败：' + escapeHtml((err && err.message) || '未知错误') + '</div>';
+    box.innerHTML = '<div class="tmdb-msg">读取配置失败：' + escapeHtml((err && err.message) || '未知错误') + '</div>';
     stopLoadingRotator();
   });
 }
