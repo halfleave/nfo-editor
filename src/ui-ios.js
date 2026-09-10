@@ -124,13 +124,18 @@ function initDetailTitleCopy(){
   var DOUBLE_MS = 300, SINGLE_DELAY = 300; // 单击延迟 300ms 再复制番号（同时作双击判定窗口）；双击窗口 300ms
   function onStart(x, y){ sx = x; sy = y; st = Date.now(); moved = false; }
   function onMove(x, y){ if (st && (Math.abs(x - sx) > 14 || Math.abs(y - sy) > 14)) moved = true; }
-  function copySingle(){ // 单击 → 复制番号（无番号则复制标题）
-    var txt = (currentDetailDvdId || '').trim() || (currentDetailTitle || '').trim() || '';
-    if (txt){ copyText(txt, function(ok){ showToast(ok ? '已复制番号' : '复制失败', ok ? 'success' : 'error'); }); }
+  function copySingle(){ // 单击 → 复制番号；没有番号则复制标题
+    var dvd = (currentDetailDvdId || '').trim();
+    var txt = dvd || (currentDetailTitleFull || '').trim() || (currentDetailTitle || '').trim() || '';
+    if (!txt) return;
+    copyText(txt, function(ok){
+      showToast(ok ? (dvd ? '已复制番号' : '已复制标题') : '复制失败', ok ? 'success' : 'error');
+    });
   }
-  function copyDouble(){ // 双击 → 复制【标题】（不附带番号）
-    var title = (currentDetailTitleFull || '').trim();
-    if (title){ copyText(title, function(ok){ showToast(ok ? '已复制标题' : '复制失败', ok ? 'success' : 'error'); }); }
+  function copyDouble(){ // 双击 → 复制标题（不附带番号；没有番号时同样复制标题）
+    var title = (currentDetailTitleFull || '').trim() || (currentDetailTitle || '').trim() || '';
+    if (!title) return;
+    copyText(title, function(ok){ showToast(ok ? '已复制标题' : '复制失败', ok ? 'success' : 'error'); });
   }
   function clearSingle(){ if (singleTimer){ clearTimeout(singleTimer); singleTimer = null; } }
   // 在「松手」的用户手势内判定单击/双击并复制（iOS 的 clipboard API 必须处于用户手势上下文才生效）
@@ -2188,6 +2193,29 @@ var AUTO115_LOCK_GRACE = Auto115Core.LOCK_GRACE_MS;  // 宽限期：刚拿到锁
 /* 僵尸步骤清理：某一步卡在 running 超过 10 分钟没动静（关页面/断网/请求挂起会留下这种状态），
    它会被当成「任务还在跑」，导致执行锁不释放、别的任务永远排不上队。这里统一判死，让用户能重试。 */
 var AUTO115_ZOMBIE_MS = Auto115Core.ZOMBIE_MS;
+/* 广告视频阈值：非主视频且体积小于 adSizeThreshold(主视频体积) → 当广告/片头删掉。
+   纯逻辑与三个常量（AD_RATIO / AD_MIN_SIZE / AD_MAX_SIZE）单点在 Auto115Core，改松紧只动那里。 */
+/* 提交中标记：任务 id → true。
+   「添加磁力后自动跑」和「自愈抢跑/手动点火」可能同时落到同一条任务上，两条流水线都会走到
+   auto115StepSubmit，于是同一个磁力被 POST 两次 → 115 那边重复离线（或完成后又下一个同名夹）。
+   这里在提交期间上标记，重复进入直接跳过。 */
+var auto115Submitting = {};
+/* 同一磁力去重：本影片下已有相同 info hash 且未中止的任务 → 返回它（避免重复建任务导致重复离线） */
+function auto115FindSameMagnet(magnet){
+  var h = auto115Btih(magnet);
+  if (!h || !auto115Doc) return null;
+  var ts = auto115Doc.tasks || [];
+  for (var i = 0; i < ts.length; i++){
+    var x = ts[i];
+    if (!x || x.aborted || x.tidy) continue;
+    if (auto115Btih(x.magnet || '') === h) return x;
+  }
+  return null;
+}
+/* 这条任务是否已经成功提交过离线（有 hash 且 submit 步骤 ok）→ 之后只能「查进度」，绝不再提交 */
+function auto115Submitted(t){
+  return !!(t && t.infoHash && auto115GetStep(t, 'submit').state === 'ok');
+}
 function auto115SweepZombies(){
   var ts = (auto115Doc && auto115Doc.tasks) || [];
   var now = Date.now(), changed = false;
@@ -2244,6 +2272,27 @@ function auto115KickStuck(){
   target.queued = false;
   auto115Run(target);
 }
+/* 步骤分发单点：key → 对应执行函数。「启动流水线」与「重试某步」共用，避免两处分发不一致 */
+function auto115DispatchStep(t, key){
+  if (key === 'dir') return auto115StepUploadDir(t);
+  if (key === 'upload') return auto115StepUploadFiles(t);
+  if (key === 'submit') return auto115StepSubmit(t);
+  if (key === 'wait') return auto115StepWait(t, true);
+  if (key === 'mkdir') return t.tidy ? auto115StepTidyMkdir(t) : auto115StepMkdir(t);
+  if (key === 'move') return auto115IsTvTask() ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
+  if (key === 'rename') return auto115IsTvTask() ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
+  if (key === 'cleanup') return auto115StepCleanup(t);
+  /* TV 专属步骤 */
+  if (key === 'mkdir2') return auto115StepTvMkdirSeasons(t);
+  if (key === 'move2') return auto115StepTvMoveVideos(t);
+  return Promise.resolve(null);
+}
+/* 任务从哪一步开始跑（判定单点）：整理任务=定位文件夹（没有离线两步）；
+   已提交过离线的任务=查进度（绝不再提交一次）；其余=步骤表第一步 */
+function auto115StartKey(t){
+  if (t.tidy) return 'mkdir';
+  return auto115Submitted(t) ? 'wait' : auto115StepDefs(t)[0].key;
+}
 function auto115Run(t){
   if (!t) return Promise.resolve(null);
   /* 引用兜底：doc 被重新加载过（任务被换成反序列化副本）时，换回 doc 里当前那条；
@@ -2253,6 +2302,12 @@ function auto115Run(t){
   else if (auto115Doc && auto115Doc.tasks && t.id) auto115Doc.tasks.unshift(t);
   /* 清理脏的 runningId：指向的任务已终态/已删除/已中止/占着锁却没在跑 → 释放队列 */
   auto115ClearDirtyLock();
+  /* 本任务已经在跑（通常是自愈抢跑先起了流水线）→ 直接收手，不再开第二条，
+     否则两条流水线都会走到 submit，同一个磁力被提交两次 */
+  if (auto115RunningId === t.id){
+    if (auto115IsActive(t)) return Promise.resolve(null);
+    auto115ReleaseLock();
+  }
   if (auto115RunningId && auto115RunningId !== t.id){
     var cur = auto115Task(auto115RunningId);
     if (cur && (auto115IsActive(cur) || Date.now() - auto115LockAt <= AUTO115_LOCK_GRACE)){
@@ -2265,15 +2320,13 @@ function auto115Run(t){
   }
   auto115HoldLock(t);
   t.queued = false;
-  var firstKey = t.tidy ? 'mkdir' : auto115StepDefs(t)[0].key;   // 整理任务从「定位文件夹」起步，没有离线两步
+  var firstKey = auto115StartKey(t);
   return ensure115Cookie().then(function(ck){
     if (!ck){
       auto115Set(t, firstKey, 'fail', '还没登录 115');
       auto115Finish(t); return null;
     }
-    if (auto115TaskType(t) === 'upload') return auto115StepUploadDir(t);
-    if (t.tidy) return auto115StepTidyMkdir(t);
-    return auto115StepSubmit(t);
+    return auto115DispatchStep(t, firstKey);
   }).catch(function(e){
     auto115Set(t, firstKey, 'fail', (e && e.message) ? e.message : '启动失败');
     auto115Finish(t); return null;
@@ -2288,19 +2341,46 @@ function auto115AdvanceQueue(t){
   auto115KickStuck();
 }
 function auto115StepSubmit(t){
+  /* 已提交过 → 只查进度，绝不重复 POST（115 的列表去重只在任务还在列表时有效，
+     一旦上一个任务完成被清出列表，再提交一次就是真的又下一遍） */
+  if (auto115Submitted(t)) return auto115StepWait(t, true);
+  /* 这一条正在提交中 → 由那条请求负责收尾，避免并发造成重复离线 */
+  if (auto115Submitting[t.id]){
+    auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…');
+    return Promise.resolve(null);
+  }
+  auto115Submitting[t.id] = true;
   auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…');
+  return auto115SubmitPost(t);
+}
+/* 真正发提交请求。提交前先查一次 115 任务列表：同一个 hash 已经在离线列表里就直接复用，
+   避免「上次提交成功但响应丢了/超时被判失败」后再提交一次造成重复离线。 */
+function auto115SubmitPost(t){
   var body = 'url=' + encodeURIComponent(t.magnet) + '&wp_path_id=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
-  return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', body).then(function(res){
-    var d = res.d || {};
-    if (res.ok && (d.state === true || d.errcode === 10008 || (d.data && d.data.info_hash))){
-      t.infoHash = ((d.info_hash || (d.data && d.data.info_hash) || auto115Btih(t.magnet)) || '').toUpperCase();
-      t.offlineName = d.name || (d.data && d.data.name) || t.magnetTitle || '';
-      auto115Set(t, 'submit', 'ok', d.errcode === 10008 ? '任务已在 115 列表中（复用）' : '已提交到云下载');
+  var hash = auto115Btih(t.magnet);
+  var pre = hash ? auto115QueryTask({ infoHash: hash }).catch(function(){ return null; }) : Promise.resolve(null);
+  return pre.then(function(info){
+    if (info && !info.failed){
+      delete auto115Submitting[t.id];
+      t.infoHash = hash;
+      t.offlineName = info.name || t.offlineName || t.magnetTitle || '';
+      auto115Set(t, 'submit', 'ok', '任务已在 115 列表中（复用，不重复提交）');
       return auto115StepWait(t, true);
     }
-    auto115Set(t, 'submit', 'fail', auto115ErrText(d, res, '提交失败'));
-    auto115Finish(t); return null;
+    return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', body).then(function(res){
+      delete auto115Submitting[t.id];
+      var d = res.d || {};
+      if (res.ok && (d.state === true || d.errcode === 10008 || (d.data && d.data.info_hash))){
+        t.infoHash = ((d.info_hash || (d.data && d.data.info_hash) || auto115Btih(t.magnet)) || '').toUpperCase();
+        t.offlineName = d.name || (d.data && d.data.name) || t.magnetTitle || '';
+        auto115Set(t, 'submit', 'ok', d.errcode === 10008 ? '任务已在 115 列表中（复用）' : '已提交到云下载');
+        return auto115StepWait(t, true);
+      }
+      auto115Set(t, 'submit', 'fail', auto115ErrText(d, res, '提交失败'));
+      auto115Finish(t); return null;
+    });
   }).catch(function(e){
+    delete auto115Submitting[t.id];
     auto115Set(t, 'submit', 'fail', (e && e.message) ? e.message : '网络错误');
     auto115Finish(t); return null;
   });
@@ -2634,13 +2714,14 @@ function auto115StepMove(t){
     var EXCLUDE = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
     var mainCands = vids.filter(function(it){ return !EXCLUDE.test(it.n || it.name || ''); });
     var pool = mainCands.length ? mainCands : vids;
-    // 强信号优先：番号（AV）或标题/原始标题（影片）命中文件名 → 直接定主视频
+    // 强信号优先：番号（AV）走归一化子串（番号独特性强）；标题/原始标题（影片）走整词边界匹配（v262 修 V2），
+    // 「赌神2.1080p」不再命中「赌神」——标题后面紧跟数字/字母视为续集，不算本片。
     var normDvd = auto115Norm(auto115Doc.dvdId);
-    var normTitles = [auto115Norm(auto115Doc.filmTitle), auto115Norm(auto115Doc.originalTitle)].filter(Boolean);
+    var titleList = [auto115Doc.filmTitle, auto115Doc.originalTitle].filter(Boolean);
     function strongHit(it){
-      var nm = auto115Norm(it.n || it.name || '');
-      if (normDvd && nm.indexOf(normDvd) >= 0) return true;
-      if (!normDvd && normTitles.length){ for (var j = 0; j < normTitles.length; j++){ if (normTitles[j] && nm.indexOf(normTitles[j]) >= 0) return true; } }
+      var nm = it.n || it.name || '';
+      if (normDvd && auto115Norm(nm).indexOf(normDvd) >= 0) return true;
+      if (!normDvd && titleList.length && Auto115Core.titleHit(nm, titleList)) return true;
       return false;
     }
     var keep;
@@ -2655,20 +2736,54 @@ function auto115StepMove(t){
       else { keep = [ pool.slice().sort(function(a, b){ return auto115VidSize(b) - auto115VidSize(a); })[0] ]; }
     }
     keep.sort(function(a, b){ return auto115VidSize(b) - auto115VidSize(a); });
+    /* V1 修复：keep 判重——名称归一相同、或体积字节完全一致（差 < 1）视为同一文件的重复副本，
+       只保留体积最大的那 1 个，其余进删除清单（不再当成 .cd1/.cd2 分碟，也不能落进合集保护通道）。 */
+    var dedup = [], dupFids = [];
+    for (var di = 0; di < keep.length; di++){
+      var cand = keep[di];
+      var candNm = auto115Norm(cand.n || cand.name || '');
+      var candSz = auto115VidSize(cand);
+      var isDup = false;
+      for (var dj = 0; dj < dedup.length; dj++){
+        var d2 = dedup[dj];
+        var d2Nm = auto115Norm(d2.n || d2.name || '');
+        if ((candNm && d2Nm && candNm === d2Nm) || (candSz > 0 && Math.abs(auto115VidSize(d2) - candSz) < 1)){ isDup = true; break; }
+      }
+      if (isDup){ if (cand.fid) dupFids.push(String(cand.fid)); }
+      else dedup.push(cand);
+    }
+    keep = dedup;
     t.keepFids = keep.map(function(it){ return String(it.fid); });
     var v = keep[0];
     t.videoFid = String(v.fid); t.videoName = v.n || v.name || ''; t.videoSize = auto115VidSize(v);
-    // 待删：非 keep 且非字幕的全部（含 sample/extras/子文件夹）；根目录保护双保险
-    var delIds = [];
+    /* 待删：① 明确非正片的视频（sample/预告/特典/花絮…）② 非视频非字幕文件 ③ 明确垃圾名的子文件夹。
+       合集保护（v260）：没被选为主视频、名字里也没有排除词的【视频文件一律保留不删】——
+       它很可能是合集包里的另一部片（如「赌神 2部全」里的赌神2），删掉就是真丢片。 */
+    var adThreshold = Auto115Core.adSizeThreshold(auto115VidSize(keep[0]));   // 广告视频阈值（随主视频大小浮动）
+    var delIds = [], keptVids = 0;
     for (var i = 0; i < list.length; i++){
       var it = list[i];
       if (!it) continue;
-      if (it.fid){ if (t.keepFids.indexOf(String(it.fid)) < 0 && subFids.indexOf(String(it.fid)) < 0) delIds.push(String(it.fid)); }
-      else if (it.cid){ if (String(it.cid) !== C115_DEFAULT_DIR_CID) delIds.push(String(it.cid)); }
+      var nmz = it.n || it.name || '';
+      if (it.fid){
+        if (t.keepFids.indexOf(String(it.fid)) >= 0 || subFids.indexOf(String(it.fid)) >= 0) continue;
+        if (dupFids.indexOf(String(it.fid)) >= 0){ delIds.push(String(it.fid)); continue; }   // 判重出的重复副本 → 删
+        if (auto115IsVideoName(nmz) && !EXCLUDE.test(nmz)){
+          var sz = auto115VidSize(it);
+          // 远小于主视频（< 主视频×20%，夹在 5MB–50MB）→ 大概率是广告/片头/水印片 → 删；
+          // 阈值算不出来（0）或取不到体积 → 一律保留，不冒险
+          if (adThreshold > 0 && sz > 0 && sz < adThreshold){ delIds.push(String(it.fid)); continue; }
+          keptVids++; continue;   // 合集保护：保留
+        }
+        delIds.push(String(it.fid));
+      }
+      else if (it.cid){ if (String(it.cid) !== C115_DEFAULT_DIR_CID && EXCLUDE.test(nmz)) delIds.push(String(it.cid)); }
     }
+    t.keptOtherVideos = keptVids;
     var subCount = (t.subInfos || []).length;
-    if (!delIds.length){ auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + '，无需清理'); return auto115StepRename(t); }
-    auto115Set(t, 'move', 'running', '保留 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + '，正在删除其余 ' + delIds.length + ' 项…');
+    var keptMsg = keptVids ? ('，另保留 ' + keptVids + ' 个其他视频（可能是合集，未删除）') : '';
+    if (!delIds.length){ auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，无需清理'); return auto115StepRename(t); }
+    auto115Set(t, 'move', 'running', '保留 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，正在删除其余 ' + delIds.length + ' 项…');
     return auto115DeleteBatch(t.offlineDirCid, delIds).then(function(errMsg){
       if (errMsg){ auto115Set(t, 'move', 'fail', errMsg); auto115Finish(t); return null; }
       auto115Set(t, 'move', 'ok', '已清理 ' + delIds.length + ' 项，保留 ' + keep.length + ' 个视频（' + auto115Size(t.videoSize) + '）');
@@ -2777,9 +2892,10 @@ function auto115StepRename(t){
     return auto115ListDir(prev.cid).then(function(list){
       var stems = {};
       for (var i = 0; i < list.length; i++){ var nm = String(list[i].n || ''); stems[nm.replace(/\.[a-z0-9]+$/i, '').toLowerCase()] = list[i].s || 0; }
-      /* 目标夹已存在同目标名且大小相同的视频 → 同一文件（多为重试），直接清临时夹收尾 */
+      /* 目标夹已存在同目标名且大小相同的视频 → 同一文件（多为重试），直接清临时夹收尾。
+         注意 stems 的 key 是无扩展名词干（下面冲突循环也是 stem 语义），此前用全名查永远是 undefined，判重从未生效过 */
       if (!multi && keep.length === 1 && t.videoSize != null){
-        var dupSize = stems[(baseName + ext).toLowerCase()];
+        var dupSize = stems[baseName.toLowerCase()];
         if (dupSize != null && Math.abs((t.videoSize || 0) - dupSize) < 1){
           t.videoName = baseName + ext;
           auto115Set(t, 'rename', 'ok', '视频已在「' + prev.name + '」中，跳过重复文件');
@@ -2854,6 +2970,17 @@ function auto115StepRenameFlat(t){
       if (it.fid && keep.indexOf(String(it.fid)) >= 0) continue;
       var nm = String(it.n || '');
       stems[nm.replace(/\.[a-z0-9]+$/i, '').toLowerCase()] = it.s || 0;
+    }
+    /* V3 修复：云下载根目录已有「同目标名 + 大小一致」的视频 → 是同一文件（重复整理/重试），
+       直接跳过不再造副本（以前会改名成 赌神.A.mp4 多存一份）。stems 的 key 是无扩展名词干。 */
+    if (!multi && keep.length === 1 && t.videoSize > 0){
+      var dupSize = stems[baseName.toLowerCase()];
+      if (dupSize != null && Math.abs(t.videoSize - dupSize) < 1){
+        t.videoName = baseName + ext;
+        t.flatVideoFid = keep[0]; t.flatVideoName = t.videoName;
+        auto115Set(t, 'rename', 'ok', '云下载已有同名同大小的「' + t.videoName + '」，跳过重复文件');
+        return auto115RemoveTmpDir(t).then(function(){ auto115RefreshDerived(); auto115Finish(t); return null; });
+      }
     }
     var jobs = keep.map(function(fid, idx){
       var suffix = multi ? ('.cd' + (idx + 1)) : '';
@@ -3863,6 +3990,11 @@ function auto115AddFromOp(){
   closeMagnetOp();
   if (!magnet){ showToast('没有可操作的磁力链接', 'error'); return; }
   auto115EnsureDoc().then(function(doc){
+    /* 同一个磁力已经在这部片子的列表里 → 不再新建（否则会再离线一遍） */
+    if (auto115FindSameMagnet(magnet)){
+      showToast('这个磁力已经在自动化列表里了', 'info');
+      return openAuto115Page();
+    }
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
       magnet: magnet, magnetTitle: title || auto115Btih(magnet),
@@ -3964,6 +4096,11 @@ function auto115AddMagnetTask(){
   }
   auto115CloseMagnetModal();
   auto115EnsureDoc().then(function(doc){
+    /* 同一个磁力已经在这部片子的列表里 → 不再新建（否则会重复离线） */
+    if (auto115FindSameMagnet(magnet)){
+      showToast('这个磁力已经在自动化列表里了', 'info');
+      return openAuto115Page();
+    }
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
       type: 'offline',
@@ -4002,26 +4139,24 @@ function auto115RetryStep(tid, key, force){
       t.queued = false;
     }
     var defs = auto115StepDefs(t); /* 按任务类型取步骤表：上传任务是 dir/upload，不是离线六步 */
+    /* 已成功提交过离线的任务：重试/强启一律从「查进度」起步，不重置 submit、不再提交一次 */
+    var keepSubmit = (key === 'submit' && auto115Submitted(t));
     var idx = -1;
     for (var i = 0; i < defs.length; i++) if (defs[i].key === key) idx = i;
     if (idx < 0) return;
-    for (var j = idx; j < defs.length; j++){
-      var s = auto115GetStep(t, defs[j].key);
-      s.state = 'idle'; s.msg = ''; s.probes = 0; s.at = 0;
+    if (!keepSubmit){
+      for (var j = idx; j < defs.length; j++){
+        var s = auto115GetStep(t, defs[j].key);
+        s.state = 'idle'; s.msg = ''; s.probes = 0; s.at = 0;
+      }
+    } else {
+      var ws = auto115GetStep(t, 'wait');
+      ws.state = 'idle'; ws.msg = ''; ws.probes = 0; ws.at = 0;
     }
     t.aborted = false;
     auto115Save(); renderAuto115();
-    if (key === 'dir') return auto115StepUploadDir(t);
-    if (key === 'upload') return auto115StepUploadFiles(t);
-    if (key === 'submit') return auto115StepSubmit(t);
-    if (key === 'wait') return auto115StepWait(t, true);
-    if (key === 'mkdir') return t.tidy ? auto115StepTidyMkdir(t) : auto115StepMkdir(t);
-    if (key === 'move') return auto115IsTvTask() ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
-    if (key === 'rename') return auto115IsTvTask() ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
-    if (key === 'cleanup') return auto115StepCleanup(t);
-    /* TV 专属步骤 */
-    if (key === 'mkdir2') return auto115StepTvMkdirSeasons(t);
-    if (key === 'move2') return auto115StepTvMoveVideos(t);
+    if (keepSubmit) return auto115StepWait(t, true);
+    return auto115DispatchStep(t, key);
   }).catch(function(e){ showToast((e && e.message) || '重试失败', 'error'); });
 }
 /* 手动点火：任务卡在「待提交 / 排队中」时直接抢锁从第一步开始跑 */
@@ -4029,8 +4164,8 @@ function auto115ForceStart(tid){
   var t = auto115Task(tid);
   if (!t) return;
   showToast('立即开始…', 'info');
-  /* 整理任务没有离线步骤，强启也要从「定位文件夹」开始，不能落到 submit */
-  return auto115RetryStep(tid, t.tidy ? 'mkdir' : auto115StepDefs(t)[0].key, true);
+  /* 起始步骤判定收口在 auto115StartKey：整理=定位；已提交=查进度；其余=第一步 */
+  return auto115RetryStep(tid, auto115StartKey(t), true);
 }
 function auto115RetryTask(tid){
   var t = auto115Task(tid);
@@ -6754,7 +6889,7 @@ var currentDetailFilmId = null;
 var currentDetailFilm = null;  // 当前详情页影片对象（AV 预告片跳转用）
 var currentDetailTitle = '';   // 详情页长按复制用的标题文本（即便显示 logo 也能取到 d.title）
 var currentDetailDvdId = '';   // 详情页复制用的番号（单击复制）
-var currentDetailTitleFull = '';   // 详情页复制用的真实标题（双击复制「番号 标题」时用）
+var currentDetailTitleFull = '';   // 详情页复制用的真实标题（双击复制标题；无番号时单击也用它）
 var currentDetailShots = [];   // 当前详情页剧照列表（用于全屏查看）
 function openFilmDetail(encId){
   if (overviewSuppressClick){ overviewSuppressClick = false; return; }
@@ -6904,8 +7039,9 @@ function renderFilmDetail(film){
   var titleEl = document.getElementById('detailTitle');
   initDetailTitleCopy(); // 幂等：仅首次绑定；每次打开详情页重置复制状态，避免跨影片把单击误判成双击
   if (titleEl && titleEl._resetCopy) titleEl._resetCopy();
-  // 用于显示的「番号」：直接从元数据取番号字段——d.dvdId 优先，其次 d.content_id，老数据 dvdId 为空时兜底 d.originaltitle（形如番号）；均空则详情页显示/复制标题
-  var effectiveDvdId = (d.dvdId || d.content_id || (d.originaltitle && /[A-Za-z]/.test(d.originaltitle) && /\d/.test(d.originaltitle) ? d.originaltitle : '')).toString().trim();
+  // 用于显示的「番号」：只认显式番号字段 d.dvdId / d.content_id。
+  // 不再用 originaltitle 兜底：否则像 "Madrid, 1987" 这类带年份的英文名会被误当成番号显示并复制。
+  var effectiveDvdId = (d.dvdId || d.content_id || '').toString().trim();
   if (d.logo){
     titleEl.className = 'detail-title';
     titleEl.innerHTML = '<img class="detail-logo-img" src="' + escapeAttr(d.logo) + '" alt="' + escapeAttr(d.title || film.id) + '">';

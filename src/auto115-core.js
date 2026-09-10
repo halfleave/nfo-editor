@@ -18,6 +18,21 @@
   api.LOCK_GRACE_MS = 45000;                 // 宽限期：刚拿到锁的头 45s 允许还没跑到 running 步骤（读 Cookie/建目录）
   api.ZOMBIE_MS = 10 * 60 * 1000;            // 步骤 running 超过 10 分钟判死（僵尸清扫）
   api.SPLIT_MIN_EPISODES = 100;              // 剧集分季阈值：多季且总集数达到该值才建季文件夹，否则平铺（命名仍带 SxxExx）
+  /* 广告视频阈值（动态）：非主视频、体积小于「主视频体积 × AD_RATIO」→ 当广告/片头/水印片删掉。
+     夹在区间 [AD_MIN_SIZE, AD_MAX_SIZE] 内：大片别把 300MB 真预告删了，小片也别一刀切 50MB。
+     取不到体积（0/unknown，或主视频体积未知）→ 返回 0，表示「不启用」，一律保留不删。 */
+  api.AD_RATIO = 0.2;                            // 主视频 ×20%：2.5GB 的片 → 500MB → 被上限压到 50MB
+  api.AD_MIN_SIZE = 5 * 1024 * 1024;             // 下限 5MB
+  api.AD_MAX_SIZE = 50 * 1024 * 1024;            // 上限 50MB（广告/片头几乎不会超过它）
+  api.adSizeThreshold = function (mainSize) {
+    var m = Number(mainSize) || 0;
+    if (m <= 0) return 0;
+    var t = m * api.AD_RATIO;
+    if (t < api.AD_MIN_SIZE) t = api.AD_MIN_SIZE;
+    if (t > api.AD_MAX_SIZE) t = api.AD_MAX_SIZE;
+    if (t > m * 0.9) t = m * 0.9;                // 主视频本身很小时，阈值不能超过它的 90%
+    return Math.round(t);
+  };
 
   /* ---------- 步骤表（方案 B：先定容器再整理内容） ---------- */
   api.STEP_DEFS = [   // offline：单影片 6 步
@@ -178,7 +193,29 @@
   };
   api.vidSize = function (it) { return Number(it.s != null ? it.s : it.size) || 0; };
   api.isVideoName = function (n) { return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm|iso)$/i.test(n || ''); };
-  api.isSubtitle = function (name) { return /\.(srt|ass|ssa|sub|idx|vtt|smi|lrc|txt)$/i.test(name || ''); };
+  /* 词化归一：小写 + 把连续非「字母/数字/汉字」压成一个空格（保留词边界信息，供整词匹配） */
+  api.normWords = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, ' ').trim(); };
+  /* 标题整词命中（V2 修复）：在文件名里找标题，且命中段两侧必须是词边界（空格/首尾）。
+     「赌神.1080p」命中「赌神」；「赌神2.1080p」不命中（赌神后面紧跟 2，是续集不是本片）。
+     titles 传原始标题数组（不必先归一化），任一命中即 true。 */
+  api.titleHit = function (name, titles) {
+    var nw = api.normWords(name);
+    if (!nw) return false;
+    for (var i = 0; i < (titles || []).length; i++){
+      var tw = api.normWords(titles && titles[i]);
+      if (!tw) continue;
+      var idx = nw.indexOf(tw);
+      while (idx >= 0){
+        var beforeOk = idx === 0 || nw.charAt(idx - 1) === ' ';
+        var afterOk = idx + tw.length === nw.length || nw.charAt(idx + tw.length) === ' ';
+        if (beforeOk && afterOk) return true;
+        idx = nw.indexOf(tw, idx + 1);
+      }
+    }
+    return false;
+  };
+  /* 字幕扩展名：不含 .txt（说明/压制信息.txt 会被当字幕保留，误伤太多） */
+  api.isSubtitle = function (name) { return /\.(srt|ass|ssa|sub|idx|vtt|smi|lrc)$/i.test(name || ''); };
   /* 字幕语言：识别中文（简中 zh / 繁中 zt）；无法识别语言 → 仍保留，标记 und（unknown） */
   api.subLang = function (name) {
     var n = (name || '').toLowerCase();

@@ -58,6 +58,24 @@ assert(api.cnNum('十二') === 12 && api.cnNum('两') === 2 && api.cnNum('零七
 assert(api.pad2(3) === '03' && api.pad2(12) === '12', 'pad2 补零');
 assert(api.isVideoName('a.mkv') && !api.isVideoName('a.jpg'), '视频扩展名判定');
 assert(api.isSubtitle('a.zh.srt') && !api.isSubtitle('a.mp4'), '字幕扩展名判定');
+assert(!api.isSubtitle('说明.txt') && !api.isSubtitle('a.txt'), '字幕扩展名不含 .txt（说明文本不当字幕）');
+
+/* 广告视频阈值：主视频体积 ×20%，夹在 5MB–50MB 之间；未知大小 → 0（不启用） */
+const MB = 1024 * 1024;
+assert(api.adSizeThreshold(100 * MB) === 20 * MB, '广告阈值：主视频 100MB → 20MB');
+assert(api.adSizeThreshold(2.5 * 1024 * MB) === 50 * MB, '广告阈值：主视频 2.5GB → 压到上限 50MB');
+assert(api.adSizeThreshold(30 * MB) === 6 * MB, '广告阈值：主视频 30MB → 6MB');
+assert(api.adSizeThreshold(10 * MB) === 5 * MB, '广告阈值：主视频 10MB → 下限 5MB（且不超过主视频 90%）');
+assert(api.adSizeThreshold(0) === 0 && api.adSizeThreshold(null) === 0, '广告阈值：体积未知 → 0（不启用，一律保留）');
+
+/* 标题整词边界匹配（V2 修复）：赌神2 不再命中赌神 */
+assert(api.titleHit('赌神.1080p.国粤双语.BD中字.mp4', ['赌神']) === true, 'titleHit：赌神.1080p 命中 赌神');
+assert(api.titleHit('赌神2.1080p.国粤双语.mp4', ['赌神']) === false, 'titleHit：赌神2 不命中 赌神（数字后缀=续集）');
+assert(api.titleHit('The.Matrix.1999.1080p.mkv', ['The Matrix']) === true, 'titleHit：英文标题（大小写/点分隔）命中');
+assert(api.titleHit('Madrid.1987.1080p.mkv', ['Madrid, 1987']) === true, 'titleHit：标题含逗号/年份也能命中');
+assert(api.titleHit('肖申克的救赎.1994.BD.mp4', ['肖申克的救赎']) === true, 'titleHit：长中文标题命中');
+assert(api.titleHit('赌神 2部全', ['赌神']) === true, 'titleHit：赌神 2部全 命中（空格分隔，2部全是独立词段）');
+assert(api.isSubtitle('a.ass') && api.isSubtitle('a.ssa') && api.isSubtitle('a.sub') && api.isSubtitle('a.idx') && api.isSubtitle('a.vtt') && api.isSubtitle('a.smi') && api.isSubtitle('a.lrc'), '其余字幕格式仍识别');
 assert(api.subLang('Show.S01E01.chs.srt') === 'zh' && api.subLang('Show.S01E01.cht.srt') === 'zt' && api.subLang('Show.S01E01.kor.srt') === 'und', '字幕语言：简/繁/其他 → 无法识别标记 und（保留）');
 
 /* ---------- 剧集命名 ---------- */
