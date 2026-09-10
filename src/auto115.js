@@ -137,6 +137,7 @@
       var cookie = (typeof v === 'string') ? v : (v && v.cookie) || '';
       if (ta && cookie) ta.value = cookie;
       state.c115Cookie = cookie;
+      pc115SyncAutoEntry();   // Cookie 变了（含被清空）→ 顶栏「自动化」按钮跟着显隐
       pc115ResetQrButton();
     }).catch(function () { pc115ResetQrButton(); });
     var tk = document.getElementById('c115TokenPc');
@@ -343,6 +344,7 @@
         if (vEl) { vEl.textContent = '✓ 连接正常'; vEl.className = 'c115-verify ok'; }
         state.c115Cookie = cookie;
         idbPut('kv', C115_COOKIE_KEY, cookie).catch(function () {});
+        pc115SyncAutoEntry();   // 登录成功 → 详情页「自动化」按钮随之出现
       })
       .catch(function (e) {
         done();
@@ -1977,10 +1979,21 @@
   });
 
   /* ---------- ui.js 钩子 ---------- */
+  /* 详情页顶栏「自动化」按钮：没登录 115 就整体不显示（进去也什么都做不了） */
+  function pc115SyncAutoEntry() {
+    var btn = document.getElementById('autoBtn');
+    if (!btn) return Promise.resolve(false);
+    return ensure115Cookie().then(function (ck) {
+      btn.style.display = ck ? '' : 'none';
+      if (!ck && pcAutoOpen) pc115CloseAutoPanel();   // 登录掉了：面板一并收掉，别留个孤儿浮层
+      return !!ck;
+    }).catch(function () { btn.style.display = 'none'; return false; });
+  }
   function pc115OnDetailOpen() {
     auto115Doc = null;
     auto115ReleaseLock();
     pc115StopProbe();
+    pc115SyncAutoEntry();
     pc115UpdateBadge();
     return pc115OpenAutoPanel().then(pc115UpdateBadge);
   }
@@ -2002,6 +2015,7 @@
     openAutoPanel: pc115OpenAutoPanel,
     closeAutoPanel: pc115CloseAutoPanel,
     onDetailOpen: pc115OnDetailOpen,
+    syncAutoEntry: pc115SyncAutoEntry,
     openConfig: pc115OpenSheet,
     fillConfig: pc115FillConfig,
     startLogin: pc115StartLogin,

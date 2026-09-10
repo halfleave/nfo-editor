@@ -1013,6 +1013,10 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 #subtitleSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
 #apiSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
+/* 文件整理：选夹 / 水印管理两个弹窗固定 85% 高，内容用 flex 撑满，不留半屏空白 */
+#tidyFolderSheet, #tidyWmSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; display: flex; flex-direction: column; padding-bottom: calc(var(--sab) + 16px); }
+#tidyPickList, #tidyWmList { flex: 1; max-height: none; }
+#tidyFolderSheet .sheet-bar, #tidyWmSheet .sheet-bar, #tidyFolderSheet .tidy-pick-path, #tidyWmSheet .tidy-wm-ops { flex: none; }
 /* 激活码下方配额显示（免费/中级档剩余次数，单行紧凑排布，｜ 分隔） */
 .quota-info { margin: 8px 2px 0; text-align: center; }
 .quota-info .quota-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; padding: 2px 0; font-size: 12px; line-height: 1.5; color: var(--text-2, #6b7280); }
@@ -1587,43 +1591,52 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* ============ 文件整理（M4） ============ */
 /* 顶栏右上角「整理任务」入口（标题是 absolute 居中，故按钮靠 margin-left:auto 顶到右侧） */
 .auto-topbar .tidy-task-entry { margin-left: auto; position: relative; z-index: 1; }
-/* 入口页：文件夹选择（中间偏上） */
-.tidy-folder-card { display: flex; align-items: center; gap: 12px; width: 100%; margin: 7vh 0 0; padding: 15px 14px; border: none; background: var(--card); border-radius: var(--radius-lg); text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.05); -webkit-tap-highlight-color: transparent; }
-.tidy-folder-card:active { background: var(--gray-fill); }
-.tidy-folder-card .tfc-icon { flex: none; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #34C759; }
-.tidy-folder-card .tfc-icon svg { width: 21px; height: 21px; }
-.tidy-folder-card .tfc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.tidy-folder-card .tfc-text b { font-size: 16px; font-weight: 600; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tidy-folder-card .tfc-text small { font-size: 12px; line-height: 1.4; color: var(--label-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tidy-folder-card .tfc-chevron { flex: none; width: 20px; height: 20px; color: var(--label-3); }
-.tidy-folder-card .tfc-chevron svg { width: 20px; height: 20px; }
-/* 入口页：两个大按钮 */
-.tidy-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
-.tidy-action-btn { display: flex; align-items: center; gap: 13px; width: 100%; padding: 17px 16px; border: none; border-radius: var(--radius-lg); background: var(--card); text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.05); -webkit-tap-highlight-color: transparent; }
+/* 入口页：目标文件夹（输入框样式，中间偏上） */
+.tidy-field { margin: 7vh 0 0; }
+.tidy-field-label { padding: 0 2px 7px; font-size: 13px; font-weight: 500; color: var(--label-2); }
+.tidy-field-input { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 11px 12px; border: none; border-radius: 10px; background: var(--card-fill); text-align: left; -webkit-tap-highlight-color: transparent; }
+.tidy-field-input:active { opacity: .7; }
+.tidy-field-input .tfi-text { flex: 1; min-width: 0; font-size: 15px; line-height: 1.4; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-field-input.empty .tfi-text { color: var(--label-3); }
+.tidy-field-input .tfi-chevron { flex: none; width: 17px; height: 17px; color: var(--label-3); }
+.tidy-field-input .tfi-chevron svg { width: 17px; height: 17px; }
+/* 入口页：两个入口按钮（并排） */
+.tidy-actions { display: flex; gap: 12px; margin-top: 18px; }
+.tidy-action-btn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 18px 10px; border: none; border-radius: var(--radius-lg); background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,0.05); -webkit-tap-highlight-color: transparent; }
 .tidy-action-btn:active { background: var(--gray-fill); }
 .tidy-action-btn .tab-ic { flex: none; width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
 .tidy-action-btn .tab-ic svg { width: 22px; height: 22px; }
 .tidy-act-ai .tab-ic { background: #5856D6; }
 .tidy-act-rule .tab-ic { background: #FF9500; }
-.tidy-action-btn .tab-tx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.tidy-action-btn .tab-tx b { font-size: 17px; font-weight: 600; color: var(--label); }
-.tidy-action-btn .tab-tx small { font-size: 12.5px; line-height: 1.4; color: var(--label-3); }
-.tidy-hint { padding: 14px 4px 0; font-size: 12px; line-height: 1.6; color: var(--label-3); }
+.tidy-action-btn .tab-tx { min-width: 0; }
+.tidy-action-btn .tab-tx b { font-size: 15px; font-weight: 600; color: var(--label); white-space: nowrap; }
 
 /* 任务列表 */
 .tidy-task-list { padding: 6px 0 8px; }
 .tidy-empty { padding: 48px 20px; text-align: center; font-size: 14px; line-height: 1.7; color: var(--label-3); }
-.tidy-task-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px; margin-bottom: 10px; border: none; background: var(--card); border-radius: var(--radius-lg); text-align: left; -webkit-tap-highlight-color: transparent; }
-.tidy-task-item:active { background: var(--gray-fill); }
-.tidy-task-item .tti-icon { flex: none; width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
-.tidy-task-item .tti-icon svg { width: 19px; height: 19px; }
-.tidy-task-item .tti-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.tidy-task-item .tti-main b { font-size: 15px; font-weight: 500; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tidy-task-item .tti-main small { font-size: 12px; color: var(--label-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tidy-task-item .tti-state { flex: none; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--gray-fill); color: var(--label-2); }
-.tidy-task-item .tti-state.run { background: rgba(255,149,0,0.16); color: #FF9500; }
-.tidy-task-item .tti-state.done { background: rgba(52,199,89,0.16); color: #34C759; }
-.tidy-task-item .tti-state.fail { background: rgba(255,59,48,0.16); color: #FF3B30; }
+/* 任务卡：折叠态一行（图标 + 标题 + 状态 + 箭头），点击展开步骤进度（同自动化页） */
+.tidy-task { background: var(--card); border-radius: var(--radius-lg); margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.tidy-task-head { display: flex; align-items: center; gap: 10px; padding: 13px 14px; -webkit-tap-highlight-color: transparent; }
+.tidy-task-head:active { background: var(--gray-fill); }
+.tidy-task-head .ttk-icon { flex: none; width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+.tidy-task-head .ttk-icon svg { width: 14px; height: 14px; }
+.tidy-task-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-task-head .tti-state { flex: none; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: var(--gray-fill); color: var(--label-2); white-space: nowrap; }
+.tidy-task-head .tti-state.run { background: rgba(255,149,0,0.16); color: #FF9500; }
+.tidy-task-head .tti-state.done { background: rgba(52,199,89,0.16); color: #34C759; }
+.tidy-task-head .tti-state.fail { background: rgba(255,59,48,0.16); color: #FF3B30; }
+.tidy-task-arrow { flex: none; width: 14px; height: 14px; color: var(--label-3); transition: transform .2s; }
+.tidy-task.expanded .tidy-task-arrow { transform: rotate(90deg); }
+/* 展开体：元信息 + 步骤流 + 操作 */
+.tidy-task-meta { padding: 0 14px 8px; font-size: 12px; color: var(--label-3); word-break: break-all; }
+.tidy-steps { display: none; padding: 8px 14px 6px; border-top: 0.5px solid var(--sep); }
+.tidy-task.expanded .tidy-steps { display: block; }
+/* 步骤圆点在白卡里要跟卡片同色（自动化页那套默认取 --bg） */
+.tidy-steps .as-dot { background: var(--card); }
+.tidy-task-ops { display: flex; gap: 8px; padding: 4px 14px 14px; }
+.tidy-task-ops button { flex: 1; border: none; border-radius: 980px; font-size: 13px; font-weight: 600; padding: 8px 0; background: var(--gray-fill); color: var(--label); -webkit-tap-highlight-color: transparent; }
+.tidy-task-ops button:active { opacity: .8; }
+.tidy-task-ops button.op-chat { background: var(--accent); color: var(--accent-text); }
 
 /* AI 对话页 */
 #page-tidy-chat { display: none; flex-direction: column; }
@@ -1643,6 +1656,15 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* 规则页 */
 #page-tidy-rules { display: none; flex-direction: column; }
 #page-tidy-rules.active { display: flex; }
+/* 规则页：目标文件夹说明（单行，点击可改选） */
+.tidy-target { display: flex; align-items: center; gap: 8px; width: 100%; margin: 4px 0 0; padding: 11px 12px; border: none; border-radius: 10px; background: var(--card-fill); text-align: left; -webkit-tap-highlight-color: transparent; }
+.tidy-target:active { opacity: .7; }
+.tidy-target .tt-label { flex: none; font-size: 13px; font-weight: 500; color: var(--label-2); }
+.tidy-target .tt-val { flex: 1; min-width: 0; font-size: 13px; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tidy-target .tt-val.empty { color: var(--label-3); }
+.tidy-target .tt-chevron { flex: none; width: 15px; height: 15px; color: var(--label-3); }
+.tidy-target .tt-chevron svg { width: 15px; height: 15px; }
+
 .tidy-rule-groups { padding: 6px 0 12px; }
 .tidy-rule-group-head { padding: 16px 2px 8px; font-size: 13px; font-weight: 600; color: var(--label-2); display: flex; align-items: baseline; gap: 8px; }
 .tidy-rule-group-head small { font-size: 11.5px; font-weight: 400; color: var(--label-3); }
@@ -1662,34 +1684,34 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-run-btn:active { opacity: .85; }
 .tidy-run-btn.disabled { background: var(--card-fill); color: var(--label-3); }
 
-/* 文件夹选择（115 目录浏览） */
-.tidy-pick-path { padding: 2px 4px 10px; font-size: 12.5px; line-height: 1.5; color: var(--label-3); word-break: break-all; }
-.tidy-pick-list { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px; }
-.tidy-pick-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 4px; border: none; background: transparent; border-bottom: 0.5px solid var(--sep); text-align: left; font-size: 15px; color: var(--label); }
+/* 文件夹选择（115 目录浏览）：底部 sheet · 当前位置条 · 逐层下钻列表 */
+.tidy-pick-path { margin: 0 0 8px; padding: 9px 12px; border-radius: 10px; background: var(--card-fill); font-size: 12.5px; line-height: 1.5; color: var(--label-2); word-break: break-all; }
+.tidy-pick-list { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0; }
+.tidy-pick-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 2px; border: none; background: transparent; border-bottom: 0.5px solid var(--sep); text-align: left; font-size: 15px; color: var(--label); -webkit-tap-highlight-color: transparent; }
 .tidy-pick-item:active { opacity: .6; }
-.tidy-pick-item .tpi-ic { flex: none; width: 20px; height: 20px; color: #FFB300; }
+.tidy-pick-item .tpi-ic { flex: none; width: 20px; height: 20px; color: #FFB300; display: flex; align-items: center; justify-content: center; }
 .tidy-pick-item .tpi-ic svg { width: 20px; height: 20px; }
 .tidy-pick-item .tpi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tidy-pick-item .tpi-up { color: var(--accent); }
-.tidy-pick-ops { padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
+.tidy-pick-item .tpi-go { flex: none; width: 15px; height: 15px; color: var(--label-3); opacity: .7; }
+.tidy-pick-item .tpi-go svg { width: 15px; height: 15px; }
 
 /* 水印管理 */
-.tidy-wm-tip { padding: 0 16px 10px; font-size: 12px; line-height: 1.6; color: var(--label-3); }
-.tidy-wm-tip b { color: var(--label-2); font-weight: 600; }
-.tidy-wm-list { max-height: 48vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px; }
+.tidy-wm-list { max-height: 48vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0; }
 .tidy-wm-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 0.5px solid var(--sep); }
-.tidy-wm-row .twm-label { flex: none; width: 78px; font-size: 12px; color: var(--label-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tidy-wm-row .twm-scope { flex: none; border: none; background: var(--card-fill); color: var(--label-2); font-size: 12px; border-radius: 8px; padding: 6px 4px; }
+.tidy-wm-row .twm-label { flex: none; width: 58px; font-size: 12px; color: var(--label-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tidy-wm-row input.twm-src { flex: 1; min-width: 0; border: none; background: var(--card-fill); border-radius: 8px; padding: 7px 9px; font-size: 12.5px; font-family: ui-monospace, Menlo, monospace; color: var(--label); -webkit-user-select: text; }
 .tidy-wm-row input.twm-src:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .tidy-wm-row .twm-del { flex: none; width: 28px; height: 28px; border: none; background: transparent; color: #FF3B30; font-size: 18px; line-height: 1; }
-.tidy-wm-ops, .tidy-wm-save, .tidy-preview-ops { display: flex; gap: 10px; padding: 12px 16px 0; }
-.tidy-wm-save { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
-.tidy-wm-save .tidy-run-btn, .tidy-preview-ops .tidy-run-btn { flex: 1; }
+.tidy-wm-ops, .tidy-preview-ops { display: flex; gap: 10px; padding: 12px 0 0; }
+/* 次级按钮（恢复默认 / 添加一条 / 取消）：sheet-btn 本身无底色，这里补中性填充 + 胶囊圆角 */
+.tidy-wm-ops .sheet-btn, .tidy-preview-ops .sheet-btn { background: var(--gray-fill); color: var(--label); }
+.tidy-wm-ops .sheet-btn { border-radius: 999px; }
+.tidy-preview-ops .tidy-run-btn { flex: 1; }
 .tidy-preview-ops .sheet-btn { flex: none; padding-left: 22px; padding-right: 22px; }
 
 /* 预览列表 */
-.tidy-preview-list { max-height: 52vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 16px; }
+.tidy-preview-list { max-height: 52vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 0; }
 .tidy-pv-row { padding: 9px 0; border-bottom: 0.5px solid var(--sep); font-size: 12.5px; line-height: 1.5; }
 .tidy-pv-row .pv-old { color: var(--label-3); text-decoration: line-through; word-break: break-all; }
 .tidy-pv-row .pv-new { color: var(--label); word-break: break-all; margin-top: 2px; }

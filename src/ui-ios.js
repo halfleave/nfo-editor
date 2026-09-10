@@ -1181,6 +1181,7 @@ function open115Sheet(){
     var cookie = (typeof v === 'string') ? v : (v && v.cookie) || '';
     if (ta && cookie) ta.value = cookie;
     state.c115Cookie = cookie;
+    updateAutoEntryBtn();    // Cookie 变了（含被清空）→ 详情页「自动化」按钮跟着显隐
     reset115QrButton(); // 始终显示【展示二维码】按钮，进入时不自动生成二维码
     auto115EnsureOpenAuth(); // 弹窗打开时，已登录则自动授权（已授权且未过期不重复）
   }).catch(function(){ reset115QrButton(); });
@@ -1401,6 +1402,7 @@ function verify115(silent){
       /* 手动自检成功即视为有效 Cookie，回写持久化（代替已移除的「保存」按钮） */
       state.c115Cookie = cookie;
       idbPut('kv', C115_COOKIE_KEY, cookie).catch(function(){});
+      updateAutoEntryBtn();    // 登录成功 → 详情页「自动化」按钮随之出现
       auto115EnsureOpenAuth(); // 自检成功即自动开放平台授权（不重复授权）
     })
     .catch(function(e){
@@ -1931,6 +1933,15 @@ function ensure115Cookie(){
     if (c) state.c115Cookie = c;
     return c;
   }).catch(function(){ return ''; });
+}
+/* 详情页顶栏「115 自动化」按钮：没登录 115 就不显示（HTML 里默认 display:none，登录后才显形） */
+function updateAutoEntryBtn(){
+  var btn = document.getElementById('dtActAuto');
+  if (!btn) return;
+  ensure115Cookie().then(function(c){
+    var el = document.getElementById('dtActAuto');
+    if (el) el.style.display = c ? '' : 'none';
+  }).catch(function(){ var el = document.getElementById('dtActAuto'); if (el) el.style.display = 'none'; });
 }
 
 /* ===== 115 自动化：离线 → 建目录 → 移视频 → 改名 → 清理 =====
@@ -7388,6 +7399,7 @@ function renderFilmDetail(film){
   if (mb) mb.style.display = (state.activationCode && (state.magnetWorker || DEFAULT_WORKER)) ? '' : 'none';
   // 字幕按钮：需有激活码；有番号（JAV）不显示
   updateSubtitleBtn(d.dvdId);
+  updateAutoEntryBtn();   // 未登录 115 时，顶栏「自动化」按钮不显示
   // 剧情：最前方增加 [番号 标题]；无番号则显示 [标题]
   var plotTitle = (d.title || film.id);
   var plotText = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
@@ -7974,7 +7986,9 @@ var tidyState = {
   wm: null,          // 水印列表（内存态，保存才落盘）
   ruleId: 'watermark',
   chatId: null,      // 当前对话任务 id
-  preview: null      // 预览待执行的 op 列表
+  preview: null,     // 预览待执行的 op 列表
+  open: {},          // 任务列表展开态 { taskId: true }
+  pendingTask: null  // 已开始「读取+计划」但还没点执行的规则任务 id
 };
 
 function tidyLoad(key, fallback){
@@ -7996,6 +8010,12 @@ function tidySheetClose(maskId, sheetId){
   if (s) s.classList.remove('show');
 }
 
+/* 路径短显：层级多时折中间（纯逻辑在 TidyCore.pathBrief，这里只加降级兜底） */
+function tidyPathBrief(path, maxSeg){
+  if (typeof TidyCore !== 'undefined' && TidyCore.pathBrief) return TidyCore.pathBrief(path, maxSeg);
+  return String(path == null ? '' : path);
+}
+
 /* —— 入口页 —— */
 function openTidy(){
   if (!tidyState.folder) tidyState.folder = tidyLoad(TIDY_FOLDER_KEY, null);
@@ -8004,16 +8024,29 @@ function openTidy(){
 }
 function renderTidy(){
   var f = tidyState.folder;
+  var btn = document.getElementById('tidyFolderCard');
   var nameEl = document.getElementById('tidyFolderName');
-  var pathEl = document.getElementById('tidyFolderPath');
-  if (nameEl) nameEl.textContent = f ? f.name : '选择文件夹';
-  if (pathEl) pathEl.textContent = f ? (f.path || f.name) : '尚未选择要整理的文件夹';
-  var hint = document.getElementById('tidyHint');
-  if (hint){
-    hint.textContent = f
-      ? 'AI 整理会读取该文件夹的目录树，和 AI 对话后生成整理方案；规则整理直接用内置规则批量改名。'
-      : '请先选择要整理的文件夹。两个入口都会作用在你选中的这个文件夹上。';
-  }
+  if (nameEl) nameEl.textContent = f ? tidyPathBrief(f.path || f.name, 2) : '选择要整理的文件夹';
+  if (btn) btn.classList.toggle('empty', !f);
+  renderTidyTarget();
+}
+/* 当前目标文件夹的短名（任务标题用，避免一行放不下完整路径） */
+function tidyFolderName(){ return tidyState.folder ? (tidyState.folder.name || '未命名') : '未选文件夹'; }
+/* 规则 id → 中文名（任务标题用） */
+function tidyRuleName(ruleId){
+  if (typeof TidyCore === 'undefined' || !TidyCore.RULE_GROUPS) return '规则整理';
+  var hit = TidyCore.findRule ? TidyCore.findRule(ruleId) : null;
+  if (hit && hit.rule) return hit.rule.name;
+  if (hit && hit.name) return hit.name;
+  return '规则整理';
+}
+/* 规则页顶部的「目标文件夹」说明（与入口页共用 tidyState.folder） */
+function renderTidyTarget(){
+  var el = document.getElementById('tidyTargetName');
+  if (!el) return;
+  var f = tidyState.folder;
+  el.textContent = f ? tidyPathBrief(f.path || f.name, 2) : '未选择，点这里选择';
+  el.classList.toggle('empty', !f);
 }
 
 /* —— 文件夹选择（115 逐层浏览，选中返回 cid） —— */
@@ -8031,19 +8064,22 @@ function tidyPickLoad(){
   var pathEl = document.getElementById('tidyPickPath');
   var pick = tidyState.pick;
   if (!listEl || !pick) return;
-  var trail = pick.stack.map(function (s) { return s.name; }).concat([pick.name]).join(' / ');
-  if (pathEl) pathEl.textContent = trail;
+  var trail = pick.stack.map(function (s) { return s.name; }).concat([pick.name]).join('/');
+  if (pathEl) pathEl.textContent = tidyPathBrief(trail, 3);
   listEl.innerHTML = '<div class="tmdb-msg">正在读取…</div>';
   auto115ListDir(pick.cid).then(function (list){
     var dirs = (list || []).filter(function (it) { return it && it.cid && !it.fid; });
     var html = '';
-    if (pick.stack.length) html += '<button class="tidy-pick-item" onclick="tidyPickUp()"><span class="tpi-ic"></span><span class="tpi-name tpi-up">返回上一级</span></button>';
+    if (pick.stack.length) html += '<button class="tidy-pick-item" onclick="tidyPickUp()">' +
+      '<span class="tpi-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>' +
+      '<span class="tpi-name tpi-up">返回上一级</span></button>';
     if (!dirs.length && !pick.stack.length) html += '<div class="tmdb-msg">这里没有子文件夹</div>';
     html += dirs.map(function (d){
       var nm = d.n || d.name || '';
       return '<button class="tidy-pick-item" onclick="tidyPickEnter(\'' + escapeAttr(String(d.cid)) + '\',\'' + escapeAttr(nm) + '\')">' +
         '<span class="tpi-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/></svg></span>' +
-        '<span class="tpi-name">' + escapeHtml(nm) + '</span></button>';
+        '<span class="tpi-name">' + escapeHtml(nm) + '</span>' +
+        '<span class="tpi-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></button>';
     }).join('');
     listEl.innerHTML = html;
   }).catch(function (e){
@@ -8088,6 +8124,7 @@ function tidyNewTask(type, title){
     folderPath: tidyState.folder ? (tidyState.folder.path || tidyState.folder.name) : '',
     state: 'run',                       // run | done | fail
     detail: '',
+    steps: (typeof TidyCore !== 'undefined' && TidyCore.newSteps) ? TidyCore.newSteps(type) : [],
     at: Date.now()
   };
   list.unshift(task);
@@ -8101,12 +8138,47 @@ function tidyUpdateTask(id, patch){
   }
   tidySaveTasks(list);
 }
+function tidyTaskGet(id){
+  var list = tidyTasks();
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return null;
+}
+/* 更新某任务的一步；state 用 hit==='idle'|'running'|'ok'|'fail'|'skip'（与 pure 层一致） */
+function tidyTaskStep(id, key, state, msg){
+  var list = tidyTasks();
+  for (var i = 0; i < list.length; i++){
+    if (list[i].id !== id) continue;
+    if (!list[i].steps) list[i].steps = [];
+    for (var j = 0; j < list[i].steps.length; j++){
+      if (list[i].steps[j].key === key){
+        list[i].steps[j].state = state;
+        list[i].steps[j].at = Date.now();
+        if (msg !== undefined) list[i].steps[j].msg = msg;
+        break;
+      }
+    }
+    break;
+  }
+  tidySaveTasks(list);
+  if (currentPage === 'tidy-tasks') renderTidyTasks();
+}
+function tidyTaskToggle(id){
+  tidyState.open = tidyState.open || {};
+  tidyState.open[id] = !tidyState.open[id];
+  renderTidyTasks();
+}
+function tidyTaskRemove(id){
+  tidySaveTasks(tidyTasks().filter(function (t){ return t.id !== id; }));
+  try { localStorage.removeItem(TIDY_CHAT_PREFIX + id); } catch (e) {}
+  renderTidyTasks();
+}
 function openTidyTasks(){ renderTidyTasks(); switchPage('tidy-tasks'); }
 function renderTidyTasks(){
   var box = document.getElementById('tidyTaskList');
   if (!box) return;
   var list = tidyTasks();
   if (!list.length){ box.innerHTML = '<div class="tidy-empty">还没有整理任务。<br>从「AI 整理」或「规则整理」开始吧。</div>'; return; }
+  var open = tidyState.open || {};
   box.innerHTML = list.map(function (t){
     var isAi = t.type === 'ai';
     var color = isAi ? '#5856D6' : '#FF9500';
@@ -8115,20 +8187,46 @@ function renderTidyTasks(){
       : '<path d="M4 6h16M4 12h16M4 18h10"/>';
     var stateCls = t.state === 'done' ? 'done' : (t.state === 'fail' ? 'fail' : 'run');
     var stateTx = t.state === 'done' ? '已完成' : (t.state === 'fail' ? '失败' : '进行中');
-    var sub = (isAi ? 'AI 整理' : '规则整理') + ' · ' + (t.folderPath || '未指定文件夹') + ' · ' + tidyTimeFmt(t.at);
-    return '<button class="tidy-task-item" onclick="tidyTaskOpen(\'' + t.id + '\')">' +
-      '<span class="tti-icon" style="background:' + color + ';"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + icon + '</svg></span>' +
-      '<span class="tti-main"><b>' + escapeHtml(t.title) + '</b><small>' + escapeHtml(sub) + '</small></span>' +
-      '<span class="tti-state ' + stateCls + '">' + stateTx + '</span></button>';
+    var expanded = !!open[t.id];
+    /* 单行：类型图标 + 标题 + 状态 + 箭头 */
+    var head = '<div class="tidy-task-head" onclick="tidyTaskToggle(\'' + t.id + '\')">' +
+      '<span class="ttk-icon" style="background:' + color + ';"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + icon + '</svg></span>' +
+      '<span class="tidy-task-title">' + escapeHtml(t.title) + '</span>' +
+      '<span class="tti-state ' + stateCls + '">' + stateTx + '</span>' +
+      '<svg class="tidy-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>' +
+      '</div>';
+    if (!expanded) return '<div class="tidy-task">' + head + '</div>';
+    var steps = t.steps || [];
+    var stepsHtml = steps.length
+      ? '<div class="tidy-steps">' + steps.map(tidyStepHtml).join('') + '</div>'
+      : '';
+    /* 展开体底部：AI 任务给「进入对话」，都可用「删除」 */
+    var ops = '<div class="tidy-task-ops">' +
+      (isAi ? '<button class="op-chat" onclick="tidyTaskChat(\'' + t.id + '\')">进入对话</button>' : '') +
+      '<button onclick="tidyTaskRemove(\'' + t.id + '\')">删除</button>' +
+      '</div>';
+    var meta = '<div class="tidy-task-meta">' + escapeHtml(t.folderPath || '未指定文件夹') + ' · ' + tidyTimeFmt(t.at) +
+      (t.detail ? ' · ' + escapeHtml(t.detail) : '') + '</div>';
+    return '<div class="tidy-task expanded">' + head + meta + stepsHtml + ops + '</div>';
   }).join('');
 }
-function tidyTaskOpen(id){
-  var list = tidyTasks(), hit = null;
-  for (var i = 0; i < list.length; i++) if (list[i].id === id) hit = list[i];
-  if (!hit){ showToast('任务不存在', 'error'); return; }
-  if (hit.type === 'ai'){ openTidyChat(hit.id); return; }
-  if (hit.detail){ showToast(hit.detail, 'info'); return; }
-  showToast('该规则任务没有可回看的内容', 'info');
+function tidyStepHtml(s){
+  var dot = (s.state === 'ok') ? '✓' : (s.state === 'fail') ? '!' : (s.state === 'skip') ? '–' : '';
+  var dotCls = (s.state === 'running') ? 'run' : s.state;
+  var label = s.label + (s.state === 'running' ? '…' : '');
+  return '<div class="auto-step">' +
+    '<div class="as-dot ' + dotCls + '">' + dot + '</div>' +
+    '<div class="as-body">' +
+    '<div class="as-label' + (s.state === 'idle' ? ' dim' : '') + '">' + escapeHtml(label) +
+    (s.at ? '<span class="as-time">' + tidyTimeFmt(s.at) + '</span>' : '') + '</div>' +
+    (s.msg ? '<div class="as-msg' + (s.state === 'fail' ? ' err' : '') + '">' + escapeHtml(s.msg) + '</div>' : '') +
+    '</div></div>';
+}
+/* AI 任务：展开体的「进入对话」入口 */
+function tidyTaskChat(id){
+  var t = tidyTaskGet(id);
+  if (!t){ showToast('任务不存在', 'error'); return; }
+  openTidyChat(id);
 }
 
 /* —— AI 对话 —— */
@@ -8142,12 +8240,14 @@ function openTidyChat(taskId){
     if (!task){ showToast('会话不存在', 'error'); return; }
   } else {
     // 每次进入 = 一条新会话（可从任务列表回到旧会话）
-    var title = tidyState.folder ? ('整理「' + tidyState.folder.name + '」') : '文件整理对话';
-    task = tidyNewTask('ai', title);
+    task = tidyNewTask('ai', 'AI 整理 · ' + tidyFolderName());
     var greet = [];
     greet.push({ role: 'sys', text: tidyState.folder ? ('目标文件夹：' + (tidyState.folder.path || tidyState.folder.name)) : '尚未选择文件夹（可先返回选择）' });
     greet.push({ role: 'ai', text: '你好，我来帮你整理这个文件夹。\n你可以直接描述想法，比如「番号统一大写」「把同番号的分碟合并成一个文件夹」。\n（AI 对话通道正在接入，当前仅可预览会话结构）' });
     tidyChatStore(task.id, greet);
+    // 步骤如实反映进度：目录树读取与发送通道都还没接
+    tidyTaskStep(task.id, 'tree', 'idle', '待接入：暂不自动读取 115 目录树');
+    tidyTaskStep(task.id, 'chat', 'idle', '会话已建立，发送通道待接入');
   }
   tidyState.chatId = task.id;
   var titleEl = document.getElementById('tidyChatTitle');
@@ -8188,11 +8288,13 @@ function tidyChatSend(){
 
 /* —— 规则页 —— */
 function openTidyRules(){
+  if (!tidyState.folder) tidyState.folder = tidyLoad(TIDY_FOLDER_KEY, null);
   tidyState.preview = null;
   renderTidyRules();
   switchPage('tidy-rules');
 }
 function renderTidyRules(){
+  renderTidyTarget();
   var box = document.getElementById('tidyRuleGroups');
   if (!box || typeof TidyCore === 'undefined') return;
   box.innerHTML = TidyCore.RULE_GROUPS.map(function (g){
@@ -8235,12 +8337,8 @@ function renderTidyWm(){
   if (!box) return;
   var list = tidyWatermarks();
   box.innerHTML = list.map(function (w, i){
-    var scopes = [['prefix', '前缀'], ['any', '任意'], ['suffix', '后缀']].map(function (s){
-      return '<option value="' + s[0] + '"' + (w.scope === s[0] ? ' selected' : '') + '>' + s[1] + '</option>';
-    }).join('');
     return '<div class="tidy-wm-row">' +
-      '<span class="twm-label">' + escapeHtml(w.label || '') + '</span>' +
-      '<select class="twm-scope" onchange="tidyWmEdit(' + i + ',\'scope\',this.value)">' + scopes + '</select>' +
+      '<span class="twm-label">规则' + (i + 1) + '</span>' +
       '<input class="twm-src" type="text" value="' + escapeAttr(w.src || '') + '" oninput="tidyWmEdit(' + i + ',\'src\',this.value)" spellcheck="false">' +
       '<button class="twm-del" onclick="tidyWmDel(' + i + ')" aria-label="删除">×</button></div>';
   }).join('') || '<div class="tmdb-msg">没有水印条目</div>';
@@ -8252,7 +8350,7 @@ function tidyWmEdit(i, key, val){
 function tidyWmDel(i){ var list = tidyWatermarks(); list.splice(i, 1); renderTidyWm(); }
 function tidyWmAdd(){
   var list = tidyWatermarks();
-  list.push({ id: 'u' + Date.now(), label: '自定义', scope: 'any', src: '' });
+  list.push({ id: 'u' + Date.now(), label: '', src: '' });
   renderTidyWm();
 }
 function tidyWmReset(){
@@ -8274,20 +8372,50 @@ function tidyPreviewRun(){
   if (!tidyState.folder){ showToast('请先选择文件夹', 'error'); return; }
   if (!tidyState.ruleId){ showToast('请先选择一条规则', 'error'); return; }
   var ruleId = tidyState.ruleId;
+  var task = tidyNewTask('rule', tidyRuleName(ruleId) + ' · ' + tidyFolderName());
+  tidyState.pendingTask = task.id;
+  tidyTaskStep(task.id, 'scan', 'running', '');
   showToast('正在读取文件夹…', 'info');
   auto115ListDir(tidyState.folder.cid).then(function (list){
     var items = (list || []).map(function (it){
       return { fid: it.fid ? String(it.fid) : '', cid: it.cid ? String(it.cid) : '', name: it.n || it.name || '' };
     });
+    tidyTaskStep(task.id, 'scan', 'ok', '读到 ' + items.length + ' 项');
+    tidyTaskStep(task.id, 'plan', 'running', '');
     var plan = TidyCore.planRule(ruleId, items, { watermarks: tidyWatermarks() });
-    if (!plan.ok){ showToast(plan.reason || '该规则暂不可用', 'error'); return; }
-    if (!plan.ops.length){ showToast('没有需要整理的项目', 'success'); return; }
+    if (!plan.ok){
+      tidyTaskStep(task.id, 'plan', 'fail', plan.reason || '该规则暂不可用');
+      tidyUpdateTask(task.id, { state: 'fail', detail: plan.reason || '该规则暂不可用' });
+      tidyState.pendingTask = null;
+      showToast(plan.reason || '该规则暂不可用', 'error'); return;
+    }
+    if (!plan.ops.length){
+      tidyTaskStep(task.id, 'plan', 'ok', '无需整理');
+      tidyTaskStep(task.id, 'exec', 'skip', '没有需要整理的项目');
+      tidyUpdateTask(task.id, { state: 'done', detail: '没有需要整理的项目' });
+      tidyState.pendingTask = null;
+      showToast('没有需要整理的项目', 'success'); return;
+    }
+    tidyTaskStep(task.id, 'plan', 'ok', '待整理 ' + plan.ops.length + ' 项');
     tidyState.preview = plan.ops;
     renderTidyPreview(plan.ops);
     tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
-  }).catch(function (e){ showToast('读取失败：' + ((e && e.message) || '网络错误'), 'error'); });
+  }).catch(function (e){
+    var m = (e && e.message) || '网络错误';
+    tidyTaskStep(task.id, 'scan', 'fail', m);
+    tidyUpdateTask(task.id, { state: 'fail', detail: '读取失败' });
+    tidyState.pendingTask = null;
+    showToast('读取失败：' + m, 'error');
+  });
 }
-function closeTidyPreview(){ tidySheetClose('tidyPreviewMask', 'tidyPreviewSheet'); }
+function closeTidyPreview(){
+  tidySheetClose('tidyPreviewMask', 'tidyPreviewSheet');
+  // 用户在预览里点了取消：这次整理没发生，任务也不该留在列表里
+  if (tidyState.pendingTask){
+    tidyTaskRemove(tidyState.pendingTask);
+    tidyState.pendingTask = null;
+  }
+}
 function renderTidyPreview(ops){
   var box = document.getElementById('tidyPreviewList');
   var title = document.getElementById('tidyPreviewTitle');
@@ -8307,18 +8435,26 @@ function tidyExecute(){
   if (!ops || !ops.length){ closeTidyPreview(); return; }
   var btn = document.getElementById('tidyExecBtn');
   if (btn){ btn.disabled = true; btn.textContent = '正在整理…'; }
-  var task = tidyNewTask('rule', '规则整理 · 水印清洗');
-  var done = 0, failed = 0, i = 0;
+  /* 任务在「预览」阶段就已建好（读取/计划两步已完成），这里接着跑执行步 */
+  var taskId = tidyState.pendingTask;
+  tidyState.pendingTask = null;
+  if (!taskId){
+    var t0 = tidyNewTask('rule', tidyRuleName(tidyState.ruleId) + ' · ' + tidyFolderName());
+    taskId = t0.id;
+    tidyTaskStep(taskId, 'scan', 'ok', '');
+    tidyTaskStep(taskId, 'plan', 'ok', '待整理 ' + ops.length + ' 项');
+  }
+  var total = ops.length, done = 0, failed = 0, i = 0;
+  tidyTaskStep(taskId, 'exec', 'running', '0/' + total);
   function step(){
-    if (i >= ops.length){
-      tidyUpdateTask(task.id, {
-        state: failed ? 'fail' : 'done',
-        detail: '成功 ' + done + ' 项' + (failed ? '，失败 ' + failed + ' 项' : '')
-      });
+    if (i >= total){
+      var detail = '成功 ' + done + ' 项' + (failed ? '，失败 ' + failed + ' 项' : '');
+      tidyTaskStep(taskId, 'exec', failed ? 'fail' : 'ok', detail);
+      tidyUpdateTask(taskId, { state: failed ? 'fail' : 'done', detail: detail });
       tidyState.preview = null;
       closeTidyPreview();
       if (btn){ btn.disabled = false; btn.textContent = '预览并整理'; }
-      showToast('整理完成：成功 ' + done + ' 项' + (failed ? '，失败 ' + failed + ' 项' : ''), failed ? 'error' : 'success');
+      showToast('整理完成：' + detail, failed ? 'error' : 'success');
       if (currentPage === 'tidy-tasks') renderTidyTasks();
       return;
     }
@@ -8326,7 +8462,11 @@ function tidyExecute(){
     var body = 'fid=' + encodeURIComponent(op.fid) + '&file_name=' + encodeURIComponent(op.name);
     auto115Post('https://webapi.115.com/files/edit', body).then(function (res){
       if (res && res.ok) done++; else failed++;
-    }).catch(function (){ failed++; }).then(step);
+    }).catch(function (){ failed++; }).then(function (){
+      /* 每 5 条刷一次进度，避免大库（上千条）时反复重绘 */
+      if (i % 5 === 0) tidyTaskStep(taskId, 'exec', 'running', (done + failed) + '/' + total);
+      step();
+    });
   }
   step();
 }

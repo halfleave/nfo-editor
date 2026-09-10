@@ -11,36 +11,31 @@
 
   /* ================= 一、水印清洗 ================= */
 
-  /* 内置水印条目（用户可在规则页里增删改）：
-     scope: 'any'    任意位置，全局删除（flags gi）
-            'prefix' 仅文件名开头（锚 ^，flags i）
-            'suffix' 仅文件名结尾（锚 $，flags i）
-     src  : 正则源码字符串，**不含锚点**（锚点由 scope 决定）
-     label: 展示用名称（给人看，不参与匹配） */
+  /* 内置水印（一律全局匹配，不再分前缀/后缀 —— 水印、广告、站点文本不管出现在哪都要删）
+     条目模型：{ id, label, src(正则源码) }。第 4 条要求括注形如「域名」：点号后必须是
+     2-8 位纯字母后缀，因此全局匹配也不会误删 `【4k】`『【中文字幕】』『【1080p.x264】』这类标注。 */
   var WATERMARK_DEFAULT = [
-    { id: 'w98t',  label: '98T 站点前缀',     scope: 'any',    src: 'u?www\\.98t\\.la@' },
-    { id: 'wfuli', label: 'fulidao 站点前缀', scope: 'any',    src: 'fulidao\\.xyz@' },
-    { id: 'w7d68', label: '7d68 站点括注',    scope: 'any',    src: '【7d68\\.xyz】' },
-    { id: 'wdom',  label: '域名式前缀括注',   scope: 'prefix', src: '【[a-z0-9.]+】\\s*' },
-    { id: 'wtail', label: '站点头尾括注',     scope: 'suffix', src: '\\s*【[^】]*www[^】]*】' },
-    { id: 'wmeta', label: '通用 www 站名@',   scope: 'prefix', src: '[A-Za-z0-9.-]*www\\.[A-Za-z0-9.-]+@' }
+    { id: 'w98t',  label: '98T 站点指纹',    src: 'u?www\\.98t\\.la@' },
+    { id: 'wfuli', label: 'fulidao 站点指纹', src: 'fulidao\\.xyz@' },
+    { id: 'w7d68', label: '7d68 站点括注',    src: '【7d68\\.xyz】' },
+    { id: 'wdom',  label: '域名式括注',       src: '【[a-z0-9.-]+\\.[a-z]{2,8}】\\s*' },
+    { id: 'wtail', label: '含 www 的站名括注', src: '\\s*【[^】]*www[^】]*】' },
+    { id: 'wmeta', label: '通用 www 站名@',   src: '[A-Za-z0-9.-]*www\\.[A-Za-z0-9.-]+@' }
   ];
 
   /* 深拷贝内置水印（避免调用方直接改到常量表） */
   function defaultWatermarks() {
     return WATERMARK_DEFAULT.map(function (w) {
-      return { id: w.id, label: w.label, scope: w.scope, src: w.src };
+      return { id: w.id, label: w.label, src: w.src };
     });
   }
 
-  /* 单个条目 → 正则（非法正则返回 null，不抛错，避免用户手滑写坏让整页炸掉） */
+  /* 单个条目 → 正则（一律全局匹配：水印/广告不管出现在开头、中间还是结尾都要删）
+     非法正则返回 null，不抛错，避免用户手滑写坏让整页炸掉 */
   function watermarkRegExp(w) {
     if (!w || typeof w.src !== 'string' || !w.src) return null;
-    try {
-      if (w.scope === 'prefix') return new RegExp('^' + w.src, 'i');
-      if (w.scope === 'suffix') return new RegExp(w.src + '$', 'i');
-      return new RegExp(w.src, 'gi');
-    } catch (e) { return null; }
+    try { return new RegExp(w.src, 'gi'); }
+    catch (e) { return null; }
   }
 
   /* 清洗后的收尾：收敛空格、去掉残留的首尾分隔符，但**保住扩展名**。
@@ -52,6 +47,21 @@
       .replace(/^[\s\-_.、]+/, '')        // 去掉开头残留的分隔符
       .replace(/[\s\-_]+(?=\.[A-Za-z0-9]+$)/, '') // 扩展名前的残留分隔符
       .trim();
+  }
+
+  /* 路径短显：层级多时把中间折叠掉，永远保住「首级 + 末几级」，避免长路径把一行撑爆。
+     例（maxSeg=2）：'影视/云下载/2024/合集/名字很长很长' → '影视 / … / 名字很长很长'
+     例（maxSeg=3）：同上一串 → '影视 / … / 合集 / 名字很长很长'
+     段数不足就直接原样 join；空路径返回空串。 */
+  function pathBrief(path, maxSeg) {
+    var segs = String(path == null ? '' : path).split('/')
+      .map(function (s) { return s.trim(); })
+      .filter(function (s) { return !!s; });
+    if (!segs.length) return '';
+    var n = parseInt(maxSeg, 10);
+    if (!n || n < 2) n = 2;
+    if (segs.length <= n) return segs.join(' / ');
+    return segs[0] + ' / … / ' + segs.slice(-(n - 1)).join(' / ');
   }
 
   /* 对单个文件名套用整张水印表 → 清洗后的名字（可能为空串，交给上层判空） */
@@ -142,17 +152,61 @@
     return { ok: false, ops: [], reason: '即将上线' };
   }
 
+  /* ================= 三、任务步骤模板 ================= */
+
+  /* 任务卡展开时按步骤显示进度（对应 UI 层任务列表的展开体）。
+     步骤状态：idle 未开始 / running 进行中 / ok 完成 / fail 失败 / skip 跳过
+     模板只定 key + label；时间与文案(msg) 由执行方逐步写入。 */
+
+  var TASK_STEPS = {
+    rule: [
+      { key: 'scan', label: '读取文件夹' },
+      { key: 'plan', label: '生成整理计划' },
+      { key: 'exec', label: '执行改名' }
+    ],
+    ai: [
+      { key: 'tree', label: '读取文件夹目录树' },
+      { key: 'chat', label: '与 AI 对话确定方案' },
+      { key: 'exec', label: '确认并执行' }
+    ]
+  };
+
+  function newSteps(kind){
+    var tpl = TASK_STEPS[kind] || [];
+    var out = [];
+    for (var i = 0; i < tpl.length; i++){
+      out.push({ key: tpl[i].key, label: tpl[i].label, state: 'idle', msg: '', at: 0 });
+    }
+    return out;
+  }
+
+  /* 就地更新某一步；找不到 key 时原样返回，不抛错 */
+  function stepSet(steps, key, patch){
+    var list = steps || [];
+    for (var i = 0; i < list.length; i++){
+      if (list[i].key === key){
+        for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) list[i][k] = patch[k];
+        break;
+      }
+    }
+    return list;
+  }
+
   var api = {
     WATERMARK_DEFAULT: WATERMARK_DEFAULT,
     defaultWatermarks: defaultWatermarks,
     watermarkRegExp: watermarkRegExp,
     finalizeName: finalizeName,
+    pathBrief: pathBrief,
     applyWatermarks: applyWatermarks,
     previewWatermark: previewWatermark,
     planWatermark: planWatermark,
     RULE_GROUPS: RULE_GROUPS,
     findRule: findRule,
-    planRule: planRule
+    planRule: planRule,
+    TASK_STEPS: TASK_STEPS,
+    newSteps: newSteps,
+    stepSet: stepSet
   };
 
   global.TidyCore = api;
