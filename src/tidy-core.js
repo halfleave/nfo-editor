@@ -243,8 +243,13 @@
   }
 
   /* —— 导入组：JSON 整理 ——
-     接受两种形态：① { root?, items:[{dir, from, to}] }  ② 直接给数组 [{dir, from, to}]
-     字段名宽容：dir|path|folder、from|old|orig|name、to|new|newName
+     条目四字段（新规范）：{ 旧文件路径, 旧名, 新文件路径, 新名 }
+       旧文件路径 / 新文件路径 = 文件所在的【父目录】（相对目标文件夹）；
+                               也接受填完整路径（含文件名），会自动剥掉末尾文件名当目录。
+       旧名 / 新名           = 文件原名 / 改后名（必填；若路径里已含文件名，可只填路径）。
+     兼容旧三字段：{ dir, from, to }（等同 旧文件路径=dir、旧名=from、新文件路径=dir、新名=to）。
+     新字段别名：旧路径 oldPath|sourcePath|fromPath|srcPath|path；旧名 oldName|fromName|name|from|old；
+                 新路径 newPath|targetPath|toPath|destPath；新名 newName|toName|to|new。
      只做「校验 + 归一化」，定位到真实文件由执行器负责（要查 115）。 */
   function pickField(e, keys){
     for (var i = 0; i < keys.length; i++){
@@ -252,6 +257,28 @@
       if (v != null && String(v).trim()) return String(v).trim();
     }
     return '';
+  }
+  /* 把「可能是完整路径、也可能只是目录」的串规整成 { dir, name }。
+     若已显式给了 name 且路径末尾正好是它 → 剥掉当目录；否则路径整体当目录，name 取末尾段。 */
+  function splitPath(path, name){
+    path = String(path || '').replace(/^\/+|\/+$/g, '');
+    var idx = path.lastIndexOf('/');
+    var base = idx >= 0 ? path.slice(idx + 1) : path;
+    if (name != null && String(name) && base === String(name)){
+      return { dir: idx >= 0 ? path.slice(0, idx) : '', name: String(name) };
+    }
+    if (name == null || !String(name).trim()){
+      return { dir: idx >= 0 ? path.slice(0, idx) : '', name: base };
+    }
+    return { dir: path, name: String(name) };
+  }
+  function normalizeDir(dir, root){
+    var d = String(dir || '').replace(/^\/+|\/+$/g, '');
+    if (root){
+      if (d === root) d = '';
+      else if (d.indexOf(root + '/') === 0) d = d.slice(root.length + 1);
+    }
+    return d;
   }
   function parseTidyJson(text){
     var raw;
@@ -269,34 +296,52 @@
     var out = [], skipped = 0;
     for (var i = 0; i < arr.length; i++){
       var e = arr[i] || {};
-      var from = pickField(e, ['from', 'old', 'orig', 'name']);
-      var to = pickField(e, ['to', 'new', 'newName']);
-      if (!from || !to){ skipped++; continue; }
-      out.push({ dir: pickField(e, ['dir', 'path', 'folder']), from: from, to: to });
+      var oldPath = pickField(e, ['旧文件路径', 'oldPath', 'sourcePath', 'fromPath', 'srcPath', 'path']);
+      var oldName = pickField(e, ['旧名', 'oldName', 'fromName', 'name', 'from', 'old']);
+      var newPath = pickField(e, ['新文件路径', 'newPath', 'targetPath', 'toPath', 'destPath']);
+      var newName = pickField(e, ['新名', 'newName', 'toName', 'to', 'new']);
+      var dir = pickField(e, ['dir', 'folder']);                // 兼容旧三字段
+      if (!oldPath && !newPath && dir){ oldPath = dir; newPath = dir; }
+      var od = splitPath(oldPath, oldName), nd = splitPath(newPath, newName);
+      if (!oldName && od.name) oldName = od.name;
+      if (!newName && nd.name) newName = nd.name;
+      oldName = String(oldName || '').trim(); newName = String(newName || '').trim();
+      if (!oldName || !newName){ skipped++; continue; }
+      out.push({ oldDir: od.dir, oldName: oldName, newDir: nd.dir, newName: newName });
     }
     if (!out.length) return { ok: false, reason: '条目的「原名称 / 改后名称」不完整', root: root, items: [] };
     return { ok: true, reason: '', root: root, items: out, skipped: skipped };
   }
 
-  /* JSON 条目 + 实际目录快照 → rename op（名字在 dir 里找不到就记为 skipped） */
+  /* JSON 条目 + 实际目录快照 → rename / move op（名字在目录里找不到就记为 skipped）
+     op 形态：
+       { op:'rename', fid, orig, name }            同目录改名
+       { op:'move',   fid, orig, name, toDir, toCid }  跨目录移动（可同时改名：name!==orig） */
   function planJsonItems(entries, opts){
     opts = opts || {};
     var byDir = opts.byDir || {};          // { dirKey: [条目,…] }
+    var dirCid = opts.dirCid || {};        // { dirKey: cid|null }（移动目标必须存在）
     var root = String(opts.root || '').replace(/\/+$/, '');
     var ops = [], miss = [];
     (entries || []).forEach(function (en){
-      var dir = String(en.dir || '').replace(/^\/+|\/+$/g, '');
-      if (root){
-        if (dir === root) dir = '';
-        else if (dir.indexOf(root + '/') === 0) dir = dir.slice(root.length + 1);
-      }
-      var pool = byDir[dir] || byDir['*'] || [];
+      var oldDir = normalizeDir(en.oldDir, root);
+      var newDir = normalizeDir(en.newDir, root);
+      var oname = String(en.oldName || ''), nname = String(en.newName || '');
+      if (!oname || !nname){ miss.push((oldDir ? oldDir + '/' : '') + oname); return; }
+      if (oldDir === newDir && oname === nname) return;          // 无变化，跳过（幂等）
+      var pool = byDir[oldDir] || byDir['*'] || [];
       var hit = null;
       for (var i = 0; i < pool.length; i++){
-        if (nameOf(pool[i]) === en.from){ hit = pool[i]; break; }
+        if (nameOf(pool[i]) === oname){ hit = pool[i]; break; }
       }
-      if (!hit){ miss.push((dir ? dir + '/' : '') + en.from); return; }
-      ops.push(mkRename(hit, en.from, en.to, 'JSON 整理'));
+      if (!hit){ miss.push((oldDir ? oldDir + '/' : '') + oname); return; }
+      if (oldDir === newDir){
+        ops.push({ op: 'rename', fid: idOf(hit), orig: oname, name: nname, why: 'JSON 整理' });
+      } else {
+        var tcid = dirCid[newDir];
+        if (!tcid){ miss.push('→ ' + (newDir ? newDir + '/' : '') + nname + '（目标目录不存在）'); return; }
+        ops.push({ op: 'move', fid: idOf(hit), orig: oname, name: nname, toDir: newDir, toCid: tcid, why: 'JSON 整理' });
+      }
     });
     return { ops: ops, miss: miss };
   }
@@ -568,7 +613,52 @@
     return list;
   }
 
+  /* ================= 五、批量改名与风控识别（防风控） =================
+     115 官方有「批量改名」接口 files/batch_rename：一次请求改多条，
+       body 形如 files_new_name[<fid>]=<新名>（jQuery 表单序列化风格，键值都编码）
+       回包 {state:true,errno:0,data:{"<fid>":"<新名>"}}
+     把「N 次请求」压成「ceil(N/100) 次」——这是防风控里最有效的一步；
+     剩下的靠调用侧的串行 + 最小间隔 + 风控熔断（见 ui-ios 的 c115Gate / c115RiskHit）。 */
+  var RENAME_BATCH = 100;  // 单次最多带多少条（中文名约 200 字节/条，100 条约 20KB body，安全）
+  var RISK_RE = /(过于频繁|操作频繁|请求频繁|频繁|检测异常|异常行为|风控|访问受限|稍后再试|暂时无法|请求过多|访问速度过快|系统繁忙|请稍候)/;
+
+  /* 计划 → 分批（每批最多 size 条） */
+  function chunkPlan(ops, size){
+    var n = size || RENAME_BATCH, out = [];
+    ops = ops || [];
+    for (var i = 0; i < ops.length; i += n) out.push(ops.slice(i, i + n));
+    return out;
+  }
+  /* 一批 → files/batch_rename 的 body（键值都编码，中英文/括号/空格都安全） */
+  function batchRenameBody(ops){
+    return (ops || []).filter(function (o){ return o && o.fid; }).map(function (o){
+      return encodeURIComponent('files_new_name[' + o.fid + ']') + '=' + encodeURIComponent(o.name || '');
+    }).join('&');
+  }
+  /* 回包 → 这批的成败：data 里出现该 fid 即成功；没有 data 时退化为看 state/errno */
+  function readRenameResult(d, chunk){
+    var map = (d && d.data && typeof d.data === 'object') ? d.data : null;
+    var ok = 0, fail = 0, failed = [];
+    (chunk || []).forEach(function (o){
+      var hit = map ? Object.prototype.hasOwnProperty.call(map, String(o.fid))
+                    : !!(d && (d.state === true || d.errno === 0));
+      if (hit) ok++; else { fail++; failed.push(o); }
+    });
+    return { ok: ok, fail: fail, failed: failed };
+  }
+  /* 115 的「软风控」：HTTP 200 但 {state:false,error:"…"}。返回命中的原文；没命中返回 '' */
+  function riskText(d){
+    if (!d || d.state !== false) return '';
+    var msg = String(d.error || d.msg || d.message || '');
+    return RISK_RE.test(msg) ? msg : '';
+  }
+
   var api = {
+    RENAME_BATCH: RENAME_BATCH,
+    chunkPlan: chunkPlan,
+    batchRenameBody: batchRenameBody,
+    readRenameResult: readRenameResult,
+    riskText: riskText,
     WATERMARK_DEFAULT: WATERMARK_DEFAULT,
     defaultWatermarks: defaultWatermarks,
     watermarkRegExp: watermarkRegExp,

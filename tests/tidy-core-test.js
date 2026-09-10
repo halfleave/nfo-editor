@@ -170,22 +170,41 @@ assert(TidyCore.planRule('imageSeq', [{ fid: '1', name: '001 (1).jpg' }]).ops[0]
 assert(TidyCore.planRule('imageSeq', [{ fid: '1', name: '001.mp4' }]).ops.length === 0, 'imageSeq：视频不动');
 assert(TidyCore.planRule('imageSeq', [{ fid: '1', name: '正常.jpg' }]).ops.length === 0, 'imageSeq：正常图片不动');
 
-/* ================= 导入组：JSON 整理 ================= */
-const jp1 = TidyCore.parseTidyJson('{"root":"影视/云下载","items":[{"dir":"","from":"A.MP4","to":"A.mp4"}]}');
-assert(jp1.ok && jp1.items.length === 1 && jp1.root === '影视/云下载', 'JSON：解析对象形态（带 root）');
-const jp2 = TidyCore.parseTidyJson([{ path: '娱乐', old: 'a.mp4', newName: 'b.mp4' }]);
-assert(jp2.ok && jp2.items[0].dir === '娱乐' && jp2.items[0].from === 'a.mp4' && jp2.items[0].to === 'b.mp4', 'JSON：数组形态 + 字段别名');
+/* ================= 导入组：JSON 整理（四字段：旧文件路径/旧名/新文件路径/新名） ================= */
+const jp1 = TidyCore.parseTidyJson('{"root":"影视/云下载","items":[{"旧文件路径":"","旧名":"A.MP4","新文件路径":"","新名":"A.mp4"}]}');
+assert(jp1.ok && jp1.items.length === 1 && jp1.root === '影视/云下载', 'JSON：四字段对象形态（带 root）');
+assert(jp1.items[0].oldDir === '' && jp1.items[0].oldName === 'A.MP4' && jp1.items[0].newDir === '' && jp1.items[0].newName === 'A.mp4', 'JSON：四字段归一化为 oldDir/oldName/newDir/newName');
+/* 路径里带文件名 → 自动剥成目录 + 名 */
+const jp2 = TidyCore.parseTidyJson([{ '旧文件路径': '云下载/OPUD-008/OPUD-008.wmv', '旧名': 'OPUD-008.wmv', '新文件路径': '娱乐/番号/OPUD-008', '新名': 'OPUD-008.wmv' }]);
+assert(jp2.ok && jp2.items[0].oldDir === '云下载/OPUD-008' && jp2.items[0].newDir === '娱乐/番号/OPUD-008', 'JSON：完整路径自动剥离目录与文件名');
+/* 兼容旧三字段 dir/from/to */
+const jp3 = TidyCore.parseTidyJson([{ dir: '娱乐', from: 'a.mp4', to: 'b.mp4' }]);
+assert(jp3.ok && jp3.items[0].oldDir === '娱乐' && jp3.items[0].oldName === 'a.mp4' && jp3.items[0].newDir === '娱乐' && jp3.items[0].newName === 'b.mp4', 'JSON：兼容旧三字段 dir/from/to');
 assert(TidyCore.parseTidyJson('这不是 json').ok === false, 'JSON：坏文本返回 ok=false');
-assert(TidyCore.parseTidyJson('{"items":[{"from":"a"}]}').ok === false, 'JSON：缺 to 视为无效');
-assert(TidyCore.parseTidyJson('{"items":[{"from":"a","to":"b"},{"from":"","to":"c"}]}').skipped === 1, 'JSON：不完整条目计入 skipped');
+assert(TidyCore.parseTidyJson('{"items":[{"旧名":"a"}]}').ok === false, 'JSON：缺新名视为无效');
+assert(TidyCore.parseTidyJson('{"items":[{"旧名":"a","新名":"b"},{"旧名":"","新名":"c"}]}').skipped === 1, 'JSON：不完整条目计入 skipped');
 
-const jr1 = TidyCore.planJsonItems([{ dir: '', from: 'A.MP4', to: 'A.mp4' }], { root: '影视/云下载', byDir: { '': [{ fid: '7', name: 'A.MP4' }] } });
-assert(jr1.ops.length === 1 && jr1.ops[0].fid === '7' && jr1.ops[0].name === 'A.mp4', 'JSON：定位到文件产出 rename op');
-assert(TidyCore.planJsonItems([{ dir: '', from: '不存在.mp4', to: 'x.mp4' }], { byDir: { '': [] } }).miss.length === 1, 'JSON：找不到记进 miss');
-const jr2 = TidyCore.planJsonItems([{ dir: '合集', from: 'old.mp4', to: 'new.mp4' }], { root: '影视/云下载', byDir: { '合集': [{ fid: '8', name: 'old.mp4' }] } });
+/* 计划：原地改名 → rename op */
+const jr1 = TidyCore.planJsonItems([{ oldDir: '', oldName: 'A.MP4', newDir: '', newName: 'A.mp4' }], { root: '影视/云下载', byDir: { '': [{ fid: '7', name: 'A.MP4' }] } });
+assert(jr1.ops.length === 1 && jr1.ops[0].fid === '7' && jr1.ops[0].name === 'A.mp4' && jr1.ops[0].op === 'rename', 'JSON：原地改名产出 rename op');
+assert(TidyCore.planJsonItems([{ oldDir: '', oldName: '不存在.mp4', newDir: '', newName: 'x.mp4' }], { byDir: { '': [] } }).miss.length === 1, 'JSON：找不到记进 miss');
+const jr2 = TidyCore.planJsonItems([{ oldDir: '合集', oldName: 'old.mp4', newDir: '合集', newName: 'new.mp4' }], { root: '影视/云下载', byDir: { '合集': [{ fid: '8', name: 'old.mp4' }] } });
 assert(jr2.ops.length === 1, 'JSON：子目录条目按相对路径定位');
+/* 计划：跨目录移动 → move op（目标目录需存在） */
+const jr3 = TidyCore.planJsonItems(
+  [{ oldDir: '云下载/OPUD-008', oldName: 'OPUD-008.wmv', newDir: '娱乐/番号/OPUD-008', newName: 'OPUD-008.wmv' }],
+  { root: '', byDir: { '云下载/OPUD-008': [{ fid: '9', name: 'OPUD-008.wmv' }] }, dirCid: { '娱乐/番号/OPUD-008': 'CID99' } });
+assert(jr3.ops.length === 1 && jr3.ops[0].op === 'move' && jr3.ops[0].toCid === 'CID99', 'JSON：跨目录移动产出 move op（带目标 cid）');
+/* 移动时目标目录不存在 → 记进 miss，不产 op */
+const jr4 = TidyCore.planJsonItems(
+  [{ oldDir: '云下载/X', oldName: 'x.mp4', newDir: '不存在的夹', newName: 'x.mp4' }],
+  { root: '', byDir: { '云下载/X': [{ fid: '10', name: 'x.mp4' }] }, dirCid: { '不存在的夹': null } });
+assert(jr4.ops.length === 0 && jr4.miss.length === 1, 'JSON：移动目标目录不存在记进 miss');
+/* 同名同目录 → 视为无变化跳过 */
+const jr5 = TidyCore.planJsonItems([{ oldDir: '', oldName: 'same.mp4', newDir: '', newName: 'same.mp4' }], { byDir: { '': [{ fid: '11', name: 'same.mp4' }] } });
+assert(jr5.ops.length === 0, 'JSON：原名=新名且同目录视为无变化跳过');
 assert(TidyCore.planRule('jsonPlan', [], {}).ok === false, 'JSON：没导入清单时 planRule 明确报错');
-assert(TidyCore.planRule('jsonPlan', [], { entries: [{ dir: '', from: 'a', to: 'b' }], byDir: { '': [{ fid: '1', name: 'a' }] } }).ops.length === 1, 'JSON：planRule 走通 jsonPlan');
+assert(TidyCore.planRule('jsonPlan', [], { entries: [{ oldDir: '', oldName: 'a', newDir: '', newName: 'b' }], byDir: { '': [{ fid: '1', name: 'a' }] } }).ops.length === 1, 'JSON：planRule 走通 jsonPlan');
 
 /* ================= 目录树文本 ================= */
 const treeTxt = TidyCore.renderTreeText({ children: [{ name: '夹', dir: true, children: [{ name: 'a.mp4' }] }, { name: 'b.txt' }] });
@@ -247,3 +266,34 @@ assert(trimmed.children[0].children[0].note && trimmed.children[0].children[0].n
 assert(TidyCore.renderTreeText(trimmed).indexOf('已折叠') >= 0, '剪枝：note 会渲染进树文本');
 assert(JSON.stringify(TidyCore.trimTree(big, { maxDepth: 9, maxNodes: 1 })).indexOf('已折叠') >= 0, '剪枝：节点上限触发折叠');
 assert(TidyCore.countNodes(big) === 4, '剪枝：countNodes 统计后代数');
+
+/* ================= 防风控：分批改名 / 回包判定 / 风控识别 ================= */
+assert(TidyCore.RENAME_BATCH === 100, '防风控：默认每批 100 条');
+const manyOps = [];
+for (let i = 0; i < 250; i++) manyOps.push({ fid: String(1000 + i), orig: 'a' + i, name: 'b' + i });
+const chunks = TidyCore.chunkPlan(manyOps);
+assert(chunks.length === 3, '防风控：250 条切成 3 批（100/100/50）');
+assert(chunks[2].length === 50, '防风控：最后一批是余数');
+assert(TidyCore.chunkPlan([], 10).length === 0, '防风控：空计划不产生批次');
+assert(TidyCore.chunkPlan(manyOps, 0).length === 3, '防风控：size=0 回落到默认 100');
+
+/* body：jQuery 表单序列化风格，键值都编码；中文/空格/括号都要安全 */
+const body = TidyCore.batchRenameBody([{ fid: '123', name: 'ABC-001 中 文.mp4' }, { fid: '456', name: 'x[1].mkv' }]);
+assert(body.indexOf('files_new_name%5B123%5D=ABC-001%20%E4%B8%AD%20%E6%96%87.mp4') === 0, '防风控：body 键为 files_new_name[fid] 且已编码');
+assert(body.indexOf('&files_new_name%5B456%5D=x%5B1%5D.mkv') > 0, '防风控：多条用 & 连接');
+assert(TidyCore.batchRenameBody([{ fid: '', name: 'a' }, { name: 'b' }]) === '', '防风控：无 fid 的条目不进 body');
+
+/* 回包判定：data 里有该 fid 即成功（115 的批量改名回包形态） */
+const rr = TidyCore.readRenameResult({ state: true, errno: 0, data: { '123': 'A.mp4' } }, [{ fid: '123' }, { fid: '456' }]);
+assert(rr.ok === 1 && rr.fail === 1 && rr.failed[0].fid === '456', '防风控：按 fid 逐条判定成败');
+const rr2 = TidyCore.readRenameResult({ state: true, errno: 0 }, [{ fid: '1' }, { fid: '2' }]);
+assert(rr2.ok === 2, '防风控：回包没有 data 时退化为看 state');
+const rr3 = TidyCore.readRenameResult({ state: false, error: '失败' }, [{ fid: '1' }]);
+assert(rr3.fail === 1, '防风控：state=false 且无 data → 全失败');
+
+/* 风控识别：HTTP 200 + state:false 的「软风控」必须被认出来 */
+assert(TidyCore.riskText({ state: false, error: '操作过于频繁，请稍后再试' }) !== '', '防风控：识别「操作过于频繁」');
+assert(TidyCore.riskText({ state: false, error: '系统检测异常' }) !== '', '防风控：识别「系统检测异常」');
+assert(TidyCore.riskText({ state: false, error: '文件不存在' }) === '', '防风控：普通业务失败不算风控');
+assert(TidyCore.riskText({ state: true }) === '', '防风控：成功回包不算风控');
+assert(TidyCore.riskText(null) === '', '防风控：空回包不抛错');

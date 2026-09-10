@@ -1106,6 +1106,79 @@ function c115AdaptiveDelay(){
 }
 function c115Sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
+/* ---- 115 请求节流闸 + 风控熔断（2026-09-10，防风控）----
+   115 的风控判的是「姿态」：并发、连打、批量遍历都是典型的机器人特征（社区里挂载 115 普遍
+   把速率压到 ~1 请求/秒、并要求分批）。这里做三件事，尽量贴着人类操作节奏：
+     ① 串行：所有 115 请求排一条队，任何时刻只有一个在飞（并发本身就是明显特征）；
+     ② 最小间隔：写操作（改名/移动/删除/建夹/导出）默认 1.2s，读操作（列目录/轮询）0.35s；
+     ③ 熔断：一旦 115 回「操作过于频繁 / 系统检测异常」或 HTTP 403/405/429，立刻冷却 60s，
+        期间所有请求自动排队等待 —— 不给「失败后继续猛打」的机会（那正是封号的临界点）。
+   注意这是「最小间隔」而非「限速」：距上次调用已超过间隔就立即放行，不额外拖慢。 */
+var C115_THROTTLE_ON = true; // 总开关（自动化流程测试会关掉：那条链路按「调用次数」编排响应）
+var C115_T_WRITE = 1200;    // 写操作最小间隔（毫秒）
+var C115_T_READ = 350;      // 读操作最小间隔
+var C115_COOLDOWN = 60000;  // 命中风控后的冷却时长
+var c115LastAt = 0;         // 上一次请求发起时间
+var c115CooldownUntil = 0;  // 冷却截止时间戳
+var c115Queue = [];
+var c115Busy = false;       // 有请求正在飞
+var c115RiskHits = 0;       // 本次会话命中风控的次数（整理任务据此中止）
+var c115RiskAt = 0;         // 上次提示时间（30s 内只提示一次，避免刷屏）
+var C115_WRITE_RE = /files\/(edit|add|move|copy|batch_rename|batch_edit|export_dir)|rb\/delete/;
+function c115IsWrite(url){ return C115_WRITE_RE.test(String(url || '')); }
+/* 排队执行：任何时刻只有一个 115 请求在飞，且两次请求之间至少隔 gap（写/读不同）。
+   空闲且无需等待时直接发（微任务里发，不绕 setTimeout），避免给单发请求平白加延迟。 */
+function c115Call(kind, fn){
+  if (!C115_THROTTLE_ON){
+    try { return Promise.resolve(fn()); } catch (e){ return Promise.reject(e); }
+  }
+  var gap = (kind === 'write') ? C115_T_WRITE : C115_T_READ;
+  var now = Date.now();
+  var wait = Math.max(0, c115LastAt + gap - now, c115CooldownUntil - now);
+  if (!c115Busy && !c115Queue.length && wait <= 0){
+    c115Busy = true; c115LastAt = now;
+    return Promise.resolve().then(fn).then(function (v){
+      c115Busy = false; c115Pump(); return v;
+    }, function (e){
+      c115Busy = false; c115Pump(); throw e;
+    });
+  }
+  return new Promise(function (resolve, reject){
+    c115Queue.push({ kind: kind, run: fn, resolve: resolve, reject: reject });
+    c115Pump();
+  });
+}
+function c115Pump(){
+  if (c115Busy || !c115Queue.length) return;
+  c115Busy = true;
+  var job = c115Queue[0];
+  var gap = (job.kind === 'write') ? C115_T_WRITE : C115_T_READ;
+  var now = Date.now();
+  var wait = Math.max(0, c115LastAt + gap - now, c115CooldownUntil - now);
+  setTimeout(function (){
+    c115Queue.shift();
+    c115LastAt = Date.now();
+    Promise.resolve().then(job.run).then(function (v){
+      c115Busy = false; c115Pump(); job.resolve(v);
+    }, function (e){
+      c115Busy = false; c115Pump(); job.reject(e);
+    });
+  }, wait > 0 ? wait + Math.floor(Math.random() * 180) : 0);
+}
+function c115RiskActive(){ return Date.now() < c115CooldownUntil; }
+/* 命中风控 → 冷却 + 提示（由 c115ProxyFetch 统一调用） */
+function c115RiskHit(reason){
+  var now = Date.now();
+  var fresh = (now - c115RiskAt) > 30000;   // 30s 内不重复计数/提示
+  if (fresh){ c115RiskAt = now; c115RiskHits++; }
+  c115CooldownUntil = now + C115_COOLDOWN;
+  if (fresh){
+    var tip = String(reason || '').slice(0, 24);
+    showToast('115 提示「' + tip + '」，已自动暂停 60 秒再继续', 'error');
+  }
+  return fresh;
+}
+
 /* 统一经 /api/cloud/proxy 透明转发。所有参数（目标 URL、令牌、115 Cookie、POST 体）
    都放 POST body，请求 URL 完全不含 115，规避部分网络对「URL 含 115」的 fetch 拦截
    （Safari 顶层导航不受该限制，故手动测试能通，但 PWA 的 fetch 被挡）。
@@ -1141,7 +1214,10 @@ async function c115ProxyFetch(targetUrl, opts){
     c115FailStreak = r.ok ? 0 : Math.min(c115FailStreak + 1, 4); // 成功即复位；HTTP 失败才累加
     if (opts.raw){ /* 原始字节响应（115「导出目录树」txt 是 UTF-16，必须拿原始字节自行解码）*/
       return r.arrayBuffer().then(function(buf){
-        if (!r.ok){ var e2 = new Error('HTTP ' + r.status); e2.status = r.status; throw e2; }
+        if (!r.ok){
+          if (r.status === 403 || r.status === 405 || r.status === 429) c115RiskHit('HTTP ' + r.status);
+          var e2 = new Error('HTTP ' + r.status); e2.status = r.status; throw e2;
+        }
         return { ok: r.ok, status: r.status, d: {}, raw: '', bytes: new Uint8Array(buf) };
       });
     }
@@ -1153,7 +1229,12 @@ async function c115ProxyFetch(targetUrl, opts){
     return r.text().then(function(txt){
       var d = {};
       try { d = JSON.parse(txt); } catch(_){ d = { raw: txt.slice(0, 300) }; }
+      /* 115 的「软风控」是 HTTP 200 + {state:false,error:"操作过于频繁…"} —— 必须单独识别，
+         否则会被当成一条普通失败吞掉，然后继续猛打（那才是真正会被封号的动作） */
+      var rk = (typeof TidyCore !== 'undefined' && TidyCore.riskText) ? TidyCore.riskText(d) : '';
+      if (rk) c115RiskHit(rk);
       if (!r.ok){
+        if (r.status === 403 || r.status === 405 || r.status === 429) c115RiskHit('HTTP ' + r.status);
         var errMsg = d && d.error ? d.error : ('HTTP ' + r.status);
         if (d && d.debug) errMsg += ' | ' + JSON.stringify(d.debug);
         var err = new Error(errMsg);
@@ -2202,44 +2283,53 @@ function renderAuto115(){
   if (uploadBtn) uploadBtn.style.display = tasks.some(function(t){ return auto115TaskType(t) === 'upload'; }) ? 'none' : '';
   updateAutoBadge();
 }
-/* —— 115 接口封装 —— */
+/* —— 115 接口封装 ——
+   所有请求统一走 c115Call：串行 + 最小间隔（写 1.2s / 读 0.35s）+ 风控冷却。
+   这是「不触发封禁」的关键一层，别再绕过它直接 fetch。 */
 function auto115Post(url, body){
-  return c115ProxyFetch(url, {
-    method: 'POST',
-    headers: { 'X-115-Cookie': state.c115Cookie || '', 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body
+  return c115Call(c115IsWrite(url) ? 'write' : 'read', function (){
+    return c115ProxyFetch(url, {
+      method: 'POST',
+      headers: { 'X-115-Cookie': state.c115Cookie || '', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body
+    });
   });
 }
 function auto115ListDir(cid, sort){
   var url = 'https://webapi.115.com/files?cid=' + encodeURIComponent(cid) + '&offset=0&limit=200&show_dir=1';
   if (sort) url += '&o=' + sort + '&asc=0';   // asc=0 倒序：最新的在前
-  return c115ProxyFetch(url, {
-    headers: { 'X-115-Cookie': state.c115Cookie || '' }
+  return c115Call('read', function (){
+    return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } });
   }).then(function(res){
     var d = res.d || {};
     var list = d.data || d.files || [];
     return Array.isArray(list) ? list : [];
   });
 }
-/* 完整列目录：115 单次最多返回 200 项，这里按 offset 循环补齐（超过 200 项的大夹不再漏取） */
+/* 完整列目录：按 offset 翻页补齐。
+   页大小取 1000（115 上限约 1150）——同样的文件夹，请求数比原来的 200 少 5 倍，
+   这是「少发请求就是最好的防风控」。终止条件改成「翻到空页为止」而不是「本页满页」，
+   这样即便 115 实际没给到 1000 条（按自己的上限截断）也不会漏取，只是多花一次请求。 */
 function auto115ListDirAll(cid, maxItems){
-  var LIMIT = 200, out = [], cap = maxItems || 3000;
-  function page(offset){
+  var LIMIT = 1000, out = [], cap = maxItems || 3000;
+  function page(offset, limit){
     var url = 'https://webapi.115.com/files?cid=' + encodeURIComponent(cid) +
-              '&offset=' + offset + '&limit=' + LIMIT + '&show_dir=1';
-    return c115ProxyFetch(url, {
-      headers: { 'X-115-Cookie': state.c115Cookie || '' }
+              '&offset=' + offset + '&limit=' + limit + '&show_dir=1';
+    return c115Call('read', function (){
+      return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } });
     }).then(function(res){
       var d = (res && res.d) || {};
       var list = d.data || d.files || [];
       if (!Array.isArray(list)) list = [];
       out = out.concat(list);
+      if (!out.length && limit !== 200) return page(0, 200); // 大页被拒/不支持 → 退回 200 重试一次
       var count = Number(d.count || 0);
-      if (list.length >= LIMIT && out.length < cap && (out.length < count || !count)) return page(offset + LIMIT);
+      var more = list.length > 0 && out.length < cap && (!count || out.length < count) && out.length < 20000;
+      if (more) return page(offset + list.length, limit);
       return out;
     });
   }
-  return page(0);
+  return page(0, LIMIT);
 }
 /* 条目时间（秒时间戳/毫秒/日期字符串均兼容）→ 毫秒 */
 function auto115ItemTime(it){
@@ -8349,8 +8439,8 @@ function tidyChatReplace(idx, msg){
      ④ 用完把产物删掉（丢进回收站，可恢复），免得根目录堆一堆「目录树.txt」
    注意：115 同一时间只允许一个导出任务，且超时不会自动取消 —— 失败就如实报错、让用户稍后重试，
    不做「逐层递归读取」的兜底（那条路风控高、对大库也慢）。 */
-var TIDY_TREE_POLL_MS = 2000;   // 轮询间隔
-var TIDY_TREE_POLL_MAX = 30;    // 最多轮询 30 次（约 60 秒）
+var TIDY_TREE_POLL_MS = 3000;   // 轮询间隔（放慢到 3s：导出是异步任务，没必要 2s 一探）
+var TIDY_TREE_POLL_MAX = 30;    // 最多轮询 30 次（约 90 秒）
 var TIDY_TREE_CHAR_CAP = 20000; // 发给 AI 的目录树字符上限（服务端还会再兜一层）
 
 /* ① 提交导出任务 → export_id */
@@ -8367,7 +8457,9 @@ function tidyExportStart(cid){
 /* ② 轮询导出状态 → { pickCode, fileId, fileName } */
 function tidyExportPoll(eid, left){
   var url = 'https://webapi.115.com/files/export_dir?export_id=' + encodeURIComponent(eid);
-  return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } }).then(function (res){
+  return c115Call('read', function (){
+    return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } });
+  }).then(function (res){
     var d = (res && res.d) || {};
     var info = d.data || d;
     if (info && (info.pick_code || info.pickcode)) {
@@ -8379,9 +8471,10 @@ function tidyExportPoll(eid, left){
 }
 /* ③ 按提取码下载产物 → 原始文本 */
 function tidyExportDownload(pickCode){
-  return c115ProxyFetch('https://webapi.115.com/files/download?pickcode=' + encodeURIComponent(pickCode),
-    { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true }
-  ).then(function (res){
+  return c115Call('read', function (){
+    return c115ProxyFetch('https://webapi.115.com/files/download?pickcode=' + encodeURIComponent(pickCode),
+      { headers: { 'X-115-Cookie': state.c115Cookie || '' }, raw: true });
+  }).then(function (res){
     var u8 = (res && res.bytes) || new Uint8Array(0);
     if (!u8.length) throw new Error('下载到的目录树是空的');
     var txt = (typeof TidyCore !== 'undefined' && TidyCore.decodeTreeBytes)
@@ -8433,7 +8526,7 @@ function tidyTreeFetch(){
     if (btn){ btn.disabled = false; btn.textContent = '获取目录树'; }
   }
   tidyExportStart(tidyState.folder.cid).then(function (eid){
-    say('115 正在后台导出目录树…（文件夹大的话可能要等一会儿，最多等约 1 分钟）');
+    say('115 正在后台导出目录树…（文件夹大的话可能要等一会儿，最多等约 1 分半）');
     return tidyExportPoll(eid, TIDY_TREE_POLL_MAX);
   }).then(function (info){
     say('导出完成，正在下载并解析…');
@@ -8590,8 +8683,10 @@ function tidyToggleRule(id){
 }
 
 /* —— JSON 整理（导入外部方案：定位文件/文件夹、原名称、改后名称） ——
-   JSON 形态：{ root?: '影视/云下载', items:[{ dir:'相对目录', from:'原名称', to:'改后名称' }] }
-   也接受直接给数组；字段别名 dir|path|folder、from|old|orig|name、to|new|newName。 */
+   JSON 形态（四字段）：{ root?: '影视/云下载', items:[
+     { 旧文件路径:'相对目录', 旧名:'原名称', 新文件路径:'相对目录', 新名:'改后名称' } ] }
+   旧文件路径/新文件路径 = 文件所在父目录（相对目标文件夹，可填完整路径自动剥文件名）；
+   旧名/新名 = 文件原名/改后名。也接受旧三字段 { dir, from, to }（等同旧路径=新路径=dir）。 */
 function tidyJsonPick(fromEntry){
   tidyState.jsonEntry = !!fromEntry;   // 从入口页点的：选完直接进预览；从规则页点的：只导入
   var inp = document.getElementById('tidyJsonFile');
@@ -8640,28 +8735,32 @@ function tidyResolveDir(rootCid, relPath){
   });
   return chain;
 }
-/* 把 JSON 涉及到的所有目录各拉一份快照 → { 相对路径: [条目] } */
+/* 把 JSON 涉及到的所有目录（旧路径 + 新路径）各拉一份快照
+   → { byDir: {相对路径:[条目]}, dirCid: {相对路径: cid|null} } */
 function tidyJsonSnapshots(rootCid, entries){
   var dirs = [], seen = {};
   (entries || []).forEach(function (en){
-    var d = String(en.dir || '').replace(/^\/+|\/+$/g, '');
-    if (!seen[d]){ seen[d] = 1; dirs.push(d); }
+    [en.oldDir, en.newDir].forEach(function (d){
+      d = String(d || '').replace(/^\/+|\/+$/g, '');
+      if (!seen[d]){ seen[d] = 1; dirs.push(d); }
+    });
   });
-  var byDir = {};
+  var byDir = {}, dirCid = {};
   var chain = Promise.resolve();
   dirs.forEach(function (d){
     chain = chain.then(function (){
       return tidyResolveDir(rootCid, d).then(function (cid){
+        dirCid[d] = cid || null;
         if (!cid){ byDir[d] = []; return; }
         return auto115ListDirAll(cid, 1200).then(function (list){
           byDir[d] = (list || []).map(function (it){
             return { fid: it.fid ? String(it.fid) : '', cid: it.cid ? String(it.cid) : '', name: it.n || it.name || '' };
           });
         });
-      }).catch(function (){ byDir[d] = []; });
+      }).catch(function (){ byDir[d] = []; dirCid[d] = null; });
     });
   });
-  return chain.then(function (){ return byDir; });
+  return chain.then(function (){ return { byDir: byDir, dirCid: dirCid }; });
 }
 /* JSON 整理的完整动线：读清单 → 定位 → 预览 → 执行 */
 function tidyJsonRun(){
@@ -8672,8 +8771,8 @@ function tidyJsonRun(){
   tidyTaskStep(task.id, 'read', 'ok', '共 ' + j.items.length + ' 条清单');
   tidyTaskStep(task.id, 'locate', 'running', '');
   showToast('正在定位清单里的文件…', 'info');
-  tidyJsonSnapshots(tidyState.folder.cid, j.items).then(function (byDir){
-    var plan = TidyCore.planRule('jsonPlan', [], { entries: j.items, root: j.root, byDir: byDir });
+  tidyJsonSnapshots(tidyState.folder.cid, j.items).then(function (snap){
+    var plan = TidyCore.planRule('jsonPlan', [], { entries: j.items, root: j.root, byDir: snap.byDir, dirCid: snap.dirCid });
     var miss = plan.miss || [];
     if (!plan.ops.length){
       tidyTaskStep(task.id, 'locate', 'fail', '没匹配到文件');
@@ -8707,18 +8806,26 @@ function tidyAiPlanOpen(){
   tidyState.aiPlan = plan;
   tidyAiRun(plan);
 }
-/* 清单里的 dir 可能带、也可能不带目标文件夹名（AI 两种写法都常见），统一剥掉，保证能落到真实目录 */
+/* 清单里的目录可能带、也可能不带目标文件夹名（AI 两种写法都常见），统一剥掉，保证能落到真实目录。
+   兼容旧三字段 {dir,from,to} 与新四字段 {oldDir,oldName,newDir,newName}（AI 当前只改名，newDir 等同 oldDir）。 */
 function tidyNormalizeAiEntries(plan){
   var root = String(plan.root || '').replace(/^\/+|\/+$/g, '');
   var fname = (tidyState.folder && tidyState.folder.name) ? tidyState.folder.name : '';
-  return (plan.items || []).map(function (en){
-    var d = String(en.dir || '').replace(/^\/+|\/+$/g, '');
+  function strip(d){
+    d = String(d || '').replace(/^\/+|\/+$/g, '');
     [root, fname].forEach(function (pre){
       if (!pre) return;
       if (d === pre) d = '';
       else if (d.indexOf(pre + '/') === 0) d = d.slice(pre.length + 1);
     });
-    return { dir: d, from: en.from, to: en.to };
+    return d;
+  }
+  return (plan.items || []).map(function (en){
+    var d = strip(en.dir != null ? en.dir : (en.oldDir != null ? en.oldDir : en.newDir || ''));
+    var nd = (en.newDir != null && en.newDir !== '') ? strip(en.newDir) : d;
+    var from = en.from != null ? en.from : (en.oldName || '');
+    var to = en.to != null ? en.to : (en.newName || '');
+    return { oldDir: d, oldName: from, newDir: nd, newName: to };
   });
 }
 function tidyAiRun(plan){
@@ -8732,8 +8839,8 @@ function tidyAiRun(plan){
   tidyTaskStep(taskId, 'exec', 'running', '正在定位文件');
   showToast('正在定位清单里的文件…', 'info');
   var entries = tidyNormalizeAiEntries(plan);
-  tidyJsonSnapshots(tidyState.folder.cid, entries).then(function (byDir){
-    var res = TidyCore.planRule('jsonPlan', [], { entries: entries, root: '', byDir: byDir });
+  tidyJsonSnapshots(tidyState.folder.cid, entries).then(function (snap){
+    var res = TidyCore.planRule('jsonPlan', [], { entries: entries, root: '', byDir: snap.byDir, dirCid: snap.dirCid });
     var miss = res.miss || [];
     if (!res.ops.length){
       tidyTaskStep(taskId, 'exec', 'fail', '没匹配到文件');
@@ -8880,6 +8987,12 @@ function renderTidyPreview(ops){
     return '<div class="tidy-pv-row"><div class="pv-old">' + escapeHtml(o.orig) + '</div><div class="pv-new">' + escapeHtml(o.name) + '</div></div>';
   }).join('');
   if (ops.length > CAP) rows += '<div class="tidy-pv-more">仅显示前 ' + CAP + ' 项，共 ' + ops.length + ' 项</div>';
+  /* 项数多时先说清节奏：为了不被 115 风控，请求是分批 + 限速发的 */
+  if (ops.length > 200){
+    var est = Math.max(2, Math.round(Math.ceil(ops.length / 100) * 1.6));
+    rows += '<div class="tidy-pv-more">为避开 115 风控，会分批提交（每 100 项一次请求），预计约 ' + est +
+      ' 秒；期间请保持页面在前台、不要反复点执行。</div>';
+  }
   box.innerHTML = rows;
   var btn = document.getElementById('tidyExecBtn');
   if (btn) btn.textContent = '执行整理（' + ops.length + ' 项）';
@@ -8909,35 +9022,90 @@ function tidyExecute(){
       tidyTaskStep(taskId, 'plan', 'ok', '待整理 ' + ops.length + ' 项');
     }
   }
-  var total = ops.length, done = 0, failed = 0, i = 0;
+  /* 执行分两类 op：
+     rename → 走 115「批量改名」接口 files/batch_rename（一批最多 100 条，把 N 次请求压成 ceil(N/100) 次）
+     move   → 走 115「移动」接口 files/move（fid → 目标目录），移动后再对需要改名的补一次 batch_rename
+     两类都由 c115Call 串行 + 最小间隔控制；一旦命中风控立刻中止，剩下的留给用户稍后重跑。 */
+  var renameOps = ops.filter(function (o){ return o.op !== 'move'; });
+  var moveOps = ops.filter(function (o){ return o.op === 'move'; });
+  var total = ops.length, done = 0, failed = 0;
+  var riskAtStart = c115RiskHits, aborted = false;
   tidyTaskStep(taskId, 'exec', 'running', '0/' + total);
-  function step(){
-    if (i >= total){
-      var detail = '成功 ' + done + ' 项' + (failed ? '，失败 ' + failed + ' 项' : '');
-      tidyTaskStep(taskId, 'exec', failed ? 'fail' : 'ok', detail);
-      tidyUpdateTask(taskId, { state: failed ? 'fail' : 'done', detail: detail });
-      /* 规则 / JSON 整理是纯客户端动作（服务端不参与）→ 由客户端自报一次「文件整理」配额；
-         AI 整理在对话那一步已经由服务端计过数，这里不重复计。 */
-      if (kind !== 'ai' && done > 0){ NfoCore.quotaInc('tidy115'); reportQuotaUse('tidy115'); }
-      tidyState.preview = null;
-      tidyState.aiPlan = null;
-      closeTidyPreview();
-      if (btn){ btn.disabled = false; btn.textContent = '预览并整理'; }
-      showToast('整理完成：' + detail, failed ? 'error' : 'success');
-      if (currentPage === 'tidy-tasks') renderTidyTasks();
-      return;
-    }
-    var op = ops[i++];
-    var body = 'fid=' + encodeURIComponent(op.fid) + '&file_name=' + encodeURIComponent(op.name);
-    auto115Post('https://webapi.115.com/files/edit', body).then(function (res){
-      if (res && res.ok) done++; else failed++;
-    }).catch(function (){ failed++; }).then(function (){
-      /* 每 5 条刷一次进度，避免大库（上千条）时反复重绘 */
-      if (i % 5 === 0) tidyTaskStep(taskId, 'exec', 'running', (done + failed) + '/' + total);
-      step();
+  function finishExec(){
+    var detail = '成功 ' + done + ' 项' + (failed ? '，失败 ' + failed + ' 项' : '');
+    if (aborted) detail = '成功 ' + done + ' 项，115 提示操作频繁已中止（剩 ' + Math.max(0, total - done - failed) + ' 项未处理，稍后可再跑一次）';
+    var bad = !!(failed || aborted);
+    tidyTaskStep(taskId, 'exec', bad ? 'fail' : 'ok', detail);
+    tidyUpdateTask(taskId, { state: bad ? 'fail' : 'done', detail: detail });
+    /* 规则 / JSON 整理是纯客户端动作（服务端不参与）→ 由客户端自报一次「文件整理」配额；
+       AI 整理在对话那一步已经由服务端计过数，这里不重复计。 */
+    if (kind !== 'ai' && done > 0){ NfoCore.quotaInc('tidy115'); reportQuotaUse('tidy115'); }
+    tidyState.preview = null;
+    tidyState.aiPlan = null;
+    closeTidyPreview();
+    if (btn){ btn.disabled = false; btn.textContent = '预览并整理'; }
+    showToast('整理完成：' + detail, bad ? 'error' : 'success');
+    if (currentPage === 'tidy-tasks') renderTidyTasks();
+  }
+  function riskHitNow(){ return c115RiskActive() && c115RiskHits > riskAtStart; }
+  /* 第一阶段：原地改名（rename）—— 复用既有的批量改名 + 批间留余量逻辑 */
+  function runRenameBatches(){
+    if (!renameOps.length) return Promise.resolve();
+    var batches = TidyCore.chunkPlan(renameOps, TidyCore.RENAME_BATCH || 100);
+    return new Promise(function (resolve){
+      var bi = 0;
+      (function next(){
+        if (bi >= batches.length || riskHitNow()){ if (riskHitNow()) aborted = true; resolve(); return; }
+        var chunk = batches[bi++];
+        var valid = chunk.filter(function (o){ return o && o.fid; });
+        failed += chunk.length - valid.length;                 // 没有 fid 的条目直接计失败
+        if (!valid.length){ next(); return; }
+        var body = TidyCore.batchRenameBody(valid);
+        auto115Post('https://webapi.115.com/files/batch_rename', body).then(function (res){
+          var d = (res && res.d) || {};
+          var r = TidyCore.readRenameResult(d, valid);
+          done += r.ok; failed += r.fail;
+        }).catch(function (){ failed += valid.length; }).then(function (){
+          tidyTaskStep(taskId, 'exec', 'running', (done + failed) + '/' + total);
+          if (riskHitNow()){ aborted = true; resolve(); return; }
+          if (bi < batches.length) c115Sleep(400).then(next); else next();
+        });
+      })();
     });
   }
-  step();
+  /* 第二阶段：跨目录移动（move）—— 先移到目标目录，需要改名的再补一次改名 */
+  function runMoveGroups(){
+    if (!moveOps.length) return Promise.resolve();
+    var groups = {};
+    moveOps.forEach(function (o){ (groups[o.toCid] = groups[o.toCid] || []).push(o); });
+    var keys = Object.keys(groups);
+    return new Promise(function (resolve){
+      var gi = 0;
+      (function next(){
+        if (gi >= keys.length || riskHitNow()){ if (riskHitNow()) aborted = true; resolve(); return; }
+        var cid = keys[gi++];
+        var group = groups[cid];
+        var valid = group.filter(function (o){ return o && o.fid; });
+        failed += group.length - valid.length;
+        if (!valid.length){ next(); return; }
+        var fids = valid.map(function (o){ return o.fid; }).join(',');
+        auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(fids) + '&pid=' + encodeURIComponent(cid)).then(function (){
+          var rn = valid.filter(function (o){ return o.name && o.name !== o.orig; });
+          if (!rn.length){ done += valid.length; return; }
+          return auto115Post('https://webapi.115.com/files/batch_rename', TidyCore.batchRenameBody(rn)).then(function (res){
+            var d = (res && res.d) || {};
+            var r = TidyCore.readRenameResult(d, rn);
+            done += r.ok; failed += r.fail;
+          }).catch(function (){ failed += rn.length; });
+        }).catch(function (){ failed += valid.length; }).then(function (){
+          tidyTaskStep(taskId, 'exec', 'running', (done + failed) + '/' + total);
+          if (riskHitNow()){ aborted = true; resolve(); return; }
+          if (gi < keys.length) c115Sleep(500).then(next); else next();
+        });
+      })();
+    });
+  }
+  runRenameBatches().then(runMoveGroups).then(finishExec);
 }
 
 /* —— 工具箱 · 磁力管理（M3 通用版 / M3.1 加手动添加）：不绑影片 ——

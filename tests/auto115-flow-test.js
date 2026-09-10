@@ -49,6 +49,8 @@ vm.createContext(ctx);
 vm.runInContext(coreSrc, ctx, { filename: 'auto115-core.js' });
 try { vm.runInContext(src, ctx, { filename: 'ui-ios.js' }); }
 catch (e) { console.log('LOAD WARN:', e.message); }
+/* 关掉 115 节流闸：本测试按「调用次数」编排响应，任何真实等待都会打乱顺序（改为在独立的节流测试里覆盖） */
+try { vm.runInContext('C115_THROTTLE_ON = false;', ctx); } catch (e) { console.log('[DBG] 节流开关补丁异常:', e.message); }
 /* bootApp 定时器在 crypto 异步等待期间会触发，补齐其依赖的 state 字段防崩（state 为 let 声明，需在 vm 作用域内补） */
 try { vm.runInContext('state.countries = state.countries || []; state.genres = state.genres || []; console.log("[DBG] vm内 state.countries=", JSON.stringify(state.countries));', ctx); } catch (e) { console.log('[DBG] 补丁异常:', e.message); }
 
@@ -1074,6 +1076,35 @@ const lz4LiteralForTest = (bytes) => {
 
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
   ctx.auto115Doc = null;
+
+  /* ------- 11. 115 请求节流闸（防风控层）—— 单独开闸测 ------- */
+  console.log('\n— 请求节流闸 —');
+  vm.runInContext('C115_THROTTLE_ON = true; C115_T_WRITE = 60; C115_T_READ = 20; C115_COOLDOWN = 300; c115LastAt = 0; c115CooldownUntil = 0; c115Queue.length = 0; c115Busy = false;', ctx);
+  let inflight = 0, maxInflight = 0;
+  const stamps = [];
+  const jobs = [0, 1, 2, 3].map(i => ctx.c115Call('write', () => {
+    inflight++; maxInflight = Math.max(maxInflight, inflight);
+    stamps.push({ i, t: Date.now() });
+    return new Promise(r => setTimeout(() => { inflight--; r('r' + i); }, 10));
+  }));
+  const outs = await Promise.all(jobs);
+  assert(maxInflight === 1, '节流：任何时刻只有一个 115 请求在飞（实测并发峰值 ' + maxInflight + '）');
+  assert(outs.join(',') === 'r0,r1,r2,r3', '节流：按入队顺序串行完成');
+  let minGap = Infinity;
+  for (let i = 1; i < stamps.length; i++) minGap = Math.min(minGap, stamps[i].t - stamps[i - 1].t);
+  assert(minGap >= 55, '节流：两次写请求间隔不小于设定值（实测最小 ' + minGap + 'ms）');
+  assert(ctx.c115IsWrite('https://webapi.115.com/files/batch_rename') === true, '节流：改名识别为写操作');
+  assert(ctx.c115IsWrite('https://webapi.115.com/files/export_dir') === true, '节流：导出目录树识别为写操作');
+  assert(ctx.c115IsWrite('https://webapi.115.com/files?cid=1') === false, '节流：列目录是读操作（间隔更短）');
+
+  /* 风控熔断：命中后进入冷却，30s 内不重复计数（避免刷屏 + 反复延长冷却） */
+  vm.runInContext('c115CooldownUntil = 0; c115RiskAt = 0; c115RiskHits = 0;', ctx);
+  assert(ctx.c115RiskActive() === false, '风控：初始不在冷却中');
+  assert(ctx.c115RiskHit('操作过于频繁') === true, '风控：首次命中 → 计入并返回 fresh');
+  assert(ctx.c115RiskActive() === true, '风控：命中后进入冷却');
+  assert(ctx.c115RiskHit('操作过于频繁') === false, '风控：30s 内重复命中不再计数（不刷屏）');
+  assert(ctx.c115RiskHits === 1, '风控：重复命中只算一次（实测 ' + ctx.c115RiskHits + '）');
+  vm.runInContext('C115_THROTTLE_ON = false; C115_T_WRITE = 1200; C115_T_READ = 350; C115_COOLDOWN = 60000; c115CooldownUntil = 0;', ctx);
 
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');
