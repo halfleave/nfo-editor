@@ -294,7 +294,8 @@ var CTX_ICONS = {
   trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M6 10V8a6 6 0 0 1 12 0v2"/></svg>',
   unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M7 10V8a5 5 0 0 1 9.9-1"/></svg>',
-  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
+  /* meta：元数据（NFO 文档）图标——替代原下载箭头，避免「实际是导出元数据」被误读成下载视频 */
+  meta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>'
 };
 function showContextSheet(title, items, anchor){
@@ -7691,7 +7692,7 @@ function bindOverviewLongPress(){
             showContextSheet('影片操作', [
               { label: '编辑', icon: 'pencil', onClick: function(){ editReturnToDetail = true; newFilm(); openFilm(encodeURIComponent(id)); } },
               { label: '刷新', icon: 'refresh', onClick: function(){ refreshFilm(id); }, disabled: isCustom },
-              { label: '下载元数据', icon: 'download', onClick: function(){ downloadMetadata(id); } },
+              { label: '下载元数据', icon: 'meta', onClick: function(){ downloadMetadata(id); } },
               { label: locked ? '解锁' : '锁定', icon: locked ? 'unlock' : 'lock', onClick: function(){ toggleLock(id); } },
               { label: '删除', danger: true, onClick: function(){
                   deleteFilm(id).then(function(){ showToast('已删除'); renderOverview(); });
@@ -7701,7 +7702,7 @@ function bindOverviewLongPress(){
             showContextSheet('影片操作', [
               { label: '编辑', icon: 'pencil', onClick: function(){ editReturnToDetail = true; newFilm(); openFilm(encodeURIComponent(id)); } },
               { label: '刷新', icon: 'refresh', onClick: function(){ refreshFilm(id); }, disabled: true },
-              { label: '下载元数据', icon: 'download', onClick: function(){ downloadMetadata(id); } },
+              { label: '下载元数据', icon: 'meta', onClick: function(){ downloadMetadata(id); } },
               { label: '锁定', icon: 'lock', onClick: function(){ toggleLock(id); } },
               { label: '删除', danger: true, onClick: function(){
                   deleteFilm(id).then(function(){ showToast('已删除'); renderOverview(); });
