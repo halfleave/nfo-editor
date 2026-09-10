@@ -2215,6 +2215,26 @@ function auto115ListDir(cid, sort){
     return Array.isArray(list) ? list : [];
   });
 }
+/* 完整列目录：115 单次最多返回 200 项，这里按 offset 循环补齐（超过 200 项的大夹不再漏取） */
+function auto115ListDirAll(cid, maxItems){
+  var LIMIT = 200, out = [], cap = maxItems || 3000;
+  function page(offset){
+    var url = 'https://webapi.115.com/files?cid=' + encodeURIComponent(cid) +
+              '&offset=' + offset + '&limit=' + LIMIT + '&show_dir=1';
+    return c115ProxyFetch(url, {
+      headers: { 'X-115-Cookie': state.c115Cookie || '' }
+    }).then(function(res){
+      var d = (res && res.d) || {};
+      var list = d.data || d.files || [];
+      if (!Array.isArray(list)) list = [];
+      out = out.concat(list);
+      var count = Number(d.count || 0);
+      if (list.length >= LIMIT && out.length < cap && (out.length < count || !count)) return page(offset + LIMIT);
+      return out;
+    });
+  }
+  return page(0);
+}
 /* 条目时间（秒时间戳/毫秒/日期字符串均兼容）→ 毫秒 */
 function auto115ItemTime(it){
   var v = it && (it.t != null ? it.t : (it.pt != null ? it.pt : ''));
@@ -7985,7 +8005,11 @@ var tidyState = {
   pick: null,        // 文件夹选择器：{ cid, name, stack:[{cid,name}] }
   wm: null,          // 水印列表（内存态，保存才落盘）
   ruleId: 'watermark',
-  chatId: null,      // 当前对话任务 id
+  chatId: null,      // 当前对话任务 id（空 = 草稿态，一次消息都没发）
+  chatDraft: null,   // 草稿态消息（没发过消息就返回 → 不建任务、不留记录）
+  tree: '',          // 本次会话手动获取到的目录树文本
+  json: null,        // 导入的 JSON 清单解析结果 { ok, root, items }
+  jsonEntry: false,  // 这次选 JSON 是从入口页点的（选完直接进预览，不回规则页）
   preview: null,     // 预览待执行的 op 列表
   open: {},          // 任务列表展开态 { taskId: true }
   pendingTask: null  // 已开始「读取+计划」但还没点执行的规则任务 id
@@ -8114,17 +8138,20 @@ function tidyPickHere(){
 /* —— 任务列表 —— */
 function tidyTasks(){ var l = tidyLoad(TIDY_TASKS_KEY, []); return Array.isArray(l) ? l : []; }
 function tidySaveTasks(list){ tidyStore(TIDY_TASKS_KEY, (list || []).slice(0, TIDY_TASK_MAX)); }
-function tidyNewTask(type, title){
+/* 建任务。title = 最终定位的文件夹名；stepsKind 决定步骤模板（rule / json / ai） */
+function tidyNewTask(type, title, stepsKind){
   var list = tidyTasks();
+  var kind = stepsKind || type;
   var task = {
     id: 't' + Date.now() + Math.floor(Math.random() * 1000),
     type: type,                         // 'ai' | 'rule'
-    title: title || '未命名',
+    stepsKind: kind,
+    title: title || tidyFolderName(),
     folderCid: tidyState.folder ? tidyState.folder.cid : '',
     folderPath: tidyState.folder ? (tidyState.folder.path || tidyState.folder.name) : '',
     state: 'run',                       // run | done | fail
     detail: '',
-    steps: (typeof TidyCore !== 'undefined' && TidyCore.newSteps) ? TidyCore.newSteps(type) : [],
+    steps: (typeof TidyCore !== 'undefined' && TidyCore.newSteps) ? TidyCore.newSteps(kind) : [],
     at: Date.now()
   };
   list.unshift(task);
@@ -8182,32 +8209,32 @@ function renderTidyTasks(){
   box.innerHTML = list.map(function (t){
     var isAi = t.type === 'ai';
     var color = isAi ? '#5856D6' : '#FF9500';
-    var icon = isAi
-      ? '<path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.2-4.2A8 8 0 1 1 21 12Z"/>'
-      : '<path d="M4 6h16M4 12h16M4 18h10"/>';
+    /* AI 任务用文字「AI」当图标；规则 / JSON 任务用列表图标 */
+    var iconHtml = isAi
+      ? '<span class="ttk-ai">AI</span>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';
     var stateCls = t.state === 'done' ? 'done' : (t.state === 'fail' ? 'fail' : 'run');
     var stateTx = t.state === 'done' ? '已完成' : (t.state === 'fail' ? '失败' : '进行中');
     var expanded = !!open[t.id];
-    /* 单行：类型图标 + 标题 + 状态 + 箭头 */
+    /* 折叠态：类型图标 + 标题（最终定位的文件夹）+ 状态 + 箭头，就一行 */
     var head = '<div class="tidy-task-head" onclick="tidyTaskToggle(\'' + t.id + '\')">' +
-      '<span class="ttk-icon" style="background:' + color + ';"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + icon + '</svg></span>' +
+      '<span class="ttk-icon" style="background:' + color + ';">' + iconHtml + '</span>' +
       '<span class="tidy-task-title">' + escapeHtml(t.title) + '</span>' +
       '<span class="tti-state ' + stateCls + '">' + stateTx + '</span>' +
-      '<svg class="tidy-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>' +
+      '<svg class="tidy-task-arrow' + (expanded ? ' on' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>' +
       '</div>';
     if (!expanded) return '<div class="tidy-task">' + head + '</div>';
     var steps = t.steps || [];
-    var stepsHtml = steps.length
-      ? '<div class="tidy-steps">' + steps.map(tidyStepHtml).join('') + '</div>'
-      : '';
-    /* 展开体底部：AI 任务给「进入对话」，都可用「删除」 */
+    /* 展开态：分隔线下方第一行是完整路径，然后才是步骤流 */
+    var body = '<div class="tidy-task-body">' +
+      '<div class="tidy-task-path">' + escapeHtml(t.folderPath || '未记录路径') + '</div>' +
+      (steps.length ? '<div class="tidy-steps">' + steps.map(tidyStepHtml).join('') + '</div>' : '') +
+      '</div>';
     var ops = '<div class="tidy-task-ops">' +
       (isAi ? '<button class="op-chat" onclick="tidyTaskChat(\'' + t.id + '\')">进入对话</button>' : '') +
       '<button onclick="tidyTaskRemove(\'' + t.id + '\')">删除</button>' +
       '</div>';
-    var meta = '<div class="tidy-task-meta">' + escapeHtml(t.folderPath || '未指定文件夹') + ' · ' + tidyTimeFmt(t.at) +
-      (t.detail ? ' · ' + escapeHtml(t.detail) : '') + '</div>';
-    return '<div class="tidy-task expanded">' + head + meta + stepsHtml + ops + '</div>';
+    return '<div class="tidy-task expanded">' + head + body + ops + '</div>';
   }).join('');
 }
 function tidyStepHtml(s){
@@ -8229,58 +8256,128 @@ function tidyTaskChat(id){
   openTidyChat(id);
 }
 
-/* —— AI 对话 —— */
+/* —— AI 对话 ——
+   会话生命周期：从入口进 = 草稿态（不建任务）；发出第一条消息才落盘成任务；
+   返回时若一次都没发过消息，就什么都不留。带 taskId 进来 = 回到任务列表里的旧会话。 */
 function tidyChatLoad(id){ return tidyLoad(TIDY_CHAT_PREFIX + id, []); }
 function tidyChatStore(id, msgs){ tidyStore(TIDY_CHAT_PREFIX + id, msgs || []); }
+function tidyChatMsgs(){
+  return tidyState.chatId ? tidyChatLoad(tidyState.chatId) : (tidyState.chatDraft || []);
+}
+function tidyChatSetMsgs(msgs){
+  if (tidyState.chatId) tidyChatStore(tidyState.chatId, msgs);
+  else tidyState.chatDraft = msgs;
+}
 function openTidyChat(taskId){
-  var task;
   if (taskId){
-    var list = tidyTasks();
-    for (var i = 0; i < list.length; i++) if (list[i].id === taskId) task = list[i];
-    if (!task){ showToast('会话不存在', 'error'); return; }
+    var t = tidyTaskGet(taskId);
+    if (!t){ showToast('会话不存在', 'error'); return; }
+    tidyState.chatId = t.id;
+    tidyState.chatDraft = null;
   } else {
-    // 每次进入 = 一条新会话（可从任务列表回到旧会话）
-    task = tidyNewTask('ai', 'AI 整理 · ' + tidyFolderName());
-    var greet = [];
-    greet.push({ role: 'sys', text: tidyState.folder ? ('目标文件夹：' + (tidyState.folder.path || tidyState.folder.name)) : '尚未选择文件夹（可先返回选择）' });
-    greet.push({ role: 'ai', text: '你好，我来帮你整理这个文件夹。\n你可以直接描述想法，比如「番号统一大写」「把同番号的分碟合并成一个文件夹」。\n（AI 对话通道正在接入，当前仅可预览会话结构）' });
-    tidyChatStore(task.id, greet);
-    // 步骤如实反映进度：目录树读取与发送通道都还没接
-    tidyTaskStep(task.id, 'tree', 'idle', '待接入：暂不自动读取 115 目录树');
-    tidyTaskStep(task.id, 'chat', 'idle', '会话已建立，发送通道待接入');
+    /* 草稿态：还没发消息，不占任务列表 */
+    tidyState.chatId = null;
+    tidyState.chatDraft = [
+      { role: 'sys', text: tidyState.folder ? ('目标文件夹：' + (tidyState.folder.path || tidyState.folder.name)) : '尚未选择文件夹（可先返回选择）' },
+      { role: 'ai', text: '先点右上角「获取目录树」，把当前文件夹的结构读出来；然后告诉我你想怎么整理。\n（AI 对话通道正在接入，先把目录树和会话结构跑通）' }
+    ];
   }
-  tidyState.chatId = task.id;
+  tidyState.tree = '';
   var titleEl = document.getElementById('tidyChatTitle');
-  if (titleEl) titleEl.textContent = task.title || 'AI 整理';
+  if (titleEl) titleEl.textContent = tidyFolderName();
   renderTidyChat();
   switchPage('tidy-chat');
 }
+/* 返回：回文件整理入口页；没发过消息就不留记录 */
 function tidyChatBack(){
-  // 回到任务列表：把这条会话留在列表里，下次可从这里继续
+  var id = tidyState.chatId;
+  if (id){
+    var hasMe = tidyChatLoad(id).some(function (m){ return m && m.role === 'me'; });
+    if (!hasMe) tidyTaskRemove(id);
+  }
   tidyState.chatId = null;
-  openTidyTasks();
+  tidyState.chatDraft = null;
+  tidyState.tree = '';
+  openTidy();
 }
 function renderTidyChat(){
   var box = document.getElementById('tidyChatScroll');
-  if (!box || !tidyState.chatId) return;
-  var msgs = tidyChatLoad(tidyState.chatId);
-  box.innerHTML = msgs.map(function (m){
+  if (!box) return;
+  box.innerHTML = tidyChatMsgs().map(function (m){
     var cls = m.role === 'me' ? 'me' : (m.role === 'ai' ? 'ai' : 'sys');
     return '<div class="tidy-msg ' + cls + '">' + escapeHtml(m.text) + '</div>';
   }).join('');
   box.scrollTop = box.scrollHeight;
 }
+function tidyChatAppend(msg){
+  var msgs = tidyChatMsgs();
+  msgs.push(msg);
+  tidyChatSetMsgs(msgs);
+  renderTidyChat();
+}
+/* 获取目录树（用户手动触发）：递归读当前文件夹 → 渲染成文本树发给会话 */
+function tidyTreeFetch(){
+  if (!tidyState.folder){ showToast('请先选择要整理的文件夹', 'error'); return; }
+  if (tidyState.treeFetching) return;
+  tidyState.treeFetching = true;
+  var id = tidyState.chatId;
+  if (id) tidyTaskStep(id, 'tree', 'running', '');
+  showToast('正在读取目录树…', 'info');
+  tidyBuildTree(tidyState.folder.cid, 6, { n: 0, max: 800 }).then(function (node){
+    var text = (typeof TidyCore !== 'undefined' && TidyCore.renderTreeText) ? TidyCore.renderTreeText(node, { maxLines: 2000 }) : '';
+    var lines = text ? text.split('\n').length : 0;
+    tidyState.tree = text;
+    tidyChatAppend({ role: 'sys', text: '已获取目录树（' + lines + ' 行）：\n' + (text || '（这个文件夹是空的）') });
+    if (id) tidyTaskStep(id, 'tree', 'ok', '共 ' + lines + ' 行');
+    showToast('目录树已获取（' + lines + ' 行）', 'success');
+  }).catch(function (e){
+    var m = (e && e.message) || '网络错误';
+    if (id) tidyTaskStep(id, 'tree', 'fail', m);
+    showToast('获取失败：' + m, 'error');
+  }).then(function (){ tidyState.treeFetching = false; });
+}
+/* 递归读目录（带深度与节点上限，避免大库把请求打爆；目录优先保持原顺序） */
+function tidyBuildTree(cid, depth, budget){
+  budget = budget || { n: 0, max: 600 };
+  return auto115ListDirAll(cid, 800).then(function (list){
+    var nodes = [], cids = [];
+    (list || []).forEach(function (it){
+      var n = it.n || it.name || '';
+      if (!n) return;
+      var isDir = !!(it.cid && !it.fid);
+      nodes.push({ name: n, dir: isDir, children: [] });
+      cids.push(isDir ? String(it.cid) : '');
+    });
+    budget.n += nodes.length;
+    var chain = Promise.resolve();
+    nodes.forEach(function (node, i){
+      if (!node.dir || depth <= 1) return;
+      chain = chain.then(function (){
+        if (budget.n >= budget.max) return null;
+        return tidyBuildTree(cids[i], depth - 1, budget).then(function (sub){ node.children = sub.children; });
+      });
+    });
+    return chain.then(function (){ return { children: nodes }; });
+  });
+}
 function tidyChatSend(){
   var inp = document.getElementById('tidyChatInput');
   if (!inp) return;
   var text = (inp.value || '').trim();
-  if (!text || !tidyState.chatId) return;
-  var msgs = tidyChatLoad(tidyState.chatId);
+  if (!text) return;
+  var msgs = tidyChatMsgs();
   msgs.push({ role: 'me', text: text });
+  /* 第一条消息发出时才真正建任务（此前返回 = 不留任何记录） */
+  if (!tidyState.chatId){
+    var task = tidyNewTask('ai', tidyFolderName(), 'ai');
+    tidyState.chatId = task.id;
+    tidyState.chatDraft = null;
+    tidyTaskStep(task.id, 'chat', 'running', '');
+  }
   // TODO(M4 后续)：接 Worker 的 AI 整理通道 —— 与翻译共用模型、换一套 tidy 系统提示语，
-  // 按文件夹分片喂目录树，收口时要求输出 nfo115.tidy/v1 的 JSON。当前先回占位。
-  msgs.push({ role: 'ai', text: '（AI 整理通道尚未接通。接通后这里会返回整理方案，并可一键执行。）' });
-  tidyChatStore(tidyState.chatId, msgs);
+  // 把 tidyState.tree 作为上下文多轮对话，收口时要求输出 nfo115.tidy/v1 的 JSON。当前先回占位。
+  msgs.push({ role: 'ai', text: '（AI 整理通道尚未接通。接通后会结合上面的目录树给出整理清单，并可一键执行。）' });
+  tidyChatSetMsgs(msgs);
   inp.value = '';
   tidyUpdateTask(tidyState.chatId, { detail: text.slice(0, 40) });
   renderTidyChat();
@@ -8300,9 +8397,14 @@ function renderTidyRules(){
   box.innerHTML = TidyCore.RULE_GROUPS.map(function (g){
     var items = g.rules.map(function (r){
       var on = (r.id === tidyState.ruleId && r.done);
-      var cfg = r.id === 'watermark'
-        ? '<button class="tri-cfg" onclick="event.stopPropagation();openTidyWatermarkSheet()">水印管理</button>'
-        : '';
+      var cfg = '';
+      if (r.id === 'watermark'){
+        cfg = '<button class="tri-cfg" onclick="event.stopPropagation();openTidyWatermarkSheet()">水印管理</button>';
+      } else if (r.id === 'jsonPlan'){
+        var hasJson = !!(tidyState.json && tidyState.json.items && tidyState.json.items.length);
+        cfg = '<button class="tri-cfg" onclick="event.stopPropagation();tidyJsonPick()">' +
+          (hasJson ? ('已导入 ' + tidyState.json.items.length + ' 条') : '上传 JSON') + '</button>';
+      }
       var right = r.done
         ? cfg + '<span class="tri-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>'
         : '<span class="tri-soon">即将上线</span>';
@@ -8322,6 +8424,111 @@ function tidyToggleRule(id){
   renderTidyRules();
 }
 
+/* —— JSON 整理（导入外部方案：定位文件/文件夹、原名称、改后名称） ——
+   JSON 形态：{ root?: '影视/云下载', items:[{ dir:'相对目录', from:'原名称', to:'改后名称' }] }
+   也接受直接给数组；字段别名 dir|path|folder、from|old|orig|name、to|new|newName。 */
+function tidyJsonPick(fromEntry){
+  tidyState.jsonEntry = !!fromEntry;   // 从入口页点的：选完直接进预览；从规则页点的：只导入
+  var inp = document.getElementById('tidyJsonFile');
+  if (inp){ inp.value = ''; inp.click(); }
+}
+/* 入口页的「JSON 整理」按钮：先确认已选目标文件夹 → 选文件 → 直接进预览 */
+function tidyJsonEntry(){
+  if (!tidyState.folder || !tidyState.folder.cid){
+    showToast('请先选择目标文件夹', 'error');
+    openTidyFolderPicker();
+    return;
+  }
+  tidyJsonPick(true);
+}
+function tidyJsonFileChosen(input){
+  var f = input && input.files && input.files[0];
+  if (!f) return;
+  var fromEntry = !!tidyState.jsonEntry;
+  tidyState.jsonEntry = false;
+  var reader = new FileReader();
+  reader.onload = function (){
+    var parsed = TidyCore.parseTidyJson(String(reader.result || ''));
+    if (!parsed.ok){ showToast(parsed.reason, 'error'); return; }
+    tidyState.json = parsed;
+    if (tidyState.ruleId !== 'jsonPlan') tidyState.ruleId = 'jsonPlan';
+    if (fromEntry){
+      showToast('已导入 ' + parsed.items.length + ' 条清单，正在定位…', 'info');
+      tidyJsonRun();
+      return;
+    }
+    renderTidyRules();
+    showToast('已导入 ' + parsed.items.length + ' 条清单' + (parsed.skipped ? ('（跳过 ' + parsed.skipped + ' 条不完整）') : ''), 'success');
+  };
+  reader.onerror = function (){ showToast('读取文件失败', 'error'); };
+  reader.readAsText(f, 'utf-8');
+}
+/* 相对目录 → cid（逐层下钻；空字符串 = 目标文件夹本身）；找不到返回 null */
+function tidyResolveDir(rootCid, relPath){
+  var segs = String(relPath || '').split('/').filter(function (s){ return !!s; });
+  var chain = Promise.resolve(rootCid);
+  segs.forEach(function (seg){
+    chain = chain.then(function (cid){
+      if (!cid) return null;
+      return auto115FindDir(cid, seg).then(function (hit){ return hit ? hit.cid : null; });
+    });
+  });
+  return chain;
+}
+/* 把 JSON 涉及到的所有目录各拉一份快照 → { 相对路径: [条目] } */
+function tidyJsonSnapshots(rootCid, entries){
+  var dirs = [], seen = {};
+  (entries || []).forEach(function (en){
+    var d = String(en.dir || '').replace(/^\/+|\/+$/g, '');
+    if (!seen[d]){ seen[d] = 1; dirs.push(d); }
+  });
+  var byDir = {};
+  var chain = Promise.resolve();
+  dirs.forEach(function (d){
+    chain = chain.then(function (){
+      return tidyResolveDir(rootCid, d).then(function (cid){
+        if (!cid){ byDir[d] = []; return; }
+        return auto115ListDirAll(cid, 1200).then(function (list){
+          byDir[d] = (list || []).map(function (it){
+            return { fid: it.fid ? String(it.fid) : '', cid: it.cid ? String(it.cid) : '', name: it.n || it.name || '' };
+          });
+        });
+      }).catch(function (){ byDir[d] = []; });
+    });
+  });
+  return chain.then(function (){ return byDir; });
+}
+/* JSON 整理的完整动线：读清单 → 定位 → 预览 → 执行 */
+function tidyJsonRun(){
+  var j = tidyState.json;
+  var task = tidyNewTask('rule', tidyFolderName(), 'json');
+  tidyState.pendingTask = task.id;
+  tidyTaskStep(task.id, 'read', 'ok', '共 ' + j.items.length + ' 条清单');
+  tidyTaskStep(task.id, 'locate', 'running', '');
+  showToast('正在定位清单里的文件…', 'info');
+  tidyJsonSnapshots(tidyState.folder.cid, j.items).then(function (byDir){
+    var plan = TidyCore.planRule('jsonPlan', [], { entries: j.items, root: j.root, byDir: byDir });
+    var miss = plan.miss || [];
+    if (!plan.ops.length){
+      tidyTaskStep(task.id, 'locate', 'fail', '没匹配到文件');
+      tidyUpdateTask(task.id, { state: 'fail', detail: '没匹配到可改名的文件' });
+      tidyState.pendingTask = null;
+      showToast('没匹配到：清单里的文件在当前文件夹找不到', 'error');
+      return;
+    }
+    tidyTaskStep(task.id, 'locate', 'ok', '待整理 ' + plan.ops.length + ' 项' + (miss.length ? ('，未匹配 ' + miss.length + ' 项') : ''));
+    tidyState.preview = plan.ops;
+    renderTidyPreview(plan.ops);
+    tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
+  }).catch(function (e){
+    var m = (e && e.message) || '网络错误';
+    tidyTaskStep(task.id, 'locate', 'fail', m);
+    tidyUpdateTask(task.id, { state: 'fail', detail: '定位失败' });
+    tidyState.pendingTask = null;
+    showToast('定位失败：' + m, 'error');
+  });
+}
+
 /* —— 水印管理（内置多条，可增删改） —— */
 function tidyWatermarks(){
   if (!tidyState.wm){
@@ -8337,9 +8544,11 @@ function renderTidyWm(){
   if (!box) return;
   var list = tidyWatermarks();
   box.innerHTML = list.map(function (w, i){
-    return '<div class="tidy-wm-row">' +
+    var on = w.on !== false;
+    return '<div class="tidy-wm-row' + (on ? '' : ' off') + '">' +
       '<span class="twm-label">规则' + (i + 1) + '</span>' +
       '<input class="twm-src" type="text" value="' + escapeAttr(w.src || '') + '" oninput="tidyWmEdit(' + i + ',\'src\',this.value)" spellcheck="false">' +
+      '<button class="twm-sw' + (on ? ' on' : '') + '" role="switch" aria-checked="' + (on ? 'true' : 'false') + '" aria-label="启用规则' + (i + 1) + '" onclick="tidyWmToggle(' + i + ')"><i></i></button>' +
       '<button class="twm-del" onclick="tidyWmDel(' + i + ')" aria-label="删除">×</button></div>';
   }).join('') || '<div class="tmdb-msg">没有水印条目</div>';
 }
@@ -8347,10 +8556,16 @@ function tidyWmEdit(i, key, val){
   var list = tidyWatermarks();
   if (list[i]) list[i][key] = val;
 }
+function tidyWmToggle(i){
+  var list = tidyWatermarks();
+  if (!list[i]) return;
+  list[i].on = (list[i].on === false);   // 关 → 开，开 → 关
+  renderTidyWm();
+}
 function tidyWmDel(i){ var list = tidyWatermarks(); list.splice(i, 1); renderTidyWm(); }
 function tidyWmAdd(){
   var list = tidyWatermarks();
-  list.push({ id: 'u' + Date.now(), label: '', src: '' });
+  list.push({ id: 'u' + Date.now(), label: '', on: true, src: '' });
   renderTidyWm();
 }
 function tidyWmReset(){
@@ -8372,11 +8587,17 @@ function tidyPreviewRun(){
   if (!tidyState.folder){ showToast('请先选择文件夹', 'error'); return; }
   if (!tidyState.ruleId){ showToast('请先选择一条规则', 'error'); return; }
   var ruleId = tidyState.ruleId;
-  var task = tidyNewTask('rule', tidyRuleName(ruleId) + ' · ' + tidyFolderName());
+  /* JSON 整理走另一条取数路径：清单 → 定位 → 列目录 */
+  if (ruleId === 'jsonPlan'){
+    if (!tidyState.json || !tidyState.json.items.length){ showToast('请先上传 JSON 清单', 'error'); tidyJsonPick(); return; }
+    tidyJsonRun();
+    return;
+  }
+  var task = tidyNewTask('rule', tidyFolderName(), 'rule');
   tidyState.pendingTask = task.id;
   tidyTaskStep(task.id, 'scan', 'running', '');
   showToast('正在读取文件夹…', 'info');
-  auto115ListDir(tidyState.folder.cid).then(function (list){
+  auto115ListDirAll(tidyState.folder.cid).then(function (list){
     var items = (list || []).map(function (it){
       return { fid: it.fid ? String(it.fid) : '', cid: it.cid ? String(it.cid) : '', name: it.n || it.name || '' };
     });
@@ -8439,10 +8660,16 @@ function tidyExecute(){
   var taskId = tidyState.pendingTask;
   tidyState.pendingTask = null;
   if (!taskId){
-    var t0 = tidyNewTask('rule', tidyRuleName(tidyState.ruleId) + ' · ' + tidyFolderName());
+    var kind = (tidyState.ruleId === 'jsonPlan') ? 'json' : 'rule';
+    var t0 = tidyNewTask('rule', tidyFolderName(), kind);
     taskId = t0.id;
-    tidyTaskStep(taskId, 'scan', 'ok', '');
-    tidyTaskStep(taskId, 'plan', 'ok', '待整理 ' + ops.length + ' 项');
+    if (kind === 'json'){
+      tidyTaskStep(taskId, 'read', 'ok', '');
+      tidyTaskStep(taskId, 'locate', 'ok', '待整理 ' + ops.length + ' 项');
+    } else {
+      tidyTaskStep(taskId, 'scan', 'ok', '');
+      tidyTaskStep(taskId, 'plan', 'ok', '待整理 ' + ops.length + ' 项');
+    }
   }
   var total = ops.length, done = 0, failed = 0, i = 0;
   tidyTaskStep(taskId, 'exec', 'running', '0/' + total);

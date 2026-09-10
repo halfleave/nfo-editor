@@ -1591,6 +1591,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* ============ 文件整理（M4） ============ */
 /* 顶栏右上角「整理任务」入口（标题是 absolute 居中，故按钮靠 margin-left:auto 顶到右侧） */
 .auto-topbar .tidy-task-entry { margin-left: auto; position: relative; z-index: 1; }
+/* 对话页右上角「获取目录树」（胶囊文字按钮，与 .auto-topbar button 的 34×34 方块区分） */
+.auto-topbar .tidy-tree-btn { margin-left: auto; position: relative; z-index: 1; width: auto; height: 30px; padding: 0 13px; border-radius: 999px; background: var(--gray-fill); color: var(--accent); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.auto-topbar .tidy-tree-btn:active { opacity: .6; }
+.auto-topbar .tidy-tree-btn[disabled] { opacity: .45; }
+/* JSON 清单的文件选择器（隐藏，由按钮触发） */
+.tidy-file-hidden { display: none; }
 /* 入口页：目标文件夹（输入框样式，中间偏上） */
 .tidy-field { margin: 7vh 0 0; }
 .tidy-field-label { padding: 0 2px 7px; font-size: 13px; font-weight: 500; color: var(--label-2); }
@@ -1600,14 +1606,18 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-field-input.empty .tfi-text { color: var(--label-3); }
 .tidy-field-input .tfi-chevron { flex: none; width: 17px; height: 17px; color: var(--label-3); }
 .tidy-field-input .tfi-chevron svg { width: 17px; height: 17px; }
-/* 入口页：两个入口按钮（并排） */
-.tidy-actions { display: flex; gap: 12px; margin-top: 18px; }
+/* 入口页：AI整理整行，规则整理 / JSON整理 并排一行 */
+.tidy-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+.tidy-action-row { display: flex; gap: 12px; }
 .tidy-action-btn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 18px 10px; border: none; border-radius: var(--radius-lg); background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,0.05); -webkit-tap-highlight-color: transparent; }
 .tidy-action-btn:active { background: var(--gray-fill); }
 .tidy-action-btn .tab-ic { flex: none; width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
 .tidy-action-btn .tab-ic svg { width: 22px; height: 22px; }
 .tidy-act-ai .tab-ic { background: #5856D6; }
 .tidy-act-rule .tab-ic { background: #FF9500; }
+.tidy-act-json .tab-ic { background: #007AFF; }
+/* 整行按钮：图标在左、标题在右 */
+.tidy-action-wide { flex-direction: row; justify-content: center; gap: 10px; padding: 16px 12px; }
 .tidy-action-btn .tab-tx { min-width: 0; }
 .tidy-action-btn .tab-tx b { font-size: 15px; font-weight: 600; color: var(--label); white-space: nowrap; }
 
@@ -1620,6 +1630,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-task-head:active { background: var(--gray-fill); }
 .tidy-task-head .ttk-icon { flex: none; width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; }
 .tidy-task-head .ttk-icon svg { width: 14px; height: 14px; }
+/* AI 任务的图标直接用文字「AI」 */
+.tidy-task-head .ttk-icon .ttk-ai { font-size: 11px; font-weight: 700; color: #fff; letter-spacing: .3px; line-height: 1; }
 .tidy-task-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tidy-task-head .tti-state { flex: none; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: var(--gray-fill); color: var(--label-2); white-space: nowrap; }
 .tidy-task-head .tti-state.run { background: rgba(255,149,0,0.16); color: #FF9500; }
@@ -1628,9 +1640,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-task-arrow { flex: none; width: 14px; height: 14px; color: var(--label-3); transition: transform .2s; }
 .tidy-task.expanded .tidy-task-arrow { transform: rotate(90deg); }
 /* 展开体：元信息 + 步骤流 + 操作 */
-.tidy-task-meta { padding: 0 14px 8px; font-size: 12px; color: var(--label-3); word-break: break-all; }
-.tidy-steps { display: none; padding: 8px 14px 6px; border-top: 0.5px solid var(--sep); }
-.tidy-task.expanded .tidy-steps { display: block; }
+/* 展开体：分隔线下方第一行是完整路径，再往下才是步骤流 */
+.tidy-task-body { border-top: 0.5px solid var(--sep); padding: 9px 14px 0; }
+.tidy-task-path { font-size: 12px; line-height: 1.5; color: var(--label-3); word-break: break-all; }
+.tidy-steps { padding: 10px 0 6px; }
 /* 步骤圆点在白卡里要跟卡片同色（自动化页那套默认取 --bg） */
 .tidy-steps .as-dot { background: var(--card); }
 .tidy-task-ops { display: flex; gap: 8px; padding: 4px 14px 14px; }
@@ -1702,7 +1715,15 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-wm-row .twm-label { flex: none; width: 58px; font-size: 12px; color: var(--label-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tidy-wm-row input.twm-src { flex: 1; min-width: 0; border: none; background: var(--card-fill); border-radius: 8px; padding: 7px 9px; font-size: 12.5px; font-family: ui-monospace, Menlo, monospace; color: var(--label); -webkit-user-select: text; }
 .tidy-wm-row input.twm-src:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
-.tidy-wm-row .twm-del { flex: none; width: 28px; height: 28px; border: none; background: transparent; color: #FF3B30; font-size: 18px; line-height: 1; }
+.tidy-wm-row .twm-del { flex: none; width: 26px; height: 28px; padding: 0; border: none; background: transparent; color: #5F5F64; font-size: 18px; line-height: 1; }
+[data-theme="dark"] .tidy-wm-row .twm-del { color: #A8A8AD; }
+/* 启用开关（iOS 风格滑块，默认开启） */
+.tidy-wm-row .twm-sw { flex: none; position: relative; width: 42px; height: 26px; padding: 0; border: none; border-radius: 999px; background: var(--gray-fill); transition: background .18s ease; -webkit-tap-highlight-color: transparent; }
+.tidy-wm-row .twm-sw i { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.22); transition: transform .18s ease; }
+.tidy-wm-row .twm-sw.on { background: #34C759; }
+.tidy-wm-row .twm-sw.on i { transform: translateX(16px); }
+.tidy-wm-row.off input.twm-src { opacity: .45; }
+.tidy-wm-row.off .twm-label { opacity: .5; }
 .tidy-wm-ops, .tidy-preview-ops { display: flex; gap: 10px; padding: 12px 0 0; }
 /* 次级按钮（恢复默认 / 添加一条 / 取消）：sheet-btn 本身无底色，这里补中性填充 + 胶囊圆角 */
 .tidy-wm-ops .sheet-btn, .tidy-preview-ops .sheet-btn { background: var(--gray-fill); color: var(--label); }
