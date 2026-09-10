@@ -38,7 +38,7 @@
   api.STEP_DEFS = [   // offline：单影片 6 步
     { key: 'submit',  label: '提交离线' },
     { key: 'wait',    label: '等待离线完成' },
-    { key: 'mkdir',   label: '定位文件夹' },
+    { key: 'mkdir',   label: '定位文件夹或影片' },   // 离线落地可能是文件夹，也可能是散装视频（v268 起两者都找）
     { key: 'cleanup', label: '修改文件夹名称' },   // 先定容器（独立任务改名为影片标题）
     { key: 'move',    label: '清理文件' },         // 删 sample/非主视频
     { key: 'rename',  label: '修改视频名称' }

@@ -108,7 +108,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115Status(t0).text === '等待中 · 已探 3/3', '等待中 · 已探 3/3');
   w.state = 'ok';
   ctx.auto115GetStep(t0, 'mkdir').state = 'running';
-  assert(ctx.auto115Status(t0).text === '整理中 · 定位文件夹', '整理中 · 定位文件夹');
+  assert(ctx.auto115Status(t0).text === '整理中 · 定位文件夹或影片', '整理中 · 定位文件夹或影片');
   ctx.auto115GetStep(t0, 'mkdir').state = 'ok';
   ctx.auto115GetStep(t0, 'move').state = 'fail';
   assert(ctx.auto115Status(t0).text === '失败 · 清理文件', '失败步 → 失败 · 清理文件');
@@ -438,7 +438,7 @@ const lz4LiteralForTest = (bytes) => {
   ctx.auto115GetStep(t3, 'submit').state = 'ok';
   ctx.auto115GetStep(t3, 'wait').state = 'ok';
   ctx.auto115GetStep(t3, 'mkdir').state = 'fail';
-  assert(ctx.auto115Status(t3).text === '失败 · 定位文件夹', '失败定位到「定位文件夹」');
+  assert(ctx.auto115Status(t3).text === '失败 · 定位文件夹或影片', '失败定位到「定位文件夹或影片」');
 
   /* 5. 影片（无番号）→ 按「标题」改名（不再因无番号中断） */
   const t4 = { id: 't4', steps: ctx.auto115NewSteps(), videoFid: 'F9', videoName: 'x.mp4' };
