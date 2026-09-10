@@ -2817,20 +2817,23 @@ function verifyActivationCode(){
     .catch(function(){ showToast('验证失败，请检查 Worker 地址', 'error'); });
 }
 
-/* 激活码下方「剩余次数」：免费/中级档按天显示各配额桶剩余，高级档显示已解锁；JAV 两项仅里模式显示 */
+/* 激活码下方「剩余次数」：免费/中级档按天显示各配额桶剩余，高级档显示已解锁；
+   主行 = TMDB搜索｜TMDB保存｜115整理；里模式追加第二行 JAV搜索｜JAV保存 */
 function renderQuotaInfo(){
   var el = document.getElementById('quotaInfo');
   if (!el) return;
   var tier = (state.tier || '').trim();
   if (tier === 'full'){ el.innerHTML = '<div class="quota-full">已解锁全部功能 · 不限次</div>'; return; }
-  var data = NfoCore.quotaData(tier || 'free').filter(function(it){
-    return (it.field !== 'javSearch' && it.field !== 'javSave') || state.themeHidden;
-  });
-  var html = data.map(function(it){
-    var cls = it.remaining <= 0 ? 'quota-zero' : (it.remaining <= 3 ? 'quota-low' : '');
-    return '<div class="quota-line ' + cls + '"><span class="quota-name">' + it.label + '</span><span class="quota-num">' + it.remaining + '/' + it.limit + '</span></div>';
-  }).join('');
-  html += '<div class="quota-hint">AI翻译 · 磁力搜索 · 字幕下载：高级档专属</div>';
+  var data = NfoCore.quotaData(tier || 'free');
+  function chip(it){
+    var cls = it.remaining <= 0 ? ' quota-zero' : (it.remaining <= 3 ? ' quota-low' : '');
+    return '<span class="quota-chip' + cls + '">' + it.label + ' <b>' + it.remaining + '/' + it.limit + '</b></span>';
+  }
+  function row(list){ return '<div class="quota-row">' + list.map(chip).join('<span class="quota-sep">｜</span>') + '</div>'; }
+  var main = data.filter(function(it){ return it.field !== 'javSearch' && it.field !== 'javSave'; });
+  var jav  = data.filter(function(it){ return it.field === 'javSearch' || it.field === 'javSave'; });
+  var html = row(main);
+  if (state.themeHidden) html += row(jav);
   el.innerHTML = html;
 }
 window.addEventListener('nfo:quota-changed', function(){ renderQuotaInfo(); });

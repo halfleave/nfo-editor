@@ -1013,15 +1013,15 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 }
 #subtitleSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
 #apiSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; }
-/* 激活码下方配额显示（免费/中级档剩余次数） */
-.quota-info { margin: 8px 2px 0; }
-.quota-info .quota-line { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 13px; color: var(--text-2, #6b7280); }
-.quota-info .quota-name { opacity: .85; }
-.quota-info .quota-num { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-1, #111); }
-.quota-info .quota-low .quota-num { color: #d97706; }
-.quota-info .quota-zero .quota-num { color: #dc2626; }
-.quota-info .quota-full { color: var(--accent, #E86A92); font-weight: 600; padding: 3px 0; }
-.quota-info .quota-hint { margin-top: 6px; font-size: 12px; color: var(--text-3, #9ca3af); }
+/* 激活码下方配额显示（免费/中级档剩余次数，单行紧凑排布，｜ 分隔） */
+.quota-info { margin: 8px 2px 0; text-align: center; }
+.quota-info .quota-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; padding: 2px 0; font-size: 12px; line-height: 1.5; color: var(--text-2, #6b7280); }
+.quota-info .quota-chip { white-space: nowrap; }
+.quota-info .quota-chip b { margin-left: 3px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-1, #111); }
+.quota-info .quota-sep { margin: 0 7px; opacity: .3; }
+.quota-info .quota-low b { color: #d97706; }
+.quota-info .quota-zero b { color: #dc2626; }
+.quota-info .quota-full { padding: 2px 0; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--text-2, #6b7280); }
 .sheet.show { transform: translateY(0); }
 .sheet::before {
   content: ""; display: block; width: 36px; height: 5px; border-radius: 3px;
