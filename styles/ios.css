@@ -1674,11 +1674,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-msg.plan .tp-go svg { width: 16px; height: 16px; }
 .tidy-msg.tree .tp-ic { background: rgba(61,140,240,.12); color: var(--accent); }
 
-/* 目录树预览弹窗（居中，可滚动看完整树） */
-.tidy-tree-pop { width: 100%; max-width: 460px; max-height: 82vh; display: flex; flex-direction: column; }
+/* 目录树正文：撑满弹窗、可滚动，等宽字体看层级 */
 .tidy-tree-pre {
-  flex: 1 1 auto; margin: 0; padding: 4px 16px 14px; overflow: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55;
+  flex: 1 1 auto; min-height: 0; margin: 0; padding: 2px 0 12px; overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.65;
   color: var(--label); white-space: pre-wrap; word-break: break-all; -webkit-overflow-scrolling: touch;
 }
 .tidy-chat-send[disabled] { opacity: .5; }
@@ -1811,6 +1810,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* 预览列表（弹窗固定 85% 高，列表撑满、底部按钮固定） */
 #tidyPreviewSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; display: flex; flex-direction: column; padding-bottom: calc(var(--sab) + 16px); }
 #tidyPreviewSheet .sheet-bar { flex: none; }
+/* 目录树预览（同样底部弹窗 85% 高，正文可滚动） */
+#tidyTreeSheet { height: 85vh; height: 85dvh; max-height: 85vh; max-height: 85dvh; display: flex; flex-direction: column; padding-bottom: calc(var(--sab) + 16px); }
+#tidyTreeSheet .sheet-bar, #tidyTreeSheet .tidy-preview-ops { flex: none; }
 .tidy-preview-list { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 0; }
 #tidyPreviewList { flex: 1; min-height: 0; }
 .tidy-preview-ops { flex: none; }

@@ -455,8 +455,9 @@
         ops.push({ op: 'rename', fid: idOf(hit), orig: oname, name: nname, oldDir: oldDir, newDir: oldDir, why: 'JSON 整理' });
       } else {
         var tcid = dirCid[newDir];
-        if (!tcid){ miss.push('→ ' + (newDir ? newDir + '/' : '') + nname + '（目标目录不存在）'); return; }
-        ops.push({ op: 'move', fid: idOf(hit), orig: oname, name: nname, oldDir: oldDir, newDir: newDir, toDir: newDir, toCid: tcid, why: 'JSON 整理' });
+        /* 目标目录在快照里不存在（如 AI 想把文件挪进一个尚不存在的新文件夹）：
+           不再跳过——照常产出 move，toCid 标 '__resolve__'，执行器在移动前会当场把该目录建好。 */
+        ops.push({ op: 'move', fid: idOf(hit), orig: oname, name: nname, oldDir: oldDir, newDir: newDir, toDir: newDir, toCid: tcid ? tcid : '__resolve__', why: 'JSON 整理' });
       }
     });
     return { ops: ops, miss: miss };

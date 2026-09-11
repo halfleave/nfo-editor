@@ -195,11 +195,11 @@ const jr3 = TidyCore.planJsonItems(
   [{ oldDir: '云下载/OPUD-008', oldName: 'OPUD-008.wmv', newDir: '娱乐/番号/OPUD-008', newName: 'OPUD-008.wmv' }],
   { root: '', byDir: { '云下载/OPUD-008': [{ fid: '9', name: 'OPUD-008.wmv' }] }, dirCid: { '娱乐/番号/OPUD-008': 'CID99' } });
 assert(jr3.ops.length === 1 && jr3.ops[0].op === 'move' && jr3.ops[0].toCid === 'CID99', 'JSON：跨目录移动产出 move op（带目标 cid）');
-/* 移动时目标目录不存在 → 记进 miss，不产 op */
+/* 移动时目标目录不存在 → 仍产出 move op，toCid 标 '__resolve__'，由执行器建好目录后再移（不再丢进 miss） */
 const jr4 = TidyCore.planJsonItems(
   [{ oldDir: '云下载/X', oldName: 'x.mp4', newDir: '不存在的夹', newName: 'x.mp4' }],
   { root: '', byDir: { '云下载/X': [{ fid: '10', name: 'x.mp4' }] }, dirCid: { '不存在的夹': null } });
-assert(jr4.ops.length === 0 && jr4.miss.length === 1, 'JSON：移动目标目录不存在记进 miss');
+assert(jr4.ops.length === 1 && jr4.ops[0].op === 'move' && jr4.ops[0].toCid === '__resolve__' && jr4.miss.length === 0, 'JSON：移动目标目录不存在→产 move 并标 __resolve__（执行器建夹）');
 /* 同名同目录 → 视为无变化跳过 */
 const jr5 = TidyCore.planJsonItems([{ oldDir: '', oldName: 'same.mp4', newDir: '', newName: 'same.mp4' }], { byDir: { '': [{ fid: '11', name: 'same.mp4' }] } });
 assert(jr5.ops.length === 0, 'JSON：原名=新名且同目录视为无变化跳过');
