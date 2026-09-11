@@ -8982,9 +8982,11 @@ function renderTidyRules(){
       var right = r.done
         ? cfg + '<span class="tri-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>'
         : '<span class="tri-soon">即将上线</span>';
+      var info = '<button type="button" class="tri-info" aria-label="规则说明" onclick="event.stopPropagation();tidyRuleInfo(\'' + r.id + '\')">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r="0.9" fill="currentColor" stroke="none"/></svg></button>';
       return '<div class="tidy-rule-item' + (r.done ? (on ? ' on' : '') : ' locked') + '"' +
         (r.done ? ' onclick="tidyToggleRule(\'' + r.id + '\')"' : '') + '>' +
-        '<span class="tri-label">' + escapeHtml(r.name) + '</span>' + right + '</div>';
+        '<span class="tri-label">' + escapeHtml(r.name) + '</span>' + info + right + '</div>';
     }).join('');
     return '<div class="tidy-rule-group-head">' + escapeHtml(g.name) + ' <small>' + escapeHtml(g.riskLabel) + '</small></div>' +
       '<div class="tidy-rule-group-box">' + items + '</div>';
@@ -8996,6 +8998,47 @@ function tidyToggleRule(id){
   tidyState.ruleId = (tidyState.ruleId === id) ? '' : id;
   tidyState.preview = null;
   renderTidyRules();
+}
+
+/* —— 规则说明弹窗（点「?」图标，居中弹出，说明 + 举例） —— */
+function tidyRuleInfo(id){
+  var info = (typeof TidyCore !== 'undefined' && TidyCore.RULE_INFO) ? TidyCore.RULE_INFO[id] : null;
+  if (!info){ showToast('该规则暂无说明', 'info'); return; }
+  var title = id;
+  if (typeof TidyCore !== 'undefined' && TidyCore.RULE_GROUPS){
+    var stop = false;
+    for (var i = 0; i < TidyCore.RULE_GROUPS.length && !stop; i++){
+      var rs = TidyCore.RULE_GROUPS[i].rules;
+      for (var j = 0; j < rs.length; j++){ if (rs[j].id === id){ title = rs[j].name; stop = true; break; } }
+    }
+  }
+  var mask = document.getElementById('tidyRuleInfoMask');
+  if (!mask){
+    mask = document.createElement('div');
+    mask.id = 'tidyRuleInfoMask';
+    mask.className = 'tidy-info-mask';
+    mask.setAttribute('onclick', 'tidyRuleInfoClose()');
+    mask.innerHTML =
+      '<div class="tidy-info-pop" onclick="event.stopPropagation()">' +
+        '<div class="tipop-head"><b id="tidyInfoTitle"></b>' +
+          '<button type="button" class="tipop-x" aria-label="关闭" onclick="tidyRuleInfoClose()">✕</button></div>' +
+        '<div class="tipop-body"><p id="tidyInfoDesc"></p>' +
+          '<div class="tipop-ex"><span class="tipop-ex-l">举例</span><code id="tidyInfoExample"></code></div></div>' +
+        '<div class="tipop-bar"><button type="button" class="tipop-ok" onclick="tidyRuleInfoClose()">知道了</button></div>' +
+      '</div>';
+    document.body.appendChild(mask);
+  }
+  document.getElementById('tidyInfoTitle').textContent = title;
+  document.getElementById('tidyInfoDesc').textContent = info.desc;
+  document.getElementById('tidyInfoExample').textContent = info.example;
+  mask.classList.add('show');
+  requestAnimationFrame(function (){ mask.classList.add('vis'); });
+}
+function tidyRuleInfoClose(){
+  var mask = document.getElementById('tidyRuleInfoMask');
+  if (!mask) return;
+  mask.classList.remove('vis');
+  setTimeout(function (){ mask.classList.remove('show'); }, 200);
 }
 
 /* —— JSON 整理（导入外部方案：定位文件/文件夹、原名称、改后名称） ——

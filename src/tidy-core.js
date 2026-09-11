@@ -653,6 +653,44 @@
     }
   ];
 
+  /* 规则说明字典（id → {desc, example}），规则页「?」图标点开查看。
+     只描述「这条规则干啥 + 一个直观例子」，不给代码细节。 */
+  var RULE_INFO = {
+    /* A 命名规范 */
+    watermark:     { desc: '去除文件名里的站点水印（如【1pan.xyz】、u?www.98t.la@ 这类来源标记）。', example: 'www.98t.la@ABC-123.mp4  →  ABC-123.mp4' },
+    extLower:      { desc: '把扩展名统一成小写，避免同一文件因大小写被系统当成两个。', example: 'movie.MP4  →  movie.mp4' },
+    dvdUpper:      { desc: '把文件名开头的番号字母大写化，统一番号书写。', example: 'opud-008.mp4  →  OPUD-008.mp4' },
+    dvdNormalize:  { desc: '番号归一：去掉 24H 前缀、下划线改连字符、去掉无码/分碟后缀。', example: '24HABC_123.mp4  →  ABC-123.mp4' },
+    illegalChar:   { desc: '删掉 115 和 Kodi 都禁用的字符（\\ / : * ? " < > | @），否则无法上传或刮削。', example: '番号/合集.mp4  →  番号合集.mp4' },
+    lengthCap:     { desc: '文件名过长时截断（文件≤100字、目录≤60字，可在设置里改），避免 115 拒绝。', example: '超长标题…（120字）.mp4  →  截断到 100 字' },
+    prefixClean:   { desc: '去掉文件名里的发布组 / 发布源标签（如 [BT]、(首发)）。', example: '[BT]ABC-123.mp4  →  ABC-123.mp4' },
+    seasonFolder:  { desc: '把散落的多季文件按季归进 S01 / S02 子文件夹，结构更清晰。', example: 'A.S01E01.mp4 / A.S02E01.mp4  →  S01/…  S02/…' },
+    imageSeq:      { desc: '图片去掉重复标记与「微信图片_」前缀，序号归一（只作用于图片）。', example: '微信图片_001 (1).jpg  →  001.jpg' },
+    /* E 泛用清洗 */
+    domPrefix:     { desc: '剥掉开头的「域名@」前缀（如 www.98t.la@、hhd800.com@），收益最大。', example: 'www.98t.la@视频.mp4  →  视频.mp4' },
+    domTag:        { desc: '剥掉【站点域名】整段括注；不含域名的【中文字幕】等保留。', example: '【7d68.xyz】电影.mp4  →  电影.mp4' },
+    spaceNorm:     { desc: '下划线与连续多个点变空格、多空格合一；单个点保留（怕伤到 v1.2、S01E01）。', example: 'The_Last_of_Us..1080p.mkv  →  The Last of Us. 1080p.mkv' },
+    dupNorm:       { desc: '复本编号统一成半角括号 + 空格。', example: '照片（2）.jpg  →  照片 (2).jpg' },
+    /* B 结构整理（未开放） */
+    splitSeason:   { desc: '一文件夹里含多个季时，按季拆进各自子文件夹（季数≥100 才触发）。', example: '剧集 S01E01/S02E01  →  S01/…  S02/…' },
+    flatMovie:     { desc: '拍平电影外层的多余套壳文件夹，影片直接进正确位置。', example: '电影/电影/xxx.mp4  →  电影/xxx.mp4' },
+    groupDvdMulti: { desc: '同一番号多碟 / 多部按序编号归整。', example: 'ABC-123-CD1/CD2  →  ABC-123-1 / -2' },
+    episodeNaming: { desc: '把「第01集 / EP01」等写法统一成标准 S01E01 命名。', example: '剧集 第01集.mp4  →  剧集 S01E01.mp4' },
+    subtitlePair:  { desc: '字幕与视频按集配对并命名对齐，刮削时字幕自动挂上。', example: '剧集 S01E01.srt 自动跟 剧集 S01E01.mp4' },
+    dvdDirNaming:  { desc: '番号片按番号建目录并规范命名。', example: '云下载/ABC-123/  →  规范目录' },
+    /* C 清理（未开放） */
+    dedupArchive:  { desc: '内容完全相同的重复文件移到归档夹（不删除，可找回）。', example: '两个一样的 a.mp4  →  一个进归档' },
+    junkArchive:   { desc: '名字像「新建文件夹 / 未命名」这类无意义文件归档。', example: '新建文件夹.mp4  →  归档' },
+    snapshotDel:   { desc: '删掉视频边上的 snapshot / thumb 缩略图。', example: 'xxx-snapshot01.jpg  →  删除' },
+    sampleDel:     { desc: '删掉 sample / 预告 这类小样片段。', example: 'xxx-sample.mp4  →  删除' },
+    adVideoDel:    { desc: '删掉夹带的小广告视频（远小于主视频）。', example: '广告.mp4（主视频20%以下） →  删除' },
+    emptyDirDel:   { desc: '删除空文件夹。', example: '空文件夹/  →  删除' },
+    /* D 归属（未开放） */
+    toYule:        { desc: '把番号片移到「娱乐 / 番号」目录。', example: '云下载/ABC-123.mp4  →  娱乐/番号/ABC-123.mp4' },
+    toYingshi:     { desc: '把影视 / 剧集归到「影视」目录的对应分类。', example: '云下载/剧集/  →  影视/剧集/' },
+    toManYing:     { desc: '写真 / 图片集归到「漫影」目录。', example: '云下载/写真/  →  漫影/写真集/' }
+  };
+
   /* 预设包（文档 §4.6）：一键勾选若干原子规则的组合。当前仅登记，UI 未接。 */
   var PRESETS = [
     { id: 'quickFix',   name: '安全快修',     risk: 'low',     rules: ['watermark', 'extLower', 'dvdUpper', 'illegalChar'] },
@@ -809,6 +847,7 @@
     previewWatermark: previewWatermark,
     planWatermark: planWatermark,
     RULE_GROUPS: RULE_GROUPS,
+    RULE_INFO: RULE_INFO,
     PRESETS: PRESETS,
     findRule: findRule,
     planRule: planRule,

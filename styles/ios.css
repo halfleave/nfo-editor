@@ -1711,6 +1711,42 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-rule-item.on .tri-check { background: var(--accent); border-color: var(--accent); }
 .tidy-rule-item.on .tri-check svg { opacity: 1; }
 .tidy-rule-item .tri-cfg { flex: none; border: none; background: transparent; color: var(--accent); font-size: 13px; padding: 4px 2px; }
+/* 规则名后的浅灰「?」说明图标（点击居中弹窗，不触发选中） */
+.tidy-rule-item .tri-info {
+  flex: none; width: 20px; height: 20px; padding: 0; border: none; background: transparent;
+  color: var(--label-3); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0.85; transition: opacity .15s, color .15s;
+}
+.tidy-rule-item .tri-info svg { width: 16px; height: 16px; }
+.tidy-rule-item .tri-info:active { opacity: 0.5; }
+@media (hover: hover){ .tidy-rule-item .tri-info:hover { color: var(--label-2); opacity: 1; } }
+
+/* 规则说明：居中弹窗 */
+.tidy-info-mask {
+  position: fixed; inset: 0; z-index: 1200; display: none;
+  align-items: center; justify-content: center; padding: 24px;
+  background: rgba(0,0,0,0.32); opacity: 0; transition: opacity .2s ease;
+  -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+}
+.tidy-info-mask.show { display: flex; }
+.tidy-info-mask.vis { opacity: 1; }
+.tidy-info-pop {
+  width: 100%; max-width: 340px; background: var(--card); border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.22); overflow: hidden;
+  transform: translateY(8px) scale(0.98); transition: transform .2s ease;
+}
+.tidy-info-mask.vis .tidy-info-pop { transform: none; }
+.tipop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 15px 16px 10px; }
+.tipop-head b { font-size: 16px; font-weight: 600; color: var(--label); }
+.tipop-x { flex: none; width: 26px; height: 26px; border: none; border-radius: 50%; background: var(--gray-fill); color: var(--label-2); font-size: 14px; line-height: 1; }
+.tipop-body { padding: 0 16px 14px; }
+.tipop-body p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--label); }
+.tipop-ex { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--gray-fill); }
+.tipop-ex-l { display: inline-block; font-size: 11px; color: var(--label-3); margin-bottom: 4px; }
+.tipop-ex code { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5; color: var(--accent); word-break: break-all; white-space: pre-wrap; }
+.tipop-bar { padding: 10px 16px 16px; }
+.tipop-ok { width: 100%; border: none; border-radius: 12px; padding: 11px; font-size: 15px; font-weight: 600; color: #fff; background: var(--accent); cursor: pointer; }
+.tipop-ok:active { filter: brightness(0.94); }
 .tidy-rules-bar { flex: none; padding: 8px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 0.5px solid var(--sep); background: var(--bg); }
 .tidy-run-btn { display: block; width: 100%; border: none; border-radius: 22px; padding: 13px 0; background: var(--accent); color: #fff; font-size: 16px; font-weight: 600; }
 .tidy-run-btn:active { opacity: .85; }
