@@ -908,6 +908,11 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
 }
 .edit-tabs .seg { margin-bottom: 0; }
 .edit-tabs .seg button { padding: 0 14px; }
+/* Tab 切换滑动动画（所有 tab 通用）：按切换方向从左/右滑入 */
+@keyframes tabSlideL { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes tabSlideR { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+.tab-slide-l { animation: tabSlideL .22s cubic-bezier(.25,.8,.35,1) both; }
+.tab-slide-r { animation: tabSlideR .22s cubic-bezier(.25,.8,.35,1) both; }
 
 #tab-media .poster-grid {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;

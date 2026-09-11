@@ -1561,6 +1561,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tool-card.locked { opacity: .55; }
 .tool-card .tc-soon { position: absolute; top: 10px; right: 10px; font-size: 11px; line-height: 1.7; padding: 0 6px; border-radius: 999px; background: var(--gray-fill); color: var(--label-3); }
 /* 工具箱 · 磁力搜索（通用版，M3）：搜索行（视觉同磁力弹窗的搜索行；结果列表复用 .magnet-result） */
+/* Tab 切换滑动动画（所有 tab 通用）：按切换方向从左/右滑入 */
+@keyframes tabSlideL { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes tabSlideR { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+.tab-slide-l { animation: tabSlideL .22s cubic-bezier(.25,.8,.35,1) both; }
+.tab-slide-r { animation: tabSlideR .22s cubic-bezier(.25,.8,.35,1) both; }
 #page-toolbox-magnet .tbm-search-row { display: flex; align-items: center; gap: 8px; padding: 4px 0 12px; }
 #page-toolbox-magnet .tbm-search-wrap { position: relative; flex: 1; min-width: 0; }
 #page-toolbox-magnet .tbm-search-wrap input { width: 100%; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 36px 10px 16px; font-size: 15px; color: var(--label); }
@@ -1572,9 +1577,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #page-toolbox-magnet .tbm-list { padding-bottom: 8px; }
 /* 磁力管理页 tab 行（添加 / 搜索，iOS 分段控件居中） */
 .tbm-tabs-row { display: flex; justify-content: center; padding: 14px 0 16px; }
-#page-toolbox-magnet .tbm-add-input { width: 100%; border: none; background: var(--card-fill); border-radius: var(--radius-lg); padding: 10px 12px; font-size: 14px; line-height: 1.5; color: var(--label); resize: none; -webkit-user-select: text; }
+/* 添加区：输入框可编辑（约 1.8 倍高、整体下移一点），右下角内嵌清除按钮 */
+#page-toolbox-magnet .tbm-add-wrap { position: relative; margin-top: 6px; }
+#page-toolbox-magnet .tbm-add-input { width: 100%; min-height: 150px; border: none; background: var(--card-fill); border-radius: var(--radius-lg); padding: 10px 12px 30px; font-size: 14px; line-height: 1.5; color: var(--label); resize: none; -webkit-user-select: text; }
 #page-toolbox-magnet .tbm-add-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
-#page-toolbox-magnet .tbm-offline { display: block; width: 100%; margin-top: 8px; border: none; border-radius: 20px; padding: 11px 0; background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; }
+#page-toolbox-magnet .tbm-add-clear { position: absolute; right: 10px; bottom: 10px; width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; border-radius: 50%; background: var(--gray-fill); color: var(--label-3); font-size: 15px; line-height: 1; }
+#page-toolbox-magnet .tbm-add-clear.show { display: flex; }
+#page-toolbox-magnet .tbm-add-clear:active { opacity: .5; }
+#page-toolbox-magnet .tbm-offline { display: block; width: 65%; margin: 8px auto 0; border: none; border-radius: 20px; padding: 11px 0; background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; }
 #page-toolbox-magnet .tbm-offline:active { opacity: .8; }
 #page-toolbox-magnet .tbm-offline.disabled { background: var(--card-fill); color: var(--label-3); }
 #page-toolbox-magnet .tbm-add.disabled .tbm-add-input { opacity: .55; }
@@ -1625,6 +1635,15 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* 任务列表 */
 .tidy-task-list { padding: 6px 0 8px; }
 .tidy-empty { padding: 48px 20px; text-align: center; font-size: 14px; line-height: 1.7; color: var(--label-3); }
+/* JSON 整理页：上传区 + 提示行 */
+.tidy-json-upload { display: flex; align-items: center; gap: 12px; width: calc(100% - 28px); margin: 12px 14px 0; padding: 14px 16px; border: 1.5px dashed var(--sep); border-radius: 14px; background: var(--card-fill); text-align: left; -webkit-tap-highlight-color: transparent; }
+.tidy-json-upload:active { opacity: .75; }
+.tidy-json-upload .tju-ic { flex: none; width: 40px; height: 40px; border-radius: 10px; background: #3478F6; color: #fff; display: flex; align-items: center; justify-content: center; }
+.tidy-json-upload .tju-ic svg { width: 22px; height: 22px; }
+.tidy-json-upload .tju-tx { display: flex; flex-direction: column; gap: 2px; color: var(--label); }
+.tidy-json-upload .tju-tx b { font-size: 15px; }
+.tidy-json-upload .tju-tx small { font-size: 12px; color: var(--label-3); }
+.tidy-json-hint { padding: 10px 16px 2px; font-size: 12px; color: var(--label-3); }
 /* 任务卡：折叠态一行（图标 + 标题 + 状态 + 箭头），点击展开步骤进度（同自动化页） */
 .tidy-task { background: var(--card); border-radius: var(--radius-lg); margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 .tidy-task-head { display: flex; align-items: center; gap: 10px; padding: 13px 14px; -webkit-tap-highlight-color: transparent; }
@@ -1825,6 +1844,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-pv-row .pv-edit { flex: none; width: 16px; height: 16px; color: var(--label-3); opacity: .6; }
 .tidy-pv-row .pv-edit svg { width: 16px; height: 16px; }
 .tidy-pv-more { padding: 10px 0; font-size: 12px; color: var(--label-3); text-align: center; }
+/* 预览翻页条（>100 项时出现在列表底部） */
+.tidy-pv-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 12px 0 6px; }
+.pv-pg-btn { flex: none; border: none; background: var(--card-fill); color: var(--accent-fg); font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 999px; -webkit-tap-highlight-color: transparent; }
+.pv-pg-btn:active { opacity: .7; }
+.pv-pg-btn[disabled] { opacity: .4; }
+.pv-pg-info { font-size: 12px; color: var(--label-3); white-space: nowrap; }
 /* 预览加载态：点方案卡片立刻开窗，定位在后台跑，回来再铺列表 */
 .tidy-pv-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 56px 16px; font-size: 13px; color: var(--label-3); }
 .tidy-pv-spin { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--sep); border-top-color: #5856d6; animation: tidyPvSpin .8s linear infinite; }

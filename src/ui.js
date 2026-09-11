@@ -493,6 +493,22 @@ function updateOverviewTabVisibility(){
     if (searchSeg) searchSeg.style.display = '';
   }
 }
+/* —— Tab 切换滑动动画（所有 tab 通用） ——
+   tabSlideIn：dir<0 从左滑入 / dir>0 从右滑入；先摘旧动画类再强制回流，保证连续切换可重播。
+   tabSlideSwap：按页签从左到右的顺序自动判方向（el 上记录当前页签 data-tabcur），首次进入不播。 */
+function tabSlideIn(el, dir){
+  if (!el) return;
+  el.classList.remove('tab-slide-l', 'tab-slide-r');
+  void el.offsetWidth;
+  el.classList.add(dir < 0 ? 'tab-slide-l' : 'tab-slide-r');
+}
+function tabSlideSwap(el, order, tab){
+  if (!el) return;
+  var prev = el.getAttribute('data-tabcur');
+  el.setAttribute('data-tabcur', tab);
+  if (!prev || prev === tab) return;
+  tabSlideIn(el, order.indexOf(tab) < order.indexOf(prev) ? -1 : 1);
+}
 function setOverviewTab(tab, btn){
   state.overviewTab = tab;
   var seg = document.getElementById('overviewTabs');
@@ -501,6 +517,7 @@ function setOverviewTab(tab, btn){
     for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('active', bs[i].getAttribute('data-tab') === tab);
   }
   idbPut('kv', 'overviewTab', tab).catch(function(){});
+  tabSlideSwap(document.getElementById('overviewGrid'), ['movie','xv'], tab);
   renderOverview();
 }
 function setMetaSource(src, btn){
@@ -520,9 +537,13 @@ function switchHomeTab(tab){
   for (var i = 0; i < bs.length; i++){
     bs[i].classList.toggle('active', bs[i].getAttribute('data-tab') === tab);
   }
-  document.getElementById('tab-basic').style.display = (tab === 'basic') ? '' : 'none';
-  document.getElementById('tab-cast').style.display  = (tab === 'cast')  ? '' : 'none';
-  document.getElementById('tab-media').style.display = (tab === 'media') ? '' : 'none';
+  var basic = document.getElementById('tab-basic');
+  var cast = document.getElementById('tab-cast');
+  var media = document.getElementById('tab-media');
+  if (basic) basic.style.display = (tab === 'basic') ? '' : 'none';
+  if (cast) cast.style.display  = (tab === 'cast')  ? '' : 'none';
+  if (media) media.style.display = (tab === 'media') ? '' : 'none';
+  tabSlideSwap(tab === 'basic' ? basic : (tab === 'cast' ? cast : media), ['basic','cast','media'], tab);
 }
 
 /* ===================================================================

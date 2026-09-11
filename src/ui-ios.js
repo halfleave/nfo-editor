@@ -30,10 +30,27 @@ function switchPage(page) {
     syncThemeHiddenSwitch(); // 进入设置页同步里模式开关状态
   }
 }
+/* —— Tab 切换滑动动画（所有 tab 通用） ——
+   tabSlideIn：dir<0 从左滑入 / dir>0 从右滑入；先摘旧动画类再强制回流，保证连续切换可重播。
+   tabSlideSwap：按页签从左到右的顺序自动判方向（el 上记录当前页签 data-tabcur），首次进入不播。 */
+function tabSlideIn(el, dir){
+  if (!el) return;
+  el.classList.remove('tab-slide-l', 'tab-slide-r');
+  void el.offsetWidth;
+  el.classList.add(dir < 0 ? 'tab-slide-l' : 'tab-slide-r');
+}
+function tabSlideSwap(el, order, tab){
+  if (!el) return;
+  var prev = el.getAttribute('data-tabcur');
+  el.setAttribute('data-tabcur', tab);
+  if (!prev || prev === tab) return;
+  tabSlideIn(el, order.indexOf(tab) < order.indexOf(prev) ? -1 : 1);
+}
 function setOverviewTab(tab, btn){
   state.overviewTab = tab;
   var seg = document.getElementById('overviewTabs');
   if (seg) seg.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === tab); });
+  tabSlideSwap(document.getElementById('overviewGrid'), ['movie','xv'], tab);
   renderOverview();
 }
 function updateOverviewTabVisibility(){
@@ -202,6 +219,7 @@ function switchHomeTab(tab) {
   if (basic) basic.style.display = (tab === 'basic') ? 'block' : 'none';
   if (cast)  cast.style.display  = (tab === 'cast')  ? 'block' : 'none';
   if (media) media.style.display = (tab === 'media') ? 'block' : 'none';
+  tabSlideSwap(tab === 'basic' ? basic : (tab === 'cast' ? cast : media), ['basic','cast','media'], tab);
 }
 
 function showToast(msg, type, duration) {
@@ -4436,6 +4454,7 @@ function switchMagnetComboTab(tab){
   for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
   if (add) add.style.display = (tab === 'add') ? '' : 'none';
   if (search) search.style.display = (tab === 'search') ? '' : 'none';
+  tabSlideSwap(tab === 'add' ? add : search, ['add','search'], tab);
   // 每次进入搜索页：一律重新读取当前影片的番号（无则标题）填入（不触发搜索），
   // 并清掉上一次的搜索结果，避免残留别的片子搜过的内容
   if (tab === 'search'){
@@ -8391,16 +8410,19 @@ function tidyTaskStep(id, key, state, msg){
   }
   tidySaveTasks(list);
   if (currentPage === 'tidy-tasks') renderTidyTasks();
+  if (currentPage === 'tidy-json') renderTidyJsonList();
 }
 function tidyTaskToggle(id){
   tidyState.open = tidyState.open || {};
   tidyState.open[id] = !tidyState.open[id];
   renderTidyTasks();
+  renderTidyJsonList();
 }
 function tidyTaskRemove(id){
   tidySaveTasks(tidyTasks().filter(function (t){ return t.id !== id; }));
   try { localStorage.removeItem(TIDY_CHAT_PREFIX + id); } catch (e) {}
   renderTidyTasks();
+  renderTidyJsonList();
 }
 function openTidyTasks(){ renderTidyTasks(); switchPage('tidy-tasks'); }
 function renderTidyTasks(){
@@ -9126,6 +9148,51 @@ function tidyJsonEntry(){
   }
   tidyJsonPick(true);
 }
+/* —— JSON 整理页：上方上传清单，下方是该页生成的任务记录（标题 = 文件名） —— */
+function openTidyJsonPage(){
+  renderTidyJsonList();
+  switchPage('tidy-json');
+}
+/* JSON 页上传按钮：同样要求先选目标文件夹（定位的根） */
+function tidyJsonUpload(){
+  if (!tidyState.folder || !tidyState.folder.cid){
+    showToast('请先回上一页选择目标文件夹', 'error');
+    openTidyFolderPicker();
+    return;
+  }
+  tidyJsonPick(true);
+}
+/* JSON 页的任务记录列表：只列 stepsKind === 'json' 的任务，卡片结构复用任务页那套 */
+function renderTidyJsonList(){
+  var box = document.getElementById('tidyJsonTaskList');
+  if (!box) return;
+  var list = tidyTasks().filter(function (t){ return t.stepsKind === 'json'; });
+  if (!list.length){ box.innerHTML = '<div class="tidy-empty">还没有 JSON 整理记录。<br>点上方「上传 JSON 清单」开始。</div>'; return; }
+  var open = tidyState.open || {};
+  box.innerHTML = list.map(function (t){
+    var color = '#3478F6';
+    var iconHtml = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6.5A2.5 2.5 0 0 0 4 4.5v15A2.5 2.5 0 0 0 6.5 22h11a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>';
+    var stateCls = t.state === 'done' ? 'done' : (t.state === 'fail' ? 'fail' : 'run');
+    var stateTx = t.state === 'done' ? '已完成' : (t.state === 'fail' ? '失败' : '进行中');
+    var expanded = !!open[t.id];
+    var head = '<div class="tidy-task-head" onclick="tidyTaskToggle(\'' + t.id + '\')">' +
+      '<span class="ttk-icon" style="background:' + color + ';">' + iconHtml + '</span>' +
+      '<span class="tidy-task-title">' + escapeHtml(t.title) + '</span>' +
+      '<span class="tti-state ' + stateCls + '">' + stateTx + '</span>' +
+      '<svg class="tidy-task-arrow' + (expanded ? ' on' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>' +
+      '</div>';
+    if (!expanded) return '<div class="tidy-task">' + head + '</div>';
+    var steps = t.steps || [];
+    var body = '<div class="tidy-task-body">' +
+      '<div class="tidy-task-path">' + escapeHtml(t.folderPath || '未记录路径') + '</div>' +
+      (steps.length ? '<div class="tidy-steps">' + steps.map(tidyStepHtml).join('') + '</div>' : '') +
+      '</div>';
+    var ops = '<div class="tidy-task-ops">' +
+      '<button onclick="tidyTaskRemove(\'' + t.id + '\')">删除</button>' +
+      '</div>';
+    return '<div class="tidy-task expanded">' + head + body + ops + '</div>';
+  }).join('');
+}
 function tidyJsonFileChosen(input){
   var f = input && input.files && input.files[0];
   if (!f) return;
@@ -9138,8 +9205,14 @@ function tidyJsonFileChosen(input){
     tidyState.json = parsed;
     if (tidyState.ruleId !== 'jsonPlan') tidyState.ruleId = 'jsonPlan';
     if (fromEntry){
+      /* JSON 页上传：以文件名为标题生成一条任务记录，随后定位 → 预览 */
+      var title = String(f.name || '').replace(/\.[^.]+$/, '') || 'JSON 清单';
+      var task = tidyNewTask('rule', title, 'json');
+      tidyState.pendingTask = task.id;
+      tidyState.pendingKind = 'json';
+      renderTidyJsonList();
       showToast('已导入 ' + parsed.items.length + ' 条清单，正在定位…', 'info');
-      tidyJsonRun();
+      tidyJsonRun(task);
       return;
     }
     renderTidyRules();
@@ -9206,10 +9279,11 @@ function tidyJsonSnapshots(rootCid, entries){
   });
   return chain.then(function (){ return { byDir: byDir, dirCid: dirCid }; });
 }
-/* JSON 整理的完整动线：读清单 → 定位 → 预览 → 执行 */
-function tidyJsonRun(){
+/* JSON 整理的完整动线：读清单 → 定位 → 预览 → 执行。
+   preTask：调用方（JSON 页上传）已建好任务时传入，标题用文件名；不传则按旧规矩建（标题 = 目标文件夹名）。 */
+function tidyJsonRun(preTask){
   var j = tidyState.json;
-  var task = tidyNewTask('rule', tidyFolderName(), 'json');
+  var task = preTask || tidyNewTask('rule', tidyFolderName(), 'json');
   tidyState.pendingTask = task.id;
   tidyState.pendingKind = 'json';
   tidyTaskStep(task.id, 'read', 'ok', '共 ' + j.items.length + ' 条清单');
@@ -9227,6 +9301,7 @@ function tidyJsonRun(){
     }
     tidyTaskStep(task.id, 'locate', 'ok', '待整理 ' + plan.ops.length + ' 项' + (miss.length ? ('，未匹配 ' + miss.length + ' 项') : ''));
     tidyState.preview = plan.ops;
+    tidyState.pvPage = 1;
     renderTidyPreview(plan.ops);
     tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
   }).catch(function (e){
@@ -9308,6 +9383,7 @@ function tidyAiRun(plan, opt){
     tidyTaskStep(taskId, 'exec', 'running', '待整理 ' + res.ops.length + ' 项' + (miss.length ? ('，未匹配 ' + miss.length + ' 项') : ''));
     if (opt.token != null && !tidyPvAlive(opt.token)) return;   // 用户已关掉弹窗：定位白跑一次，不再打扰
     tidyState.preview = res.ops;
+    tidyState.pvPage = 1;
     renderTidyPreview(res.ops);
     if (opt.token == null) tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
     if (miss.length) showToast('有 ' + miss.length + ' 项名字在文件夹里找不到，已跳过', 'info');
@@ -9412,6 +9488,7 @@ function tidyPreviewRun(){
     }
     tidyTaskStep(task.id, 'plan', 'ok', '待整理 ' + plan.ops.length + ' 项');
     tidyState.preview = plan.ops;
+    tidyState.pvPage = 1;
     renderTidyPreview(plan.ops);
     tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
   }).catch(function (e){
@@ -9446,32 +9523,45 @@ function tidyPreviewLoading(hint){
   var box = document.getElementById('tidyPreviewList');
   var title = document.getElementById('tidyPreviewTitle');
   if (title) title.textContent = '整理预览';
+  tidyState.pvPage = 1;
   if (box) box.innerHTML = '<div class="tidy-pv-loading"><span class="tidy-pv-spin"></span>' + escapeHtml(hint || '正在准备预览…') + '</div>';
   var btn = document.getElementById('tidyExecBtn');
   if (btn){ btn.disabled = true; btn.textContent = '定位中…'; }
 }
+var TIDY_PV_PAGE_SIZE = 100;   /* 预览每页行数；超过一页时底部翻页 */
 function renderTidyPreview(ops){
   var box = document.getElementById('tidyPreviewList');
   var title = document.getElementById('tidyPreviewTitle');
   if (title) title.textContent = '整理预览（' + ops.length + ' 项）';
   if (!box) return;
-  var CAP = 100;
   var PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   var btn = document.getElementById('tidyExecBtn');
   if (btn){ btn.disabled = false; btn.textContent = '执行整理（' + ops.length + ' 项）'; }
-  var show = ops.slice(0, CAP);
+  /* 翻页：页码存在 tidyState.pvPage（新数据回填前由调用方重置为 1） */
+  var pages = Math.max(1, Math.ceil(ops.length / TIDY_PV_PAGE_SIZE));
+  var page = Math.min(Math.max(1, tidyState.pvPage || 1), pages);
+  tidyState.pvPage = page;
+  var start = (page - 1) * TIDY_PV_PAGE_SIZE;
+  var show = ops.slice(start, start + TIDY_PV_PAGE_SIZE);
   function rowAt(i){
     var o = show[i];
     var oldTxt = (o.oldDir ? o.oldDir + '/' : '') + o.orig;
     var newTxt = (o.op === 'move' && o.newDir ? o.newDir + '/' : '') + o.name;
-    return '<button type="button" class="tidy-pv-row" onclick="tidyPreviewEdit(' + i + ')">' +
+    /* 传全局索引 start+i：第 2 页起的「编辑」也要对回 ops 里正确的那一项 */
+    return '<button type="button" class="tidy-pv-row" onclick="tidyPreviewEdit(' + (start + i) + ')">' +
       '<span class="pv-main"><span class="pv-old">' + escapeHtml(oldTxt) + '</span>' +
       '<span class="pv-new">' + escapeHtml(newTxt) + '</span></span>' +
       '<span class="pv-edit">' + PEN + '</span></button>';
   }
-  /* 项数多时先说清节奏：为了不被 115 风控，请求是分批 + 限速发的 */
+  /* 翻页条 + 风控提示（>200 项时说清分批节奏） */
   var notes = '';
-  if (ops.length > CAP) notes += '<div class="tidy-pv-more">仅显示前 ' + CAP + ' 项，共 ' + ops.length + ' 项</div>';
+  if (pages > 1){
+    notes += '<div class="tidy-pv-pager">' +
+      '<button type="button" class="pv-pg-btn" onclick="tidyPvGo(-1)"' + (page <= 1 ? ' disabled' : '') + '>上一页</button>' +
+      '<span class="pv-pg-info">第 ' + page + ' / ' + pages + ' 页 · 共 ' + ops.length + ' 项</span>' +
+      '<button type="button" class="pv-pg-btn" onclick="tidyPvGo(1)"' + (page >= pages ? ' disabled' : '') + '>下一页</button>' +
+      '</div>';
+  }
   if (ops.length > 200){
     var est = Math.max(2, Math.round(Math.ceil(ops.length / 100) * 1.6));
     notes += '<div class="tidy-pv-more">为避开 115 风控，会分批提交（每 100 项一次请求），预计约 ' + est +
@@ -9486,12 +9576,23 @@ function renderTidyPreview(ops){
     var to = Math.min(show.length, made + CHUNK);
     var html = '';
     for (var i = made; i < to; i++) html += rowAt(i);
-    var anchor = box.querySelector('.tidy-pv-more');
+    var anchor = box.querySelector('.tidy-pv-pager') || box.querySelector('.tidy-pv-more');
     if (anchor) anchor.insertAdjacentHTML('beforebegin', html);
     else box.insertAdjacentHTML('beforeend', html);
     made = to;
     if (made < show.length) setTimeout(more, 16);
   })();
+}
+/* 预览翻页：±1 翻页并滚回顶部；边界 clamp */
+function tidyPvGo(d){
+  var ops = tidyState.preview || [];
+  var pages = Math.max(1, Math.ceil(ops.length / TIDY_PV_PAGE_SIZE));
+  var p = Math.min(Math.max(1, (tidyState.pvPage || 1) + d), pages);
+  if (p === tidyState.pvPage) return;
+  tidyState.pvPage = p;
+  renderTidyPreview(ops);
+  var box = document.getElementById('tidyPreviewList');
+  if (box) box.scrollTop = 0;
 }
 /* —— 预览项改名：点预览里某一行 → 弹输入框，手动改这一项的新名 —— */
 function tidyPreviewEdit(idx){
@@ -9694,6 +9795,7 @@ function openToolboxMagnet(){
   var minp = document.getElementById('tbmMagnetInput');
   if (inp) inp.value = '';
   if (minp) minp.value = '';
+  toggleTbmAddClear();
   if (box) box.innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
   toggleTbmClear();
   refreshTbmAddState();
@@ -9707,6 +9809,7 @@ function switchTbmTab(tab){
   if (!add || !search) return;
   add.style.display = tab === 'add' ? '' : 'none';
   search.style.display = tab === 'search' ? '' : 'none';
+  tabSlideSwap(tab === 'add' ? add : search, ['add','search'], tab);
   var tabs = document.querySelectorAll('#page-toolbox-magnet .mc-tab');
   for (var i = 0; i < tabs.length; i++){
     tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tbm') === tab);
@@ -9727,18 +9830,16 @@ function refreshTbmAddState(){
     }
   });
 }
-function toolboxPasteMagnet(){
+/* 添加区输入框：可手动编辑/粘贴（原生长按），有内容时右下角显示清除按钮 */
+function toggleTbmAddClear(){
   var inp = document.getElementById('tbmMagnetInput');
-  if (!inp) return;
-  if (navigator.clipboard && navigator.clipboard.readText){
-    navigator.clipboard.readText().then(function(txt){
-      var v = (txt || '').trim();
-      if (!v){ showToast('剪贴板为空', 'info'); inp.focus(); return; }
-      inp.value = v;
-    }).catch(function(){ inp.focus(); showToast('请长按输入框手动粘贴', 'info'); });
-  } else {
-    inp.focus(); showToast('请长按输入框手动粘贴', 'info');
-  }
+  var btn = document.getElementById('tbmAddClear');
+  if (inp && btn) btn.classList.toggle('show', (inp.value || '').length > 0);
+}
+function clearTbmAddInput(){
+  var inp = document.getElementById('tbmMagnetInput');
+  if (inp){ inp.value = ''; inp.focus(); }
+  toggleTbmAddClear();
 }
 /* 纯离线：提交到 115 云下载根目录，不建自动化任务、不落影片文档、不整理。
    M4「115 文件整理」落地后，在此处挂整理规则即可升级为「离线 + 整理」，调用方无需改。 */
@@ -9756,6 +9857,7 @@ function toolboxMagnetOffline(magnet){
         showToast(d.errcode === 10008 ? '该磁力已在 115 云下载列表中' : '已提交到 115 云下载', 'success');
         var inp = document.getElementById('tbmMagnetInput');
         if (inp) inp.value = '';
+        toggleTbmAddClear();
       } else {
         showToast(auto115ErrText(d, res, '离线提交失败'), 'error');
       }
