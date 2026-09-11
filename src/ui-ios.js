@@ -8510,8 +8510,14 @@ function renderTidyChat(){
   box.innerHTML = tidyChatMsgs().map(function (m, mi){
     if (!m) return '';
     if (m.role === 'tree'){
-      /* 目录树本身太长，气泡里只放一行摘要；完整文本留在消息里，发送时随请求带给 AI */
-      return '<div class="tidy-msg sys">已获取目录树（' + (m.lines || 0) + ' 行）</div>';
+      /* 目录树本身太长，气泡里只放一行摘要卡片；点卡片看完整结构（完整文本留 m.text，发送时随请求带给 AI） */
+      var tlines = m.lines || 0;
+      return '<div class="tidy-msg plan tree" onclick="tidyTreePreview(' + mi + ')">' +
+        '<span class="tp-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 12h18"/></svg></span>' +
+        '<span class="tp-body"><b class="tp-tx">目录树 · ' + tlines + ' 行</b>' +
+        '<small class="tp-sub">点击查看完整目录结构</small></span>' +
+        '<span class="tp-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>' +
+        '</div>';
     }
     if (m.role === 'plan'){
       /* 清单不铺在聊天里，收成一张可点的小卡片（像附件文件）：点开 = 预览并执行。
@@ -8546,6 +8552,47 @@ function tidyChatAppend(msg){
   msgs.push(msg);
   tidyChatSetMsgs(msgs);
   renderTidyChat();
+}
+/* —— 目录树卡片预览（点卡片，居中弹窗看完整目录结构，可复制） —— */
+function tidyTreePreview(mi){
+  var msgs = tidyChatMsgs();
+  var m = msgs[mi];
+  if (!m || m.role !== 'tree'){ return; }
+  var text = typeof m.text === 'string' ? m.text : '';
+  var lines = m.lines || 0;
+  var mask = document.getElementById('tidyTreePreviewMask');
+  if (!mask){
+    mask = document.createElement('div');
+    mask.id = 'tidyTreePreviewMask';
+    mask.className = 'tidy-info-mask';
+    mask.setAttribute('onclick', 'tidyTreePreviewClose()');
+    mask.innerHTML =
+      '<div class="tidy-tree-pop" onclick="event.stopPropagation()">' +
+        '<div class="tipop-head"><b id="tidyTreeTitle"></b>' +
+          '<button type="button" class="tipop-x" aria-label="关闭" onclick="tidyTreePreviewClose()">✕</button></div>' +
+        '<pre class="tidy-tree-pre" id="tidyTreeText"></pre>' +
+        '<div class="tipop-bar">' +
+          '<button type="button" class="tipop-ok" onclick="tidyTreeCopy()">复制目录树</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(mask);
+  }
+  document.getElementById('tidyTreeTitle').textContent = '目录树 · ' + lines + ' 行';
+  document.getElementById('tidyTreeText').textContent = text;
+  mask.classList.add('show');
+  requestAnimationFrame(function (){ mask.classList.add('vis'); });
+}
+function tidyTreePreviewClose(){
+  var mask = document.getElementById('tidyTreePreviewMask');
+  if (!mask) return;
+  mask.classList.remove('vis');
+  setTimeout(function (){ mask.classList.remove('show'); }, 200);
+}
+function tidyTreeCopy(){
+  var pre = document.getElementById('tidyTreeText');
+  if (!pre) return;
+  try { navigator.clipboard.writeText(pre.textContent); showToast('目录树已复制', 'success'); }
+  catch (e){ showToast('复制失败', 'error'); }
 }
 /* 就地替换第 idx 条（用于「正在…」这类会被结果覆盖的占位消息） */
 function tidyChatReplace(idx, msg){

@@ -1672,6 +1672,15 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-msg.plan .tp-dl:active { opacity: .7; }
 .tidy-msg.plan .tp-go { flex: none; width: 16px; height: 16px; color: var(--label-3); }
 .tidy-msg.plan .tp-go svg { width: 16px; height: 16px; }
+.tidy-msg.tree .tp-ic { background: rgba(61,140,240,.12); color: var(--accent); }
+
+/* 目录树预览弹窗（居中，可滚动看完整树） */
+.tidy-tree-pop { width: 100%; max-width: 460px; max-height: 82vh; display: flex; flex-direction: column; }
+.tidy-tree-pre {
+  flex: 1 1 auto; margin: 0; padding: 4px 16px 14px; overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55;
+  color: var(--label); white-space: pre-wrap; word-break: break-all; -webkit-overflow-scrolling: touch;
+}
 .tidy-chat-send[disabled] { opacity: .5; }
 /* 输入框上方的「确认结果」按钮：点了才让 AI 出清单（平时只聊天，不吐 JSON） */
 .tidy-chat-acts { flex: none; display: flex; justify-content: flex-start; padding: 8px 14px 0; border-top: 0.5px solid var(--sep); background: var(--bg); }
