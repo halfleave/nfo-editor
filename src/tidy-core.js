@@ -242,6 +242,96 @@
     }, '图片序号化');
   }
 
+  /* —— E 组 · 泛用清洗（提案 §二 E，2026-09-11 拍板落地）——
+     全库通用的「名字卫生」，不挑内容类型；全库实测主体是写真/小说，这组才是大头。
+     共同纪律与 A 组一致：幂等、只产「真的会变」的 op、拿不准一律不动。 */
+
+  /* E1 域名前缀清洗：剥离开头的 `www.98t.la@` / `hhd800.com@` 这类「域名@」（全库 2.4 万+ 条裸前缀）。
+     域名特征 = 至少一节「字母数字标签.」+ 结尾 2–8 位纯字母；锚定在名字开头才动。 */
+  var DOM_AT_RE = /^(?:[a-z0-9-]+\.){1,4}[a-z]{2,8}@/i;
+  function planDomPrefix(items){
+    return planByMap(items, function (n){
+      var m = n.match(DOM_AT_RE);
+      if (!m) return null;
+      var nb = n.slice(m[0].length).replace(/^[\s._-]+/, '');
+      if (!nb || nb === n) return null;
+      return nb;
+    }, '域名前缀清洗');
+  }
+
+  /* E2 站点标签清洗：【www.98t.la】 / 【7d68.xyz】 这类整段站点标签（域名特征），连同样式空格剥掉。
+     与水印规则的 wdom 同特征；水印规则只在用户配置后生效，这条是「零配置」的兜底。 */
+  var DOM_TAG_RE = /[【[]\s*(?:[a-z0-9-]+\.){1,4}[a-z]{2,8}\s*[\]】]\s*/gi;
+  function planDomTag(items){
+    return planByMap(items, function (n){
+      var p = splitExt(n);
+      var nb = p.base.replace(DOM_TAG_RE, '').replace(/\s{2,}/g, ' ').replace(/^[\s._-]+|[\s._-]+$/g, '');
+      if (!nb || nb === p.base) return null;
+      return joinExt(nb, p.ext);
+    }, '站点标签清洗');
+  }
+
+  /* E3 间隔符归一：`_` → 空格、连续 `..` → 空格、多空格合一、首尾空白收掉。
+     单个点保留（v1.2、S01E01.2024 这类动了反而伤）；主名/文件夹都适用。 */
+  function planSpaceNorm(items){
+    return planByMap(items, function (n){
+      var p = splitExt(n);
+      var nb = p.base
+        .replace(/_+/g, ' ')
+        .replace(/\.{2,}/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/^[\s._-]+|[\s._-]+$/g, '');
+      if (!nb || nb === p.base) return null;
+      return joinExt(nb, p.ext);
+    }, '间隔符归一');
+  }
+
+  /* E4 复本编号规整：`(1)` `（２）` 统一成「一个空格 + 半角括号」的 ` (N)`；已是该形态则不动。 */
+  var DUP_TAIL_RE = /\s*[（(]\s*(\d{1,4})\s*[)）]\s*$/;
+  function planDupNorm(items){
+    return planByMap(items, function (n){
+      var p = splitExt(n);
+      var m = p.base.match(DUP_TAIL_RE);
+      if (!m) return null;
+      var head = p.base.slice(0, m.index).replace(/[\s._-]+$/, '');
+      if (!head) return null;
+      var nb = head + ' (' + parseInt(m[1], 10) + ')';
+      return (nb === p.base) ? null : joinExt(nb, p.ext);
+    }, '复本编号规整');
+  }
+
+  /* —— M1 关联文件联动（提案 §二 M，内建能力，不进注册表）——
+     规则页一次只跑一条规则，「联动」单独跑没有意义 → 直接内建：任何「文件改名」规则产出 op 时，
+     同目录同主名的 .nfo/.srt/.ass/.ssa/.sub 自动补一条跟随改名（Kodi/Plex 改名后元数据不断链）。
+     只认「视频主名」触发；已在 ops 里的条目不重复补；options.linked === false 可整体关掉
+     （JSON / AI 清单本来逐条显式指定，不走联动）。 */
+  var LINK_EXT_RE = /^(nfo|srt|ass|ssa|sub)$/i;
+  var VIDEO_EXT_RE = /^(mp4|mkv|avi|mov|wmv|ts|m2ts|flv|rmvb|webm)$/i;
+  function planLinked(items, ops){
+    if (!ops || !ops.length) return [];
+    var touched = {}, stems = {};
+    ops.forEach(function (o){
+      touched[o.fid] = 1;
+      var p = splitExt(o.orig), q = splitExt(o.name);
+      if (!p.ext || !VIDEO_EXT_RE.test(p.ext)) return;
+      if (!q.base || q.base === p.base) return;
+      stems[p.base] = q.base;
+    });
+    var added = [];
+    (items || []).forEach(function (it){
+      if (isDirItem(it)) return;
+      var n = nameOf(it);
+      if (!n || touched[idOf(it)]) return;
+      var p = splitExt(n);
+      if (!p.ext || !LINK_EXT_RE.test(p.ext)) return;
+      var nb = stems[p.base];
+      if (!nb) return;
+      added.push(mkRename(it, n, joinExt(nb, p.ext), '关联文件联动'));
+    });
+    return added;
+  }
+
+
   /* —— 导入组：JSON 整理 ——
      条目四字段（新规范）：{ 旧文件路径, 旧名, 新文件路径, 新名 }
        旧文件路径 / 新文件路径 = 文件所在的【父目录】（相对目标文件夹）；
@@ -488,6 +578,7 @@
     var used = 0;
     function walk(n, d) {
       var out = { name: n.name, dir: !!n.dir, children: [] };
+      if (n.note) out.note = n.note;   /* 「读取失败 / 已达上限」等提示要跟着节点走，不能丢 */
       var kids = n.children || [];
       if (!kids.length) return out;
       if (d >= maxDepth) { out.note = '共 ' + countNodes(n) + ' 项，已折叠'; return out; }
@@ -503,14 +594,10 @@
 
   /* ================= 二、规则注册表 ================= */
   /* 分组见文档 §4.1；done=false 的规则在规则页显示为「即将上线」，不可勾选。
-     已实现：全部 A 组（9 条，纯改名）+ 导入组「JSON 整理」。B/C/D 组待执行器支持 mkdir/move/delete 后接入。 */
+     已实现：A 组 9 条（纯改名）。B/C/D 组待执行器支持 mkdir/move/delete 后接入。
+     JSON 整理不在注册表（已从规则页下架）：入口页「JSON 整理」与 AI 清单执行仍走
+     planRule('jsonPlan')（独立分支，不依赖注册表）。 */
   var RULE_GROUPS = [
-    {
-      id: 'J', name: '导入', risk: 'low', riskLabel: '外部方案 · 按清单改名',
-      rules: [
-        { id: 'jsonPlan', name: 'JSON 整理', risk: 'low', done: true }
-      ]
-    },
     {
       id: 'A', name: '命名规范', risk: 'low', riskLabel: '低风险 · 只改名，可逆',
       rules: [
@@ -523,6 +610,15 @@
         { id: 'prefixClean',   name: '发布标签剥离', risk: 'low', done: true },
         { id: 'seasonFolder',  name: '季夹归一',     risk: 'low', done: true },
         { id: 'imageSeq',      name: '图片序号化',   risk: 'low', done: true }
+      ]
+    },
+    {
+      id: 'E', name: '泛用清洗', risk: 'low', riskLabel: '低风险 · 只改名，可逆 · 不挑内容类型',
+      rules: [
+        { id: 'domPrefix', name: '域名前缀清洗', risk: 'low', done: true },
+        { id: 'domTag',    name: '站点标签清洗', risk: 'low', done: true },
+        { id: 'spaceNorm', name: '间隔符归一',   risk: 'low', done: true },
+        { id: 'dupNorm',   name: '复本编号规整', risk: 'low', done: true }
       ]
     },
     {
@@ -577,18 +673,28 @@
     return null;
   }
 
+  /* 改名类规则的统一出口：把 M1 联动补在后面（seasonFolder 只动文件夹，无需联动） */
+  function renameResult(ruleId, items, options, ops){
+    if (options.linked !== false && ruleId !== 'seasonFolder') ops = ops.concat(planLinked(items, ops));
+    return { ok: true, ops: ops, reason: '' };
+  }
+
   /* 规则 id → op 列表的总入口（当前只实现水印清洗，其余返回空并给出原因） */
   function planRule(ruleId, items, options) {
     options = options || {};
-    if (ruleId === 'watermark')    return { ok: true, ops: planWatermark(items, options.watermarks || defaultWatermarks()), reason: '' };
-    if (ruleId === 'extLower')     return { ok: true, ops: planExtLower(items), reason: '' };
-    if (ruleId === 'dvdUpper')     return { ok: true, ops: planDvdUpper(items), reason: '' };
-    if (ruleId === 'dvdNormalize') return { ok: true, ops: planDvdNormalize(items), reason: '' };
-    if (ruleId === 'illegalChar')  return { ok: true, ops: planIllegalChar(items), reason: '' };
-    if (ruleId === 'lengthCap')    return { ok: true, ops: planLengthCap(items, options), reason: '' };
-    if (ruleId === 'prefixClean')  return { ok: true, ops: planPrefixClean(items), reason: '' };
+    if (ruleId === 'watermark')    return renameResult(ruleId, items, options, planWatermark(items, options.watermarks || defaultWatermarks()));
+    if (ruleId === 'extLower')     return renameResult(ruleId, items, options, planExtLower(items));
+    if (ruleId === 'dvdUpper')     return renameResult(ruleId, items, options, planDvdUpper(items));
+    if (ruleId === 'dvdNormalize') return renameResult(ruleId, items, options, planDvdNormalize(items));
+    if (ruleId === 'illegalChar')  return renameResult(ruleId, items, options, planIllegalChar(items));
+    if (ruleId === 'lengthCap')    return renameResult(ruleId, items, options, planLengthCap(items, options));
+    if (ruleId === 'prefixClean')  return renameResult(ruleId, items, options, planPrefixClean(items));
     if (ruleId === 'seasonFolder') return { ok: true, ops: planSeasonFolder(items), reason: '' };
-    if (ruleId === 'imageSeq')     return { ok: true, ops: planImageSeq(items), reason: '' };
+    if (ruleId === 'imageSeq')     return renameResult(ruleId, items, options, planImageSeq(items));
+    if (ruleId === 'domPrefix')    return renameResult(ruleId, items, options, planDomPrefix(items));
+    if (ruleId === 'domTag')       return renameResult(ruleId, items, options, planDomTag(items));
+    if (ruleId === 'spaceNorm')    return renameResult(ruleId, items, options, planSpaceNorm(items));
+    if (ruleId === 'dupNorm')      return renameResult(ruleId, items, options, planDupNorm(items));
     if (ruleId === 'jsonPlan') {
       if (!options.entries || !options.entries.length) return { ok: false, ops: [], reason: '还没有导入 JSON 清单' };
       var jr = planJsonItems(options.entries, options);
@@ -710,6 +816,11 @@
     isDirItem: isDirItem,
     idOf: idOf,
     splitExt: splitExt,
+    planDomPrefix: planDomPrefix,
+    planDomTag: planDomTag,
+    planSpaceNorm: planSpaceNorm,
+    planDupNorm: planDupNorm,
+    planLinked: planLinked,
     planExtLower: planExtLower,
     planDvdUpper: planDvdUpper,
     planDvdNormalize: planDvdNormalize,

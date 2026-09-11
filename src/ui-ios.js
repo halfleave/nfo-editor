@@ -8182,6 +8182,7 @@ function openTidyFolderPicker(){
   ensure115Cookie().then(function (ck){
     if (!ck){ showToast('请先到「设置 → 应用配置 → 115 配置」登录', 'error'); return; }
     tidyState.pick = { cid: '0', name: '根目录', stack: [], page: 0, noMore: false };
+    tidyState.pickCache = {};   /* 会话内页缓存随每次打开重置，避免用到旧数据 */
     tidyPickLoad();
     tidySheetOpen('tidyFolderMask', 'tidyFolderSheet');
   });
@@ -8213,7 +8214,8 @@ function tidyPickSize(it){
 var TIDY_PICK_BACK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
 var TIDY_PICK_DIR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/></svg>';
 var TIDY_PICK_FILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7.5A1.5 1.5 0 0 0 6 4.5v15A1.5 1.5 0 0 0 7.5 21h9a1.5 1.5 0 0 0 1.5-1.5V7z"/><path d="M14 3v4h4"/></svg>';
-/* 渲染一页：文件夹可点下钻，文件置灰只展示（选择器只选文件夹） */
+/* 渲染一页：文件夹可点下钻，文件置灰只展示（选择器只选文件夹）。
+   每页内排序：文件夹在上、文件在下（各自保持 115 原顺序）。 */
 function tidyPickListHtml(items, pick, err){
   var html = '';
   if (pick.stack.length){
@@ -8223,7 +8225,11 @@ function tidyPickListHtml(items, pick, err){
   }
   if (err){ return html + '<div class="tmdb-msg">读取失败：' + escapeHtml(err) + '</div>'; }
   if (!items.length) html += '<div class="tmdb-msg">这个文件夹是空的</div>';
-  html += items.map(function (it){
+  var sorted = items.slice().sort(function (a, b){
+    var da = (a && a.cid && !a.fid) ? 0 : 1, db = (b && b.cid && !b.fid) ? 0 : 1;
+    return da - db;
+  });
+  html += sorted.map(function (it){
     var nm = (it && (it.n || it.name)) || '';
     if (it && it.cid && !it.fid){
       return '<button class="tidy-pick-item" onclick="tidyPickEnter(\'' + escapeAttr(String(it.cid)) + '\',\'' + escapeAttr(nm) + '\')">' +
@@ -8250,6 +8256,18 @@ function tidyPickPagerHtml(pick, page){
     '<span class="tpp-info">' + label + '</span>' +
     '<button class="tpp-btn" onclick="tidyPickNext()"' + (pick.hasMore ? '' : ' disabled') + '>下一页</button>';
 }
+/* 真正把一页画上去（total/hasMore 判定 + 列表 + 翻页条） */
+function tidyPickPaint(pick, page, items, count, err){
+  var listEl = document.getElementById('tidyPickList');
+  var pgEl = document.getElementById('tidyPickPager');
+  if (!listEl) return;
+  pick.total = count;
+  pick.hasMore = pick.noMore ? false
+    : (count ? (page + 1) * TIDY_PICK_PAGE_SIZE < count : items.length >= TIDY_PICK_PAGE_SIZE);
+  listEl.innerHTML = tidyPickListHtml(items, pick, err);
+  listEl.scrollTop = 0;
+  if (pgEl) pgEl.innerHTML = tidyPickPagerHtml(pick, page);
+}
 function tidyPickLoad(){
   var listEl = document.getElementById('tidyPickList');
   var pathEl = document.getElementById('tidyPickPath');
@@ -8260,19 +8278,28 @@ function tidyPickLoad(){
   var trail = pick.stack.map(function (s) { return s.name; }).concat([pick.name]).join('/');
   if (pathEl) pathEl.textContent = tidyPathBrief(trail, 3);
   if (pgEl) pgEl.innerHTML = '';
-  listEl.innerHTML = '<div class="tmdb-msg">正在读取…</div>';
+  /* 会话内页缓存：看过的文件夹/页码即时回显，进退与翻页零等待（卡顿的主因是每次都白屏等网络） */
+  var cache = tidyState.pickCache || (tidyState.pickCache = {});
+  var c = cache[pick.cid];
+  if (c && c.pages && c.pages[page]){
+    tidyPickPaint(pick, page, c.pages[page], c.count, '');
+    return;
+  }
+  /* 没看过才真正去取：旧内容保留只调暗（不再整页换成「正在读取…」，消除闪一下的卡顿感） */
+  listEl.classList.add('loading');
   tidyPickFetchPage(pick.cid, page).then(function (r){
+    cache[pick.cid] = { pages: (c && c.pages) || {}, count: r.count };
+    cache[pick.cid].pages[page] = r.items;
     /* 翻过头了（末页刚好被翻走）→ 退回上一页，并记住没有下一页 */
-    if (!r.items.length && page > 0){ pick.page = page - 1; pick.noMore = true; tidyPickLoad(); return; }
-    pick.total = r.count;
-    pick.hasMore = pick.noMore ? false
-      : (r.count ? (page + 1) * TIDY_PICK_PAGE_SIZE < r.count : r.items.length >= TIDY_PICK_PAGE_SIZE);
-    listEl.innerHTML = tidyPickListHtml(r.items, pick, '');
-    listEl.scrollTop = 0;
-    if (pgEl) pgEl.innerHTML = tidyPickPagerHtml(pick, page);
+    if (!r.items.length && page > 0){
+      delete cache[pick.cid].pages[page];
+      pick.page = page - 1; pick.noMore = true; tidyPickLoad(); return;
+    }
+    tidyPickPaint(pick, page, r.items, r.count, '');
   }).catch(function (e){
-    listEl.innerHTML = tidyPickListHtml([], pick, (e && e.message) || '网络错误');
-    if (pgEl) pgEl.innerHTML = '';
+    tidyPickPaint(pick, page, [], 0, (e && e.message) || '网络错误');
+  }).then(function (){
+    listEl.classList.remove('loading');
   });
 }
 /* 翻页 */
@@ -8480,22 +8507,23 @@ function tidyChatBack(){
 function renderTidyChat(){
   var box = document.getElementById('tidyChatScroll');
   if (!box) return;
-  box.innerHTML = tidyChatMsgs().map(function (m){
+  box.innerHTML = tidyChatMsgs().map(function (m, mi){
     if (!m) return '';
     if (m.role === 'tree'){
       /* 目录树本身太长，气泡里只放一行摘要；完整文本留在消息里，发送时随请求带给 AI */
       return '<div class="tidy-msg sys">已获取目录树（' + (m.lines || 0) + ' 行）</div>';
     }
     if (m.role === 'plan'){
-      /* 清单不铺在聊天里，收成一张可点的小卡片（像附件文件）：点开 = 预览并执行 */
+      /* 清单不铺在聊天里，收成一张可点的小卡片（像附件文件）：点开 = 预览并执行。
+         卡片带上自己在消息里的位置 mi —— 一段对话出过多批清单时，每张卡都能回看自己的那份 */
       var n = (m.plan && m.plan.items) ? m.plan.items.length : (m.count || 0);
       var total = (m.plan && m.plan.total) ? m.plan.total : n;
       var more = total > n ? (total - n) : 0;
       var sub = more ? ('共 ' + total + ' 项，还有 ' + more + ' 项未列出 · 点开预览') : '点击预览，可逐项改名后执行';
-      return '<div class="tidy-msg plan" onclick="tidyAiPlanOpen()">' +
+      return '<div class="tidy-msg plan" onclick="tidyAiPlanOpen(' + mi + ')">' +
         '<span class="tp-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6.5A2.5 2.5 0 0 0 4 4.5v15A2.5 2.5 0 0 0 6.5 22h11a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></span>' +
         '<span class="tp-body"><b class="tp-tx">整理方案 · ' + n + ' 项</b><small class="tp-sub">' + sub + '</small></span>' +
-        '<button class="tp-dl" onclick="tidyPlanExport(event)">导出</button>' +
+        '<button class="tp-dl" onclick="tidyPlanExport(event,' + mi + ')">导出</button>' +
         '<span class="tp-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>' +
         '</div>';
     }
@@ -8650,22 +8678,22 @@ function tidyExportCleanup(fileId){
   auto115Post('https://webapi.115.com/rb/delete', 'fid=' + encodeURIComponent(fileId) + '&pid=0')
     .catch(function (){ /* 删不掉就留着，不打扰用户 */ });
 }
-/* 导出 txt → 剪枝后的树文本。
-   规模自适应：先按节点上限剪枝，太长就逐步收紧上限，直到能整段塞进请求（LLM 一次读得完）。 */
-function tidyTreeFromExport(rawText){
+/* 真实树 → 文本。不再走「拍平成导出格式 → 再启发式解析」的老路（那次来回会靠
+   「有无子节点」反推目录、靠缩进猜层级，文件/空目录会误判、层级猜错兄弟全挂错父级）。
+   递归列目录时手里就有真实 dir 标记（来自 115 接口），直接渲染，永不变形。
+   规模自适应：默认完整渲染（不按深度折叠）；只有大到超出字符上限，才按节点预算逐步收紧。 */
+function tidyTreeFromNode(root){
   var T = (typeof TidyCore !== 'undefined') ? TidyCore : null;
-  if (!T || !T.parseExportTree) return { text: rawText, count: 0 };
-  var parsed = T.parseExportTree(rawText);
-  if (!parsed.ok) return { text: '', count: 0 };
-  var caps = [900, 700, 500, 380, 280, 200, 140, 90, 60];
+  if (!T || !T.renderTreeText) return { text: '', count: 0 };
+  var caps = [999999, 4000, 2500, 1600, 1000, 700, 500, 350, 250, 160, 100, 60];
   var text = '';
   for (var i = 0; i < caps.length; i++){
-    var tr = T.trimTree(parsed.tree, { maxDepth: 4, maxNodes: caps[i] });
-    text = T.renderTreeText(tr, { maxLines: 1200 }) || '';
+    var tr = T.trimTree(root, { maxDepth: TIDY_TREE_MAX_DEPTH + 1, maxNodes: caps[i] });
+    text = T.renderTreeText(tr, { maxLines: 4000 }) || '';
     if (text.length <= TIDY_TREE_CHAR_CAP) break;
   }
   if (text.length > TIDY_TREE_CHAR_CAP) text = text.slice(0, TIDY_TREE_CHAR_CAP) + '\n…（已截断）';
-  return { text: text, count: parsed.count };
+  return { text: text, count: T.countNodes(root) };
 }
 
 /* 给每一步的失败加上步骤名，便于用户一眼看出卡在「提交/轮询/下载」哪一步 */
@@ -8684,14 +8712,6 @@ var TIDY_TREE_MAX_FILES = 10000;  // 收集到的文件总数上限（只影响�
 var TIDY_TREE_MAX_DIRS  = 300;    // 递归钻取的目录数上限（= 请求次数上限，直接决定耗时与风控姿态）
 var TIDY_TREE_MAX_DEPTH = 8;      // 递归深度上限
 var TIDY_TREE_MAX_NODES = 12000;  // 总节点（目录 + 文件）兜底上限，须 ≥ 文件上限才不会被提前截断
-/* 目录树节点 → 115 官方导出格式文本（根 |——名；子 <每层缩进2空格>|-名）。
-   下游 tidyTreeFromExport 解析它 → trim → render，AI 整理/JSON 整理零改动。 */
-function tidyNodeToExportText(node, depth, out){
-  if (depth === 0) out.push('|——' + (node.name || ''));
-  else out.push(new Array(depth * 2 + 1).join('  ') + '|-' + (node.name || ''));
-  var kids = node.children || [];
-  for (var i = 0; i < kids.length; i++) tidyNodeToExportText(kids[i], depth + 1, out);
-}
 /* 获取目录树：递归列目录拼树，绕开 115 的 CDN 文件下载（机房 IP 被 403 拦） */
 function tidyTreeFetch(){
   if (!tidyState.folder){ showToast('请先选择要整理的文件夹', 'error'); return; }
@@ -8755,12 +8775,11 @@ function tidyTreeFetch(){
   rec(tidyState.folder.cid, tidyState.folder.name || '根目录', 0).then(function (root){
     if (!root) throw new Error('递归读取目录树失败（目录可能为空或无权访问）');
     say('已读取 ' + stats.dirs + ' 个目录、' + stats.files + ' 个文件' + (stats.truncated ? '（已达上限，部分未列出）' : '') + '，正在生成目录树…');
-    var raw = []; tidyNodeToExportText(root, 0, raw);
-    var r = tidyTreeFromExport(raw.join('\n'));
+    var r = tidyTreeFromNode(root);
     if (!r.text) throw new Error('目录树解析结果为空（' + (stats.files + stats.dirs) + ' 项，但未产出可读文本）');
     var lines = r.text.split('\n').length;
     tidyState.tree = r.text;
-    say('读取完成：共 ' + (r.count || 0) + ' 项' + (stats.truncated ? '（已截断到上限）' : '') + '，已折叠到前 4 层');
+    say('读取完成：共 ' + stats.dirs + ' 个目录、' + stats.files + ' 个文件' + (stats.truncated ? '（已截断到上限）' : '，结构完整未折叠'));
     /* 同一会话只留最新一份目录树，反复获取时不会越堆越多 */
     var msgs = tidyChatMsgs().filter(function (m){ return m && m.role !== 'tree'; });
     msgs.push({ role: 'tree', text: r.text, lines: lines });
@@ -8911,10 +8930,13 @@ function tidyChatConfirm(){
     : '确认结果，出清单。');
 }
 /* 把清单导出成 .json 文件（留档 / 给外部 AI 复用）；不支持下载时退回「复制到剪贴板」 */
-function tidyPlanExport(ev){
+function tidyPlanExport(ev, mi){
   if (ev && ev.stopPropagation) ev.stopPropagation();
   if (ev && ev.preventDefault) ev.preventDefault();
-  var p = tidyLastPlan();
+  /* 导出跟随被点的那张卡片；没传位置（旧入口）才退回最近一张 */
+  var msgs = tidyChatMsgs(), p = null;
+  if (mi != null && msgs[mi] && msgs[mi].role === 'plan' && msgs[mi].plan) p = msgs[mi].plan;
+  if (!p) p = tidyLastPlan();
   if (!p || !p.items || !p.items.length){ showToast('没有可导出的清单', 'error'); return; }
   var txt = (typeof TidyCore !== 'undefined' && TidyCore.planToJson) ? TidyCore.planToJson(p) : JSON.stringify(p, null, 2);
   var safe = String(tidyFolderName() || '未命名').replace(/[\\/:*?"<>|]/g, '_');
@@ -9089,16 +9111,24 @@ function tidyJsonRun(){
 }
 
 /* —— AI 整理：把 AI 给的清单落到「定位 → 预览 → 执行」这条同动线上 ——
-   清单结构和 JSON 整理完全一致（{ root, items:[{dir,from,to}] }），所以直接复用那一套。 */
-function tidyAiPlanOpen(){
+   清单结构和 JSON 整理完全一致（{ root, items:[{dir,from,to}] }），所以直接复用那一套。
+   mi = 被点卡片在消息里的位置：一段对话出过多批清单时每张卡都能回看自己的那份，不是只认最新一张。 */
+function tidyAiPlanOpen(mi){
   var msgs = tidyChatMsgs(), plan = null;
-  for (var i = msgs.length - 1; i >= 0; i--){
-    if (msgs[i] && msgs[i].role === 'plan' && msgs[i].plan){ plan = msgs[i].plan; break; }
+  if (mi != null && msgs[mi] && msgs[mi].role === 'plan' && msgs[mi].plan) plan = msgs[mi].plan;
+  else {
+    for (var i = msgs.length - 1; i >= 0; i--){
+      if (msgs[i] && msgs[i].role === 'plan' && msgs[i].plan){ plan = msgs[i].plan; break; }
+    }
   }
   if (!plan || !plan.items || !plan.items.length){ showToast('没有可执行的清单', 'error'); return; }
   if (!tidyState.folder){ showToast('请先选择目标文件夹', 'error'); return; }
   tidyState.aiPlan = plan;
-  tidyAiRun(plan);
+  /* 点了立刻开弹窗：先给加载态，定位在后台跑，结果回来再逐步铺列表（tidyAiRun 内核对 token） */
+  var tok = tidyPvBegin();
+  tidyPreviewLoading('正在定位清单里的文件…');
+  tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
+  tidyAiRun(plan, { token: tok });
 }
 /* 清单里的目录可能带、也可能不带目标文件夹名（AI 两种写法都常见），统一剥掉，保证能落到真实目录。
    兼容旧三字段 {dir,from,to} 与新四字段 {oldDir,oldName,newDir,newName}（AI 当前只改名，newDir 等同 oldDir）。 */
@@ -9122,7 +9152,10 @@ function tidyNormalizeAiEntries(plan){
     return { oldDir: d, oldName: from, newDir: nd, newName: to };
   });
 }
-function tidyAiRun(plan){
+function tidyAiRun(plan, opt){
+  /* opt.token：弹窗已经先一步打开（点卡片直接进预览）。定位结果回来时先核对 token，
+     用户中途关掉弹窗就不再回填、也不重新开窗；失败也只在弹窗还开着时负责关它。 */
+  opt = opt || {};
   var taskId = tidyState.chatId;
   if (!taskId){ taskId = tidyNewTask('ai', tidyFolderName(), 'ai').id; tidyState.chatId = taskId; }
   tidyState.pendingTask = taskId;
@@ -9131,7 +9164,7 @@ function tidyAiRun(plan){
   tidyTaskStep(taskId, 'chat', 'ok', '');
   tidyTaskStep(taskId, 'plan', 'ok', '共 ' + plan.items.length + ' 项');
   tidyTaskStep(taskId, 'exec', 'running', '正在定位文件');
-  showToast('正在定位清单里的文件…', 'info');
+  if (opt.token == null) showToast('正在定位清单里的文件…', 'info');
   var entries = tidyNormalizeAiEntries(plan);
   tidyJsonSnapshots(tidyState.folder.cid, entries).then(function (snap){
     var res = TidyCore.planRule('jsonPlan', [], { entries: entries, root: '', byDir: snap.byDir, dirCid: snap.dirCid });
@@ -9140,19 +9173,22 @@ function tidyAiRun(plan){
       tidyTaskStep(taskId, 'exec', 'fail', '没匹配到文件');
       tidyUpdateTask(taskId, { state: 'fail', detail: '清单里的名字在当前文件夹找不到' });
       tidyState.pendingTask = null; tidyState.pendingKind = null;
+      if (opt.token != null && tidyPvAlive(opt.token)) tidySheetClose('tidyPreviewMask', 'tidyPreviewSheet');
       showToast('没匹配到：清单里的名字在当前文件夹找不到', 'error');
       return;
     }
     tidyTaskStep(taskId, 'exec', 'running', '待整理 ' + res.ops.length + ' 项' + (miss.length ? ('，未匹配 ' + miss.length + ' 项') : ''));
+    if (opt.token != null && !tidyPvAlive(opt.token)) return;   // 用户已关掉弹窗：定位白跑一次，不再打扰
     tidyState.preview = res.ops;
     renderTidyPreview(res.ops);
-    tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
+    if (opt.token == null) tidySheetOpen('tidyPreviewMask', 'tidyPreviewSheet');
     if (miss.length) showToast('有 ' + miss.length + ' 项名字在文件夹里找不到，已跳过', 'info');
   }).catch(function (e){
     var m = (e && e.message) || '网络错误';
     tidyTaskStep(taskId, 'exec', 'fail', m);
     tidyUpdateTask(taskId, { state: 'fail', detail: '定位失败' });
     tidyState.pendingTask = null; tidyState.pendingKind = null;
+    if (opt.token != null && tidyPvAlive(opt.token)) tidySheetClose('tidyPreviewMask', 'tidyPreviewSheet');
     showToast('定位失败：' + m, 'error');
   });
 }
@@ -9259,6 +9295,7 @@ function tidyPreviewRun(){
   });
 }
 function closeTidyPreview(){
+  tidyPvToken++;   // 作废所有在途的预览回填（点卡片后正在后台定位的那份，回来时发现 token 变了就不再开窗）
   tidySheetClose('tidyPreviewMask', 'tidyPreviewSheet');
   /* 用户在预览里点了取消：这次整理没发生。
      规则 / JSON 任务是为这一次整理建的 → 直接删掉；
@@ -9271,6 +9308,20 @@ function closeTidyPreview(){
   tidyState.pendingTask = null;
   tidyState.pendingKind = null;
 }
+/* —— 预览弹窗的「先开窗后加载」支撑 ——
+   tidyPvBegin 发新票（旧的一律作废），tidyPvAlive 验票：异步结果回来时只有票还有效才回填。 */
+var tidyPvToken = 0;
+function tidyPvBegin(){ return ++tidyPvToken; }
+function tidyPvAlive(tok){ return tok === tidyPvToken; }
+/* 预览弹窗加载态：点开立刻有反馈，定位在后台跑，避免「点了没反应」的空窗 */
+function tidyPreviewLoading(hint){
+  var box = document.getElementById('tidyPreviewList');
+  var title = document.getElementById('tidyPreviewTitle');
+  if (title) title.textContent = '整理预览';
+  if (box) box.innerHTML = '<div class="tidy-pv-loading"><span class="tidy-pv-spin"></span>' + escapeHtml(hint || '正在准备预览…') + '</div>';
+  var btn = document.getElementById('tidyExecBtn');
+  if (btn){ btn.disabled = true; btn.textContent = '定位中…'; }
+}
 function renderTidyPreview(ops){
   var box = document.getElementById('tidyPreviewList');
   var title = document.getElementById('tidyPreviewTitle');
@@ -9278,24 +9329,41 @@ function renderTidyPreview(ops){
   if (!box) return;
   var CAP = 100;
   var PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-  var rows = ops.slice(0, CAP).map(function (o, i){
+  var btn = document.getElementById('tidyExecBtn');
+  if (btn){ btn.disabled = false; btn.textContent = '执行整理（' + ops.length + ' 项）'; }
+  var show = ops.slice(0, CAP);
+  function rowAt(i){
+    var o = show[i];
     var oldTxt = (o.oldDir ? o.oldDir + '/' : '') + o.orig;
     var newTxt = (o.op === 'move' && o.newDir ? o.newDir + '/' : '') + o.name;
     return '<button type="button" class="tidy-pv-row" onclick="tidyPreviewEdit(' + i + ')">' +
       '<span class="pv-main"><span class="pv-old">' + escapeHtml(oldTxt) + '</span>' +
       '<span class="pv-new">' + escapeHtml(newTxt) + '</span></span>' +
       '<span class="pv-edit">' + PEN + '</span></button>';
-  }).join('');
-  if (ops.length > CAP) rows += '<div class="tidy-pv-more">仅显示前 ' + CAP + ' 项，共 ' + ops.length + ' 项</div>';
+  }
   /* 项数多时先说清节奏：为了不被 115 风控，请求是分批 + 限速发的 */
+  var notes = '';
+  if (ops.length > CAP) notes += '<div class="tidy-pv-more">仅显示前 ' + CAP + ' 项，共 ' + ops.length + ' 项</div>';
   if (ops.length > 200){
     var est = Math.max(2, Math.round(Math.ceil(ops.length / 100) * 1.6));
-    rows += '<div class="tidy-pv-more">为避开 115 风控，会分批提交（每 100 项一次请求），预计约 ' + est +
+    notes += '<div class="tidy-pv-more">为避开 115 风控，会分批提交（每 100 项一次请求），预计约 ' + est +
       ' 秒；期间请保持页面在前台、不要反复点执行。</div>';
   }
-  box.innerHTML = rows;
-  var btn = document.getElementById('tidyExecBtn');
-  if (btn) btn.textContent = '执行整理（' + ops.length + ' 项）';
+  /* 首屏先铺 20 行，剩下的分帧补上：弹窗一开就有内容，长列表不再整块卡一下 */
+  var CHUNK = 20;
+  var made = Math.min(CHUNK, show.length);
+  box.innerHTML = show.slice(0, made).map(function (_, i){ return rowAt(i); }).join('') + notes;
+  (function more(){
+    if (made >= show.length) return;
+    var to = Math.min(show.length, made + CHUNK);
+    var html = '';
+    for (var i = made; i < to; i++) html += rowAt(i);
+    var anchor = box.querySelector('.tidy-pv-more');
+    if (anchor) anchor.insertAdjacentHTML('beforebegin', html);
+    else box.insertAdjacentHTML('beforeend', html);
+    made = to;
+    if (made < show.length) setTimeout(more, 16);
+  })();
 }
 /* —— 预览项改名：点预览里某一行 → 弹输入框，手动改这一项的新名 —— */
 function tidyPreviewEdit(idx){
@@ -9488,7 +9556,20 @@ function openToolboxMagnet(){
   if (box) box.innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
   toggleTbmClear();
   refreshTbmAddState();
+  switchTbmTab('add');   /* 每次进页回到「添加」tab */
   switchPage('toolbox-magnet');
+}
+/* 磁力管理页 tab：添加 / 搜索（iOS 分段控件样式，与磁力弹窗一致） */
+function switchTbmTab(tab){
+  var add = document.getElementById('tbmPanelAdd');
+  var search = document.getElementById('tbmPanelSearch');
+  if (!add || !search) return;
+  add.style.display = tab === 'add' ? '' : 'none';
+  search.style.display = tab === 'search' ? '' : 'none';
+  var tabs = document.querySelectorAll('#page-toolbox-magnet .mc-tab');
+  for (var i = 0; i < tabs.length; i++){
+    tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tbm') === tab);
+  }
 }
 /* 添加区可用性：未配置 115 Cookie → 灰态 + 提示（提交前还会再兜一次） */
 function refreshTbmAddState(){

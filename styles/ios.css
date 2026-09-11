@@ -1570,7 +1570,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #page-toolbox-magnet .tbm-search-wrap .tbm-clear:active { opacity: .5; }
 #page-toolbox-magnet .tbm-go { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 14px; font-weight: 600; }
 #page-toolbox-magnet .tbm-list { padding-bottom: 8px; }
-#page-toolbox-magnet .tbm-sec-head { padding: 14px 2px 7px; font-size: 13px; font-weight: 600; color: var(--label-2); }
+/* 磁力管理页 tab 行（添加 / 搜索，iOS 分段控件居中） */
+.tbm-tabs-row { display: flex; justify-content: center; padding: 14px 0 16px; }
 #page-toolbox-magnet .tbm-add-input { width: 100%; border: none; background: var(--card-fill); border-radius: var(--radius-lg); padding: 10px 12px; font-size: 14px; line-height: 1.5; color: var(--label); resize: none; -webkit-user-select: text; }
 #page-toolbox-magnet .tbm-add-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 #page-toolbox-magnet .tbm-offline { display: block; width: 100%; margin-top: 8px; border: none; border-radius: 20px; padding: 11px 0; background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; }
@@ -1717,7 +1718,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 
 /* 文件夹选择（115 目录浏览）：底部 sheet · 当前位置条 · 逐层下钻列表 */
 .tidy-pick-path { margin: 0 0 8px; padding: 9px 12px; border-radius: 10px; background: var(--card-fill); font-size: 12.5px; line-height: 1.5; color: var(--label-2); word-break: break-all; }
-.tidy-pick-list { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0; }
+.tidy-pick-list { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0; transition: opacity .15s; }
+.tidy-pick-list.loading { opacity: .4; pointer-events: none; }
 .tidy-pick-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 2px; border: none; background: transparent; border-bottom: 0.5px solid var(--sep); text-align: left; font-size: 15px; color: var(--label); -webkit-tap-highlight-color: transparent; -webkit-user-select: none; }
 .tidy-pick-item:active { opacity: .6; }
 .tidy-pick-item .tpi-ic { flex: none; width: 20px; height: 20px; color: #FFB300; display: flex; align-items: center; justify-content: center; }
@@ -1776,6 +1778,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-pv-row .pv-edit { flex: none; width: 16px; height: 16px; color: var(--label-3); opacity: .6; }
 .tidy-pv-row .pv-edit svg { width: 16px; height: 16px; }
 .tidy-pv-more { padding: 10px 0; font-size: 12px; color: var(--label-3); text-align: center; }
+/* 预览加载态：点方案卡片立刻开窗，定位在后台跑，回来再铺列表 */
+.tidy-pv-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 56px 16px; font-size: 13px; color: var(--label-3); }
+.tidy-pv-spin { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--sep); border-top-color: #5856d6; animation: tidyPvSpin .8s linear infinite; }
+@keyframes tidyPvSpin { to { transform: rotate(360deg); } }
 /* 改名单项弹窗：内容自适应高度（覆写通用 44dvh 最小高，不留空） */
 .sheet-tidy-name { min-height: 0; height: auto; max-height: 70vh; max-height: 70dvh; padding-bottom: calc(var(--sab) + 16px); }
 .tidy-name-body { padding: 2px 0 4px; }

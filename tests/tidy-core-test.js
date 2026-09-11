@@ -6,7 +6,7 @@ const TidyCore = require('../src/tidy-core.js').TidyCore;
 function assert(cond, msg){ console.log((cond ? 'PASS' : 'FAIL') + ' ' + msg); if (!cond) process.exitCode = 1; }
 
 /* —— 注册表 —— */
-assert(Array.isArray(TidyCore.RULE_GROUPS) && TidyCore.RULE_GROUPS.length === 5, '注册表：5 个分组（导入/A命名/B结构/C清理/D归属）');
+assert(Array.isArray(TidyCore.RULE_GROUPS) && TidyCore.RULE_GROUPS.length === 5, '注册表：5 个分组（A命名/E泛用清洗/B结构/C清理/D归属；JSON 整理已从规则页下架）');
 const allRules = [];
 TidyCore.RULE_GROUPS.forEach(g => g.rules.forEach(r => allRules.push(r)));
 const rids = allRules.map(r => r.id);
@@ -228,11 +228,45 @@ assert(TidyCore.TASK_STEPS.ai.length === 4 && TidyCore.TASK_STEPS.ai[0].key === 
 assert(TidyCore.newSteps('json')[0].label === '读取 JSON 清单', '步骤：newSteps 支持 json 模板');
 
 /* ================= 规则注册表（全量） ================= */
-assert(TidyCore.RULE_GROUPS.length === 5, '注册表：5 组（导入 / A / B / C / D）');
+assert(TidyCore.RULE_GROUPS.length === 5, '注册表：5 组（A / E / B / C / D）');
 const atomTotal = TidyCore.RULE_GROUPS.reduce(function (n, g) { return n + g.rules.length; }, 0);
-assert(atomTotal === 25, '注册表：共 25 条原子规则（1+9+6+6+3）');
-assert(TidyCore.findRule('jsonPlan') && TidyCore.findRule('jsonPlan').rule.done === true, '注册表：JSON 整理已实现');
-assert(TidyCore.RULE_GROUPS[1].rules.every(function (r) { return r.done === true; }), '注册表：A 组 9 条全部已实现');
+assert(atomTotal === 28, '注册表：共 28 条原子规则（9+4+6+6+3）');
+assert(!TidyCore.findRule('jsonPlan'), '注册表：JSON 整理已从规则页下架（仅 UI，planRule 内部能力保留）');
+assert(TidyCore.RULE_GROUPS[0].rules.every(function (r) { return r.done === true; }), '注册表：A 组 9 条全部已实现');
+const eGroup = TidyCore.RULE_GROUPS.filter(function (g) { return g.id === 'E'; })[0];
+assert(!!eGroup && eGroup.rules.length === 4 && eGroup.rules.every(function (r) { return r.done === true; }), '注册表：E 组 4 条全部已实现');
+
+/* ================= E 组：泛用清洗（4 条） ================= */
+assert(TidyCore.planRule('domPrefix', [{ fid: '1', name: 'www.98T.la@三和资源随手发823.rar' }]).ops[0].name === '三和资源随手发823.rar', 'domPrefix：剥离 www.98T.la@ 前缀');
+assert(TidyCore.planRule('domPrefix', [{ fid: '1', name: 'HHD800.COM@ABC-123.mp4' }]).ops[0].name === 'ABC-123.mp4', 'domPrefix：剥离 hhd800 大写前缀');
+assert(TidyCore.planRule('domPrefix', [{ fid: '1', name: 'v1.2@3x 评测.mp4' }]).ops.length === 0, 'domPrefix：非域名形态（尾段非纯字母）不动');
+assert(TidyCore.planRule('domPrefix', [{ fid: '1', name: '干净名字.mp4' }]).ops.length === 0, 'domPrefix：无前缀不动（幂等）');
+assert(TidyCore.planRule('domTag', [{ fid: '1', name: '【7d68.xyz】 (8).mp4' }]).ops[0].name === '(8).mp4', 'domTag：剥【域名】标签（含尾随空格）');
+assert(TidyCore.planRule('domTag', [{ fid: '1', name: '[www.98t.la]名字.mkv' }]).ops[0].name === '名字.mkv', 'domTag：方括号域名标签也认');
+assert(TidyCore.planRule('domTag', [{ fid: '1', name: '【中文字幕】名字.mp4' }]).ops.length === 0, 'domTag：非域名【标签】不误删');
+assert(TidyCore.planRule('spaceNorm', [{ fid: '1', name: 'The_Last_of_Us.S01E01..1080p.mkv' }]).ops[0].name === 'The Last of Us.S01E01 1080p.mkv', 'spaceNorm：下划线与连续点 → 空格（单点保留）');
+assert(TidyCore.planRule('spaceNorm', [{ fid: '1', name: '已规整 名字.mp4' }]).ops.length === 0, 'spaceNorm：已规整不动（幂等）');
+assert(TidyCore.planRule('spaceNorm', [{ cid: '2', name: '散_落_夹' }]).ops[0].name === '散 落 夹', 'spaceNorm：文件夹名也归一');
+assert(TidyCore.planRule('dupNorm', [{ fid: '1', name: '照片（2）.jpg' }]).ops[0].name === '照片 (2).jpg', 'dupNorm：全角括号复本 → 半角统一');
+assert(TidyCore.planRule('dupNorm', [{ fid: '1', name: '照片 (1).jpg' }]).ops.length === 0, 'dupNorm：已统一形态不动（幂等）');
+assert(TidyCore.planRule('dupNorm', [{ fid: '1', name: '(1).jpg' }]).ops.length === 0, 'dupNorm：主名空了宁可不动');
+
+/* —— M1 关联文件联动（内建，不进注册表） —— */
+{
+  const lk = TidyCore.planLinked(
+    [{ fid: '1', name: 'ABC-123.mp4' }, { fid: '2', name: 'ABC-123.nfo' }, { fid: '3', name: 'ABC-123.ass' }, { fid: '4', name: '别的.nfo' }, { fid: '5', name: '无关.jpg' }],
+    [{ op: 'rename', fid: '1', orig: 'ABC-123.mp4', name: 'WXYZ-999.mp4', oldDir: '', newDir: '' }]
+  );
+  assert(lk.length === 2 && lk[0].name === 'WXYZ-999.nfo' && lk[1].name === 'WXYZ-999.ass', '联动：视频改名 → 同主名 nfo/ass 自动跟随（新主名 + 原扩展名）');
+  assert(lk.every(function (o) { return o.why === '关联文件联动'; }), '联动：补的 op 带「关联文件联动」标识');
+  const res2 = TidyCore.planRule('domPrefix', [
+    { fid: '1', name: 'www.98t.la@ABC-123.mp4' },
+    { fid: '2', name: 'www.98t.la@ABC-123.nfo' },
+    { fid: '3', name: 'ABC-123.srt' }
+  ]);
+  assert(res2.ops.length === 2, '联动：规则各自改了视频和 nfo，已干净的字幕无需跟随（无重复 op）');
+  assert(TidyCore.planRule('domPrefix', [{ fid: '1', name: 'www.98t.la@ABC-123.mp4' }], { linked: false }).ops.length === 1, '联动：linked:false 可整体关掉');
+}
 assert(TidyCore.PRESETS.length === 6, '注册表：6 个预设包');
 assert(TidyCore.PRESETS[0].rules.indexOf('watermark') >= 0, '注册表：安全快修包含水印清洗');
 
