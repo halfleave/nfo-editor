@@ -1659,25 +1659,37 @@
     return loadFilm(auto115Doc.filmId).then(function (film) {
       if (!film) throw new Error('没找到影片信息');
       var d = film.data || {};
+      // 字幕标记兜底：老记录可能漏标 hasSubtitle → 用持久化磁力列表再判一次（NFO 标签 + 图片角标共用）
+      if (!d.hasSubtitle && (d.javbusMagnets || []).some(isSubtitledMagnet)) d.hasSubtitle = true;
       var base = auto115Doc.dvdId || pcSanitizeName(auto115Doc.filmTitle || '') || 'movie';
       var files = [{ name: base + '.nfo', mime: 'application/octet-stream', bytes: new TextEncoder().encode(buildNFOMovieXml(d)) }];
-      var pb = (typeof d.poster === 'string') ? dataUrlToBytesSync(d.poster) : null;
-      if (pb) files.push({ name: base + '-poster.jpg', mime: 'image/jpeg', bytes: pb });
-      var fb = (typeof d.fanart === 'string') ? dataUrlToBytesSync(d.fanart) : null;
-      if (fb) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: fb });
-      var total = files.length, idx = 0;
-      function next() {
-        if (idx >= total) return Promise.resolve();
-        var f = files[idx];
-        auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
-        pc115RenderAuto();
-        return c115OpenUploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function () { idx++; return next(); });
+      // 海报/剧照：带字幕时先烘焙「字幕」角标再上传（与下载元数据 zip 同款，不污染原图）
+      var bakeJobs = [];
+      if (typeof d.poster === 'string') {
+        var upj = Promise.resolve(d.poster);
+        if (d.hasSubtitle) upj = upj.then(drawSubtitleBadge);
+        bakeJobs.push(upj.then(function (u) { var b = dataUrlToBytesSync(u); if (b) files.push({ name: base + '-poster.jpg', mime: 'image/jpeg', bytes: b }); }));
       }
-      return next().then(function () {
-        t.nfoUploaded = auto115Now();
-        auto115Set(t, 'upload', 'ok', '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」');
-        auto115Finish(t);
-        showToast('已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」', 'success');
+      if (typeof d.fanart === 'string') {
+        var ufj = Promise.resolve(d.fanart);
+        if (d.hasSubtitle) ufj = ufj.then(drawSubtitleBadge);
+        bakeJobs.push(ufj.then(function (u) { var b = dataUrlToBytesSync(u); if (b) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: b }); }));
+      }
+      return Promise.all(bakeJobs).then(function () {
+        var total = files.length, idx = 0;
+        function next() {
+          if (idx >= total) return Promise.resolve();
+          var f = files[idx];
+          auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
+          pc115RenderAuto();
+          return c115OpenUploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function () { idx++; return next(); });
+        }
+        return next().then(function () {
+          t.nfoUploaded = auto115Now();
+          auto115Set(t, 'upload', 'ok', '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」');
+          auto115Finish(t);
+          showToast('已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」', 'success');
+        });
       });
     }).catch(function (e) {
       console.warn('[115上传]', e);

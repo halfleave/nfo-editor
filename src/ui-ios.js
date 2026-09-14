@@ -4292,31 +4292,44 @@ function auto115StepUploadFiles(t){
   return loadFilm(auto115Doc.filmId).then(function(film){
     if (!film) throw new Error('没找到影片信息');
     var d = film.data || {};
+    // 字幕标记兜底：老版本保存的影片可能漏标 hasSubtitle（当时磁力扫描失败就丢了）；
+    // 上传前用持久化的磁力列表再判一次，保证「首页有字幕角标 / 磁力带字幕 → NFO 一定带 <subtitles> 标签」
+    if (!d.hasSubtitle && (d.javbusMagnets || []).some(isSubtitledMagnet)) d.hasSubtitle = true;
     var base = auto115Doc.dvdId || sanitizeName(auto115Doc.filmTitle || '') || 'movie';
     var files = [{ name: nfoEntryName(d, base), mime: 'application/octet-stream', bytes: new TextEncoder().encode(buildFilmXml(d)) }];
-    var pb = (typeof d.poster === 'string') ? dataUrlToBytesSync(d.poster) : null;
-    if (pb) files.push({ name: base + '-poster.jpg', mime: 'image/jpeg', bytes: pb });
-    var fb = (typeof d.fanart === 'string') ? dataUrlToBytesSync(d.fanart) : null;
-    if (fb) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: fb });
-    var total = files.length, idx = 0;
-    function next(){
-      if (idx >= total) return Promise.resolve();
-      var f = files[idx];
-      auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
-      renderAuto115();
-      return c115UploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function(){
-        idx++; return next();
-      });
+    // 海报/剧照：带字幕时先烘焙「字幕」角标再上传（与「下载元数据」zip 同款处理，不污染原图数据）
+    var bakeJobs = [];
+    if (typeof d.poster === 'string'){
+      var upj = Promise.resolve(d.poster);
+      if (d.hasSubtitle) upj = upj.then(drawSubtitleBadge);
+      bakeJobs.push(upj.then(function(u){ var b = dataUrlToBytesSync(u); if (b) files.push({ name: base + '-poster.jpg', mime: 'image/jpeg', bytes: b }); }));
     }
-    return next().then(function(){
-      t.nfoUploaded = auto115Now();
-      /* 这部片原本平铺在云下载（普通影片默认形态）→ 现在有了文件夹，把视频也移进去 */
-      return auto115MoveFlatVideoInto(t).then(function(moved){
-        var msg = '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」' + (moved ? '，视频也移进去了' : '');
-        if (auto115Doc) auto115Doc.nfoUploaded = auto115Now();
-        auto115Set(t, 'upload', 'ok', msg);
-        auto115Finish(t);
-        showToast(msg, 'success');
+    if (typeof d.fanart === 'string'){
+      var ufj = Promise.resolve(d.fanart);
+      if (d.hasSubtitle) ufj = ufj.then(drawSubtitleBadge);
+      bakeJobs.push(ufj.then(function(u){ var b = dataUrlToBytesSync(u); if (b) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: b }); }));
+    }
+    return Promise.all(bakeJobs).then(function(){
+      var total = files.length, idx = 0;
+      function next(){
+        if (idx >= total) return Promise.resolve();
+        var f = files[idx];
+        auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
+        renderAuto115();
+        return c115UploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function(){
+          idx++; return next();
+        });
+      }
+      return next().then(function(){
+        t.nfoUploaded = auto115Now();
+        /* 这部片原本平铺在云下载（普通影片默认形态）→ 现在有了文件夹，把视频也移进去 */
+        return auto115MoveFlatVideoInto(t).then(function(moved){
+          var msg = '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」' + (moved ? '，视频也移进去了' : '');
+          if (auto115Doc) auto115Doc.nfoUploaded = auto115Now();
+          auto115Set(t, 'upload', 'ok', msg);
+          auto115Finish(t);
+          showToast(msg, 'success');
+        });
       });
     });
   }).catch(function(e){
@@ -6984,7 +6997,8 @@ function generateNFOMovie(){
     runtime: getVal('runtime'), plot: getVal('plot'), rating: getVal('rating'), mpaa: getVal('mpaa'),
     genres: state.genres || [], countries: state.countries || [],
     directors: state.directors || [], actors: state.actors || [],
-    hasSubtitle: state.hasSubtitle
+    // 字幕标记兜底：老记录可能漏标（当时磁力扫描失败），编辑态用持久化磁力列表再判一次
+    hasSubtitle: !!state.hasSubtitle || (state.javbusMagnets || []).some(isSubtitledMagnet)
   };
   return NfoCore.buildMovieXml(d);
 }
@@ -7392,6 +7406,8 @@ function downloadMetadata(id){
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
     var d = film.data || {};
+    // 字幕标记兜底：老记录漏标时用持久化磁力列表再判一次（NFO 标签与图片角标共用）
+    if (!d.hasSubtitle && (d.javbusMagnets || []).some(isSubtitledMagnet)) d.hasSubtitle = true;
     var filename = sanitizeName(d.filename || d.title || film.title || film.id || 'movie');
     var zipFiles = [];
     zipFiles.push({ name: nfoEntryName(d, filename), data: new TextEncoder().encode(buildFilmXml(d)) });
