@@ -1178,8 +1178,9 @@ function applyJavbusResult(i){
   var it = lastJavbusResults[i];
   if (!it) return;
   if (!it.id){
-    var imgP0 = populateFromJavbus(it);
-    quickSaveAndHome().then(function(){ return imgP0; }).then(silentRefreshCurrentFilm).catch(function(){});
+    var imgP0 = populateFromJavbus(it, it.tags);
+    // 保存前先把搜索列表已加载的封面转成本地海报（初始保存即有图，不用等高清封面慢加载）
+    prefetchJavbusPoster(it.img).then(quickSaveAndHome).then(function(){ return imgP0; }).then(silentRefreshCurrentFilm).catch(function(){});
     return;
   }
   var base = javbusApiBase();
@@ -1189,10 +1190,22 @@ function applyJavbusResult(i){
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d){
       if (!d || !d.id) throw new Error('无详情数据');
-      var imgP = populateFromJavbus(d);
-      quickSaveAndHome().then(function(){ return imgP; }).then(silentRefreshCurrentFilm).catch(function(){});
+      // 详情接口不返回搜索时的「字幕/高清」标签 → 从搜索卡片带过来（字幕标记不断链）
+      var imgP = populateFromJavbus(d, it.tags);
+      // 同上：先用搜索列表已加载封面当初始海报，高清封面后台加载完再静默覆盖
+      prefetchJavbusPoster(it.img).then(quickSaveAndHome).then(function(){ return imgP; }).then(silentRefreshCurrentFilm).catch(function(){});
     })
     .catch(function(e){ showToast('加载详情失败：' + ((e && e.message) || '未知'), 'error'); });
+}
+/* 保存时直接复用搜索列表已加载的封面（URL 相同 → 浏览器缓存秒回）：转 dataURL 并按海报方向裁切，
+   作为初始海报让首页立刻有图；高清封面在后台加载完后由 silentRefresh 覆盖升级 */
+function prefetchJavbusPoster(rawImg){
+  if (!rawImg) return Promise.resolve();
+  var url = javbusImgUrl(rawImg);
+  return NfoCore.fetchImageToDataURL(url)
+    .then(function(durl){ return cropRightHalfAuto(durl); })
+    .then(function(cropped){ if (!state.poster) state.poster = cropped; })
+    .catch(function(){});
 }
 
 /* ---------- 搜索框交互 ---------- */

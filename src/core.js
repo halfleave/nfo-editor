@@ -508,7 +508,7 @@ function populateFromJAV(d){
   return Promise.all(imgPromises);
 }
 
-function populateFromJavbus(d){
+function populateFromJavbus(d, hintTags){
   resetSourceState();
   state.adult = true;   // JavBus 内容均为成人 → 编辑页显示 AV 字段
   state.source = 'javbus';   // 记录来源，供「刷新」按源刷新
@@ -542,8 +542,10 @@ function populateFromJavbus(d){
   state.series = n.series;
   state.dvdId = n.dvdId;
   state.javbusMagnets = (d.magnets || []).slice();   // JavBus 详情页抓取的磁力列表
-  // 字幕自动判定：任一磁力带中文字幕标记（hasSubtitle 或标题关键词）→ 影片标记字幕
-  if (state.javbusMagnets.some(isSubtitledMagnet)){
+  // 字幕自动判定：任一磁力带中文字幕标记（hasSubtitle 或标题关键词）→ 影片标记字幕。
+  // 补充：磁力请求失败/该片无磁力行时，搜索列表与详情接口都可能带「字幕」标签（hintTags 由搜索卡片/上次保存传入），同样认定带字幕
+  var subHints = (hintTags || []).concat(d.tags || []);
+  if (state.javbusMagnets.some(isSubtitledMagnet) || subHints.indexOf('字幕') >= 0){
     state.hasSubtitle = true;
     var _hs = document.getElementById('hasSubtitle'); if (_hs) _hs.checked = true;
   }
@@ -715,7 +717,9 @@ function refreshFromJavbus(film){
     .then(function(d){
       if (!d || (!d.title && !d.id)) throw new Error('无详情数据');
       state.javbusId = d.id || id;   // 刷新时回填番号，保证后续可再刷
-      var imgP = populateFromJavbus(d);   // 内部重设 state.source='javbus'、state.javbusId
+      // 已知带字幕的影片刷新时保留标记（磁力这次抓不到也不会把字幕标签刷丢）
+      var subHint = (film.data && film.data.hasSubtitle) ? ['字幕'] : [];
+      var imgP = populateFromJavbus(d, subHint);   // 内部重设 state.source='javbus'、state.javbusId
       var f = NfoCore.buildFilmFromCurrent();
       f.id = film.id;            // 强制覆盖原影片，避免生成新条目
       f.locked = !!film.locked;

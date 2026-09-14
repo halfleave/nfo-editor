@@ -6196,9 +6196,10 @@ function applyJavbusResult(i){
   var id = it.id;
   if (!id){
     // 列表已含基本信息，直接填充
-    var imgP0 = populateFromJavbus(it);
-    // 先保存再补存图片，串行执行
-    quickSaveAndHome().then(function(){ return imgP0; }).then(silentRefreshCurrentFilm).catch(function(){});
+    var imgP0 = populateFromJavbus(it, it.tags);
+    // 保存前先把搜索列表已加载的封面转成本地海报（首页初始保存即有图，不用等高清封面慢加载）
+    prefetchJavbusPoster(it.img).then(function(){ return quickSaveAndHome(); })
+      .then(function(){ return imgP0; }).then(silentRefreshCurrentFilm).catch(function(){});
     return;
   }
   var base = javbusApiBase();
@@ -6207,13 +6208,25 @@ function applyJavbusResult(i){
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d){
       if (!d || !d.id) throw new Error('无详情数据');
-      var imgP = populateFromJavbus(d);
-      // 先保存再补存图片，串行执行
-      quickSaveAndHome().then(function(){ return imgP; }).then(silentRefreshCurrentFilm).catch(function(){});
+      // 详情接口不返回搜索时的「字幕/高清」标签 → 从搜索卡片带过来（字幕标记不断链）
+      var imgP = populateFromJavbus(d, it.tags);
+      // 同上：先用搜索列表已加载封面当初始海报，高清封面后台加载完再静默覆盖
+      prefetchJavbusPoster(it.img).then(function(){ return quickSaveAndHome(); })
+        .then(function(){ return imgP; }).then(silentRefreshCurrentFilm).catch(function(){});
     })
     .catch(function(e){
       showToast('加载详情失败：' + ((e && e.message) || '未知'), 'error');
     });
+}
+/* 保存时直接复用搜索列表已加载的封面（URL 相同 → 浏览器缓存秒回）：转 dataURL 并按海报方向裁切，
+   作为初始海报让首页立刻有图；高清封面在后台加载完后由 silentRefresh 覆盖升级 */
+function prefetchJavbusPoster(rawImg){
+  if (!rawImg) return Promise.resolve();
+  var url = javbusImgUrl(rawImg);
+  return NfoCore.fetchImageToDataURL(url)
+    .then(function(durl){ return cropRightHalfAuto(durl); })
+    .then(function(cropped){ if (!state.poster) state.poster = cropped; })
+    .catch(function(){});
 }
 /* 切换元数据源前统一重置：防止上一个源残留的字段污染下一个源的影片（如 AV 的磁力/封面混入 TMDB） */
 function resetSourceState(){
@@ -6295,7 +6308,7 @@ function populateFromJAV(d){
    scraper 详情字段：id(番号) / title / img(封面) / date / videoLength(分钟) /
    director{id,name} / producer{id,name}(制作商) / publisher{id,name}(发行商) /
    series{id,name} / genres[{id,name}] / stars[{id,name}](演员) / samples[{id,thumbnail,src,alt}](剧照) */
-function populateFromJavbus(d){
+function populateFromJavbus(d, hintTags){
   resetSourceState();
   state.adult = true;   // JavBus 内容均为成人 → 编辑页显示 AV 字段
   state.source = 'javbus';   // 记录来源，供「刷新」按源刷新
@@ -6329,8 +6342,10 @@ function populateFromJavbus(d){
   state.series = n.series;
   state.dvdId = n.dvdId;
   state.javbusMagnets = (d.magnets || []).slice();   // JavBus 详情页抓取的磁力列表
-  // 字幕自动判定：任一磁力带中文字幕标记（hasSubtitle 或标题关键词）→ 影片标记字幕
-  if (state.javbusMagnets.some(isSubtitledMagnet)){
+  // 字幕自动判定：任一磁力带中文字幕标记（hasSubtitle 或标题关键词）→ 影片标记字幕。
+  // 补充：磁力请求失败/该片无磁力行时，搜索列表与详情接口都可能带「字幕」标签（hintTags 由搜索卡片/上次保存传入），同样认定带字幕
+  var subHints = (hintTags || []).concat(d.tags || []);
+  if (state.javbusMagnets.some(isSubtitledMagnet) || subHints.indexOf('字幕') >= 0){
     state.hasSubtitle = true;
     var _hs = document.getElementById('hasSubtitle'); if (_hs) _hs.checked = true;
   }
@@ -6631,7 +6646,9 @@ function refreshFromJavbus(film){
     .then(function(d){
       if (!d || (!d.title && !d.id)) throw new Error('无详情数据');
       state.javbusId = d.id || id;   // 刷新时回填番号，保证后续可再刷
-      var imgP = populateFromJavbus(d);   // 内部重设 state.source='javbus'、state.javbusId
+      // 已知带字幕的影片刷新时保留标记（磁力这次抓不到也不会把字幕标签刷丢）
+      var subHint = (film.data && film.data.hasSubtitle) ? ['字幕'] : [];
+      var imgP = populateFromJavbus(d, subHint);   // 内部重设 state.source='javbus'、state.javbusId
       var f = NfoCore.buildFilmFromCurrent();
       f.id = film.id;            // 强制覆盖原影片，避免生成新条目
       f.locked = !!film.locked;
@@ -7430,6 +7447,22 @@ function updateTranslateRetryBtn(){
   var box = document.getElementById('detailTranslateRetry');
   if (!box) return;
   box.style.display = (currentDetailFilmId && state.translateFailedIds && state.translateFailedIds.has(currentDetailFilmId)) ? '' : 'none';
+}
+/* 翻译完成后动态刷新详情页简介：仅当详情页正显示该影片时，从最新记录重取 plot 更新 DOM
+   （不重渲染整页，避免底图/滚动闪烁）。iOS 此前缺失该函数 → 翻译完成后详情页要重进才看到新简介。 */
+function refreshDetailPlot(){
+  if (!currentDetailFilmId) return;
+  loadFilm(currentDetailFilmId).then(function(film){
+    if (!film || film.id !== currentDetailFilmId) return;
+    var d = film.data || {};
+    var plotText = '[' + (d.title || film.id) + ']' + (d.plot ? ' ' + d.plot : '');
+    var plotEl = document.getElementById('detailPlot');
+    if (plotEl){
+      plotEl.textContent = plotText;
+      plotEl.onclick = function(){ copyText(plotText, '简介'); };
+    }
+    updateTranslateRetryBtn();
+  }).catch(function(){});
 }
 function retryTranslate(){
   if (!currentDetailFilmId) return;
