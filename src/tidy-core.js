@@ -168,8 +168,8 @@
     }, '番号归一');
   }
 
-  /* A5 非法字符清理：115 + Kodi 双保留字 @ \ / : * ? " < > | */
-  var ILLEGAL_RE = /[\\/:*?"<>|@]/g;
+  /* A5 非法字符清理：115 保留字 @ \ : * ? " < > |（/ 不算非法，2026-09-14 用户拍板去掉） */
+  var ILLEGAL_RE = /[\\:*?"<>|@]/g;
   function planIllegalChar(items){
     return planByMap(items, function (n){
       var p = splitExt(n);

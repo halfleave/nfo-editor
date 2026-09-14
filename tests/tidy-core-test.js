@@ -145,6 +145,7 @@ assert(TidyCore.planRule('dvdNormalize', [{ fid: '1', name: 'SDDE-045 标题.mp4
 
 /* —— 非法字符 —— */
 assert(TidyCore.planRule('illegalChar', [{ fid: '1', name: '影片@名?.mp4' }]).ops[0].name === '影片名.mp4', 'illegalChar：删 @ ? 等保留字');
+assert(TidyCore.planRule('illegalChar', [{ fid: '1', name: '影/片.mp4' }]).ops.length === 0, 'illegalChar：/ 不算非法字符，不处理');
 assert(TidyCore.planRule('illegalChar', [{ fid: '1', name: '正常名字.mp4' }]).ops.length === 0, 'illegalChar：干净名字不动');
 
 /* —— 超长截断 —— */

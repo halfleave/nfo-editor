@@ -114,7 +114,7 @@
   function pcSanitizeName(name) {
     if (typeof NfoCore !== 'undefined' && NfoCore.sanitizeName) return NfoCore.sanitizeName(name);
     if (typeof sanitizeName === 'function') return sanitizeName(name);
-    return (name || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie';
+    return (name || '').replace(/[\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie'; /* / 不净化（115 支持），与 NfoCore.sanitizeName 同规则 */
   }
 
   /* ---------- 115 配置（扫码登录 + Cookie 管理 + 开放平台授权） ---------- */
@@ -1584,8 +1584,9 @@
       if (!t.targetName) { auto115Set(t, 'cleanup', 'skip', '未填目标名称，保留 115 文件夹名'); return auto115StepMove(t); }
       newName = auto115ExternalBaseName(t);
     } else {
-      /* 文件夹命名：始终只取影片标题（AV/影片一致） */
-      newName = ((auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || t.offlineDirName || '').trim();
+      /* 文件夹命名：始终只取影片标题；统一走 pcSanitizeName（非法字符 → _，/ 不净化），与上传找夹同一规则 */
+      var rawName2 = ((auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || t.offlineDirName || '').trim();
+      newName = rawName2 ? pcSanitizeName(rawName2) : '';
     }
     if (!newName) { auto115Set(t, 'cleanup', 'fail', '缺少名称信息，没法改名'); auto115Finish(t); return Promise.resolve(null); }
     if (newName === t.offlineDirName) { auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改'); return auto115StepMove(t); }
@@ -1633,9 +1634,16 @@
     return auto115ListDir(C115_DEFAULT_DIR_CID).then(function (list) {
       var folders = list.filter(function (it) { return it && it.cid && !it.fid; });
       for (var i = 0; i < folders.length; i++) {
-        if ((folders[i].n || '') === name) {
-          t.uploadDirCid = String(folders[i].cid); t.uploadDirName = name;
-          auto115Set(t, 'dir', 'ok', '已找到「' + name + '」');
+        var fn = folders[i].n || '';
+        /* 精确匹配 + 净化后匹配：旧版整理用原始标题改过夹名（带 / 等），净化后比对才能对上，
+           找到后顺手把夹名改成规范名（失败不影响上传） */
+        if (fn === name || pcSanitizeName(fn) === name) {
+          t.uploadDirCid = String(folders[i].cid); t.uploadDirName = fn;
+          auto115Set(t, 'dir', 'ok', '已找到「' + fn + '」');
+          if (fn !== name) {
+            auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(folders[i].cid) + '&file_name=' + encodeURIComponent(name))
+              .then(function () { t.uploadDirName = name; }).catch(function () { });
+          }
           return auto115StepUploadFiles(t);
         }
       }

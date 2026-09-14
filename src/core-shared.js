@@ -17,8 +17,9 @@
   }
 
   function sanitizeName(name) {
+    /* 2026-09-14 起 / 不再视为非法字符（115 夹名支持 /，用户拍板），仅净化 \ : * ? " < > | */
     return (name || '')
-      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/[\\:*?"<>|]/g, '_')
       .replace(/\s+/g, ' ')
       .trim() || 'movie';
   }

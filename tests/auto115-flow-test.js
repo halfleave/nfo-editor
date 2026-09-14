@@ -51,6 +51,10 @@ try { vm.runInContext(src, ctx, { filename: 'ui-ios.js' }); }
 catch (e) { console.log('LOAD WARN:', e.message); }
 /* 关掉 115 节流闸：本测试按「调用次数」编排响应，任何真实等待都会打乱顺序（改为在独立的节流测试里覆盖） */
 try { vm.runInContext('C115_THROTTLE_ON = false;', ctx); } catch (e) { console.log('[DBG] 节流开关补丁异常:', e.message); }
+/* sanitizeName 桩（按 core-shared.js 真实实现）：必须在 ui-ios.js 加载之后赋值——
+   加载时 `var sanitizeName = NfoCore.sanitizeName` 会把它覆盖成 noop（返回 {}），
+   而 v324 起整理改夹名/建夹也走 sanitizeName（与上传同规则），不补桩这些用例全拿到 [object Object] */
+ctx.sanitizeName = (s) => (s || '').replace(/[\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie';
 /* bootApp 定时器在 crypto 异步等待期间会触发，补齐其依赖的 state 字段防崩（state 为 let 声明，需在 vm 作用域内补） */
 try { vm.runInContext('state.countries = state.countries || []; state.genres = state.genres || []; console.log("[DBG] vm内 state.countries=", JSON.stringify(state.countries));', ctx); } catch (e) { console.log('[DBG] 补丁异常:', e.message); }
 
@@ -476,10 +480,7 @@ const lz4LiteralForTest = (bytes) => {
   /* 6. 上传 NFO/海报/剧照 链路（115 4.0 加密通道：uploadinfo → initupload(ECDH+AES) → getuploadinfo → gettoken → OSS PUT） */
   ctx.dataUrlToBytesSync = (u) => (typeof u === 'string' && u.indexOf('data:') === 0) ? new Uint8Array([1, 2, 3]) : null;
   ctx.loadFilm = () => Promise.resolve({ id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486', poster: 'data:image/jpeg;base64,AA', fanart: 'data:image/jpeg;base64,AA' } });
-  /* ui-ios.js:5526 是 `var sanitizeName = NfoCore.sanitizeName`，而 NfoCore 被桩成一律返回 {} 的 noop，
-     不补这个桩的话 sanitizeName(标题) 会返回空对象（上传任务据此定文件夹名，会永远匹配不上）。
-     此处按 core-shared.js:19 的真实实现补桩。 */
-  ctx.sanitizeName = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'movie';
+  /* sanitizeName 桩已提前到公共桩区（NfoCore 桩后），此处不再重复设置 */
   ctx.buildNFOMovieXml = () => '<movie><title>测试影片</title></movie>';
 
   /* 6a. 加密层单元断言 */

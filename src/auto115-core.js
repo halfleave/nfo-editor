@@ -184,10 +184,10 @@
     else if (orig && orig.toLowerCase() !== title.toLowerCase()){ name = title + '.' + orig.replace(/ /g, '.') + '.' + year; }
     else { name = title + '.' + year; }                                  // 无原始标题 或 标题=原始标题 → 标题.年份
     if (quality) name += '.' + quality;
-    return name.replace(/ /g, '.').replace(/[\/\\:*?"<>|]/g, '').trim();
+    return name.replace(/ /g, '.').replace(/[\\:*?"<>|]/g, '').trim(); /* / 不再清除（115 支持，2026-09-14），与 iOS 端同规则 */
   };
   api.looksDvd = function (s) { return /^[A-Za-z]{2,}-?\d+[A-Za-z]?$/i.test((s || '').trim()); };
-  api.cleanName = function (s) { return (s || '').replace(/ /g, '.').replace(/[\/\\:*?"<>|]/g, '').trim(); };
+  api.cleanName = function (s) { return (s || '').replace(/ /g, '.').replace(/[\\:*?"<>|]/g, '').trim(); };
   /* 外部磁力任务：目标名称判定（番号 vs 标题） */
   api.externalBaseName = function (t) {
     if (!t.targetName) return '';
