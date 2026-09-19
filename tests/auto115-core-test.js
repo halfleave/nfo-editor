@@ -46,6 +46,13 @@ assert(api.partBase('Show.S01.cd2.mkv') === api.norm('Show.S01'), 'partBase 去�
 assert(api.sizeFmt(1536) === '1.5 KB' && api.sizeFmt(0) === '0 B', 'sizeFmt 人类可读');
 assert(api.btih('magnet:?xt=urn:btih:' + 'abcdef1234567890abcdef1234567890abcdef12') === 'ABCDEF1234567890ABCDEF1234567890ABCDEF12', 'btih 提取并大写');
 
+/* ---------- ed2k 离线链接 ---------- */
+assert(api.isOfflineLink('magnet:?xt=urn:btih:abcdef') && api.isOfflineLink('ed2k://|file|Some.Movie.mkv|1468006400|3B26E56A0F1D2E3C4B5A69788796A5B4|/'), 'isOfflineLink：磁力与 ed2k 都通过');
+assert(!api.isOfflineLink('https://example.com/file.mkv') && !api.isOfflineLink(''), 'isOfflineLink：普通链接/空串拒绝');
+assert(api.offlineTitle('magnet:?xt=urn:btih:ABCDEF1234567890ABCDEF1234567890ABCDEF12') === 'ABCDEF1234567890ABCDEF1234567890ABCDEF12', 'offlineTitle：磁力取 btih');
+assert(api.offlineTitle('ed2k://|file|' + encodeURIComponent('某电影.2020.mkv') + '|1468006400|3B26E56A0F1D2E3C4B5A69788796A5B4|/') === '某电影.2020.mkv', 'offlineTitle：ed2k 取解码后的文件名');
+assert(api.offlineTitle('ed2k://|file||123|ABCDEF0123456789ABCDEF0123456789|/') === 'ABCDEF0123456789ABCDEF0123456789', 'offlineTitle：ed2k 无文件名退 hash');
+
 /* ---------- 剧集解析 ---------- */
 assert(api.episodeOf('Show.S02E05.mkv').season === 2 && api.episodeOf('Show.S02E05.mkv').episode === 5, 'SxxExx 解析');
 assert(api.episodeOf('show 1x07.mp4').episode === 7, '1x07 解析');

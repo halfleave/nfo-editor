@@ -153,6 +153,21 @@
     var m = /btih:([0-9a-fA-F]{40}|[0-9a-zA-Z]{32})/.exec(magnet || '');
     return m ? m[1].toUpperCase() : '';
   };
+  /* 离线链接判定：磁力（magnet:?）或电驴（ed2k://|file|…）——115 云下载两种都支持 */
+  api.isOfflineLink = function (s) { return /^(magnet:\?|ed2k:\/\/\|)/i.test(String(s || '').trim()); };
+  /* 离线任务标题：磁力取 btih；ed2k 取文件名（无名字退 hash） */
+  api.offlineTitle = function (url) {
+    var s = String(url || '').trim();
+    var h = api.btih(s);
+    if (h) return h;
+    var m = /^ed2k:\/\/\|file\|([^|]*)\|[^|]*\|([0-9a-fA-F]{32})/i.exec(s);
+    if (m) {
+      var name = m[1];
+      if (name) { try { name = decodeURIComponent(name); } catch (_) {} }
+      return name || m[2].toUpperCase();
+    }
+    return '';
+  };
   api.sizeFmt = function (n) {
     if (!n) return '0 B';
     var u = ['B','KB','MB','GB','TB'], i = 0;

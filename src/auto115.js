@@ -535,7 +535,7 @@
   }
   function auto115TaskTitle(t) {
     if (auto115TaskType(t) === 'upload') return '上传 NFO';
-    return (t && (t.magnetTitle || auto115Btih(t && t.magnet))) || '磁力任务';
+    return (t && (t.magnetTitle || auto115OfflineTitle(t && t.magnet))) || '磁力任务';
   }
   var auto115Doc = null;
   var auto115ProbeTimer = null;
@@ -604,6 +604,8 @@
   function auto115Now() { return Date.now(); }
   function auto115Time(ts) { return Auto115Core.timeFmt(ts); }
   function auto115Btih(magnet) { return Auto115Core.btih(magnet); }
+  function auto115IsOfflineLink(s) { return Auto115Core.isOfflineLink(s); }   /* 磁力 + ed2k 都算（115 云下载均支持） */
+  function auto115OfflineTitle(url) { return Auto115Core.offlineTitle(url); } /* 磁力取 btih；ed2k 取文件名 */
   function auto115NewSteps(type) { return Auto115Core.newSteps(type, auto115IsTvTask()); }
   function auto115Size(n) { return Auto115Core.sizeFmt(n); }
   function auto115ErrText(d, res, fallback) { return Auto115Core.errText(d, res, fallback); }
@@ -1760,12 +1762,12 @@
   function pc115SubmitAddMagnet() {
     var inp = document.getElementById('pcMagnetInput');
     var magnet = (inp && inp.value || '').trim();
-    if (!/^magnet:\?/i.test(magnet)) { showToast('请粘贴有效的磁力链接（以 magnet:? 开头）', 'error'); return; }
+    if (!auto115IsOfflineLink(magnet)) { showToast('请粘贴有效的磁力或 ed2k 链接（magnet:? / ed2k:// 开头）', 'error'); return; }
     auto115EnsureDoc().then(function (doc) {
       var t = {
         id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
         type: 'offline',
-        magnet: magnet, magnetTitle: auto115Btih(magnet),
+        magnet: magnet, magnetTitle: auto115OfflineTitle(magnet),
         steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
       };
       doc.tasks.unshift(t);
