@@ -1751,9 +1751,17 @@ function renderMediaThumb(type, url){
       img = document.createElement('img');
       col.insertBefore(img, col.firstChild);
     }
+    img.onload = function(){
+      // 显示容器比例跟随裁剪/上传图的实际比例，避免固定比例 + object-fit:cover 二次裁切造成「框里和结果不一致」
+      if (type === 'poster' || type === 'fanart'){
+        var r = img.naturalHeight > 0 ? (img.naturalWidth / img.naturalHeight) : 0;
+        if (r > 0) col.style.aspectRatio = String(r);
+      }
+    };
     img.src = url;
     if (bar) bar.style.display = '';
   } else {
+    col.style.aspectRatio = '';   // 还原，恢复 class 固定比例
     if (img) col.removeChild(img);
     if (!ph){
       ph = document.createElement('div');
@@ -2795,22 +2803,26 @@ function clampCropTransform(){
 }
 function applyCrop(){
   var img = document.getElementById('cropImg');
-  var t = img._crop || { x:0, y:0, scale:1, minScale:1 };
-  var box = getCropBoxSize();
-  var stage = document.getElementById('cropStage');
-  var st = stage.getBoundingClientRect();
-  var boxCx = st.width / 2, boxCy = st.height / 2;       // 裁剪框在 stage 内的中心
-  var imgCx = boxCx + t.x, imgCy = boxCy + t.y;           // 图片中心（以 stage 中心为原点）
-  var sx = 1 / t.scale;                                   // 自然像素 → 显示像素 比例
-  var cropLeft = (boxCx - box.w/2 - (imgCx - img.naturalWidth * t.scale / 2)) * sx;
-  var cropTop  = (boxCy - box.h/2 - (imgCy - img.naturalHeight * t.scale / 2)) * sx;
+  var box = document.getElementById('cropBox');
+  if (!img || !box || !img.naturalWidth) return;
+  // 直接读取真实 DOM 矩形：裁剪框在图片可视区域内的部分即导出区域（所见即所得）
+  // 不再依赖「裁剪框居中于 stage」的公式假设，任何布局/比例下都与屏幕显示一致
+  var imgRect = img.getBoundingClientRect();
+  var boxRect = box.getBoundingClientRect();
+  if (!imgRect.width || !imgRect.height) return;
+  var sx = img.naturalWidth / imgRect.width;   // 自然像素 / 视觉像素（modal 缩放两端抵消）
+  var sy = img.naturalHeight / imgRect.height;
+  var cropLeft = (boxRect.left - imgRect.left) * sx;
+  var cropTop  = (boxRect.top - imgRect.top) * sy;
+  var srcW = boxRect.width * sx;
+  var srcH = boxRect.height * sy;
   var canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(box.w * sx));
-  canvas.height = Math.max(1, Math.round(box.h * sx));
+  canvas.width = Math.max(1, Math.round(srcW));
+  canvas.height = Math.max(1, Math.round(srcH));
   var ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, cropLeft, cropTop, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, cropLeft, cropTop, srcW, srcH, 0, 0, canvas.width, canvas.height);
   var out = canvas.toDataURL('image/jpeg', 0.92);
   if (cropType === 'person'){
     state.personPhoto = out;
