@@ -12,7 +12,7 @@
 <meta name="color-scheme" content="light dark" data-page-node-id="jErD6Cqs5fcGpZCZFDZMjC">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzAwN0FGRiIvPjxwYXRoIGQ9Ik0xMiAxMGwxMCA2LTEwIDZ6IiBmaWxsPSIjZmZmIi8+PC9zdmc+" data-page-node-id="YEPH7RjM30f9lDAmrM7Exz">
 <title>NFO 编辑器</title>
-  <link rel="stylesheet" href="./styles/pc.css?v=327" data-page-node-id="McivyXH0xfpFASamTE8Ha4">
+  <link rel="stylesheet" href="./styles/pc.css?v=328" data-page-node-id="McivyXH0xfpFASamTE8Ha4">
   <script>
   /* 首屏同步应用主题色，避免刷新瞬间默认蓝 → 主题色的闪烁 (FOUC)。
      主题色权威值存于 IndexedDB（异步），这里仅用 localStorage 镜像做首屏兜底。 */
@@ -42,7 +42,7 @@
           <div class="app-brand-logo" data-page-node-id="aKJoiDIsifJD15ysLrv6eH">
             <svg viewBox="0 0 24 24" fill="currentColor" data-page-node-id="3Tx54U8Kq510JFdgHjBLHz"><path d="M8 5v14l11-7z" data-page-node-id="LnSp793lcG6vZWuLW3e21s"/></svg>
           </div>
-          <span class="app-brand-name" data-page-node-id="r0qOK4QXpjViSq5yomys8z">NFO<span class="app-brand-ver">v2.0.327</span></span>
+          <span class="app-brand-name" data-page-node-id="r0qOK4QXpjViSq5yomys8z">NFO<span class="app-brand-ver">v2.0.328</span></span>
         </div>
         <div class="spacer" data-page-node-id="TESTRTIkGUEw5DETYMrGqL"></div>
         <button class="hidden-badge" id="hiddenBadge" onclick="closeThemeHidden()" title="里模式已开启，点击关闭" data-page-node-id="2u0pJi9zWjdRaE1i9kKZoz">18+</button>
@@ -812,10 +812,15 @@
 <div class="modal modal-wide modal-tall" id="cropModal" data-page-node-id="BCYQcRgSGfqXaZZAIk4CvH">
   <div class="modal-head" data-page-node-id="aPFAVzS6iG4oBa0S6B4r9v">
     <h3 data-page-node-id="mFVhK4BVh3ZANM0silkF2A">裁剪图片</h3>
-    <div class="seg hidden" id="cropRatios" data-page-node-id="I0QTJaBfWfhKKTZ76KpUzU">
-      <button type="button" data-ratio="16:9" onclick="setFanartRatio('16:9', this)" data-page-node-id="phSAk5MWeEfEdIj6wKsFVM">16:9</button>
-      <button type="button" data-ratio="3:2" onclick="setFanartRatio('3:2', this)" data-page-node-id="9lXMrFa5BGUFoSpQCG7UjJ">3:2</button>
-      <button type="button" data-ratio="4:3" onclick="setFanartRatio('4:3', this)" data-page-node-id="CAzbLwoswl9u5IbZEsVpBc">4:3</button>
+    <div class="seg hidden" id="posterRatios" data-page-node-id="PcPosterRatiosSeg">
+      <button type="button" data-ratio="3:4" onclick="setPosterRatio('3:4', this)" data-page-node-id="PcPoster34">3:4</button>
+      <button type="button" data-ratio="2:3" onclick="setPosterRatio('2:3', this)" data-page-node-id="PcPoster23">2:3</button>
+      <button type="button" data-ratio="0.618:1" onclick="setPosterRatio('0.618:1', this)" data-page-node-id="PcPoster0618">0.618:1</button>
+    </div>
+    <div class="seg hidden" id="fanartRatios" data-page-node-id="PcFanartRatiosSeg">
+      <button type="button" data-ratio="16:9" onclick="setFanartRatio('16:9', this)" data-page-node-id="PcFanart169">16:9</button>
+      <button type="button" data-ratio="4:3" onclick="setFanartRatio('4:3', this)" data-page-node-id="PcFanart43">4:3</button>
+      <button type="button" data-ratio="3:2" onclick="setFanartRatio('3:2', this)" data-page-node-id="PcFanart32">3:2</button>
     </div>
     <button class="modal-close" onclick="closeCrop()" aria-label="关闭" data-page-node-id="haWtHFfiUNmhalDZa4yBOn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" data-page-node-id="abMm2hcgfaGjPucuxDMc6l"><path d="M18 6 6 18M6 6l12 12" data-page-node-id="rt1XcltvRZ08x0GBDSL7em"/></svg>
@@ -1083,11 +1088,11 @@
 
 <!-- ==================== Toast ==================== -->
 <div class="toasts" id="toasts" data-page-node-id="TD9n03wFqRdZX4PS2qQlOt"></div>
-  <script src="./src/core-shared.js?v=327"></script>
-  <script src="./src/auto115-core.js?v=327"></script>
-  <script src="./src/core.js?v=327"></script>
-  <script src="./src/ui.js?v=327"></script>
-  <script src="./src/auto115.js?v=327"></script>
-  <script src="./src/main.js?v=327"></script>
+  <script src="./src/core-shared.js?v=328"></script>
+  <script src="./src/auto115-core.js?v=328"></script>
+  <script src="./src/core.js?v=328"></script>
+  <script src="./src/ui.js?v=328"></script>
+  <script src="./src/auto115.js?v=328"></script>
+  <script src="./src/main.js?v=328"></script>
 </body>
 </html>

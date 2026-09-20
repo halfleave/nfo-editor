@@ -2659,27 +2659,51 @@ function initPreviewMouse(){
 /* ===================================================================
    裁剪（滚轮缩放 / 拖拽 / 双击复位）
    =================================================================== */
+var cropType = null, cropRatio = 0, cropOriginals = {}, posterRatio = 2/3, fanartRatio = 16/9;
 function openCrop(type){
   var url = cropOriginals[type] || state[type];
   if (!url) return;
   cropType = type;
-  cropRatio = (type === 'fanart') ? fanartRatio : 0;
-  var ratios = document.getElementById('cropRatios');
-  if (ratios) ratios.style.display = (type === 'fanart') ? '' : 'none';
+  var posterSeg = document.getElementById('posterRatios');
+  var fanartSeg = document.getElementById('fanartRatios');
+  // 注意：.hidden 带 !important，必须用 classList 切换，style.display 盖不住
+  if (posterSeg) posterSeg.classList.toggle('hidden', type !== 'poster');
+  if (fanartSeg) fanartSeg.classList.toggle('hidden', type !== 'fanart');
+  if (type === 'poster'){
+    cropRatio = posterRatio;
+    markCropRatioActive(posterSeg, posterRatio);
+  } else if (type === 'fanart'){
+    cropRatio = fanartRatio;
+    markCropRatioActive(fanartSeg, fanartRatio);
+  } else {
+    cropRatio = (type === 'person') ? 1 : 0;
+  }
   var img = document.getElementById('cropImg');
   img.onload = function(){ resetCropTransform(); };
   img.src = url;
   openSheet('cropModal');
 }
 function setFanartRatio(r, btn){
-  fanartRatio = (r === '16:9') ? 16 / 9 : (r === '3:2') ? 3 / 2 : (r === '4:3') ? 4 / 3 : 0;
+  fanartRatio = (r === '16:9') ? 16 / 9 : (r === '4:3') ? 4 / 3 : (r === '3:2') ? 3 / 2 : 0;
   cropRatio = fanartRatio;
-  var seg = document.getElementById('cropRatios');
-  if (seg){
-    var bs = seg.querySelectorAll('button');
-    for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('active', bs[i].getAttribute('data-ratio') === r);
-  }
+  markCropRatioActive(btn && btn.parentNode, fanartRatio);
   resetCropTransform();
+}
+function setPosterRatio(r, btn){
+  posterRatio = (r === '3:4') ? 3 / 4 : (r === '2:3') ? 2 / 3 : 0.618;
+  cropRatio = posterRatio;
+  markCropRatioActive(btn && btn.parentNode, posterRatio);
+  resetCropTransform();
+}
+function markCropRatioActive(seg, val){
+  if (!seg) return;
+  var bs = seg.querySelectorAll('button');
+  for (var i = 0; i < bs.length; i++){
+    var r = bs[i].getAttribute('data-ratio');
+    var v = (r === '3:4') ? 3/4 : (r === '2:3') ? 2/3 : (r === '0.618:1') ? 0.618
+            : (r === '16:9') ? 16/9 : (r === '4:3') ? 4/3 : (r === '3:2') ? 3/2 : 0;
+    bs[i].classList.toggle('active', Math.abs(v - val) < 0.001);
+  }
 }
 function closeCrop(){
   var m = document.getElementById('cropModal');
@@ -2722,6 +2746,82 @@ function initCropMouse(){
   });
   document.addEventListener('mouseup', function(){ dragging = false; });
   stage.addEventListener('dblclick', function(){ resetCropTransform(); });
+}
+
+/* 裁剪框尺寸：按 stage 留边后，按 cropRatio 约束（无比例则铺满） */
+function getCropBoxSize(){
+  var stage = document.getElementById('cropStage');
+  var st = stage.getBoundingClientRect();
+  var sw = st.width - 32, sh = st.height - 32; // 留边距
+  var boxW, boxH;
+  if (cropRatio){
+    if (sw / sh > cropRatio){ boxH = sh; boxW = sh * cropRatio; }
+    else { boxW = sw; boxH = sw / cropRatio; }
+  } else { boxW = sw; boxH = sh; }
+  return { w: Math.max(40, boxW), h: Math.max(40, boxH), cx: st.width/2, cy: st.height/2 };
+}
+function resetCropTransform(){
+  var img = document.getElementById('cropImg');
+  var box = getCropBoxSize();
+  var viewport = document.getElementById('cropViewport');
+  viewport.style.width = box.w + 'px';
+  viewport.style.height = box.h + 'px';
+  var nw = img.naturalWidth || box.w, nh = img.naturalHeight || box.h;
+  var scale = Math.max(box.w / nw, box.h / nh);
+  if (!isFinite(scale) || scale <= 0) scale = 1;
+  img._crop = { x: 0, y: 0, scale: scale, minScale: scale };
+  applyCropTransform();
+  clampCropTransform();
+  applyCropTransform();
+}
+function applyCropTransform(){
+  var img = document.getElementById('cropImg');
+  var t = img._crop || { x:0, y:0, scale:1 };
+  img.style.transform = 'translate(calc(-50% + ' + t.x + 'px), calc(-50% + ' + t.y + 'px)) scale(' + t.scale + ')';
+}
+function clampCropTransform(){
+  var img = document.getElementById('cropImg');
+  var t = img._crop; if (!t) return;
+  var box = getCropBoxSize();
+  var nw = img.naturalWidth, nh = img.naturalHeight;
+  var scaledW = nw * t.scale, scaledH = nh * t.scale;
+  t.scale = Math.max(t.minScale, t.scale);   // 不能小于初始铺满值
+  t.scale = Math.min(t.scale, 4);            // 最大放大 4 倍
+  scaledW = nw * t.scale; scaledH = nh * t.scale;
+  var halfBoxW = box.w / 2, halfBoxH = box.h / 2;
+  var halfImgW = scaledW / 2, halfImgH = scaledH / 2;
+  t.x = Math.min(halfImgW - halfBoxW, Math.max(halfBoxW - halfImgW, t.x));
+  t.y = Math.min(halfImgH - halfBoxH, Math.max(halfBoxH - halfImgH, t.y));
+}
+function applyCrop(){
+  var img = document.getElementById('cropImg');
+  var t = img._crop || { x:0, y:0, scale:1, minScale:1 };
+  var box = getCropBoxSize();
+  var stage = document.getElementById('cropStage');
+  var st = stage.getBoundingClientRect();
+  var boxCx = st.width / 2, boxCy = st.height / 2;       // 裁剪框在 stage 内的中心
+  var imgCx = boxCx + t.x, imgCy = boxCy + t.y;           // 图片中心（以 stage 中心为原点）
+  var sx = 1 / t.scale;                                   // 自然像素 → 显示像素 比例
+  var cropLeft = (boxCx - box.w/2 - (imgCx - img.naturalWidth * t.scale / 2)) * sx;
+  var cropTop  = (boxCy - box.h/2 - (imgCy - img.naturalHeight * t.scale / 2)) * sx;
+  var canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(box.w * sx));
+  canvas.height = Math.max(1, Math.round(box.h * sx));
+  var ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, cropLeft, cropTop, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  var out = canvas.toDataURL('image/jpeg', 0.92);
+  if (cropType === 'person'){
+    state.personPhoto = out;
+    var preview = document.getElementById('personAvatarPreview');
+    if (preview){ preview.style.backgroundImage = 'url(' + out + ')'; preview.classList.add('has-photo'); }
+  } else {
+    state[cropType] = out;
+    renderMediaThumb(cropType, out);
+  }
+  updateState();
+  closeCrop();
 }
 
 /* ===================================================================
