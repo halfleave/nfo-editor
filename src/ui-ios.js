@@ -2067,10 +2067,10 @@ var AUTO115_STEPS_UPLOAD = Auto115Core.STEPS_UPLOAD;
 /* 步骤表按任务类型取；旧任务没有 type 一律按 offline 处理（兼容存量数据） */
 var AUTO115_STEP_TABLE = Auto115Core.STEP_TABLE;
 function auto115TaskType(t){ return Auto115Core.taskType(t); }
-/* 当前是剧集任务吗？优先以 doc.type 为准（任务本身不存 type，读的是当前影片详情） */
-function auto115IsTvTask(){ return !!(auto115Doc && auto115Doc.type === 'tv'); }
-function auto115StepDefs(t){
-  if (auto115IsTvTask()) return AUTO115_STEPS_TV;
+/* 当前是剧集任务吗？可传文档（执行绑定用）；不传读当前打开影片 */
+function auto115IsTvTask(doc){ return !!(((doc != null ? doc : auto115Doc) || {}).type === 'tv'); }
+function auto115StepDefs(t, doc){
+  if (auto115IsTvTask(doc != null ? doc : auto115TaskDoc(t))) return AUTO115_STEPS_TV;
   return AUTO115_STEP_TABLE[auto115TaskType(t)] || AUTO115_STEP_DEFS;
 }
 /* 任务卡标题：上传任务没有磁力名，统一显示「上传 NFO」 */
@@ -2081,6 +2081,8 @@ function auto115TaskTitle(t){
   return (t && (t.magnetTitle || auto115OfflineTitle(t && t.magnet))) || '磁力任务';
 }
 var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
+var auto115ExecDoc = null;      /* 执行绑定（v327）：正在执行的任务所属影片的文档。执行中途切到别的影片，
+                                   执行器仍读写这个文档——影片身份、进度保存都不会串到别人身上 */
 var auto115ProbeTimer = null;
 var auto115Expanded = {};          // 已展开的任务卡 id 集合（支持多个同时展开）
 
@@ -2103,6 +2105,9 @@ function auto115EnsureDoc(){
   // 番号只认显式字段；不再用 originaltitle 做兜底：否则像 "Madrid, 1987" 这种带年份的英文名会被误判为番号，导致普通影片被收进文件夹。
   var dvdId = (d.dvdId || d.content_id || '').toString().trim();
   var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
+  /* v327：这部片已有执行绑定文档（正在跑/跑过）→ 直接复用同一对象，保证执行器手里的任务引用
+     不被「新建文档 + 库合并」换成反序列化副本（换了引用，进度就会写到孤儿对象上） */
+  if (auto115ExecDoc && auto115ExecDoc.filmId === film.id && auto115Doc !== auto115ExecDoc) auto115Doc = auto115ExecDoc;
   if (!auto115Doc){
     auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, originalTitle: d.originaltitle || '', year: year, type: isTv ? 'tv' : 'movie', tasks: [] };
   } else {
@@ -2171,18 +2176,42 @@ function auto115RefreshDerived(){
   }
 }
 /* 单影片存放形态：AV / 已传 NFO → 文件夹；其余普通影片 → 平铺云下载根目录（纯逻辑在 Auto115Core.movieLayout） */
-function auto115MovieLayout(){ return Auto115Core.movieLayout(auto115Doc || {}); }
+function auto115MovieLayout(doc){ return Auto115Core.movieLayout(doc || auto115Doc || {}); }
 /* 合并任务列表：单点实现在 Auto115Core.mergeTasks（内存任务保持原引用，只补库里有、内存没有的）。 */
 function auto115MergeTasks(memTasks, savedTasks){ return Auto115Core.mergeTasks(memTasks, savedTasks); }
-function auto115Save(){
-  if (!auto115Doc) return Promise.resolve();
-  return idbPut('kv', auto115Key(auto115Doc.filmId), auto115Doc).catch(function(){});
+function auto115Save(doc){
+  var d = doc || auto115Doc;
+  if (!d) return Promise.resolve();
+  return idbPut('kv', auto115Key(d.filmId), d).catch(function(){});
 }
 function auto115Task(id){
-  if (!auto115Doc) return null;
-  var ts = auto115Doc.tasks || [];
+  var ts = (auto115Doc && auto115Doc.tasks) || [];
   for (var i = 0; i < ts.length; i++) if (ts[i].id === id) return ts[i];
+  /* 当前文档里没有 → 再找执行绑定文档（跑到一半切了影片时，任务在执行文档里） */
+  if (auto115ExecDoc && auto115ExecDoc !== auto115Doc){
+    ts = auto115ExecDoc.tasks || [];
+    for (var j = 0; j < ts.length; j++) if (ts[j].id === id) return ts[j];
+  }
   return null;
+}
+/* 任务归属的文档：优先引用比对（任务对象只会在一个文档的 tasks 数组里）；
+   引用失联（被反序列化副本替换）时由 auto115Run 按 filmId 归位。 */
+function auto115DocOf(t){
+  if (!t) return auto115Doc;
+  if (auto115ExecDoc && (auto115ExecDoc.tasks || []).indexOf(t) >= 0) return auto115ExecDoc;
+  if (auto115Doc && (auto115Doc.tasks || []).indexOf(t) >= 0) return auto115Doc;
+  return null;
+}
+/* 执行器读影片身份：按任务实时解析归属文档（引用比对 → filmId 比对 → 当前文档）。
+   不用全局「执行绑定」判断身份——绑定文档在探测等待期不会解除，会劫持别的影片的身份读取 */
+function auto115TaskDoc(t){
+  var d = auto115DocOf(t);
+  if (d) return d;
+  if (t && t.filmId){
+    if (auto115ExecDoc && auto115ExecDoc.filmId === t.filmId) return auto115ExecDoc;
+    if (auto115Doc && auto115Doc.filmId === t.filmId) return auto115Doc;
+  }
+  return auto115Doc;
 }
 function auto115GetStep(t, key){ return Auto115Core.getStep(t, key); }
 function auto115Set(t, key, state, msg){
@@ -2190,14 +2219,25 @@ function auto115Set(t, key, state, msg){
   s.state = state; s.msg = msg || '';
   if (state !== 'idle' && state !== 'running') s.at = auto115Now();
   else if (!s.at) s.at = auto115Now();
-  renderAuto115(); auto115Save();
+  renderAuto115(); auto115Save(auto115DocOf(t) || auto115Doc);   /* 进度写回任务归属的文档（防串到别的影片） */
   return s;
 }
-function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115Save(); updateAutoBadge(); auto115AdvanceQueue(t); }
+function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115Save(auto115DocOf(t) || auto115Doc); updateAutoBadge(); auto115AdvanceQueue(t); if (auto115ExecDocIdle()) auto115ExecDoc = null; }
+/* 执行绑定文档里还有在跑/排队的任务吗？都没有就解除绑定，避免旧文档被后台续跑 */
+function auto115ExecDocIdle(){
+  if (!auto115ExecDoc) return true;
+  var ts = auto115ExecDoc.tasks || [];
+  for (var i = 0; i < ts.length; i++){
+    var x = ts[i];
+    if (!x || x.aborted) continue;
+    if (x.queued || auto115IsActive(x)) return false;
+  }
+  return true;
+}
 
 /* —— 大状态合成（纯逻辑在 Auto115Core.status，isTv 由当前影片详情判定） —— */
 function auto115StepLabel(key){ return Auto115Core.stepLabel(key); }
-function auto115Status(t){ return Auto115Core.status(t, auto115IsTvTask()); }
+function auto115Status(t, doc){ return Auto115Core.status(t, auto115IsTvTask(doc)); }
 /* 任务是否真的在跑：只要有任一步骤处于 running 就算活跃（waiting/ok/idle/skip 都不算） */
 function auto115IsActive(t){ return Auto115Core.isActive(t); }
 /* —— 页面渲染 —— */
@@ -2433,21 +2473,27 @@ function auto115Submitted(t){
   return !!(t && t.infoHash && auto115GetStep(t, 'submit').state === 'ok');
 }
 function auto115SweepZombies(){
-  var ts = (auto115Doc && auto115Doc.tasks) || [];
+  var docs = [];
+  if (auto115Doc) docs.push(auto115Doc);
+  if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) docs.push(auto115ExecDoc);   /* 执行绑定的文档也要扫（人可能在别的影片页） */
   var now = Date.now(), changed = false;
-  for (var i = 0; i < ts.length; i++){
-    var t = ts[i];
-    if (!t || t.aborted) continue;
-    var steps = t.steps || [];
-    for (var j = 0; j < steps.length; j++){
-      var s = steps[j];
-      if (Auto115Core.isZombieStep(s, now)){
-        s.state = 'fail'; s.msg = '这一步长时间没响应，点「重试」继续';
-        changed = true;
+  for (var di = 0; di < docs.length; di++){
+    var dts = docs[di].tasks || [], docChanged = false;
+    for (var i = 0; i < dts.length; i++){
+      var t = dts[i];
+      if (!t || t.aborted) continue;
+      var steps = t.steps || [];
+      for (var j = 0; j < steps.length; j++){
+        var s = steps[j];
+        if (Auto115Core.isZombieStep(s, now)){
+          s.state = 'fail'; s.msg = '这一步长时间没响应，点「重试」继续';
+          changed = true; docChanged = true;
+        }
       }
     }
+    if (docChanged) auto115Save(docs[di]);
   }
-  if (changed){ auto115Save(); renderAuto115(); updateAutoBadge(); }
+  if (changed){ renderAuto115(); updateAutoBadge(); }
   return changed;
 }
 function auto115HoldLock(t){ auto115RunningId = t.id; auto115LockAt = Date.now(); }
@@ -2460,17 +2506,22 @@ function auto115ClearDirtyLock(){
   var cur = auto115Task(auto115RunningId);
   if (!cur || cur.aborted){ auto115ReleaseLock(); return; }
   if (auto115IsActive(cur)) return;
-  var st = auto115Status(cur);
+  var st = auto115Status(cur, auto115DocOf(cur));
   if (st.cls === 'ab-ok' || st.cls === 'ab-fail'){ auto115ReleaseLock(); return; }
   if (Date.now() - auto115LockAt > AUTO115_LOCK_GRACE) auto115ReleaseLock();
 }
 /* 自愈：没有任何任务在跑时，把最早一条「待开始」（待提交/排队中）的任务拉起来，避免永远停摆 */
 function auto115KickStuck(){
-  if (!auto115Doc) return;
+  /* v327：先看执行绑定文档（人在别的影片页时，那边的排队任务也要能接上），再看当前打开的 */
+  if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) auto115KickStuckIn(auto115ExecDoc);
+  if (auto115Doc) auto115KickStuckIn(auto115Doc);
+}
+function auto115KickStuckIn(doc){
+  if (!doc) return;
   auto115SweepZombies();                       // 先清僵尸（可能把占锁任务的 running 步骤判死）
   if (auto115RunningId) auto115ClearDirtyLock(); // 僵尸清完后锁往往就变脏了，这里顺带释放
   if (auto115RunningId) return;
-  var ts = auto115Doc.tasks || [];
+  var ts = doc.tasks || [];
   /* 真有任务在执行（任一步骤 running）就不抢，避免两条流水线并发导致定位/改名串档 */
   for (var k = 0; k < ts.length; k++) if (auto115IsActive(ts[k])) return;
   /* 先接排队的，再救卡在待提交的 */
@@ -2481,7 +2532,7 @@ function auto115KickStuck(){
   if (!target){
     for (var j = ts.length - 1; j >= 0; j--){
       var x = ts[j];
-      if (x && !x.aborted && auto115Status(x).cls === 'ab-idle'){ target = x; break; }
+      if (x && !x.aborted && auto115Status(x, doc).cls === 'ab-idle'){ target = x; break; }
     }
   }
   if (!target) return;
@@ -2490,13 +2541,14 @@ function auto115KickStuck(){
 }
 /* 步骤分发单点：key → 对应执行函数。「启动流水线」与「重试某步」共用，避免两处分发不一致 */
 function auto115DispatchStep(t, key){
+  var isTv = auto115IsTvTask(auto115TaskDoc(t));   /* 执行绑定文档的剧集属性，不受「当前打开哪部片」影响 */
   if (key === 'dir') return auto115StepUploadDir(t);
   if (key === 'upload') return auto115StepUploadFiles(t);
   if (key === 'submit') return auto115StepSubmit(t);
   if (key === 'wait') return auto115StepWait(t, true);
   if (key === 'mkdir') return t.tidy ? auto115StepTidyMkdir(t) : auto115StepMkdir(t);
-  if (key === 'move') return auto115IsTvTask() ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
-  if (key === 'rename') return auto115IsTvTask() ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
+  if (key === 'move') return isTv ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
+  if (key === 'rename') return isTv ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
   if (key === 'cleanup') return auto115StepCleanup(t);
   /* TV 专属步骤 */
   if (key === 'mkdir2') return auto115StepTvMkdirSeasons(t);
@@ -2511,11 +2563,31 @@ function auto115StartKey(t){
 }
 function auto115Run(t){
   if (!t) return Promise.resolve(null);
-  /* 引用兜底：doc 被重新加载过（任务被换成反序列化副本）时，换回 doc 里当前那条；
-     若 doc 里已经没有它，就把它收编回来。否则进度会写进孤儿对象，界面永远显示「待提交」。 */
-  var live = auto115Task(t.id);
-  if (live) t = live;
-  else if (auto115Doc && auto115Doc.tasks && t.id) auto115Doc.tasks.unshift(t);
+  /* v327 引用兜底（防串档核心）：先把任务归属的文档找对，再在归属文档里按 id 换回活引用。
+     此前只认「当前打开影片」的文档——任务跑到一半切到别的影片，任务会被错误收编进别人的文档，
+     后续定位/改名全用错影片身份（影片 A 的文件夹被改成影片 B 的名字）。 */
+  var doc = auto115DocOf(t);
+  if (!doc && t.filmId){
+    if (auto115ExecDoc && auto115ExecDoc.filmId === t.filmId) doc = auto115ExecDoc;
+    else if (auto115Doc && auto115Doc.filmId === t.filmId) doc = auto115Doc;
+  }
+  if (doc){
+    var live = null, dts = doc.tasks || [];
+    for (var di = 0; di < dts.length; di++){ if (dts[di] && dts[di].id === t.id){ live = dts[di]; break; } }
+    if (live) t = live; else { dts.unshift(t); doc.tasks = dts; }
+    auto115ExecDoc = doc;   /* 执行绑定：后续所有身份读取/保存都走这个文档，切走页面也不串 */
+  } else if (!t.filmId && auto115Doc){
+    /* 老任务没 filmId：先按 id 在当前文档里找活引用（落库重载后手里是旧引用的场景），
+       找不到才收编进去；只在「就是当前这部片」的常规场景成立 */
+    var live0 = null, dts0 = auto115Doc.tasks || [];
+    for (var di0 = 0; di0 < dts0.length; di0++){ if (dts0[di0] && dts0[di0].id === t.id){ live0 = dts0[di0]; break; } }
+    if (live0) t = live0; else auto115Doc.tasks.unshift(t);
+    auto115ExecDoc = auto115Doc;
+  } else {
+    /* 归属不明（带 filmId 但对不上任何文档）→ 宁可不跑也不冒串档风险 */
+    showToast('这个任务已和所属影片失去关联，请回到该影片重新操作', 'error');
+    return Promise.resolve(null);
+  }
   /* 清理脏的 runningId：指向的任务已终态/已删除/已中止/占着锁却没在跑 → 释放队列 */
   auto115ClearDirtyLock();
   /* 本任务已经在跑（通常是自愈抢跑先起了流水线）→ 直接收手，不再开第二条，
@@ -2692,9 +2764,9 @@ function auto115StepMkdir(t){
 /* ===== 115 离线辅助：主视频筛选 / 影片命名 / 批量改名 ===== */
 function auto115Norm(s){ return Auto115Core.norm(s); }
 function auto115PartBase(name){ return Auto115Core.partBase(name); }
-function auto115MovieVideoName(videoName){
+function auto115MovieVideoName(videoName, doc){
   /* 原文件名带清晰度标识（1080p/2160p/4k…）→ 追加在年份后面：标题.原始标题.年份.1080p */
-  return Auto115Core.movieVideoName(auto115Doc, videoName ? Auto115Core.qualityTag(videoName) : '');
+  return Auto115Core.movieVideoName(doc || auto115Doc, videoName ? Auto115Core.qualityTag(videoName) : '');
 }
 /* 外部磁力任务：目标名称判定（番号 vs 标题） */
 function auto115LooksDvd(s){ return Auto115Core.looksDvd(s); }
@@ -2779,7 +2851,7 @@ function auto115StepTvCleanupFiles(t){
   auto115Set(t, 'move', 'running', '正在识别并清除无关文件…');
   if (!t.offlineDirCid && !t.noFolder){ auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
   return auto115StepTvGetItems(t).then(function(items){
-    var plan = auto115TvPlan(auto115Doc.filmTitle, items);
+    var plan = auto115TvPlan((auto115TaskDoc(t) || {}).filmTitle, items);
     if (!plan.renames.length){ auto115Set(t, 'move', 'fail', '没有可识别的视频文件，点「重试」'); auto115Finish(t); return null; }
     t.tvPlan = plan;
     var delIds = plan.deleteFids.filter(Boolean);
@@ -2814,7 +2886,7 @@ function auto115StepTvMkdirSeasons(t){
   var seasonNums = Object.keys(seasons).sort();
   if (!seasonNums.length){ auto115Set(t, 'mkdir2', 'fail', '未能识别季号'); auto115Finish(t); return Promise.resolve(null); }
   var need = auto115TvNeedSeasonSplit(plan);
-  var flatName = t.finalDirName || auto115TvDirName(auto115Doc.filmTitle);
+  var flatName = t.finalDirName || auto115TvDirName((auto115TaskDoc(t) || {}).filmTitle);
   if (!need.split){
     /* 不分季：文件统一放在剧集根文件夹（命名仍带 SxxExx），跳过建季文件夹 */
     t.tvFlat = true;
@@ -2829,7 +2901,7 @@ function auto115StepTvMkdirSeasons(t){
     /* 并入同名剧集夹（cleanup 阶段发现）或单文件剧集：季文件夹建在已确定的剧集根内 */
     parentPromise = Promise.resolve(t.tvRootCid);
   } else if (t.noFolder){
-    parentPromise = auto115EnsureTvRoot(auto115Doc.filmTitle).then(function(cid){ if (!cid) throw new Error('创建剧集根文件夹失败'); t.tvRootCid = cid; return cid; });
+    parentPromise = auto115EnsureTvRoot((auto115TaskDoc(t) || {}).filmTitle).then(function(cid){ if (!cid) throw new Error('创建剧集根文件夹失败'); t.tvRootCid = cid; return cid; });
   } else {
     if (!t.offlineDirCid){ parentPromise = Promise.reject(new Error('父文件夹没定位到')); }
     else { parentPromise = Promise.resolve(t.offlineDirCid); }
@@ -2905,7 +2977,7 @@ function auto115StepTvMoveVideos(t){
   auto115Set(t, 'move2', 'running', '正在整理文件位置…');
   var plan = t.tvPlan, map = t.tvSeasonMap;
   if (!plan){ auto115Set(t, 'move2', 'fail', '缺少整理计划'); auto115Finish(t); return Promise.resolve(null); }
-  var flatName = t.finalDirName || auto115TvDirName(auto115Doc.filmTitle);
+  var flatName = t.finalDirName || auto115TvDirName((auto115TaskDoc(t) || {}).filmTitle);
   /* 不分季模式：文件统一平铺到剧集根文件夹（命名仍带 SxxExx）。
      注意文件可能嵌在根下的子文件夹里（v271 穿透扫描后种子套层很常见），
      所以**不能因为「目标=当前夹」就跳过**——照常发起移动，planMoveJobs 会把
@@ -3020,8 +3092,9 @@ function auto115StepMove(t){
     var pool = mainCands.length ? mainCands : vids;
     // 强信号优先：番号（AV）走归一化子串（番号独特性强）；标题/原始标题（影片）走整词边界匹配（v262 修 V2），
     // 「赌神2.1080p」不再命中「赌神」——标题后面紧跟数字/字母视为续集，不算本片。
-    var normDvd = auto115Norm(auto115Doc.dvdId);
-    var titleList = [auto115Doc.filmTitle, auto115Doc.originalTitle].filter(Boolean);
+    var normDvd = auto115Norm((auto115TaskDoc(t) || {}).dvdId);
+    var _ctx0 = auto115TaskDoc(t) || {};
+    var titleList = [_ctx0.filmTitle, _ctx0.originalTitle].filter(Boolean);
     function strongHit(it){
       var nm = it.n || it.name || '';
       if (normDvd && auto115Norm(nm).indexOf(normDvd) >= 0) return true;
@@ -3175,7 +3248,7 @@ function auto115DeleteBatch(parentCid, ids){
 /* 并入目标：同影片下已有「完成态且有最终文件夹」的任务——多磁力同一部片 → 并入同一文件夹。
    返回 { cid, name }；并入过的任务（finalDirCid）优先用最终文件夹，而非已删除的临时文件夹 */
 function auto115FindMergeTarget(t){
-  var ts = (auto115Doc && auto115Doc.tasks) || [];
+  var ts = (auto115TaskDoc(t) && auto115TaskDoc(t).tasks) || [];
   for (var i = 0; i < ts.length; i++){
     var p = ts[i];
     if (!p || p.id === t.id) continue;
@@ -3195,15 +3268,16 @@ function auto115EnsureFilmFolder(name){
   });
 }
 /* 在云下载根目录里找出属于本片的散装视频：优先用之前任务记下的 fid，否则按标题相似度挑一个 */
-function auto115FindFlatVideo(){
-  var titles = auto115TidyTitles(auto115Doc);
+function auto115FindFlatVideo(doc){
+  var D = doc || auto115Doc;
+  var titles = auto115TidyTitles(D);
   if (!titles.length) return Promise.resolve('');
-  if (auto115Doc && auto115Doc.flatVideoFid) return Promise.resolve(String(auto115Doc.flatVideoFid));
+  if (D && D.flatVideoFid) return Promise.resolve(String(D.flatVideoFid));
   return auto115ListDir(C115_DEFAULT_DIR_CID).then(function(list){
     var vids = (list || []).filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
     var best = '', bs = 0;
     for (var i = 0; i < vids.length; i++){
-      var s = Auto115Core.tidyScore(vids[i].n || vids[i].name || '', titles, auto115Doc && auto115Doc.year);
+      var s = Auto115Core.tidyScore(vids[i].n || vids[i].name || '', titles, D && D.year);
       if (s > bs){ bs = s; best = String(vids[i].fid); }
     }
     return (best && bs >= Auto115Core.TIDY_ACCEPT) ? best : '';
@@ -3215,12 +3289,13 @@ function auto115PullFlatVideo(t){
   if (t._pulled) return Promise.resolve(false);
   if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) return Promise.resolve(false);
   t._pulled = true;
-  return auto115FindFlatVideo().then(function(vfid){
+  return auto115FindFlatVideo(auto115TaskDoc(t)).then(function(vfid){
     if (!vfid) return false;
     return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(vfid) + '&pid=' + encodeURIComponent(t.offlineDirCid)).then(function(res){
       var d = res.d || {};
       if (!(res.ok && (d.state === true || d.errno === 0))) return false;
-      if (auto115Doc){ auto115Doc.flatVideoFid = ''; auto115Doc.flatVideoName = ''; }
+      var D = auto115TaskDoc(t);
+      if (D){ D.flatVideoFid = ''; D.flatVideoName = ''; }
       auto115Set(t, 'move', 'running', '已把云下载里的视频收进文件夹');
       return true;
     });
@@ -3237,24 +3312,25 @@ function auto115SecondVersionJob(t){
   if (!sv || !sv.fid) return null;
   var e = (/\.[a-z0-9]+$/i.exec(sv.name) || ['.mp4'])[0];
   var sq = Auto115Core.qualityTag(sv.name);
-  if (auto115Doc && auto115Doc.dvdId){
-    return { fid: sv.fid, name: auto115Doc.dvdId + (sq ? ('.' + sq) : '') + e, orig: sv.name, size: sv.size || 0 };
+  var D = auto115TaskDoc(t);
+  if (D && D.dvdId){
+    return { fid: sv.fid, name: D.dvdId + (sq ? ('.' + sq) : '') + e, orig: sv.name, size: sv.size || 0 };
   }
-  return { fid: sv.fid, name: auto115MovieVideoName(sv.name) + e, orig: sv.name, size: sv.size || 0 };
+  return { fid: sv.fid, name: auto115MovieVideoName(sv.name, auto115TaskDoc(t)) + e, orig: sv.name, size: sv.size || 0 };
 }
 /* 步骤5：视频改名。
    有番号（AV）→ 番号.ext（多 part → 番号.cd1.ext / 番号.cd2.ext）
    无番号（影片）→ 标题.原始标题.年份.ext（无年份/无原始标题 → 仅标题；标题=原始标题 → 标题.年份）
    多 part 全部改名并保留；并入模式先移入已有文件夹再按占用加 .A/.B 后缀。 */
 function auto115StepRename(t){
-  if (auto115IsTvTask()) return auto115StepTvRenameVideos(t);
+  if (auto115IsTvTask(auto115TaskDoc(t))) return auto115StepTvRenameVideos(t);
   /* 平铺普通影片：不进文件夹，改好名直接放云下载根目录 */
-  if (!t.external && !auto115MovieLayout().folder) return auto115StepRenameFlat(t);
+  if (!t.external && !auto115MovieLayout(auto115TaskDoc(t)).folder) return auto115StepRenameFlat(t);
   if (t.external){
     if (!t.targetName){ auto115Set(t, 'rename', 'skip', '未填目标名称，保留 115 原始文件名'); auto115Finish(t); return Promise.resolve(null); }
   }
   var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
-  var baseName = t.external ? auto115ExternalBaseName(t) : (auto115Doc.dvdId ? auto115Doc.dvdId : auto115MovieVideoName(t.videoName));
+  var baseName = t.external ? auto115ExternalBaseName(t) : ((auto115TaskDoc(t) || {}).dvdId ? auto115TaskDoc(t).dvdId : auto115MovieVideoName(t.videoName, auto115TaskDoc(t)));
   if (!baseName){ auto115Set(t, 'rename', 'fail', '缺少名称信息，没法自动改名'); auto115Finish(t); return Promise.resolve(null); }
   var keep = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [t.videoFid] : []);
   if (!keep.length){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
@@ -3343,7 +3419,7 @@ function auto115StepRename(t){
    离线落地的临时文件夹在视频移出后随即删掉。命名规则与文件夹内一致（番号 / 标题.原名.年份）。 */
 function auto115StepRenameFlat(t){
   var ext = (/\.[a-z0-9]+$/i.exec(t.videoName || '') || ['.mp4'])[0];
-  var baseName = auto115MovieVideoName(t.videoName);
+  var baseName = auto115MovieVideoName(t.videoName, auto115TaskDoc(t));
   if (!baseName){ auto115Set(t, 'rename', 'fail', '缺少名称信息，没法自动改名'); auto115Finish(t); return Promise.resolve(null); }
   var keep = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [t.videoFid] : []);
   if (!keep.length){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
@@ -3433,10 +3509,10 @@ function auto115StepRenameFlat(t){
 function auto115StepCleanup(t){
   if (auto115IsTvTask()){
     /* 剧集流程第 4 步（方案 B）：先把容器改成剧集标题；改完调 TvCleanupFiles（第 5 步） */
-    var showTitle = auto115TvDirName(auto115Doc.filmTitle);
+    var showTitle = auto115TvDirName((auto115TaskDoc(t) || {}).filmTitle);
     if (t.noFolder){
       /* 单文件剧集：离线没有落地文件夹，在这里把剧集根目录建好（后续建季/移入都用它） */
-      return auto115EnsureTvRoot(auto115Doc.filmTitle).then(function(cid){
+      return auto115EnsureTvRoot((auto115TaskDoc(t) || {}).filmTitle).then(function(cid){
         if (!cid){ auto115Set(t, 'cleanup', 'fail', '创建剧集根文件夹失败'); auto115Finish(t); return null; }
         t.tvRootCid = cid; t.finalDirCid = cid; t.finalDirName = showTitle;
         auto115Set(t, 'cleanup', 'ok', '剧集根目录「' + showTitle + '」就绪');
@@ -3488,7 +3564,7 @@ function auto115StepCleanup(t){
   if (t.noFolder){
     /* 散装视频（直接落在云下载根目录）+ 这部片需要文件夹（AV / 已传 NFO）→ 先把文件夹准备好，
        后面 rename 会把视频移进去（典型场景：先上传 NFO 建好了文件夹，影片后到） */
-    var dirName = lay.name || (auto115Doc && auto115Doc.filmTitle) || '';
+    var dirName = lay.name || (auto115TaskDoc(t) && auto115TaskDoc(t).filmTitle) || '';
     dirName = dirName ? sanitizeName(dirName) : '';   // 与上传/改名同规则：非法字符 → _（/ 不净化）
     if (!t.external && lay.folder && dirName){
       auto115Set(t, 'cleanup', 'running', '正在准备文件夹「' + dirName + '」…');
@@ -3520,7 +3596,7 @@ function auto115StepCleanup(t){
   } else {
     /* 文件夹命名：始终只取影片标题；统一走 sanitizeName（非法字符 → _，/ 不净化），
        与「上传 NFO」的 auto115UploadDirName 同一规则——否则整理改名带 /、上传找 _ 名，两边对不上 */
-    var rawName = ((auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || t.offlineDirName || '').trim();
+    var rawName = ((auto115TaskDoc(t) && (auto115TaskDoc(t).filmTitle || auto115TaskDoc(t).dvdId)) || t.offlineDirName || '').trim();
     newName = rawName ? sanitizeName(rawName) : '';
   }
   if (!newName){ auto115Set(t, 'cleanup', 'fail', '缺少名称信息，没法改名'); auto115Finish(t); return Promise.resolve(null); }
@@ -4225,8 +4301,9 @@ function c115UploadFile(cid, fileName, bytes, mime){
 /* ===== 上传任务（type=upload）：独立于离线，随时可传 =====
    文件夹：统一用影片标题，且只在云下载目录里操作——先找同名文件夹，没有才创建。
    文件名：沿用番号优先（番号.nfo / 番号-poster.jpg），与 NFO 命名惯例一致。 */
-function auto115UploadDirName(){
-  return sanitizeName((auto115Doc && auto115Doc.filmTitle) || '') || '';
+function auto115UploadDirName(doc){
+  var D = doc || auto115Doc;
+  return sanitizeName((D && D.filmTitle) || '') || '';
 }
 /* 在云下载目录下建文件夹，返回新目录 cid */
 function auto115Mkdir(name){
@@ -4242,15 +4319,16 @@ function auto115Mkdir(name){
 /* 上传 NFO 之后：普通影片本来平铺在云下载根目录，现在有了文件夹，把对应的视频也移进去 */
 function auto115MoveFlatVideoInto(t){
   if (!t.uploadDirCid) return Promise.resolve(false);
-  if (auto115MovieLayout().folder) return Promise.resolve(false);   // AV / 之前传过 NFO：本来就在文件夹里，不用动
-  return auto115FindFlatVideo().then(function(vfid){
+  if (auto115MovieLayout(auto115TaskDoc(t)).folder) return Promise.resolve(false);   // AV / 之前传过 NFO：本来就在文件夹里，不用动
+  return auto115FindFlatVideo(auto115TaskDoc(t)).then(function(vfid){
     if (!vfid) return false;
     return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(vfid) + '&pid=' + encodeURIComponent(t.uploadDirCid)).then(function(res){
       var d = res.d || {};
       if (!(res.ok && (d.state === true || d.errno === 0))) return false;
       /* 视频已进文件夹 → 清掉平铺记录，以后整理按「有文件夹」处理 */
-      if (auto115Doc){ auto115Doc.flatVideoFid = ''; auto115Doc.flatVideoName = ''; }
-      var ts = (auto115Doc && auto115Doc.tasks) || [];
+      var D = auto115TaskDoc(t);
+      if (D){ D.flatVideoFid = ''; D.flatVideoName = ''; }
+      var ts = (D && D.tasks) || [];
       for (var i = 0; i < ts.length; i++){
         if (ts[i] && String(ts[i].flatVideoFid) === String(vfid)){ delete ts[i].flatVideoFid; delete ts[i].flatVideoName; }
       }
@@ -4260,7 +4338,7 @@ function auto115MoveFlatVideoInto(t){
 }
 /* 步骤1：准备文件夹（按标题查找 → 没有则创建） */
 function auto115StepUploadDir(t){
-  var name = auto115UploadDirName();
+  var name = auto115UploadDirName(auto115TaskDoc(t));
   if (!name){
     auto115Set(t, 'dir', 'fail', '这部影片没有标题，不知道传到哪儿');
     auto115Finish(t); return Promise.resolve(null);
@@ -4304,13 +4382,14 @@ function auto115StepUploadFiles(t){
   }
   auto115Set(t, 'upload', 'running', '正在准备文件…');
   renderAuto115();
-  return loadFilm(auto115Doc.filmId).then(function(film){
+  return loadFilm((auto115TaskDoc(t) || {}).filmId).then(function(film){
     if (!film) throw new Error('没找到影片信息');
     var d = film.data || {};
     // 字幕标记兜底：老版本保存的影片可能漏标 hasSubtitle（当时磁力扫描失败就丢了）；
     // 上传前用持久化的磁力列表再判一次，保证「首页有字幕角标 / 磁力带字幕 → NFO 一定带 <subtitles> 标签」
     if (!d.hasSubtitle && (d.javbusMagnets || []).some(isSubtitledMagnet)) d.hasSubtitle = true;
-    var base = auto115Doc.dvdId || sanitizeName(auto115Doc.filmTitle || '') || 'movie';
+    var _upDoc = auto115TaskDoc(t) || {};
+    var base = _upDoc.dvdId || sanitizeName(_upDoc.filmTitle || '') || 'movie';
     var files = [{ name: nfoEntryName(d, base), mime: 'application/octet-stream', bytes: new TextEncoder().encode(buildFilmXml(d)) }];
     // 海报/剧照：带字幕时先烘焙「字幕」角标再上传（与「下载元数据」zip 同款处理，不污染原图数据）
     var bakeJobs = [];
@@ -4340,7 +4419,8 @@ function auto115StepUploadFiles(t){
         /* 这部片原本平铺在云下载（普通影片默认形态）→ 现在有了文件夹，把视频也移进去 */
         return auto115MoveFlatVideoInto(t).then(function(moved){
           var msg = '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」' + (moved ? '，视频也移进去了' : '');
-          if (auto115Doc) auto115Doc.nfoUploaded = auto115Now();
+          var _upDoc2 = auto115TaskDoc(t);
+          if (_upDoc2) _upDoc2.nfoUploaded = auto115Now();
           auto115Set(t, 'upload', 'ok', msg);
           auto115Finish(t);
           showToast(msg, 'success');
@@ -4364,7 +4444,8 @@ function auto115AddUploadTask(){
     }
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
-      type: 'upload', steps: auto115NewSteps('upload'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
+      type: 'upload', steps: auto115NewSteps('upload'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+      filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
     };
     ts.unshift(t); doc.tasks = ts;
     auto115Expanded[t.id] = true;
@@ -4380,17 +4461,20 @@ function auto115ProbeDelay(doneProbes){ return Auto115Core.probeDelay(doneProbes
 function auto115ScheduleProbe(t){
   stopAuto115Probe();
   var delay = AUTO115_PROBE_GAPS[0];
+  function waitRunning(doc){ return ((doc && doc.tasks) || []).filter(function(x){ return auto115GetStep(x, 'wait').state === 'running'; }); }
   if (t){
     delay = auto115ProbeDelay(auto115GetStep(t, 'wait').probes);
   } else {
-    /* 群体调度（Resume/无具体任务）：取所有进行中任务下一次探测的最早时刻 */
-    var pend = (auto115Doc && auto115Doc.tasks || []).filter(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
+    /* 群体调度（Resume/无具体任务）：取所有进行中任务下一次探测的最早时刻。
+       v327：执行绑定文档里在等待的任务也算（人可能正开在别的影片页） */
+    var pend = waitRunning(auto115Doc);
+    if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) pend = pend.concat(waitRunning(auto115ExecDoc));
     for (var i = 0; i < pend.length; i++) delay = Math.min(delay, auto115ProbeDelay(auto115GetStep(pend[i], 'wait').probes));
   }
   auto115ProbeTimer = setTimeout(function(){
     auto115ProbeTimer = null;
-    if (!auto115Doc) return;
-    var pending = (auto115Doc.tasks || []).filter(function(x){ return auto115GetStep(x, 'wait').state === 'running'; });
+    var pending = waitRunning(auto115Doc);
+    if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) pending = pending.concat(waitRunning(auto115ExecDoc));
     if (!pending.length) return;
     ensure115Cookie().then(function(ck){
       if (!ck) return;
@@ -4423,7 +4507,8 @@ function auto115AddFromOp(){
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
       magnet: magnet, magnetTitle: title || auto115OfflineTitle(magnet),
-      steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
+      steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+      filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
     };
     doc.tasks.unshift(t);
     auto115Expanded[t.id] = true;
@@ -4534,7 +4619,8 @@ function auto115AddMagnetTask(){
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
       type: 'offline',
       magnet: magnet, magnetTitle: auto115OfflineTitle(magnet),
-      steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
+      steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+      filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
     };
     doc.tasks.unshift(t);
     auto115Expanded[t.id] = true;
@@ -4710,7 +4796,8 @@ function auto115StartTidy(dir){
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
       type: 'tidy', tidy: true,
-      steps: auto115NewSteps('offline'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION
+      steps: auto115NewSteps('offline'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+      filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
     };
     /* 整理任务复用离线任务那张步骤表，但前两步（提交/等待）不走，标记为跳过 */
     auto115Set(t, 'submit', 'skip', '已有文件，跳过离线下载');
@@ -5885,6 +5972,7 @@ function loadFilm(id){ return idbGet('kv', NfoCore.filmKey(id)); }
 function deleteFilm(id){
   /* 影片删除时一并清除其 115 自动化记录：否则记录会残留成孤儿（任务列表/已完成项仍能点开、上传 NFO 指向已删影片） */
   if (auto115Doc && auto115Doc.filmId === id){ auto115Doc = null; auto115ReleaseLock(); }
+  if (auto115ExecDoc && auto115ExecDoc.filmId === id) auto115ExecDoc = null;
   return Promise.all([
     idbDelete('kv', NfoCore.filmKey(id)),
     idbDelete('kv', auto115Key(id)).catch(function(){}) // 无自动化记录时忽略

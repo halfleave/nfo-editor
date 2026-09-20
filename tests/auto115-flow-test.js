@@ -971,6 +971,32 @@ const lz4LiteralForTest = (bytes) => {
   assert(mvSp2.some(b => b.indexOf('pid=S01NEW') >= 0) && mvSp2.some(b => b.indexOf('pid=S02NEW') >= 0), '视频分别移入 S01 / S02');
   ctx.Auto115Core.SPLIT_MIN_EPISODES = 100;
 
+  // 9o. 防串档回归（v327）：任务跑到一半切到别的影片，身份读取按任务归属解析——
+  //     影片 A 的离线临时夹必须用 A 的标题改名，绝不能改成影片 B 的名字
+  ctx.currentDetailFilm = { id: 'filmA', data: { title: 'A片标题', dvdId: 'AAA-001' } };
+  ctx.auto115Doc = null; ctx.auto115ExecDoc = null;
+  const docA = await ctx.auto115EnsureDoc();
+  const tA = { id: 'tA', magnet: 'magnet:?xt=urn:btih:aaa1111111111111111111111111111111111111', magnetTitle: 'A片标题', steps: ctx.auto115NewSteps(), createdAt: Date.now(), offlineDirCid: 'DIRA', offlineDirName: '离线临时夹A', fv: 2, filmId: 'filmA' };
+  ['submit', 'wait', 'mkdir'].forEach(k => { ctx.auto115GetStep(tA, k).state = 'ok'; });
+  docA.tasks.unshift(tA);
+  ctx.auto115ExecDoc = docA;               // 模拟：A 的任务正在执行（执行绑定在 A）
+  ctx.currentDetailFilm = { id: 'filmB', data: { title: 'B片标题', dvdId: 'BBB-001' } };
+  ctx.auto115Doc = null;
+  await ctx.auto115EnsureDoc();            // 用户此刻打开影片 B
+  script = {
+    'files/edit': { state: true },
+    'files?cid=DIRA': { state: true, data: [] },
+    'files/move': { state: true },
+    'rb/delete': { state: true }
+  };
+  calls.length = 0;
+  await ctx.auto115StepCleanup(tA);        // A 的任务继续收尾（改夹名）
+  const editA = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editA.some(b => b.indexOf('file_name=A片标题') >= 0), '防串档：A 的文件夹用 A 的标题改名（人在 B 页也不串）');
+  assert(!editA.some(b => b.indexOf('B片标题') >= 0 || b.indexOf('BBB-001') >= 0), '防串档：全程没有用到 B 片的身份');
+  ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
+  ctx.auto115Doc = null; ctx.auto115ExecDoc = null;
+
   /* 10. 文件整理任务（tidy）：云下载里已有文件 → 跳过离线两步，从定位文件夹开始跑改名整理 */
   script = {
     'files?cid=3311283881428122938': { state: true, data: [
@@ -984,7 +1010,7 @@ const lz4LiteralForTest = (bytes) => {
     'rb/delete': { state: true }
   };
   const docT = await ctx.auto115EnsureDoc();
-  docT.dvdId = ''; docT.filmTitle = '整理测试片'; docT.originalTitle = ''; docT.year = '2020'; docT.type = 'movie';
+  docT.dvdId = ''; docT.filmTitle = '整理测试片'; docT.originalTitle = ''; docT.year = '2020'; docT.type = 'movie'; docT.nfoUploaded = false;   // 隔离：清掉上传用例残留的 nfoUploaded，否则会被判成「需建文件夹」
   docT.tasks.length = 0;   // 隔离：清掉前面用例留下的任务（否则「并入已有文件夹」逻辑会介入）
   const tt = { id: 'ttidy', type: 'tidy', tidy: true, steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   docT.tasks.unshift(tt);
@@ -1016,7 +1042,7 @@ const lz4LiteralForTest = (bytes) => {
     'files?cid=3311283881428122938': { state: true, data: [ { fid: 'V5', n: '赌神2.1080p.国粤双语.BD中字.mkv', s: 900 } ] },
     'files/edit': { state: true }, 'rb/delete': { state: true }
   };
-  docT.filmTitle = '赌神2'; docT.originalTitle = ''; docT.year = '';
+  docT.filmTitle = '赌神2'; docT.originalTitle = ''; docT.year = ''; docT.nfoUploaded = false;   // 散装视频：清掉上传用例残留的 nfoUploaded
   const tt4 = { id: 'ttidy4', type: 'tidy', tidy: true, steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   docT.tasks.length = 0; docT.tasks.unshift(tt4);
   await ctx.auto115StepTidyMkdir(tt4);
@@ -1038,6 +1064,7 @@ const lz4LiteralForTest = (bytes) => {
   ttAv.offlineDirCid = 'DIRT1'; ttAv.offlineDirName = '整理测试片.2020.1080p.BluRay';
   docT.tasks.length = 0; docT.tasks.unshift(ttAv);
   await ctx.auto115Run(ttAv);
+  docT.nfoUploaded = false;   // 下面的普通影片/散装用例需要「不需文件夹」分支，清掉 10b AV 残留
   assert(ctx.auto115GetStep(ttAv, 'cleanup').state === 'ok' && ctx.auto115GetStep(ttAv, 'cleanup').msg.indexOf('整理测试片') >= 0, 'AV 整理仍改夹名：' + ctx.auto115GetStep(ttAv, 'cleanup').msg);
   assert(ctx.auto115GetStep(ttAv, 'rename').msg.indexOf('ABC-123.mkv') >= 0, 'AV 整理视频按番号命名：' + ctx.auto115GetStep(ttAv, 'rename').msg);
   assert(!calls.some(c => c.url.indexOf('files/move') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=V2') >= 0), 'AV 整理 → 视频留在文件夹里，不移出');
