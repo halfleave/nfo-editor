@@ -1346,6 +1346,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tr-trailer-tag.show { opacity: 1; transform: scale(1); }
 .tr-trailer-tag svg { width: 11px; height: 11px; display: block; }
 .tmdb-msg { padding: 16px 4px; color: var(--label-2); font-size: 14px; text-align: center; }
+/* 人物搜索结果：圆形头像 + 返回栏（仅手机端 v329+） */
+.tmdb-result.tr-person img, .tmdb-result.tr-person .tr-ph-round { width: 62px; height: 62px; border-radius: 50%; }
+.tmdb-back { padding: 11px 4px; margin-bottom: 6px; font-size: 14px; font-weight: 600; color: var(--accent); cursor: pointer; border-bottom: 0.5px solid var(--sep); }
+.tmdb-back:active { opacity: .6; }
 
 /* ===== 磁力搜索结果 ===== */
 .magnet-result { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 0.5px solid var(--sep); }

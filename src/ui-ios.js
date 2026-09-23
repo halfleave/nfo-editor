@@ -6079,7 +6079,7 @@ function searchTMDB(){
     // TMDB 成人内容：里模式解锁后包含，否则不包含
     var adult = state.themeHidden ? 'true' : 'false';
     var mt = state.tmdbMediaType;
-    var path = mt === 'tv' ? '/search/tv' : '/search/movie';
+    var path = mt === 'tv' ? '/search/tv' : (mt === 'person' ? '/search/person' : '/search/movie');
     var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
     NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
       .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
@@ -6131,12 +6131,15 @@ function updateSearchPlaceholder(){
   var el = document.getElementById('tmdbQuery');
   if (!el) return;
   if (state.metaSource === 'jav') updateJavPlaceholder();
+  else if (state.tmdbMediaType === 'person') el.placeholder = '输入演员 / 导演姓名';
   else el.placeholder = '泰坦尼克号';
 }
 /* TMDB 搜索的电影/剧集切换：复用 flip-type 翻转动画样式，仅在 metaSource==='tmdb' 时显示 */
-function tmdbTypeLabel(mt){ return mt === 'tv' ? '剧集' : '电影'; }
+function tmdbTypeLabel(mt){ return mt === 'tv' ? '剧集' : (mt === 'person' ? '人物' : '电影'); }
 function cycleTmdbType(){
-  var next = state.tmdbMediaType === 'tv' ? 'movie' : 'tv';
+  var order = ['movie','tv','person'];
+  var idx = order.indexOf(state.tmdbMediaType); if (idx < 0) idx = 0;
+  var next = order[(idx + 1) % 3];
   var btn = document.getElementById('tmdbTypeBtn');
   if (!btn) return;
   var curEl = btn.querySelector('.flip-type-layer.is-current');
@@ -6146,6 +6149,7 @@ function cycleTmdbType(){
   requestAnimationFrame(function(){ btn.classList.add('animating'); });
   setTimeout(function(){
     state.tmdbMediaType = next;
+    updateSearchPlaceholder();
     btn.classList.add('no-transition');
     curEl.textContent = tmdbTypeLabel(next);
     btn.classList.remove('animating');
@@ -6614,6 +6618,71 @@ function renderTMDBResults(results){
   box.innerHTML = html;
   // A+B+C：限并发拉取每个结果的预告信息，按 tmdb id 缓存到 IndexedDB，列表先渲染后懒加载点亮角标
   fetchTrailersForResults(results.slice(0, 20), mt);
+}
+/* ===== TMDB 人物搜索（仅手机端 v329+）：搜人物 → 反查参演作品 → 点作品直接保存影片 ===== */
+var _tmdbPersonPrevHtml = '';
+var _tmdbPersonName = '';
+function renderTMDBPersonResults(results){
+  var box = document.getElementById('tmdbResults');
+  if (!results.length){ box.innerHTML = '<div class="tmdb-msg">未找到匹配人物</div>'; return; }
+  var html = '';
+  results.slice(0, 20).forEach(function(p){
+    var name = p.name || p.original_name || '';
+    var dept = p.known_for_department || '';
+    var deptZh = ({ Acting:'演员', Directing:'导演', Production:'制片', Writing:'编剧', Sound:'音效', Cinematography:'摄影', Editing:'剪辑', Art:'美术', Costume:'服装', MakeUp:'化妆', VisualEffects:'视效' })[dept] || dept;
+    var avatar = p.profile_path ? tmdbImgUrl(p.profile_path, 'w185') : '';
+    var knownFor = (p.known_for || []).map(function(k){ return k.title || k.name || ''; }).filter(Boolean).slice(0, 3).join('、');
+    html += '<div class="tmdb-result tr-person" data-person-id="' + p.id + '" onclick="openPersonCredits(' + p.id + ',\'' + escapeAttr(name) + '\')">';
+    html += avatar ? '<img src="' + avatar + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph tr-ph-round"></div>';
+    html += '<div class="tr-info">';
+    html += '<div class="tr-title">' + escapeHtml(name) + '</div>';
+    if (deptZh || knownFor) html += '<div class="tr-meta">' + escapeHtml(deptZh) + (knownFor ? (' · 代表作：' + escapeHtml(knownFor)) : '') + '</div>';
+    html += '</div></div>';
+  });
+  box.innerHTML = html;
+}
+function personCreditsBackBar(){
+  return '<div class="tmdb-back" onclick="backToPersonList()">← 返回人物' + (_tmdbPersonName ? ('：' + escapeHtml(_tmdbPersonName)) : '') + '</div>';
+}
+function openPersonCredits(personId, personName){
+  var box = document.getElementById('tmdbResults');
+  _tmdbPersonPrevHtml = box.innerHTML;
+  _tmdbPersonName = personName || '';
+  box.innerHTML = personCreditsBackBar() + tmdbLoadingHtml();
+  startLoadingRotator(box, tmdbLoadingHtml);
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
+    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
+    NfoCore.tmdbRequest('/person/' + personId + '/movie_credits', { language: 'zh-CN' }, opts)
+      .then(function(data){
+        var cast = (data && data.cast) || [];
+        renderPersonCredits(cast);
+      })
+      .catch(function(err){ box.innerHTML = personCreditsBackBar() + '<div class="tmdb-msg">获取作品失败：' + escapeHtml((err && err.message) || '请求失败') + '</div>'; })
+      .finally(function(){ stopLoadingRotator(); });
+  }).catch(function(){ stopLoadingRotator(); });
+}
+function renderPersonCredits(cast){
+  var box = document.getElementById('tmdbResults');
+  if (!cast.length){ box.innerHTML = personCreditsBackBar() + '<div class="tmdb-msg">该人物暂无参演作品记录</div>'; return; }
+  var html = personCreditsBackBar();
+  cast.slice(0, 30).forEach(function(item){
+    var name = item.title || item.name || '';
+    var date = item.release_date || item.first_air_date || '';
+    var poster = item.poster_path ? tmdbImgUrl(item.poster_path, 'w154') : '';
+    var mt = item.media_type === 'tv' ? 'tv' : 'movie';
+    html += '<div class="tmdb-result" data-tmdb-id="' + item.id + '" data-tmdb-type="' + mt + '" data-poster-path="' + escapeAttr(item.poster_path || '') + '" onclick="selectTMDB(' + item.id + ')">';
+    html += poster ? '<img src="' + poster + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
+    html += '<div class="tr-info">';
+    html += '<div class="tr-title">' + escapeHtml(name) + (mt === 'tv' ? '<span class="adult-tag">剧集</span>' : '') + '</div>';
+    if (date) html += '<div class="tr-meta">' + escapeHtml(date) + '</div>';
+    html += '</div></div>';
+  });
+  box.innerHTML = html;
+}
+function backToPersonList(){
+  var box = document.getElementById('tmdbResults');
+  box.innerHTML = _tmdbPersonPrevHtml || '';
 }
 function selectTMDB(id){
   // 从搜索结果卡片读取已展示的 poster_path（属性已转义），保存时直接复用已加载封面
