@@ -6082,7 +6082,11 @@ function searchTMDB(){
     var path = mt === 'tv' ? '/search/tv' : (mt === 'person' ? '/search/person' : '/search/movie');
     var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
     NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
-      .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
+      .then(function(data){
+        var list = data && data.results ? data.results : [];
+        if (state.tmdbMediaType === 'person') renderTMDBPersonResults(list);
+        else renderTMDBResults(list);
+      })
       .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; }).finally(function(){ stopLoadingRotator(); });
   }).catch(function(){ stopLoadingRotator(); });
 }
