@@ -1200,6 +1200,20 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.Auto115Core.getStep(tbmP, 'wait').state === 'waiting', 'tbm 续探：3 次后转「等待中」');
   vm.runInContext('auto115LibraryDoc = null; auto115Doc = null; auto115ExecDoc = null; auto115RunningId = "";', ctx);
 
+  /* —— v335 整理定位读任务自身身份：auto115Doc 指向别的影片时，tbm 整理任务仍应按 targetName 命中，而非被全局 auto115Doc 带偏 —— */
+  vm.runInContext('auto115LibraryDoc = { filmId:"tbm-library", filmTitle:"磁力库", type:"library", tasks:[] }; auto115Doc = { filmId:"filmX", filmTitle:"OtherFilm", dvdId:"", originalTitle:"", year:"", type:"movie", tasks:[] }; auto115ExecDoc = null; auto115RunningId = "";', ctx);
+  // 默认目录下放两个夹：一个与「全局 auto115Doc」同名(OtherFilm)，一个与「任务 targetName」同名(MatchMe)
+  const _locPrevScript = script;
+  script = Object.assign({}, script, { 'cid=3311283881428122938': { data: [ { n: 'OtherFilm', cid: '22' }, { n: 'MatchMe', cid: '11' } ] } });
+  const tbmLoc = { id: 'tbmLoc', tbm: true, type: 'tbm', tidy: true, tbmType: 'movie', targetName: 'MatchMe', external: true, magnet: 'magnet:?xt=urn:btih:LOCATEHASH99', magnetTitle: 'MatchMe', infoHash: 'LOCATEHASH99', steps: ctx.auto115NewSteps('tidy'), createdAt: 1, fv: 2, filmId: 'tbm-library' };
+  ctx.__tbmLoc = tbmLoc;
+  vm.runInContext('auto115LibraryDoc.tasks.push(__tbmLoc);', ctx);
+  delete ctx.__tbmLoc;
+  await ctx.auto115StepTidyMkdir(tbmLoc);
+  script = _locPrevScript;   // 还原 mock，避免污染后续用例
+  assert(tbmLoc.offlineDirName === 'MatchMe' && tbmLoc.offlineDirCid === '11', 'tbm 整理定位按 targetName(MatchMe) 命中，不被全局 auto115Doc(OtherFilm) 带偏（v335 修复点）');
+  vm.runInContext('auto115LibraryDoc = null; auto115Doc = null; auto115ExecDoc = null; auto115RunningId = "";', ctx);
+
   /* —— v334 中断重启恢复回归：页面关闭后重开，孤儿 running 步骤（定时器已随关闭丢失）应被重置并自动续跑 —— */
   vm.runInContext('auto115LibraryDoc = null; auto115Doc = null; auto115ExecDoc = null; auto115RunningId = "";', ctx);
   const rec = { id: 'rec1', magnet: 'magnet:?xt=urn:btih:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC', magnetTitle: '恢复任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };

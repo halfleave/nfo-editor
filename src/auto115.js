@@ -1203,6 +1203,26 @@
     var plan = t.tvPlan, map = t.tvSeasonMap;
     if (!plan){ auto115Set(t, 'move2', 'fail', '缺少整理计划'); auto115Finish(t); return Promise.resolve(null); }
     var flatName = t.finalDirName || auto115TvDirName((auto115TaskDoc(t) || {}).filmTitle);
+    var rootCid = t.tvRootCid;
+    /* 未识别集号的视频：整条移入「未识别」文件夹，绝不臆造 SxxExx（对齐移动端 v336） */
+    var unrecPromise = Promise.resolve(null);
+    if (plan.unrecognized && plan.unrecognized.length && rootCid){
+      unrecPromise = auto115FindDir(rootCid, Auto115Core.UNRECOGNIZED_DIR).then(function (d) {
+        var uncid = d ? d.cid : null;
+        if (!uncid) return auto115Post('https://webapi.115.com/files/add', 'pid=' + encodeURIComponent(rootCid) + '&cname=' + encodeURIComponent(Auto115Core.UNRECOGNIZED_DIR)).then(function (res) {
+          var dd = res.d || {}, ddd = dd.data || {};
+          var cid = String(ddd.cid || ddd.file_id || ddd.id || dd.cid || res.cid || '');
+          if (!res.ok || !(dd.state === true || dd.errno === 0) || !cid) throw new Error('创建未识别文件夹失败');
+          return cid;
+        });
+        return uncid;
+      }).then(function (uncid) {
+        if (!uncid) return null;
+        var jobs = plan.unrecognized.map(function (u) { return { fid: u.fid, name: u.name, orig: u.orig || u.name, size: u.size }; });
+        return auto115MoveInto(t, jobs, uncid);
+      }).catch(function () { return null; });
+    }
+    return unrecPromise.then(function () {
     /* 不分季模式：文件统一平铺到剧集根文件夹（命名仍带 SxxExx）。
        注意文件可能嵌在根下的子文件夹里（穿透扫描后种子套层很常见），
        所以**不能因为「目标=当前夹」就跳过**——照常发起移动，planMoveJobs 会把
@@ -1271,6 +1291,7 @@
       }
       return Promise.resolve(null);
     }).catch(function (e) { auto115Set(t, 'move2', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+    });
   }
   /* 剧集平铺收尾：把「搬空了的子文件夹」删掉（如原有的 Outlander.S01–S05 老季夹——
      里面的视频已全部搬到剧集根）。只删**空夹**：里面还留着文件（遗留/认不出的）一律不动。 */
@@ -1330,6 +1351,34 @@
      清理步骤（对齐移动端 v262–v269）：保留主视频（多 part 全保留）、字幕、其他视频（合集保护），
      只删明确垃圾——重复副本、第三档以下清晰度、sample/预告类、非视频非字幕杂项、垃圾名子夹。
      绝不因为「没被选为主视频」就删视频文件：合集包里的另一部片（如「赌神 2部全」里的赌神2）删掉就是真丢片。 */
+  /* 单磁力电影：保留多条视频（合集/系列）时系列反查（v336，与移动端共用 planMovieNames）。
+     把多视频当「伪磁力」传入，命中系列部名则逐条按部名改名；否则不动（沿用默认 .cdN）。 */
+  function auto115FetchCollectionParts(collectionId) {
+    if (!collectionId) return Promise.resolve(null);
+    if (typeof NfoCore === 'undefined' || !NfoCore.tmdbRequest) return Promise.resolve(null);
+    return NfoCore.tmdbRequest('/collection/' + collectionId, { language: 'zh-CN' }, {}).then(function (d) {
+      if (!d || !d.parts) return null;
+      return (d.parts || []).map(function (p) { return { id: p.id, title: p.title, release_date: p.release_date }; });
+    }).catch(function () { return null; });
+  }
+  function auto115MoviePrepMultiParts(t, keep) {
+    var doc = auto115TaskDoc(t) || {};
+    if (!doc.collectionId || !keep || keep.length < 2) return Promise.resolve(null);
+    var ms = keep.map(function (it) { return { dirName: it.n || it.name || '', title: it.n || it.name || '' }; });
+    return auto115FetchCollectionParts(doc.collectionId).then(function (parts) {
+      if (!parts || !parts.length) return null;
+      Auto115Core.planMovieNames(ms, { filmTitle: doc.filmTitle, collectionId: doc.collectionId, parts: parts });
+      var nameMap = {}, extMap = {};
+      keep.forEach(function (it, i) {
+        var fid = String(it.fid);
+        var ext = (/\.[a-z0-9]+$/i.exec(it.n || it.name || '') || ['.mp4'])[0];
+        nameMap[fid] = ms[i].renameTo || doc.filmTitle;
+        extMap[fid] = ext;
+      });
+      t._keepPartNames = nameMap; t._keepExts = extMap;
+      return null;
+    });
+  }
   function auto115StepMove(t) {
     if (t.noFolder) { auto115Set(t, 'move', 'skip', '单文件落地，无需清理'); return auto115StepRename(t); }
     if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID) { auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
@@ -1457,12 +1506,12 @@
       t.keptOthers = keptOthers;
       var subCount = (t.subInfos || []).length;
       var keptMsg = keptVids ? ('，另保留 ' + keptVids + ' 个其他视频（可能是合集，未删除）') : '';
-      if (!delIds.length) { auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，无需清理'); return auto115StepRename(t); }
+      if (!delIds.length) { auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，无需清理'); return auto115MoviePrepMultiParts(t, keep).then(function () { return auto115StepRename(t); }); }
       auto115Set(t, 'move', 'running', '保留 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，正在删除其余 ' + delIds.length + ' 项…');
       return auto115DeleteBatch(t.offlineDirCid, delIds).then(function (errMsg) {
         if (errMsg) { auto115Set(t, 'move', 'fail', errMsg); auto115Finish(t); return null; }
         auto115Set(t, 'move', 'ok', '已清理 ' + delIds.length + ' 项，保留 ' + keep.length + ' 个视频（' + auto115Size(t.videoSize) + '）');
-        return auto115StepRename(t);
+        return auto115MoviePrepMultiParts(t, keep).then(function () { return auto115StepRename(t); });
       });
     }).catch(function (e) { auto115Set(t, 'move', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   }
@@ -1520,6 +1569,9 @@
     if (!baseName) { auto115Set(t, 'rename', 'fail', '缺少名称信息，没法自动改名'); auto115Finish(t); return Promise.resolve(null); }
     var keep = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [t.videoFid] : []);
     if (!keep.length) { auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
+    /* 单磁力电影多视频系列反查（v336）：命中系列部名的逐条按部名改名；用完即清，避免污染后续单次改名 */
+    var partNameMap = t._keepPartNames || null; t._keepPartNames = null;
+    var partExtMap = t._keepExts || null; t._keepExts = null;
     var multi = keep.length > 1;
     var prev = t.external ? null : (t.forcedMergeCid ? { cid: t.forcedMergeCid, name: t.finalDirName } : auto115FindMergeTarget(t));
     if (prev) {
@@ -1549,6 +1601,10 @@
           }
         }
         var jobs = keep.map(function (fid, i) {
+          if (partNameMap && partNameMap[fid]) {
+            var pe = (partExtMap && partExtMap[fid]) || ext;
+            return { fid: fid, name: partNameMap[fid] + pe, size: t.videoSize };
+          }
           var suffix = multi ? ('.cd' + (i + 1)) : '';
           var cand = baseName + suffix, k = 0;
           while (stems[cand.toLowerCase()] != null) {
@@ -1576,6 +1632,10 @@
       }).catch(function (e) { auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
     }
     var jobs = keep.map(function (fid, i) {
+      if (partNameMap && partNameMap[fid]) {
+        var pe = (partExtMap && partExtMap[fid]) || ext;
+        return { fid: fid, name: partNameMap[fid] + pe };
+      }
       var suffix = multi ? ('.cd' + (i + 1)) : '';
       return { fid: fid, name: baseName + suffix + ext };
     });

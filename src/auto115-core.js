@@ -64,6 +64,16 @@
     { key: 'submit', label: '提交离线' },
     { key: 'wait', label: '等待离线完成' }
   ];
+  /* 多磁力任务（v336）：每条磁力=一集/一部，folder-level 整理 6 步。
+     各步骤直接自链到下一个 *Multi 步骤函数；dispatch 仅用于首步与重试入口。 */
+  api.STEPS_MULTI = [
+    { key: 'submit',  label: '提交磁力' },
+    { key: 'wait',    label: '等待离线完成' },
+    { key: 'mkdir',   label: '定位文件夹' },
+    { key: 'cleanup', label: '清理' },
+    { key: 'move',    label: '移动' },
+    { key: 'rename',  label: '重命名' }
+  ];
 
   /* ---------- 任务模型纯函数 ---------- */
   function taskType(t){ if (!t) return 'offline'; if (t.type === 'upload') return 'upload'; if (t.type === 'tv') return 'tv'; if (t.type === 'tbm') return 'tbm'; return 'offline'; }
@@ -74,6 +84,7 @@
     if (type === 'tbm') table = api.STEPS_TBM;
     else if (type === 'upload') table = api.STEPS_UPLOAD;
     else if (type === 'tv') table = api.STEPS_TV;
+    else if (type === 'multi') table = api.STEPS_MULTI;
     else table = isTv ? api.STEPS_TV : api.STEP_DEFS;
     return table.map(function (s) { return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
   };
@@ -382,16 +393,12 @@
     var occupied = {};
     function take(s, e) { occupied[key(s, e)] = true; }
     function nextEp(s) { var e = 1; while (occupied[key(s, e)]) e++; take(s, e); return e; }
-    var vidPlan = [], vidPending = [];
+    var vidPlan = [], unrecognized = [];
     vids.forEach(function (it) {
       var ep = api.episodeOf(it.name);
       if (ep && ep.episode){ var s = ep.season || 1; if (!occupied[key(s, ep.episode)]){ take(s, ep.episode); vidPlan.push({ fid: it.fid, season: s, ep: ep.episode, orig: it.name, size: it.s || 0 }); return; } }
-      vidPending.push(it);
-    });
-    vidPending.forEach(function (it) {
-      var ep = api.episodeOf(it.name);
-      var s = (ep && ep.season) || 1;
-      vidPlan.push({ fid: it.fid, season: s, ep: nextEp(s), orig: it.name, size: it.s || 0 });
+      /* 认不出集号的视频：不臆造集号，整条保留原名，后续移入「未识别」文件夹（见 auto115StepTvMoveVideos / PC 对应步骤） */
+      unrecognized.push({ fid: it.fid, name: it.name, orig: it.name, size: it.s || 0 });
     });
     /* 字幕不做兜底：只有能从文件名里明确认出集号（S01E01 / 第1集 / 01.ass 等）才改名；
        认不出的保持原名不动、仍然保留（绝不进删除清单），避免误配到错误的集。 */
@@ -407,7 +414,8 @@
     vidPlan.forEach(function (p) { renames.push({ fid: p.fid, name: api.tvVideoName(showTitle, p.season, p.ep, api.ext(p.orig)), orig: p.orig, size: p.size }); });
     subPlan.forEach(function (p) { renames.push({ fid: p.fid, name: api.tvSubName(showTitle, p.season, p.ep, p.lang, api.ext(p.orig)), orig: p.orig, size: p.size }); });
     var deleteFids = junk.map(function (it) { return it.fid; }).filter(Boolean);
-    return { renames: renames, deleteFids: deleteFids };
+    /* unrecognized：未识别集号的视频，保持原名移入「未识别」文件夹，绝不臆造 SxxExx（iOS / PC 两端共用此逻辑） */
+    return { renames: renames, deleteFids: deleteFids, unrecognized: unrecognized };
   };
   /* 是否分季：只有一季 → 不分；多季但总集数不足 SPLIT_MIN_EPISODES → 不分；
      多季且总集数达到阈值 → 才建季文件夹。不分季时文件平铺在剧集根文件夹里，命名仍带 SxxExx。 */
@@ -425,6 +433,108 @@
       return { split: false, seasons: keys, videos: vids, reason: '共 ' + vids + ' 集（不足 ' + MIN + ' 集），无需分季' };
     }
     return { split: true, seasons: keys, videos: vids, reason: '共 ' + vids + ' 集，达到 ' + MIN + ' 集阈值' };
+  };
+
+  /* ---------- 多磁力任务流（v336）辅助 ---------- */
+  /* 集号识别别名：多磁力「每条磁力=一集/一部」场景下，从种子/文件夹名提取季集号。
+     直接复用单文件版 episodeOf（已支持 S01E05 / 第5集 / EP07 / 1x05 等），naming 单点一致。 */
+  api.detectEpisode = api.episodeOf;
+  /* 未识别文件夹名（剧集整理时认不出集号的视频/磁力整体搬入此夹） */
+  api.UNRECOGNIZED_DIR = '未识别';
+  /* 多磁力任务模型归一化：旧单磁力任务无 t.magnets，从 t.magnet/offlineName 等合成单元素数组，
+     新任务直接用 t.magnets。两端（iOS / PC）读磁力身份一律走它，避免散落各自取字段。 */
+  api.magnets = function (t) {
+    if (t && t.magnets && t.magnets.length) return t.magnets;
+    if (!t) return [];
+    return [{
+      magnet: t.magnet, title: t.magnetTitle, infoHash: t.infoHash,
+      offlineName: t.offlineName, dirCid: t.offlineDirCid, dirName: t.offlineDirName,
+      videoFid: t.videoFid, videoName: t.videoName, noFolder: t.noFolder,
+      state: t.infoHash ? 'submitted' : 'idle'
+    }];
+  };
+  api.isMultiMagnet = function (t) { return !!(t && t.magnets && t.magnets.length); };
+  /* 版本/清晰度后缀识别：从种子名提取 1080p / 4K / Remux / 导演剪辑版 等；识别不到返回 null。 */
+  api.VERSION_SUFFIXES = [
+    { re: /2160p|4k\b/i, s: '4K' },
+    { re: /1080p/i, s: '1080p' },
+    { re: /720p/i, s: '720p' },
+    { re: /480p/i, s: '480p' },
+    { re: /remux/i, s: 'Remux' },
+    { re: /blu[- ]?ray|bluray|bdrip/i, s: 'BluRay' },
+    { re: /web[- ]?dl|webrip|web\b/i, s: 'WEB' },
+    { re: /hdr/i, s: 'HDR' },
+    { re: /导演剪辑版|director'?s?\s*cut/i, s: '导演剪辑版' },
+    { re: /加长版|extended/i, s: '加长版' },
+    { re: /收藏版|ultimate\s*cut/i, s: '收藏版' },
+    { re: /重制版|remaster/i, s: '重制版' },
+    { re: /未删减|uncut/i, s: '未删减' },
+    { re: /(19|20)\d{2}/, s: function (m) { return m[0]; } }   // 年份也算一种版本标记
+  ];
+  api.detectVersionSuffix = function (name) {
+    name = String(name || '');
+    for (var i = 0; i < api.VERSION_SUFFIXES.length; i++) {
+      var r = api.VERSION_SUFFIXES[i];
+      var m = name.match(r.re);
+      if (m) return (typeof r.s === 'function') ? r.s(m) : r.s;
+    }
+    return null;
+  };
+  /* 系列反查匹配：把一条磁力对应到系列某部。parts = [{id, title, release_date, order}]（按序号升序）。
+     used 记录已占用部名，避免多条磁力对应到同一部。尽力而为，拿不准返回 null（由调用方回退后缀）。 */
+  api.matchCollectionPart = function (m, parts, used) {
+    if (!parts || !parts.length) return null;
+    var nm = String(m.dirName || m.title || m.offlineName || '').toLowerCase();
+    var usedMap = used || {};
+    /* ① 序号标记：2 / II / 第2部 / Part 2 / 2nd → 映射到 parts[序号-1] */
+    var om = nm.match(/(\d+)\s*(部|part|影|rd|nd|th)/i) || nm.match(/第\s*(\d+)\s*部/);
+    var roman = nm.match(/\b(ii|iii|iv|v|vi|vii|viii|ix|x)\b/);
+    var ordNum = null;
+    if (om && /\d/.test(om[0])) ordNum = parseInt(om[1], 10);
+    else if (roman){ ordNum = { ii:2, iii:3, iv:4, v:5, vi:6, vii:7, viii:8, ix:9, x:10 }[roman[0].toLowerCase()]; }
+    if (ordNum && parts[ordNum - 1]){
+      var p0 = parts[ordNum - 1];
+      if (!usedMap[p0.id || p0.title]) return p0;
+    }
+    /* ② 标题关键词模糊匹配：parts 某部标题是磁力名的子串（去年份/符号后） */
+    for (var i = 0; i < parts.length; i++){
+      var p = parts[i];
+      if (usedMap[p.id || p.title]) continue;
+      var pt = String(p.title || '').toLowerCase();
+      if (pt && nm.indexOf(pt) >= 0) return p;
+    }
+    return null;
+  };
+  /* 计算每条磁力的改名目标（影片自动化入口·电影多磁力）。
+     ms = Auto115Core.magnets(t)；opts = { filmTitle, collectionId, parts }。
+     - 无系列 / 无 parts → 区分后缀模式（片名 + 版本后缀；识别不到→片名+版本N）
+     - 有系列且每条都能对应 → 按对应部名改名；任一对应不上 → 整批回退后缀（避免误标成别的电影）
+     直接改写每条 m.renameTo，并返回 { mode, names }。 */
+  api.planMovieNames = function (ms, opts) {
+    ms = ms || [];
+    opts = opts || {};
+    var title = opts.filmTitle || '';
+    var parts = opts.parts || null;
+    function suffixFor(m, idx) {
+      var s = api.detectVersionSuffix(m.dirName || m.title || m.offlineName || '');
+      return title + (s ? (' ' + s) : (' 版本' + (idx + 1)));
+    }
+    if (!opts.collectionId || !parts || !parts.length){
+      ms.forEach(function (m, i) { m.renameTo = suffixFor(m, i); });
+      return { mode: 'suffix', names: ms.map(function (m) { return m.renameTo; }) };
+    }
+    var used = {}, matchedAll = true;
+    ms.forEach(function (m, i) {
+      var part = api.matchCollectionPart(m, parts, used);
+      if (part){ used[part.id || part.title] = true; m.renameTo = part.title; }
+      else { m.renameTo = suffixFor(m, i); matchedAll = false; }
+    });
+    /* 任一无法对应 → 整批回退后缀（拿不准不硬标成别的电影） */
+    if (!matchedAll){
+      ms.forEach(function (m, i) { m.renameTo = suffixFor(m, i); });
+      return { mode: 'suffix', names: ms.map(function (m) { return m.renameTo; }) };
+    }
+    return { mode: 'series', names: ms.map(function (m) { return m.renameTo; }) };
   };
 
   /* ---------- 移入冲突决策（纯函数，供两端 auto115MoveInto 使用） ---------- */

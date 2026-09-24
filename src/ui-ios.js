@@ -2064,12 +2064,14 @@ var AUTO115_FLOW_VERSION = Auto115Core.FLOW_VERSION;
 var AUTO115_STEP_DEFS = Auto115Core.STEP_DEFS;
 var AUTO115_STEPS_TV = Auto115Core.STEPS_TV;
 var AUTO115_STEPS_UPLOAD = Auto115Core.STEPS_UPLOAD;
+var AUTO115_STEPS_MULTI = Auto115Core.STEPS_MULTI;
 /* 步骤表按任务类型取；旧任务没有 type 一律按 offline 处理（兼容存量数据） */
 var AUTO115_STEP_TABLE = Auto115Core.STEP_TABLE;
 function auto115TaskType(t){ return Auto115Core.taskType(t); }
 /* 当前是剧集任务吗？可传文档（执行绑定用）；不传读当前打开影片 */
 function auto115IsTvTask(doc){ return !!(((doc != null ? doc : auto115Doc) || {}).type === 'tv'); }
 function auto115StepDefs(t, doc){
+  if (Auto115Core.isMultiMagnet(t)) return AUTO115_STEPS_MULTI;
   if (auto115TaskIsTv(t)) return AUTO115_STEPS_TV;
   return AUTO115_STEP_TABLE[auto115TaskType(t)] || AUTO115_STEP_DEFS;
 }
@@ -2087,6 +2089,11 @@ function auto115TaskTitle(t){
   if (t && t.tidy) return '整理：' + (t.offlineDirName || t.videoName || (auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || '文件夹');
   /* tbm 任务已填整理标题 → 显示「影片/剧集：标题」 */
   if (t && t.tbm && t.tbmType && t.targetName) return (t.tbmType === 'tv' ? '剧集：' : '影片：') + t.targetName;
+  /* 多磁力任务：显示条目数（如「多磁力任务（3 条）」/「磁力库·多磁力（3 条）」） */
+  if (t && Auto115Core.isMultiMagnet(t)){
+    var n = t.magnets.length;
+    return (t.tbm ? '磁力库·多磁力' : '多磁力任务') + '（' + n + ' 条）';
+  }
   return (t && (t.magnetTitle || auto115OfflineTitle(t && t.magnet))) || '磁力任务';
 }
 var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
@@ -2638,6 +2645,17 @@ function auto115KickStuckIn(doc){
 /* 步骤分发单点：key → 对应执行函数。「启动流水线」与「重试某步」共用，避免两处分发不一致 */
 function auto115DispatchStep(t, key){
   var isTv = auto115TaskIsTv(t);   /* 执行绑定文档/任务的剧集属性，不受「当前打开哪部片」影响 */
+  /* 多磁力任务（v336）：folder-level 整理，优先路由到各 *Multi 步骤。
+     wait 仍走 auto115BeginWait —— 探针回调会进 auto115StepWait，由其内部守卫分流到 WaitMulti。 */
+  if (Auto115Core.isMultiMagnet(t)){
+    if (key === 'submit') return auto115StepSubmitMulti(t);
+    if (key === 'wait') return auto115BeginWait(t);
+    if (key === 'mkdir') return auto115StepMkdirMulti(t);
+    if (key === 'cleanup') return auto115StepCleanupMulti(t);
+    if (key === 'move') return auto115StepMoveMulti(t);
+    if (key === 'rename') return auto115StepRenameMulti(t);
+    return Promise.resolve(null);
+  }
   if (key === 'dir') return auto115StepUploadDir(t);
   if (key === 'upload') return auto115StepUploadFiles(t);
   if (key === 'submit') return auto115StepSubmit(t);
@@ -2781,6 +2799,8 @@ function auto115BeginWait(t){
   return Promise.resolve(null);
 }
 function auto115StepWait(t, reset){
+  /* 多磁力任务（v336）：探针回调统一走 WaitMulti 自链流程 */
+  if (Auto115Core.isMultiMagnet(t)) return auto115StepWaitMulti(t, reset);
   /* 节点级排队（v332）：等待下载期间不长期占锁。探针回调重入时本任务通常未持锁，
      先抢锁——抢到才继续；抢不到（别的任务正在做整理写操作）就排队让出，
      等对方终态后 auto115KickStuck 重新拉起续跑。来自 auto115Run / submit 链路的调用已持锁，直接放行。 */
@@ -2890,8 +2910,10 @@ function auto115ApplyRenames(t, jobs, targetCid){
     if (!job || !job.fid) return p;
     return p.then(function(){
       var chain = Promise.resolve();
-      if (targetCid){
-        chain = chain.then(function(){ return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(job.fid) + '&pid=' + encodeURIComponent(targetCid)); });
+      /* 目标父目录：优先用 job.pid（每条任务可带独立父目录，如剧集未识别夹），否则用统一的 targetCid */
+      var pid = job.pid || targetCid;
+      if (pid){
+        chain = chain.then(function(){ return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(job.fid) + '&pid=' + encodeURIComponent(pid)); });
       }
       /* 文件名已符合规则（目标名 === 当前名）→ 跳过改名请求（move 照常执行） */
       if (job.orig != null && job.orig === job.name) return chain;
@@ -3090,6 +3112,17 @@ function auto115StepTvMoveVideos(t){
   var plan = t.tvPlan, map = t.tvSeasonMap;
   if (!plan){ auto115Set(t, 'move2', 'fail', '缺少整理计划'); auto115Finish(t); return Promise.resolve(null); }
   var flatName = t.finalDirName || auto115TvDirName((auto115TaskDoc(t) || {}).filmTitle);
+  var rootCid = t.tvRootCid;
+  /* 未识别集号的视频：整条移入「未识别」文件夹，绝不臆造 SxxExx（iOS / PC 两端一致，v336） */
+  var unrecPromise = Promise.resolve(null);
+  if (plan.unrecognized && plan.unrecognized.length && rootCid){
+    unrecPromise = auto115EnsureDir(rootCid, Auto115Core.UNRECOGNIZED_DIR).then(function(uncid){
+      if (!uncid) return null;
+      var jobs = plan.unrecognized.map(function(u){ return { fid: u.fid, name: u.name, orig: u.orig || u.name, size: u.size }; });
+      return auto115MoveInto(t, jobs, uncid);
+    }).catch(function(){ return null; });
+  }
+  return unrecPromise.then(function(){
   /* 不分季模式：文件统一平铺到剧集根文件夹（命名仍带 SxxExx）。
      注意文件可能嵌在根下的子文件夹里（v271 穿透扫描后种子套层很常见），
      所以**不能因为「目标=当前夹」就跳过**——照常发起移动，planMoveJobs 会把
@@ -3160,6 +3193,7 @@ function auto115StepTvMoveVideos(t){
     }
     return Promise.resolve(null);
   }).catch(function(e){ auto115Set(t, 'move2', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+  });
 }
 /* 步骤「修改标题文件夹」（方案 B 第 4 步）已并入 auto115StepCleanup 的 TV 分支；
    TvRenameFolder 保留为空壳仅为兼容旧重试分发，不再被调用。 */
@@ -3184,6 +3218,27 @@ function auto115FlattenSubDirs(t, list, depth){
 }
 /* 步骤4：清理文件夹内容——保留主视频（多 part 全保留），删除其余全部（含 sample/子文件夹）。
    只对该文件夹的「子项」发起删除，绝不删除文件夹本身；根目录保护双保险。 */
+/* 单磁力电影：清除完无关文件后若保留多条视频（合集/系列），系列反查（v336，与多磁力共用 planMovieNames）。
+   把保留的多视频当「伪磁力」传入，命中系列部名则逐条按部名改名；否则不动（沿用默认 .cdN）。
+   结果以 fid→名称 / fid→扩展名 暂存到 t 上，供 auto115StepRename 取用。 */
+function auto115MoviePrepMultiParts(t, keep){
+  var doc = auto115TaskDoc(t) || {};
+  if (!doc.collectionId || !keep || keep.length < 2) return Promise.resolve(null);
+  var ms = keep.map(function(it){ return { dirName: it.n || it.name || '', title: it.n || it.name || '' }; });
+  return auto115FetchCollectionParts(doc.collectionId).then(function(parts){
+    if (!parts || !parts.length) return null;
+    Auto115Core.planMovieNames(ms, { filmTitle: doc.filmTitle, collectionId: doc.collectionId, parts: parts });
+    var nameMap = {}, extMap = {};
+    keep.forEach(function(it, i){
+      var fid = String(it.fid);
+      var ext = (/\.[a-z0-9]+$/i.exec(it.n || it.name || '') || ['.mp4'])[0];
+      nameMap[fid] = ms[i].renameTo || doc.filmTitle;
+      extMap[fid] = ext;
+    });
+    t._keepPartNames = nameMap; t._keepExts = extMap;
+    return null;
+  });
+}
 function auto115StepMove(t){
   if (t.noFolder){ auto115Set(t, 'move', 'skip', '单文件落地，无需清理'); return auto115StepRename(t); }
   if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
@@ -3326,12 +3381,12 @@ function auto115StepMove(t){
     t.keptOthers = keptOthers;
     var subCount = (t.subInfos || []).length;
     var keptMsg = keptVids ? ('，另保留 ' + keptVids + ' 个其他视频（可能是合集，未删除）') : '';
-    if (!delIds.length){ auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，无需清理'); return auto115StepRename(t); }
+    if (!delIds.length){ auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，无需清理'); return auto115MoviePrepMultiParts(t, keep).then(function(){ return auto115StepRename(t); }); }
     auto115Set(t, 'move', 'running', '保留 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，正在删除其余 ' + delIds.length + ' 项…');
     return auto115DeleteBatch(t.offlineDirCid, delIds).then(function(errMsg){
       if (errMsg){ auto115Set(t, 'move', 'fail', errMsg); auto115Finish(t); return null; }
       auto115Set(t, 'move', 'ok', '已清理 ' + delIds.length + ' 项，保留 ' + keep.length + ' 个视频（' + auto115Size(t.videoSize) + '）');
-      return auto115StepRename(t);
+      return auto115MoviePrepMultiParts(t, keep).then(function(){ return auto115StepRename(t); });
     });
   }).catch(function(e){
     auto115Set(t, 'move', 'fail', (e && e.message) ? e.message : '网络错误');
@@ -3446,6 +3501,9 @@ function auto115StepRename(t){
   if (!baseName){ auto115Set(t, 'rename', 'fail', '缺少名称信息，没法自动改名'); auto115Finish(t); return Promise.resolve(null); }
   var keep = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [t.videoFid] : []);
   if (!keep.length){ auto115Set(t, 'rename', 'fail', '未定位到视频文件，请重试'); auto115Finish(t); return Promise.resolve(null); }
+  /* 单磁力电影多视频系列反查（v336）：命中系列部名的逐条按部名改名；用完即清，避免污染后续单次改名 */
+  var partNameMap = t._keepPartNames || null; t._keepPartNames = null;
+  var partExtMap = t._keepExts || null; t._keepExts = null;
   var multi = keep.length > 1;
   var prev = t.external ? null : (t.forcedMergeCid ? { cid: t.forcedMergeCid, name: t.finalDirName } : auto115FindMergeTarget(t));
   if (prev){
@@ -3472,6 +3530,10 @@ function auto115StepRename(t){
         }
       }
       var jobs = keep.map(function(fid, i){
+        if (partNameMap && partNameMap[fid]){
+          var pe = (partExtMap && partExtMap[fid]) || ext;
+          return { fid: fid, name: partNameMap[fid] + pe, size: t.videoSize };
+        }
         var suffix = multi ? ('.cd' + (i + 1)) : '';
         var cand = baseName + suffix, k = 0;
         while (stems[cand.toLowerCase()] != null){
@@ -3504,6 +3566,10 @@ function auto115StepRename(t){
     });
   }
   var jobs = keep.map(function(fid, i){
+    if (partNameMap && partNameMap[fid]){
+      var pe = (partExtMap && partExtMap[fid]) || ext;
+      return { fid: fid, name: partNameMap[fid] + pe, size: t.videoSize };
+    }
     var suffix = multi ? ('.cd' + (i + 1)) : '';
     return { fid: fid, name: baseName + suffix + ext, size: t.videoSize };
   });
@@ -3615,6 +3681,226 @@ function auto115StepRenameFlat(t){
   }).catch(function(e){
     auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '网络错误');
     auto115Finish(t); return null;
+  });
+}
+/* ============ 多磁力任务流（v336）：每条磁力=一集/一部，合并为一条任务 ============ */
+/* 查询单条磁力的离线状态，结果写回 m.state（submitting/submitted/done/fail）与 m.probes */
+function auto115QueryOneMagnet(t, m){
+  return auto115QueryTask(m).then(function(info){
+    if (!info){
+      m.probes = (m.probes || 0) + 1;
+      if (m.probes >= AUTO115_PROBE_MAX) m.state = 'fail';
+      return;
+    }
+    if (info.done){ m.offlineName = info.name || m.offlineName; m.state = 'done'; return; }
+    if (info.failed){ m.state = 'fail'; return; }
+    m.probes = (m.probes || 0) + 1;
+    if (m.probes >= AUTO115_PROBE_MAX) m.state = 'fail';
+  }).catch(function(){ m.probes = (m.probes || 0) + 1; if (m.probes >= AUTO115_PROBE_MAX) m.state = 'fail'; });
+}
+function auto115SubmittedMulti(t){
+  var ms = Auto115Core.magnets(t);
+  return ms.length && ms.every(function(m){ return m.state === 'submitted' || m.infoHash; });
+}
+/* 提交单条磁力（参数从 m 取，复用现有 add_task_url 逻辑） */
+function auto115SubmitOneMagnet(t, m){
+  m.state = 'submitting';
+  var body = 'url=' + encodeURIComponent(m.magnet) + '&wp_path_id=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+  var hash = auto115Btih(m.magnet);
+  var pre = hash ? auto115QueryTask({ infoHash: hash }).catch(function(){ return null; }) : Promise.resolve(null);
+  return pre.then(function(info){
+    if (info && !info.failed){
+      m.infoHash = hash; m.state = 'submitted';
+      m.offlineName = info.name || m.offlineName || m.title || '';
+      return;
+    }
+    return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', body).then(function(res){
+      var d = res.d || {};
+      if (res.ok && (d.state === true || d.errcode === 10008 || (d.data && d.data.info_hash))){
+        m.infoHash = ((d.info_hash || (d.data && d.data.info_hash) || auto115Btih(m.magnet)) || '').toUpperCase();
+        m.offlineName = d.name || (d.data && d.data.name) || m.title || '';
+        m.state = 'submitted';
+        return;
+      }
+      m.state = 'fail';
+      throw new Error(auto115ErrText(d, res, '提交失败'));
+    });
+  }).catch(function(e){ m.state = 'fail'; throw e; });
+}
+function auto115StepSubmitMulti(t){
+  if (auto115SubmittedMulti(t)) return auto115BeginWait(t);
+  if (auto115Submitting[t.id]){ auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…'); return Promise.resolve(null); }
+  auto115Submitting[t.id] = true;
+  var ms = Auto115Core.magnets(t).filter(function(m){ return m.state !== 'submitted'; });
+  if (!ms.length){ delete auto115Submitting[t.id]; return auto115BeginWait(t); }
+  auto115Set(t, 'submit', 'running', '正在提交 ' + ms.length + ' 条磁力到 115…');
+  return Promise.all(ms.map(function(m){ return auto115SubmitOneMagnet(t, m); })).then(function(){
+    delete auto115Submitting[t.id];
+    auto115Set(t, 'submit', 'ok', '已提交 ' + Auto115Core.magnets(t).length + ' 条磁力');
+    return auto115BeginWait(t);
+  }).catch(function(e){
+    delete auto115Submitting[t.id];
+    auto115Set(t, 'submit', 'fail', (e && e.message) ? e.message : '提交失败');
+    auto115Finish(t); return null;
+  });
+}
+function auto115StepWaitMulti(t, reset){
+  if (!auto115EnsureLock(t)) return Promise.resolve(null);
+  var s = auto115Set(t, 'wait', 'running', '正在查询离线状态…');
+  if (reset) s.probes = 0;
+  var ms = Auto115Core.magnets(t);
+  return Promise.all(ms.map(function(m){ return auto115QueryOneMagnet(t, m); })).then(function(){
+    var done = ms.filter(function(m){ return m.state === 'done'; }).length;
+    var failed = ms.filter(function(m){ return m.state === 'fail'; }).length;
+    s.probes = Math.max.apply(null, ms.map(function(m){ return m.probes || 0; }).concat([0]));
+    if (done === ms.length){
+      auto115Set(t, 'wait', 'ok', '全部 ' + ms.length + ' 条磁力离线完成');
+      return auto115StepMkdirMulti(t);
+    }
+    if (failed > 0 && done > 0){
+      /* 部分完成：已 done 的继续定位/整理；fail 的（死种）留待单独重试 */
+      auto115Set(t, 'wait', 'ok', done + '/' + ms.length + ' 条成功，' + failed + ' 条失败（可单独重试）');
+      t.partialDone = true;
+      return auto115StepMkdirMulti(t);
+    }
+    if (failed > 0 && done === 0){
+      auto115Set(t, 'wait', 'fail', ms.length + ' 条磁力均离线失败（死种）');
+      auto115Finish(t); return null;
+    }
+    s.msg = '离线中 ' + done + '/' + ms.length + ' 已就绪';
+    renderAuto115(); auto115Save();
+    auto115YieldLock(t);
+    auto115ScheduleProbe(t);
+    return null;
+  }).catch(function(e){
+    auto115Set(t, 'wait', 'fail', (e && e.message) ? e.message : '网络错误');
+    auto115Finish(t); return null;
+  });
+}
+function auto115StepMkdirMulti(t){
+  auto115Set(t, 'mkdir', 'running', '正在定位离线文件夹…');
+  var ms = Auto115Core.magnets(t).filter(function(m){ return m.state === 'done' && !m.dirCid && !m.noFolder; });
+  if (!ms.length){
+    var allHandled = Auto115Core.magnets(t).every(function(m){ return m.dirCid || m.noFolder || m.state === 'fail'; });
+    if (allHandled) return auto115StepCleanupMulti(t);
+  }
+  return auto115ListDir(C115_DEFAULT_DIR_CID, 'user_ptime').then(function(list){
+    var folders = list.filter(function(it){ return it && it.cid && !it.fid; });
+    var files = list.filter(function(it){ return it && it.fid; });
+    Auto115Core.magnets(t).forEach(function(m){
+      if (m.state !== 'done' || m.dirCid || m.noFolder) return;
+      var base = m.createdAt || t.createdAt;
+      var dir = null, f = null, i;
+      if (m.offlineName){
+        for (i = 0; i < folders.length; i++){ if ((folders[i].n || '') === m.offlineName){ dir = folders[i]; break; } }
+      }
+      if (!dir){
+        for (i = 0; i < folders.length; i++){ if (auto115ItemTime(folders[i]) >= base - AUTO115_DIR_SLACK_MS){ dir = folders[i]; break; } }
+      }
+      if (dir){ var cid = String(dir.cid); if (cid !== C115_DEFAULT_DIR_CID){ m.dirCid = cid; m.dirName = dir.n || ''; } }
+      else if (m.offlineName){
+        for (i = 0; i < files.length; i++){ if ((files[i].n || '') === m.offlineName){ f = files[i]; break; } }
+        if (!f){ for (i = 0; i < files.length; i++){ if (auto115ItemTime(files[i]) >= base - AUTO115_DIR_SLACK_MS){ f = files[i]; break; } } }
+        if (f){ m.noFolder = true; m.videoFid = String(f.fid); m.videoName = f.n || ''; m.videoSize = Number(f.s) || 0; }
+      }
+    });
+    var stillMissing = Auto115Core.magnets(t).filter(function(m){ return m.state === 'done' && !m.dirCid && !m.noFolder; });
+    if (stillMissing.length){
+      auto115Set(t, 'mkdir', 'fail', '部分磁力没找到下载内容，请重试'); auto115Finish(t); return null;
+    }
+    auto115Set(t, 'mkdir', 'ok', '已定位 ' + Auto115Core.magnets(t).filter(function(m){ return m.dirCid || m.noFolder; }).length + ' 个文件夹');
+    return auto115StepCleanupMulti(t);
+  }).catch(function(e){
+    auto115Set(t, 'wait', 'fail', (e && e.message) ? e.message : '网络错误');
+    auto115Finish(t); return null;
+  });
+}
+function auto115StepCleanupMulti(t){
+  /* 多磁力：整夹层级整理（每条磁力一个文件夹），不删除夹内无关文件 */
+  auto115Set(t, 'cleanup', 'skip', '多磁力：整夹整理，跳过清理');
+  return auto115StepMoveMulti(t);
+}
+function auto115StepMoveMulti(t){
+  auto115Set(t, 'move', 'skip', '多磁力：移动与改名在「修改视频名称」步骤一并完成');
+  return auto115StepRenameMulti(t);
+}
+/* 多磁力整理：剧集→每条磁力整夹改名成 SxxExx 移入剧集夹（识别不到则整夹移入「未识别」夹）；
+   电影→整夹改名成片名/对应系列部名移入影片夹。tbm 多磁力不进此步（仅下载）。 */
+function auto115StepRenameMulti(t){
+  if (t.tbm){ auto115Set(t, 'rename', 'skip', '磁力库任务不整理'); auto115Finish(t); return Promise.resolve(null); }
+  var ms = Auto115Core.magnets(t).filter(function(m){ return (m.dirCid || m.noFolder) && m.state === 'done'; });
+  if (!ms.length){ auto115Set(t, 'rename', 'skip', '没有可整理的磁力'); auto115Finish(t); return Promise.resolve(null); }
+  var isTv = auto115TaskIsTv(t);
+  var doc = auto115TaskDoc(t) || {};
+  var partsPromise = (!isTv && doc.collectionId) ? auto115FetchCollectionParts(doc.collectionId) : Promise.resolve(null);
+  return partsPromise.then(function(parts){
+    return auto115ComputeMultiTargets(t, ms, isTv, doc, parts);
+  }).then(function(jobs){
+    if (!jobs || !jobs.length){ auto115Set(t, 'rename', 'ok', '无需改名'); auto115Finish(t); return null; }
+    return auto115ApplyRenames(t, jobs, null).then(function(){
+      auto115Set(t, 'rename', 'ok', '已整理 ' + jobs.length + ' 条磁力');
+      auto115Finish(t); return null;
+    }).catch(function(e){
+      auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '改名失败'); auto115Finish(t); return null;
+    });
+  }).catch(function(e){
+    auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '整理失败'); auto115Finish(t); return null;
+  });
+}
+/* 计算每条磁力的改名+移动作业（剧集/电影分支）；返回 jobs（每条带 pid=目标父目录） */
+function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
+  if (isTv){
+    var showTitle = doc.filmTitle || '';
+    return auto115EnsureTvRoot(showTitle).then(function(showCid){
+      if (!showCid) throw new Error('创建剧集根文件夹失败');
+      return auto115EnsureDir(showCid, Auto115Core.UNRECOGNIZED_DIR).then(function(uncid){
+        /* 多季且总集数达标（SPLIT_MIN_EPISODES，默认 100）→ 建季文件夹；否则平铺到剧集根（命名仍带 SxxExx） */
+        var seasons = {}, vids = 0;
+        ms.forEach(function(m){
+          var ep = Auto115Core.detectEpisode(m.dirName || m.offlineName || '');
+          if (ep && ep.episode){ var s = ep.season || 1; seasons[s] = true; vids++; }
+        });
+        var keys = Object.keys(seasons).map(Number).sort(function(a, b){ return a - b; });
+        var needSplit = keys.length > 1 && vids >= Auto115Core.SPLIT_MIN_EPISODES;
+        var seasonCidMap = {};
+        var ensureSeasons = needSplit
+          ? Promise.all(keys.map(function(s){
+              return auto115EnsureDir(showCid, 'S' + auto115Pad2(s)).then(function(c){ seasonCidMap[s] = c; });
+            }))
+          : Promise.resolve(null);
+        return ensureSeasons.then(function(){
+          var jobs = [];
+          ms.forEach(function(m){
+            var ep = Auto115Core.detectEpisode(m.dirName || m.offlineName || '');
+            if (ep && ep.episode){
+              var s = ep.season || 1, e = ep.episode;
+              var name = auto115TvDirName(showTitle) + '.S' + auto115Pad2(s) + 'E' + auto115Pad2(e);
+              var pid = (needSplit && seasonCidMap[s]) ? seasonCidMap[s] : showCid;
+              if (m.noFolder){ var ext = (/\.[a-z0-9]+$/i.exec(m.videoName || '') || ['.mp4'])[0]; jobs.push({ fid: m.videoFid, name: name + ext, orig: m.videoName, pid: pid }); }
+              else jobs.push({ fid: m.dirCid, name: name, orig: m.dirName, pid: pid });
+            } else {
+              /* 识别不到集号 → 整夹移入「未识别」夹，不改名 */
+              if (m.noFolder){ jobs.push({ fid: m.videoFid, name: m.videoName, orig: m.videoName, pid: uncid }); }
+              else jobs.push({ fid: m.dirCid, name: m.dirName, orig: m.dirName, pid: uncid });
+            }
+          });
+          return jobs;
+        });
+      });
+    });
+  }
+  /* 电影：区分后缀 / 按系列改名 */
+  var filmTitle = doc.filmTitle || '';
+  return auto115EnsureDir(C115_DEFAULT_DIR_CID, filmTitle).then(function(filmCid){
+    if (!filmCid) throw new Error('创建影片文件夹失败');
+    Auto115Core.planMovieNames(ms, { filmTitle: filmTitle, collectionId: doc.collectionId, parts: parts });
+    var jobs = [];
+    ms.forEach(function(m){
+      var name = m.renameTo || filmTitle;
+      if (m.noFolder){ var ext = (/\.[a-z0-9]+$/i.exec(m.videoName || '') || ['.mp4'])[0]; jobs.push({ fid: m.videoFid, name: name + ext, orig: m.videoName, pid: filmCid }); }
+      else jobs.push({ fid: m.dirCid, name: name, orig: m.dirName, pid: filmCid });
+    });
+    return jobs;
   });
 }
 /* 步骤「修改文件夹名称」：把 115 离线的临时目录改名为影片标题（独立任务）；并入任务跳过。删除临时目录的逻辑由 auto115RemoveTmpDir 在 rename 后自动执行，不显示在 UI。 */
@@ -4428,6 +4714,26 @@ function auto115Mkdir(name){
     return cid;
   });
 }
+/* 确保某父目录下的子文件夹存在（先找后建），返回其 cid */
+function auto115EnsureDir(parentCid, name){
+  return auto115FindDir(parentCid, name).then(function(d){
+    if (d) return d.cid;
+    return auto115Post('https://webapi.115.com/files/add', 'pid=' + encodeURIComponent(parentCid) + '&cname=' + encodeURIComponent(name)).then(function(res){
+      var dd = (res.d || {}).data || res.d || {};
+      var cid = String(dd.cid || dd.file_id || dd.id || '');
+      if (!res.ok || !(dd.state === true || dd.errno === 0) || !cid) throw new Error(auto115ErrText(dd, res, '创建 ' + name + ' 失败'));
+      return cid;
+    });
+  });
+}
+/* 系列反查：拉取 TMDB collection 的 parts 列表（按序号升序）。尽力而为，任何失败返回 null（调用方回退后缀模式） */
+function auto115FetchCollectionParts(collectionId){
+  if (!collectionId) return Promise.resolve(null);
+  return NfoCore.tmdbRequest('/collection/' + collectionId, { language: 'zh-CN' }, {}).then(function(d){
+    var parts = (d && d.parts) || [];
+    return parts.map(function(p){ return { id: p.id, title: p.title || '', release_date: p.release_date || '' }; });
+  }).catch(function(){ return null; });
+}
 /* 上传 NFO 之后：普通影片本来平铺在云下载根目录，现在有了文件夹，把对应的视频也移进去 */
 function auto115MoveFlatVideoInto(t){
   if (!t.uploadDirCid) return Promise.resolve(false);
@@ -4644,11 +4950,8 @@ function openMagnetCombo(tab){
   }
   var want = (tab === 'search' && isFull) ? 'search' : 'add';
   switchMagnetComboTab(want);
-  // 添加磁力：每次进入都清空，避免残留上次粘贴的内容
-  if (want !== 'search'){
-    var mInp = document.getElementById('magnetInput');
-    if (mInp) mInp.value = '';
-  }
+  // 添加磁力：每次进入都用全新的 composer（清空上次残留），不残留上次粘贴的内容
+  if (want !== 'search') auto115ComposerReset('magnetComposer');
   renderMagnetQuickChips();
   openSheet('magnetComboSheet');
 }
@@ -4703,13 +5006,15 @@ function auto115CloseMagnetModal(){
   closeAllSheets();
 }
 function auto115PasteMagnet(){
-  var inp = document.getElementById('magnetInput');
-  if (!inp) return;
+  var box = document.getElementById('magnetComposer');
+  if (!box) return;
+  var inp = box.querySelector('.mc-input');
   if (navigator.clipboard && navigator.clipboard.readText){
     navigator.clipboard.readText().then(function(txt){
       var val = (txt || '').trim();
       if (!val){ showToast('剪贴板为空', 'info'); return; }
       inp.value = val;
+      auto115ComposerAdd('magnetComposer');
     }).catch(function(){
       showToast('剪贴板为空', 'info');
     });
@@ -4717,31 +5022,96 @@ function auto115PasteMagnet(){
     showToast('剪贴板为空', 'info');
   }
 }
+/* ============ 多磁力 composer（v336）：默认单框 + 添加按钮；点添加后该磁力收起成紧凑 chip，可继续加多条 ============ */
+/* 两入口（影片自动化 modal / 磁力库添加 tab）各自挂一个容器，读值统一走 auto115ComposerValues。 */
+function renderMagnetComposer(containerId){
+  var box = document.getElementById(containerId);
+  if (!box || box.getAttribute('data-composed') === '1') return;   /* 已初始化不重渲染（避免清掉已有值） */
+  box.setAttribute('data-composed', '1');
+  box.classList.add('magnet-composer');
+  box.innerHTML = '';
+  var rows = document.createElement('div'); rows.className = 'mc-rows';
+  var inputRow = document.createElement('div'); inputRow.className = 'mc-input-row';
+  var ta = document.createElement('textarea'); ta.className = 'mc-input'; ta.rows = 1;
+  ta.placeholder = '粘贴/输入磁力或 ed2k 链接（magnet:? / ed2k://），多条可逐条添加';
+  ta.onkeydown = function(e){ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); auto115ComposerAdd(containerId); } };
+  var pasteBtn = document.createElement('button'); pasteBtn.type = 'button'; pasteBtn.className = 'mc-paste'; pasteBtn.textContent = '粘贴';
+  pasteBtn.onclick = function(){ auto115ComposerPaste(containerId); };
+  var addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'mc-add'; addBtn.textContent = '添加';
+  addBtn.onclick = function(){ auto115ComposerAdd(containerId); };
+  inputRow.appendChild(ta); inputRow.appendChild(pasteBtn); inputRow.appendChild(addBtn);
+  box.appendChild(rows); box.appendChild(inputRow);
+}
+function auto115ComposerAdd(containerId){
+  var box = document.getElementById(containerId); if (!box) return;
+  var ta = box.querySelector('.mc-input'); if (!ta) return;
+  var lines = (ta.value || '').split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
+  if (!lines.length) return;
+  var rows = box.querySelector('.mc-rows');
+  lines.forEach(function(line){
+    var chip = document.createElement('div'); chip.className = 'mc-chip';
+    var span = document.createElement('span'); span.className = 'mc-text'; span.textContent = line;
+    var x = document.createElement('button'); x.type = 'button'; x.className = 'mc-x'; x.textContent = '×';
+    x.onclick = function(){ chip.remove(); };
+    chip.appendChild(span); chip.appendChild(x);
+    rows.appendChild(chip);
+  });
+  ta.value = ''; ta.focus();
+}
+function auto115ComposerPaste(containerId){
+  var box = document.getElementById(containerId); if (!box) return;
+  var ta = box.querySelector('.mc-input'); if (!ta) return;
+  if (navigator.clipboard && navigator.clipboard.readText){
+    navigator.clipboard.readText().then(function(txt){
+      ta.value = ((ta.value && ta.value.trim()) ? (ta.value.trim() + '\n') : '') + (txt || '');
+      ta.focus();
+    }).catch(function(){ ta.focus(); });
+  } else { ta.focus(); }
+}
+function auto115ComposerValues(containerId){
+  var box = document.getElementById(containerId); if (!box) return [];
+  var out = [];
+  var chips = box.querySelectorAll('.mc-chip .mc-text');
+  for (var i = 0; i < chips.length; i++){ var v = (chips[i].textContent || '').trim(); if (v) out.push(v); }
+  var ta = box.querySelector('.mc-input');
+  if (ta){ ta.value.split(/\r?\n/).forEach(function(s){ s = (s || '').trim(); if (s) out.push(s); }); }
+  return out;
+}
+function auto115ComposerReset(containerId){
+  var box = document.getElementById(containerId); if (!box) return;
+  box.removeAttribute('data-composed');
+  box.innerHTML = '';
+  renderMagnetComposer(containerId);
+}
 function auto115AddMagnetTask(){
-  var inp = document.getElementById('magnetInput');
-  var magnet = (inp && inp.value || '').trim();
-  if (!auto115IsOfflineLink(magnet)){
-    showToast('请粘贴有效的磁力或 ed2k 链接（magnet:? / ed2k:// 开头）', 'error');
-    return;
-  }
+  var mags = auto115ComposerValues('magnetComposer').filter(Boolean);
+  if (!mags.length){ showToast('请至少添加一个磁力或 ed2k 链接', 'error'); return; }
+  if (mags.some(function(m){ return !auto115IsOfflineLink(m); })){ showToast('有不是有效磁力/ed2k 链接的内容，请检查', 'error'); return; }
   auto115CloseMagnetModal();
   auto115EnsureDoc().then(function(doc){
-    /* 同一个磁力已经在这部片子的列表里 → 不再新建（否则会重复离线） */
-    if (auto115FindSameMagnet(magnet)){
-      showToast('这个磁力已经在自动化列表里了', 'info');
-      return openAuto115Page();
-    }
+    /* 去重：批内重复 / 已在该影片列表里 → 跳过 */
+    var seen = {}, kept = [], dupExist = false;
+    mags.forEach(function(m){
+      var k = auto115Btih(m) || m.trim().toLowerCase();
+      if (seen[k]) return; seen[k] = 1;
+      if (auto115FindSameMagnet(m)){ dupExist = true; return; }
+      kept.push(m);
+    });
+    if (dupExist) showToast('部分磁力已在该影片列表里，已跳过', 'info');
+    if (!kept.length){ showToast('没有新的磁力可加入', 'info'); return openAuto115Page(); }
+    var ms = kept.map(function(m){ return { magnet: m, title: auto115OfflineTitle(m), state: 'idle' }; });
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
-      type: 'offline',
-      magnet: magnet, magnetTitle: auto115OfflineTitle(magnet),
-      steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+      type: 'offline', multi: true,
+      magnets: ms,
+      steps: Auto115Core.newSteps('multi'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
       filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
     };
     doc.tasks.unshift(t);
     auto115Expanded[t.id] = true;
     return auto115Save().then(function(){
-      showToast('已加入自动化', 'success');
+      showToast('已加入自动化（' + ms.length + ' 条磁力）', 'success');
+      auto115ComposerReset('magnetComposer');
       return openAuto115Page().then(function(){ return auto115Run(t); });
     });
   }).catch(function(e){ showToast((e && e.message) || '加入失败', 'error'); });
@@ -4956,15 +5326,16 @@ function auto115StepTidyMkdir(t){
     auto115Set(t, 'mkdir', 'ok', '已定位文件夹：' + (t.offlineDirName || ''));
     return auto115StepCleanup(t);
   }
-  var titles = auto115TidyTitles(auto115Doc);
+  var _doc = auto115TaskDoc(t) || {};   /* v335：每任务自身身份（tbm→targetName、影片→归属文档），不读全局 auto115Doc —— 否则切走页面/多任务排队时全读同一个（错的）影片导致集体定位失败 */
+  var titles = auto115TidyTitles(_doc);
   if (!titles.length){ auto115Set(t, 'mkdir', 'fail', '缺少影片标题，没法定位'); auto115Finish(t); return Promise.resolve(null); }
   return auto115ListDir(C115_DEFAULT_DIR_CID, 'user_ptime').then(function(list){
     /* 重试定位：与入口同规则——文件夹和散装视频都找，分高者赢（v267 修：原来只找文件夹，
        赌神2 这类散在根目录的视频重试永远失败「没找到相似的文件夹」） */
     var folders = (list || []).filter(function(it){ return it && it.cid && !it.fid; });
     var vids = (list || []).filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
-    var m = Auto115Core.matchTidyDir(folders, titles, auto115Doc && auto115Doc.year);
-    var mv = Auto115Core.matchTidyDir(vids, titles, auto115Doc && auto115Doc.year);
+    var m = Auto115Core.matchTidyDir(folders, titles, _doc.year);
+    var mv = Auto115Core.matchTidyDir(vids, titles, _doc.year);
     var bestF = (m.ok && m.best) ? m.best : null;
     var bestV = (mv.ok && mv.best) ? mv.best : null;
     if (!bestF && !bestV){ auto115Set(t, 'mkdir', 'fail', '云下载里没找到相似的文件夹或视频'); auto115Finish(t); return null; }
@@ -10166,6 +10537,7 @@ function switchTbmTab(tab){
     tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tbm') === tab);
   }
   if (tab === 'tasks') renderTbmTasks();
+  if (tab === 'add') renderMagnetComposer('tbmMagnetComposer');
 }
 /* 添加区可用性：未配置 115 Cookie → 灰态 + 提示（提交前还会再兜一次） */
 function refreshTbmAddState(){
@@ -10194,36 +10566,65 @@ function clearTbmAddInput(){
   toggleTbmAddClear();
 }
 /* 方案 A（v332）：工具箱磁力管理「离线到 115」= 建一条 tbm 任务（存磁力库文档）并自动跑 submit/wait。
-   下载完成后停在「待整理」，由用户在任务详情页选影片/剧集 + 手输标题触发整理（不调 TMDB）。 */
+   支持多磁力（v336）：composer 里的多条磁力合成一条 multi 任务，下载完停在「待整理」即可（tbm 不整理）。 */
 function toolboxMagnetOffline(magnet){
-  var m = (magnet != null ? magnet : ((document.getElementById('tbmMagnetInput') || {}).value || ''));
-  m = (m || '').trim();
-  if (!auto115IsOfflineLink(m)){ showToast('请粘贴有效的磁力或 ed2k 链接（magnet:? / ed2k:// 开头）', 'error'); return; }
+  var mags;
+  if (magnet != null){
+    mags = [String(magnet).trim()].filter(Boolean);
+  } else {
+    mags = auto115ComposerValues('tbmMagnetComposer').filter(Boolean);
+  }
+  if (!mags.length){ showToast('请粘贴有效的磁力或 ed2k 链接（magnet:? / ed2k:// 开头）', 'error'); return; }
+  if (mags.some(function(m){ return !auto115IsOfflineLink(m); })){ showToast('有不是有效磁力/ed2k 链接的内容，请检查', 'error'); return; }
   ensure115Cookie().then(function(ck){
     if (!ck){ showToast('请先到「设置 → 应用配置 → 115 配置」登录', 'error'); refreshTbmAddState(); return; }
     return auto115EnsureLibraryDoc().then(function(lib){
       /* 去重：同一磁力已在库里（未中止）→ 不重复建任务、不重复离线 */
-      var h = auto115Btih(m), s = m.toLowerCase(), dup = false;
-      (lib.tasks || []).forEach(function(x){
-        if (!x || x.aborted || !x.tbm) return;
-        var xm = (x.magnet || '').toLowerCase();
-        if (h ? (auto115Btih(x.magnet || '') === h) : (xm === s)) dup = true;
+      var dup = false;
+      mags.forEach(function(m){
+        var h = auto115Btih(m), s = m.toLowerCase();
+        (lib.tasks || []).forEach(function(x){
+          if (!x || x.aborted || !x.tbm) return;
+          var xm = (x.magnet || '').toLowerCase();
+          if (h ? (auto115Btih(x.magnet || '') === h) : (xm === s)) dup = true;
+        });
       });
-      if (dup){ showToast('这个磁力已经在任务列表里了', 'info'); return; }
-      var t = {
-        id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
-        tbm: true, type: 'tbm', external: true,   /* external：整理阶段复用「外部磁力」改名路径（按手输标题改名，不调 TMDB） */
-        magnet: m, magnetTitle: auto115OfflineTitle(m),
-        infoHash: h || '', offlineName: '',
-        steps: Auto115Core.newSteps('tbm'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
-        filmId: 'tbm-library'
-      };
+      if (dup){ showToast('部分磁力已经在任务列表里了', 'info'); }
+      var kept = mags.filter(function(m){
+        var h = auto115Btih(m), s = m.toLowerCase(), hit = false;
+        (lib.tasks || []).forEach(function(x){
+          if (!x || x.aborted || !x.tbm) return;
+          var xm = (x.magnet || '').toLowerCase();
+          if (h ? (auto115Btih(x.magnet || '') === h) : (xm === s)) hit = true;
+        });
+        return !hit;
+      });
+      if (!kept.length){ showToast('没有新的磁力可加入', 'info'); return; }
+      var t;
+      if (kept.length === 1){
+        var m0 = kept[0];
+        t = {
+          id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
+          tbm: true, type: 'tbm', external: true,   /* external：整理阶段复用「外部磁力」改名路径（按手输标题改名，不调 TMDB） */
+          magnet: m0, magnetTitle: auto115OfflineTitle(m0),
+          infoHash: auto115Btih(m0) || '', offlineName: '',
+          steps: Auto115Core.newSteps('tbm'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+          filmId: 'tbm-library'
+        };
+      } else {
+        var ms = kept.map(function(m){ return { magnet: m, title: auto115OfflineTitle(m), state: 'idle' }; });
+        t = {
+          id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
+          tbm: true, type: 'tbm', external: true, multi: true,
+          magnets: ms,
+          steps: Auto115Core.newSteps('multi'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+          filmId: 'tbm-library'
+        };
+      }
       lib.tasks.unshift(t);
       return auto115Save(lib).then(function(){
-        var inp = document.getElementById('tbmMagnetInput');
-        if (inp) inp.value = '';
-        toggleTbmAddClear();
-        showToast('已加入离线任务，下载中…', 'success');
+        auto115ComposerReset('tbmMagnetComposer');
+        showToast('已加入离线任务（' + kept.length + ' 条），下载中…', 'success');
         switchTbmTab('tasks'); renderTbmTasks();   /* 跳到任务列表，让用户看到进度 */
         return auto115Run(t);                        /* 自动跑 submit/wait */
       });
@@ -10336,6 +10737,7 @@ function tbmConfirmOrganize(){
   t.tbmType = tbmOrganizeType;        // 'movie' | 'tv'
   t.type = tbmOrganizeType;           // 让 auto115TaskType 走对应步骤表（movie/tv）
   t.targetName = name;                // 整理身份（外部磁力改名路径用）
+  t.tidy = true;                     // v335：标记整理任务，dispatch 走 auto115StepTidyMkdir（按标题定位），而非离线定位（按磁力 offlineName 匹配，对 tbm 整理永远失败）
   /* 追加整理步骤：跳过 submit/wait（已跑完），从定位文件夹起步 */
   var orgKeys = (t.tbmType === 'tv')
     ? ['mkdir','cleanup','move','mkdir2','rename','move2']
