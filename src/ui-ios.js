@@ -4719,9 +4719,10 @@ function auto115EnsureDir(parentCid, name){
   return auto115FindDir(parentCid, name).then(function(d){
     if (d) return d.cid;
     return auto115Post('https://webapi.115.com/files/add', 'pid=' + encodeURIComponent(parentCid) + '&cname=' + encodeURIComponent(name)).then(function(res){
-      var dd = (res.d || {}).data || res.d || {};
-      var cid = String(dd.cid || dd.file_id || dd.id || '');
-      if (!res.ok || !(dd.state === true || dd.errno === 0) || !cid) throw new Error(auto115ErrText(dd, res, '创建 ' + name + ' 失败'));
+      /* 与 auto115EnsureTvRoot / auto115EnsureSeasonFolder 保持一致：state 在响应顶层，cid 在 data 内 */
+      var dd = res.d || {}, ddd = dd.data || {};
+      var cid = String(ddd.cid || ddd.file_id || ddd.id || dd.cid || res.cid || '');
+      if (!res.ok || !(dd.state === true || dd.errno === 0) || !cid) throw new Error(auto115ErrText(ddd, res, '创建 ' + name + ' 失败'));
       return cid;
     });
   });

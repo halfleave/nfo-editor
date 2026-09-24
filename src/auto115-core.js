@@ -486,12 +486,20 @@
     if (!parts || !parts.length) return null;
     var nm = String(m.dirName || m.title || m.offlineName || '').toLowerCase();
     var usedMap = used || {};
-    /* ① 序号标记：2 / II / 第2部 / Part 2 / 2nd → 映射到 parts[序号-1] */
-    var om = nm.match(/(\d+)\s*(部|part|影|rd|nd|th)/i) || nm.match(/第\s*(\d+)\s*部/);
-    var roman = nm.match(/\b(ii|iii|iv|v|vi|vii|viii|ix|x)\b/);
+    /* ① 序号标记 → 映射到 parts[序号-1]
+       覆盖两种词序：数字在前（2part / 第2部 / 2nd）与关键字在前（Part2 / part 1 / cd1 / disc2） */
+    var ROMAN = { ii:2, iii:3, iv:4, v:5, vi:6, vii:7, viii:8, ix:9, x:10 };
     var ordNum = null;
-    if (om && /\d/.test(om[0])) ordNum = parseInt(om[1], 10);
-    else if (roman){ ordNum = { ii:2, iii:3, iv:4, v:5, vi:6, vii:7, viii:8, ix:9, x:10 }[roman[0].toLowerCase()]; }
+    var om = nm.match(/(\d+)\s*(部|part|影|cd|disc|disk|rd|nd|th)/i) || nm.match(/第\s*(\d+)\s*部/);
+    if (om && om[1] && /\d/.test(om[1])) ordNum = parseInt(om[1], 10);
+    if (ordNum == null){
+      var om2 = nm.match(/(?:部|part|cd|disc|disk|影)\s*(\d+)/i);
+      if (om2 && om2[1]) ordNum = parseInt(om2[1], 10);
+    }
+    if (ordNum == null){
+      var roman = nm.match(/\b(ii|iii|iv|v|vi|vii|viii|ix|x)\b/);
+      if (roman) ordNum = ROMAN[roman[0].toLowerCase()];
+    }
     if (ordNum && parts[ordNum - 1]){
       var p0 = parts[ordNum - 1];
       if (!usedMap[p0.id || p0.title]) return p0;

@@ -1247,6 +1247,128 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115RunningId === 'lkB', '节点排队：非锁主调用 YieldLock 不误释放他人锁');
   vm.runInContext('auto115RunningId = ""; auto115ExecDoc = null; auto115Doc = null;', ctx);
 
+  /* 11. 多磁力任务流（v336）回归：电影单文件夹 / 系列改名 / 剧集分季+未识别夹 / 数据模型 */
+  /* 隔离：专属 doc，避免 advanceQueue 捡起前面用例残留的任务 */
+  const mkMultiDoc = (type, title, extra) => Object.assign({ filmId: 'filmMulti', type: type, filmTitle: title, dvdId: '', originalTitle: '', year: '', tasks: [] }, extra || {});
+  ctx.auto115RunningId = ''; ctx.auto115ExecDoc = null;
+
+  // 11e. 数据模型：isMultiMagnet / magnets 归一化 / 任务标题
+  assert(ctx.Auto115Core.isMultiMagnet({ magnets: [{}, {}] }) === true, '多磁力：isMultiMagnet 有 magnets 数组 → true');
+  assert(ctx.Auto115Core.isMultiMagnet({ magnet: 'magnet:?xt=urn:btih:x' }) === false, '多磁力：旧单磁力 → false');
+  assert(ctx.Auto115Core.isMultiMagnet({}) === false, '多磁力：空任务 → false');
+  const legN = ctx.Auto115Core.magnets({ magnet: 'magnet:?xt=urn:btih:leg', magnetTitle: '旧磁力' });
+  assert(legN.length === 1 && legN[0].magnet === 'magnet:?xt=urn:btih:leg', '多磁力：旧单磁力归一化为 1 条（magnet 保留）');
+  const mulN = ctx.Auto115Core.magnets({ magnets: [ { magnet: 'm1', title: 'A', state: 'done' }, { magnet: 'm2', title: 'B', state: 'done' } ] });
+  assert(mulN.length === 2, '多磁力：magnets 返回原数组长度');
+  const tOff = { magnets: [{}, {}, {}] };
+  assert(ctx.auto115TaskTitle(tOff) === '多磁力任务（3 条）', '多磁力：离线任务标题 = 多磁力任务（3 条）');
+  const tTbmM = { tbm: true, magnets: [{}, {}] };
+  assert(ctx.auto115TaskTitle(tTbmM) === '磁力库·多磁力（2 条）', '多磁力：磁力库任务标题 = 磁力库·多磁力（2 条）');
+
+  // 11a. 电影多磁力（后缀模式，无系列）：多部电影放一个文件夹，夹名=影片名，各按后缀区分
+  ctx.auto115Doc = mkMultiDoc('movie', '测试影片');
+  const tMov = { id: 'tmov1', type: 'offline', multi: true, magnets: [
+    { magnet: 'magnet:?xt=urn:btih:aa', title: '电影A.2160p', dirCid: 'DIRA', dirName: '电影A.2160p', state: 'done' },
+    { magnet: 'magnet:?xt=urn:btih:bb', title: '电影B.1080p', dirCid: 'DIRB', dirName: '电影B.1080p', state: 'done' },
+    { magnet: 'magnet:?xt=urn:btih:cc', title: '电影C',       dirCid: 'DIRC', dirName: '电影C',       state: 'done' }
+  ], steps: ctx.auto115NewSteps('multi'), createdAt: Date.now() };
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [] },          // 根目录空 → 建「测试影片」夹
+    'files/add': { state: true, data: { cid: 'MOVDIR' } },
+    'files/edit': { state: true },
+    'files/move': { state: true }
+  };
+  calls.length = 0;
+  await ctx.auto115StepRenameMulti(tMov);
+  assert(ctx.auto115GetStep(tMov, 'rename').state === 'ok', '电影多磁力：rename 步 = ok（' + ctx.auto115GetStep(tMov, 'rename').msg + '）');
+  const addsM = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(addsM.length === 1 && addsM[0].indexOf('cname=测试影片') >= 0, '电影多磁力：只建 1 个文件夹，夹名=影片名（测试影片）');
+  const editsM = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editsM.some(b => b.indexOf('file_name=测试影片 4K') >= 0), '电影多磁力：电影A 改名 测试影片 4K（2160p 归一为 4K）');
+  assert(editsM.some(b => b.indexOf('file_name=测试影片 1080p') >= 0), '电影多磁力：电影B 改名 测试影片 1080p');
+  assert(editsM.some(b => b.indexOf('file_name=测试影片 版本3') >= 0), '电影多磁力：电影C 无后缀 → 测试影片 版本3');
+  const movesM = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(movesM.every(b => b.indexOf('pid=MOVDIR') >= 0), '电影多磁力：3 部都移入同一个文件夹 MOVDIR');
+  assert(!calls.some(c => c.url.indexOf('files/add') >= 0 && decodeURIComponent(c.body || '').indexOf('S0') >= 0), '电影多磁力：电影不分季（无 S0x 文件夹）');
+
+  // 11b. 电影多磁力（系列模式）：collectionId + TMDB parts → 各按对应部名改名，仍同夹
+  ctx.NfoCore.tmdbRequest = (url) => Promise.resolve({ parts: [ { id: 1, title: '系列名 1' }, { id: 2, title: '系列名 2' } ] });
+  ctx.auto115Doc = mkMultiDoc('movie', '系列名', { collectionId: 'col1' });
+  const tMovS = { id: 'tmovs', type: 'offline', multi: true, magnets: [
+    { magnet: 'magnet:?xt=urn:btih:sa', title: 'Series.Part1.1080p', dirCid: 'DSA', dirName: 'Series.Part1.1080p', state: 'done' },
+    { magnet: 'magnet:?xt=urn:btih:sb', title: 'Series.Part2.1080p', dirCid: 'DSB', dirName: 'Series.Part2.1080p', state: 'done' }
+  ], steps: ctx.auto115NewSteps('multi'), createdAt: Date.now() };
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [] },
+    'files/add': { state: true, data: { cid: 'SERDIR' } },
+    'files/edit': { state: true }, 'files/move': { state: true }
+  };
+  calls.length = 0;
+  await ctx.auto115StepRenameMulti(tMovS);
+  assert(ctx.auto115GetStep(tMovS, 'rename').state === 'ok', '电影多磁力·系列：rename = ok');
+  const editsS = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editsS.some(b => b.indexOf('file_name=系列名 1') >= 0), '电影多磁力·系列：Part1 改名 系列名 1（按系列部名）');
+  assert(editsS.some(b => b.indexOf('file_name=系列名 2') >= 0), '电影多磁力·系列：Part2 改名 系列名 2');
+  const addsS = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(addsS.length === 1 && addsS[0].indexOf('cname=系列名') >= 0, '电影多磁力·系列：夹名仍用系列名（系列名）');
+  ctx.NfoCore.tmdbRequest = () => Promise.resolve(null);   // 还原，避免影响后续
+
+  // 11c. 剧集多磁力·分季+未识别（阈值降到 3，2 季 4 集即分季）
+  ctx.Auto115Core.SPLIT_MIN_EPISODES = 3;
+  ctx.auto115Doc = mkMultiDoc('tv', '多季剧');
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [ { cid: 'SHOWCID', n: '多季剧', t: Math.floor(Date.now() / 1000) } ] },
+    'files?cid=SHOWCID': { state: true, data: [] },
+    'files/add': (n) => ({ state: true, data: { cid: 'NEW' + n } }),
+    'files/edit': { state: true }, 'files/move': { state: true }
+  };
+  const tTvSplit = { id: 'ttvm', type: 'offline', multi: true, magnets: [
+    { dirCid: 'D1', dirName: 'Show.S01E01.mkv', state: 'done' },
+    { dirCid: 'D2', dirName: 'Show.S01E02.mkv', state: 'done' },
+    { dirCid: 'D3', dirName: 'Show.S02E01.mkv', state: 'done' },
+    { dirCid: 'D4', dirName: 'Show.S02E02.mkv', state: 'done' },
+    { dirCid: 'D5', dirName: 'Extra.Pack.mkv',  state: 'done' }   // 识别不到集号 → 进未识别夹
+  ], steps: ctx.auto115NewSteps('multi'), createdAt: Date.now() };
+  calls.length = 0;
+  await ctx.auto115StepRenameMulti(tTvSplit);
+  assert(ctx.auto115GetStep(tTvSplit, 'rename').state === 'ok', '剧集多磁力·分季：rename = ok');
+  const addsT = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(addsT.length === 3, '剧集多磁力·分季：建 3 个夹（未识别 + S01 + S02），实际=' + addsT.length);
+  assert(addsT.some(b => b.indexOf('cname=未识别') >= 0), '剧集多磁力·分季：建「未识别」夹');
+  assert(addsT.some(b => b.indexOf('cname=S01') >= 0) && addsT.some(b => b.indexOf('cname=S02') >= 0), '剧集多磁力·分季：建 S01 / S02 季文件夹');
+  const editsT = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editsT.some(b => b.indexOf('file_name=多季剧.S01E01') >= 0), '剧集多磁力·分季：S01E01 改名 多季剧.S01E01（文件夹不带扩展名）');
+  assert(editsT.some(b => b.indexOf('file_name=多季剧.S02E02') >= 0), '剧集多磁力·分季：S02E02 改名 多季剧.S02E02（文件夹不带扩展名）');
+  const movesT = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(movesT.some(b => b.indexOf('fid=D1') >= 0 && b.indexOf('pid=NEW2') >= 0), '剧集多磁力·分季：S01 视频移入 S01 夹（NEW2）');
+  assert(movesT.some(b => b.indexOf('fid=D3') >= 0 && b.indexOf('pid=NEW3') >= 0), '剧集多磁力·分季：S02 视频移入 S02 夹（NEW3）');
+  assert(movesT.some(b => b.indexOf('fid=D5') >= 0 && b.indexOf('pid=NEW1') >= 0), '剧集多磁力·分季：识别不到集号 → 整夹移入「未识别」（NEW1）');
+  ctx.Auto115Core.SPLIT_MIN_EPISODES = 100;
+
+  // 11d. 剧集多磁力·不分季（单季 2 集 < 阈值）：视频平铺在剧集根，不建季文件夹
+  ctx.auto115Doc = mkMultiDoc('tv', '单季剧');
+  script = {
+    'files?cid=3311283881428122938': { state: true, data: [ { cid: 'SHOWCID2', n: '单季剧', t: Math.floor(Date.now() / 1000) } ] },
+    'files?cid=SHOWCID2': { state: true, data: [] },
+    'files/add': { state: true, data: { cid: 'NEWU' } },
+    'files/edit': { state: true }, 'files/move': { state: true }
+  };
+  const tTvN = { id: 'ttvn', type: 'offline', multi: true, magnets: [
+    { dirCid: 'N1', dirName: 'Show.S01E01.mkv', state: 'done' },
+    { dirCid: 'N2', dirName: 'Show.S01E02.mkv', state: 'done' }
+  ], steps: ctx.auto115NewSteps('multi'), createdAt: Date.now() };
+  calls.length = 0;
+  await ctx.auto115StepRenameMulti(tTvN);
+  assert(ctx.auto115GetStep(tTvN, 'rename').state === 'ok', '剧集多磁力·不分季：rename = ok');
+  const addsN = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(addsN.length === 1 && addsN[0].indexOf('cname=未识别') >= 0, '剧集多磁力·不分季：只建「未识别」夹，不建季文件夹');
+  assert(!addsN.some(b => /cname=S0\d/.test(b)), '剧集多磁力·不分季：无 S0x 季文件夹');
+  const movesN = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(movesN.every(b => b.indexOf('pid=SHOWCID2') >= 0), '剧集多磁力·不分季：视频平铺移入剧集根 SHOWCID2');
+  const editsN = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(editsN.some(b => b.indexOf('file_name=单季剧.S01E01') >= 0), '剧集多磁力·不分季：命名仍带 S01E01（文件夹不带扩展名）');
+  ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
+
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');
   process.exit(process.exitCode || 0);

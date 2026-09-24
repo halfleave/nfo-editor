@@ -109,7 +109,8 @@ const plan2 = api.tvPlan('X', [{ fid: 'p1', name: '某剧 第1集.mkv' }, { fid:
 assert(plan2.renames.map(r => r.name).join(',') === 'X.S01E01.mkv,X.S01E02.mkv', 'tvPlan：中文集号按顺序识别');
 const plan3 = api.tvPlan('Y', [{ fid: 'q1', name: 'ep.mkv' }, { fid: 'q2', name: 'ep2.mkv' }]);
 const p3names = plan3.renames.map(r => r.name);
-assert(p3names.indexOf('Y.S01E01.mkv') >= 0 && p3names.indexOf('Y.S01E02.mkv') >= 0 && p3names.length === 2, 'tvPlan：认不出集号顺序补号不撞号（ep2 被 E02 规则命中）');
+assert(p3names.indexOf('Y.S01E02.mkv') >= 0 && p3names.length === 1, 'tvPlan：ep2 正确识别为 E02（ep 认不出集号不臆造，保持未识别）');
+assert(plan3.unrecognized.some(u => u.name === 'ep.mkv'), 'tvPlan：认不出集号的 ep.mkv 进未识别（不编出 E01）');
 const plan4 = api.tvPlan('Z', [{ fid: 'd1', name: 'D.第二部 第1集.mkv' }, { fid: 'd2', name: 'D.第1集.mkv' }]);
 assert(plan4.renames.some(r => r.name === 'Z.S02E01.mkv'), 'tvPlan：第二部 → S02');
 /* 无集号字幕不兜底：不改名、不删除，保持原名 */
