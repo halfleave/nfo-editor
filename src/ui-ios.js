@@ -2070,21 +2070,49 @@ function auto115TaskType(t){ return Auto115Core.taskType(t); }
 /* 当前是剧集任务吗？可传文档（执行绑定用）；不传读当前打开影片 */
 function auto115IsTvTask(doc){ return !!(((doc != null ? doc : auto115Doc) || {}).type === 'tv'); }
 function auto115StepDefs(t, doc){
-  if (auto115IsTvTask(doc != null ? doc : auto115TaskDoc(t))) return AUTO115_STEPS_TV;
+  if (auto115TaskIsTv(t)) return AUTO115_STEPS_TV;
   return AUTO115_STEP_TABLE[auto115TaskType(t)] || AUTO115_STEP_DEFS;
+}
+/* 任务级剧集判定（方案 A，v332）：tbm 任务由 t.tbmType 决定影片/剧集，不读影片详情文档；
+   普通任务仍读执行绑定/当前影片文档的 type 字段 */
+function auto115TaskIsTv(t){
+  if (!t) return auto115IsTvTask();
+  if (t.tbm) return t.tbmType === 'tv';
+  return auto115IsTvTask(auto115TaskDoc(t));
 }
 /* 任务卡标题：上传任务没有磁力名，统一显示「上传 NFO」 */
 function auto115TaskTitle(t){
   if (auto115TaskType(t) === 'upload') return '上传 NFO';
   /* 整理任务：没有磁力名，显示被整理的文件夹名 */
   if (t && t.tidy) return '整理：' + (t.offlineDirName || t.videoName || (auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId)) || '文件夹');
+  /* tbm 任务已填整理标题 → 显示「影片/剧集：标题」 */
+  if (t && t.tbm && t.tbmType && t.targetName) return (t.tbmType === 'tv' ? '剧集：' : '影片：') + t.targetName;
   return (t && (t.magnetTitle || auto115OfflineTitle(t && t.magnet))) || '磁力任务';
 }
 var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
+var auto115LibraryDoc = null;   /* tbm 磁力库文档（方案 A，v332）：filmId='tbm-library'，存工具箱磁力管理任务。
+                                   与影片文档相互独立，离线下载与整理都在它名下跑，不污染任何影片文档 */
 var auto115ExecDoc = null;      /* 执行绑定（v327）：正在执行的任务所属影片的文档。执行中途切到别的影片，
                                    执行器仍读写这个文档——影片身份、进度保存都不会串到别人身上 */
 var auto115ProbeTimer = null;
 var auto115Expanded = {};          // 已展开的任务卡 id 集合（支持多个同时展开）
+var auto115TbmDetailOpen = false;  // 方案 A：是否正打开某条 tbm 任务详情页（用于进度实时刷新）
+var auto115TbmDetailId = '';       // 当前打开的 tbm 任务 id
+/* 进度写回时若正打开该 tbm 任务详情页，顺带刷新它（方案 A） */
+function auto115TbmRefreshIfOpen(t){
+  if (t && t.tbm && auto115TbmDetailOpen && auto115TbmDetailId === t.id) renderTbmTaskDetail(t.id);
+}
+/* tbm 磁力库文档加载（方案 A）：与影片文档同存 IndexedDB kv，加载后常驻内存，保证后台探针也能找到任务 */
+function auto115EnsureLibraryDoc(){
+  if (auto115LibraryDoc) return Promise.resolve(auto115LibraryDoc);
+  return idbGet('kv', auto115Key('tbm-library')).then(function(v){
+    auto115LibraryDoc = (v && v.tasks) ? v : { filmId: 'tbm-library', filmTitle: '磁力库', dvdId: '', originalTitle: '', year: '', type: 'library', tasks: [] };
+    return auto115LibraryDoc;
+  }).catch(function(){
+    auto115LibraryDoc = { filmId: 'tbm-library', filmTitle: '磁力库', dvdId: '', originalTitle: '', year: '', type: 'library', tasks: [] };
+    return auto115LibraryDoc;
+  });
+}
 
 function auto115Key(filmId){ return AUTO115_PREFIX + filmId; }
 function auto115Now(){ return Date.now(); }
@@ -2192,19 +2220,36 @@ function auto115Task(id){
     ts = auto115ExecDoc.tasks || [];
     for (var j = 0; j < ts.length; j++) if (ts[j].id === id) return ts[j];
   }
+  /* 再找 tbm 磁力库文档（方案 A 任务） */
+  if (auto115LibraryDoc){
+    ts = auto115LibraryDoc.tasks || [];
+    for (var k = 0; k < ts.length; k++) if (ts[k].id === id) return ts[k];
+  }
   return null;
 }
 /* 任务归属的文档：优先引用比对（任务对象只会在一个文档的 tasks 数组里）；
-   引用失联（被反序列化副本替换）时由 auto115Run 按 filmId 归位。 */
+   引用失联（被反序列化副本替换）时由 auto115Run 按 filmId 归位。tbm 任务一律归属磁力库文档。 */
 function auto115DocOf(t){
   if (!t) return auto115Doc;
+  if (t.tbm) return auto115LibraryDoc;   /* 方案 A：tbm 任务存磁力库文档，不污染影片文档 */
   if (auto115ExecDoc && (auto115ExecDoc.tasks || []).indexOf(t) >= 0) return auto115ExecDoc;
   if (auto115Doc && (auto115Doc.tasks || []).indexOf(t) >= 0) return auto115Doc;
   return null;
 }
 /* 执行器读影片身份：按任务实时解析归属文档（引用比对 → filmId 比对 → 当前文档）。
-   不用全局「执行绑定」判断身份——绑定文档在探测等待期不会解除，会劫持别的影片的身份读取 */
+   不用全局「执行绑定」判断身份——绑定文档在探测等待期不会解除，会劫持别的影片的身份读取。
+   tbm 任务：合成虚拟文档，身份（标题/剧集属性）取自任务自身 targetName，不依赖影片详情页。 */
 function auto115TaskDoc(t){
+  if (t && t.tbm){
+    return {
+      filmId: 'tbm-library',
+      filmTitle: t.targetName || t.magnetTitle || '',
+      dvdId: '', originalTitle: '', year: '',
+      type: t.tbmType === 'tv' ? 'tv' : 'movie',
+      nfoUploaded: 0,
+      tasks: (auto115LibraryDoc && auto115LibraryDoc.tasks) || []
+    };
+  }
   var d = auto115DocOf(t);
   if (d) return d;
   if (t && t.filmId){
@@ -2220,9 +2265,10 @@ function auto115Set(t, key, state, msg){
   if (state !== 'idle' && state !== 'running') s.at = auto115Now();
   else if (!s.at) s.at = auto115Now();
   renderAuto115(); auto115Save(auto115DocOf(t) || auto115Doc);   /* 进度写回任务归属的文档（防串到别的影片） */
+  auto115TbmRefreshIfOpen(t);
   return s;
 }
-function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115Save(auto115DocOf(t) || auto115Doc); updateAutoBadge(); auto115AdvanceQueue(t); if (auto115ExecDocIdle()) auto115ExecDoc = null; }
+function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115Save(auto115DocOf(t) || auto115Doc); updateAutoBadge(); auto115AdvanceQueue(t); auto115TbmRefreshIfOpen(t); if (auto115ExecDocIdle()) auto115ExecDoc = null; }
 /* 执行绑定文档里还有在跑/排队的任务吗？都没有就解除绑定，避免旧文档被后台续跑 */
 function auto115ExecDocIdle(){
   if (!auto115ExecDoc) return true;
@@ -2237,7 +2283,7 @@ function auto115ExecDocIdle(){
 
 /* —— 大状态合成（纯逻辑在 Auto115Core.status，isTv 由当前影片详情判定） —— */
 function auto115StepLabel(key){ return Auto115Core.stepLabel(key); }
-function auto115Status(t, doc){ return Auto115Core.status(t, auto115IsTvTask(doc)); }
+function auto115Status(t, doc){ return Auto115Core.status(t, auto115TaskIsTv(t)); }
 /* 任务是否真的在跑：只要有任一步骤处于 running 就算活跃（waiting/ok/idle/skip 都不算） */
 function auto115IsActive(t){ return Auto115Core.isActive(t); }
 /* —— 页面渲染 —— */
@@ -2438,9 +2484,11 @@ function auto115QueryTask(t){
   });
 }
 /* —— 六步执行器 ——
-   排队串行化：同一时间只跑一条任务流水线（auto115RunningId）。
-   同时点多个「115 离线」时，第一个正常跑完（含改名/并入判断），其余排队等它终态后逐个启动——
-   后跑的自然命中并入模式（移入已有标题文件夹、改名 番号.A…），也避免并发时时间窗兜底定位错文件夹。 */
+   节点级排队（v332）：执行锁（auto115RunningId）只在「写操作突发」期间持有——
+   提交离线 POST、以及下载完成后的 定位/清理/改名/移入 写链；等待下载（探针轮询）期间主动让出锁，
+   让别的任务的提交/整理节点并行。多个任务可同时处于「离线下载中」，互不阻塞；
+   某任务下载完成 → 探针回调抢锁 → 持锁跑完自己的写链（身份一致性由 auto115TaskDoc 按任务解析文档保证，v327 防串档不变）。
+   后跑的任务仍命中并入模式（移入已有标题文件夹、改名 番号.A…），避免并发写时时间窗兜底定位错文件夹。 */
 var auto115RunningId = '';
 var auto115LockAt = 0;                       // 拿到锁的时刻，用于识别「占着锁但没在跑」的脏锁
 var AUTO115_LOCK_GRACE = Auto115Core.LOCK_GRACE_MS;  // 宽限期：刚拿到锁的头 45s 允许还没跑到 running 步骤（读 Cookie/建目录）
@@ -2476,6 +2524,7 @@ function auto115SweepZombies(){
   var docs = [];
   if (auto115Doc) docs.push(auto115Doc);
   if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) docs.push(auto115ExecDoc);   /* 执行绑定的文档也要扫（人可能在别的影片页） */
+  if (auto115LibraryDoc) docs.push(auto115LibraryDoc);   /* 方案 A：tbm 库文档也要扫僵尸 */
   var now = Date.now(), changed = false;
   for (var di = 0; di < docs.length; di++){
     var dts = docs[di].tasks || [], docChanged = false;
@@ -2498,6 +2547,21 @@ function auto115SweepZombies(){
 }
 function auto115HoldLock(t){ auto115RunningId = t.id; auto115LockAt = Date.now(); }
 function auto115ReleaseLock(){ auto115RunningId = ''; auto115LockAt = 0; }
+/* 节点级排队（v332）：等待下载期间不再长期占用执行锁。
+   ① auto115YieldLock：本任务处于「离线下载中」时主动让出锁，让其他任务的提交/整理节点并行；
+      wait 步骤保持 running（继续被探针调度 + 状态显示「离线中」）。
+   ② auto115EnsureLock：探针回调重入时本任务通常不持有锁，先抢锁——抢到才继续；
+      抢不到（别的任务正在做整理写操作）就排队让出，等对方终态后 auto115KickStuck 重新拉起续跑。
+      来自 auto115Run / submit 链路的调用已持有锁，直接放行。 */
+function auto115YieldLock(t){
+  if (auto115RunningId === t.id){ auto115ReleaseLock(); auto115KickStuck(); }
+}
+function auto115EnsureLock(t){
+  if (auto115RunningId === t.id) return true;
+  if (!auto115RunningId){ auto115HoldLock(t); t.queued = false; return true; }
+  if (!t.queued) t.queued = true;   /* 锁被占用：标记排队，等被 kick 续跑（wait 仍 running，探针继续） */
+  return false;
+}
 /* 脏锁清理：锁指向的任务不存在 / 已中止 / 已终态 / 超过宽限期仍没有任何 running 步骤 → 释放。
    最后一条是「卡在待提交」的根因：任务拿到锁后卡在读 Cookie 等异步环节，步骤迟迟不 running，
    旧逻辑只认「已终态」不认「没在跑」，于是锁永不释放，后面所有任务全变排队（界面一直显示待提交）。 */
@@ -2515,6 +2579,7 @@ function auto115KickStuck(){
   /* v327：先看执行绑定文档（人在别的影片页时，那边的排队任务也要能接上），再看当前打开的 */
   if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) auto115KickStuckIn(auto115ExecDoc);
   if (auto115Doc) auto115KickStuckIn(auto115Doc);
+  if (auto115LibraryDoc) auto115KickStuckIn(auto115LibraryDoc);   /* 方案 A：tbm 库任务也要接上调度 */
 }
 function auto115KickStuckIn(doc){
   if (!doc) return;
@@ -2541,11 +2606,11 @@ function auto115KickStuckIn(doc){
 }
 /* 步骤分发单点：key → 对应执行函数。「启动流水线」与「重试某步」共用，避免两处分发不一致 */
 function auto115DispatchStep(t, key){
-  var isTv = auto115IsTvTask(auto115TaskDoc(t));   /* 执行绑定文档的剧集属性，不受「当前打开哪部片」影响 */
+  var isTv = auto115TaskIsTv(t);   /* 执行绑定文档/任务的剧集属性，不受「当前打开哪部片」影响 */
   if (key === 'dir') return auto115StepUploadDir(t);
   if (key === 'upload') return auto115StepUploadFiles(t);
   if (key === 'submit') return auto115StepSubmit(t);
-  if (key === 'wait') return auto115StepWait(t, true);
+  if (key === 'wait') return auto115BeginWait(t);
   if (key === 'mkdir') return t.tidy ? auto115StepTidyMkdir(t) : auto115StepMkdir(t);
   if (key === 'move') return isTv ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
   if (key === 'rename') return isTv ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
@@ -2631,7 +2696,7 @@ function auto115AdvanceQueue(t){
 function auto115StepSubmit(t){
   /* 已提交过 → 只查进度，绝不重复 POST（115 的列表去重只在任务还在列表时有效，
      一旦上一个任务完成被清出列表，再提交一次就是真的又下一遍） */
-  if (auto115Submitted(t)) return auto115StepWait(t, true);
+  if (auto115Submitted(t)) return auto115BeginWait(t);
   /* 这一条正在提交中 → 由那条请求负责收尾，避免并发造成重复离线 */
   if (auto115Submitting[t.id]){
     auto115Set(t, 'submit', 'running', '正在提交到 115 云下载…');
@@ -2653,7 +2718,7 @@ function auto115SubmitPost(t){
       t.infoHash = hash;
       t.offlineName = info.name || t.offlineName || t.magnetTitle || '';
       auto115Set(t, 'submit', 'ok', '任务已在 115 列表中（复用，不重复提交）');
-      return auto115StepWait(t, true);
+      return auto115BeginWait(t);
     }
     return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', body).then(function(res){
       delete auto115Submitting[t.id];
@@ -2662,7 +2727,7 @@ function auto115SubmitPost(t){
         t.infoHash = ((d.info_hash || (d.data && d.data.info_hash) || auto115Btih(t.magnet)) || '').toUpperCase();
         t.offlineName = d.name || (d.data && d.data.name) || t.magnetTitle || '';
         auto115Set(t, 'submit', 'ok', d.errcode === 10008 ? '任务已在 115 列表中（复用）' : '已提交到云下载');
-        return auto115StepWait(t, true);
+        return auto115BeginWait(t);
       }
       auto115Set(t, 'submit', 'fail', auto115ErrText(d, res, '提交失败'));
       auto115Finish(t); return null;
@@ -2673,7 +2738,22 @@ function auto115SubmitPost(t){
     auto115Finish(t); return null;
   });
 }
+function auto115BeginWait(t){
+  /* v333：等待阶段启动器。提交 / 恢复 / 重试走到「等待离线」时，首探延迟 PROBE_GAPS[0]=5s，
+     不再立即探测——离线后 5s / 10s / 20s 各探一次，共 20s（与 auto115-core PROBE_GAPS 注释一致）。
+     旧行为首探立即执行，会让探测时刻变成 0s / 5s / 15s。手动「继续探测」按钮仍走 auto115StepWait 立即版。 */
+  if (!auto115EnsureLock(t)) return Promise.resolve(null);
+  var s = auto115Set(t, 'wait', 'running', '正在查询离线状态…');   /* 内部已按归属文档持久化（含 tbm 库文档） */
+  s.probes = 0;
+  auto115YieldLock(t);          /* 节点级排队：等待下载期让出锁，其他任务可并行提交/整理 */
+  auto115ScheduleProbe(t);      /* 首探延迟 5s（PROBE_GAPS[0]），之后每次按已完成探测数取间隔 */
+  return Promise.resolve(null);
+}
 function auto115StepWait(t, reset){
+  /* 节点级排队（v332）：等待下载期间不长期占锁。探针回调重入时本任务通常未持锁，
+     先抢锁——抢到才继续；抢不到（别的任务正在做整理写操作）就排队让出，
+     等对方终态后 auto115KickStuck 重新拉起续跑。来自 auto115Run / submit 链路的调用已持锁，直接放行。 */
+  if (!auto115EnsureLock(t)) return Promise.resolve(null);
   var s = auto115Set(t, 'wait', 'running', '正在查询离线状态…');
   if (reset) s.probes = 0;
   return auto115QueryTask(t).then(function(info){
@@ -2705,6 +2785,7 @@ function auto115StepWait(t, reset){
     }
     s.msg = '离线中 ' + (info.percent != null ? info.percent + '% ' : '') + '（' + s.probes + '/' + AUTO115_PROBE_MAX + '）';
     renderAuto115(); auto115Save();
+    auto115YieldLock(t);          /* 节点级排队：让出执行锁，其他任务可并行提交/整理 */
     auto115ScheduleProbe(t);
     return null;
   }).catch(function(e){
@@ -3323,7 +3404,7 @@ function auto115SecondVersionJob(t){
    无番号（影片）→ 标题.原始标题.年份.ext（无年份/无原始标题 → 仅标题；标题=原始标题 → 标题.年份）
    多 part 全部改名并保留；并入模式先移入已有文件夹再按占用加 .A/.B 后缀。 */
 function auto115StepRename(t){
-  if (auto115IsTvTask(auto115TaskDoc(t))) return auto115StepTvRenameVideos(t);
+  if (auto115TaskIsTv(t)) return auto115StepTvRenameVideos(t);
   /* 平铺普通影片：不进文件夹，改好名直接放云下载根目录 */
   if (!t.external && !auto115MovieLayout(auto115TaskDoc(t)).folder) return auto115StepRenameFlat(t);
   if (t.external){
@@ -3507,7 +3588,7 @@ function auto115StepRenameFlat(t){
 }
 /* 步骤「修改文件夹名称」：把 115 离线的临时目录改名为影片标题（独立任务）；并入任务跳过。删除临时目录的逻辑由 auto115RemoveTmpDir 在 rename 后自动执行，不显示在 UI。 */
 function auto115StepCleanup(t){
-  if (auto115IsTvTask()){
+  if (auto115TaskIsTv(t)){
     /* 剧集流程第 4 步（方案 B）：先把容器改成剧集标题；改完调 TvCleanupFiles（第 5 步） */
     var showTitle = auto115TvDirName((auto115TaskDoc(t) || {}).filmTitle);
     if (t.noFolder){
@@ -4475,6 +4556,7 @@ function auto115ScheduleProbe(t){
     auto115ProbeTimer = null;
     var pending = waitRunning(auto115Doc);
     if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) pending = pending.concat(waitRunning(auto115ExecDoc));
+    if (auto115LibraryDoc) pending = pending.concat(waitRunning(auto115LibraryDoc));   /* v333：tbm 库任务也要被全局轮询扫到 */
     if (!pending.length) return;
     ensure115Cookie().then(function(ck){
       if (!ck) return;
@@ -4669,8 +4751,8 @@ function auto115RetryStep(tid, key, force){
       ws.state = 'idle'; ws.msg = ''; ws.probes = 0; ws.at = 0;
     }
     t.aborted = false;
-    auto115Save(); renderAuto115();
-    if (keepSubmit) return auto115StepWait(t, true);
+    auto115Save(); renderAuto115(); auto115TbmRefreshIfOpen(t);
+    if (keepSubmit) return auto115BeginWait(t);
     return auto115DispatchStep(t, key);
   }).catch(function(e){ showToast((e && e.message) || '重试失败', 'error'); });
 }
@@ -4711,10 +4793,16 @@ function auto115Abort(tid){
   auto115Finish(t);
 }
 function auto115RemoveTask(tid){
-  if (!auto115Doc) return;
-  auto115Doc.tasks = (auto115Doc.tasks || []).filter(function(x){ return x.id !== tid; });
+  var t = auto115Task(tid);
+  if (!t) return;
+  var doc = auto115DocOf(t);
+  if (!doc) return;
+  doc.tasks = (doc.tasks || []).filter(function(x){ return x.id !== tid; });
   if (auto115RunningId === tid) auto115AdvanceQueue(null); // 删的是正在跑的任务 → 释放队列
-  auto115Save().then(renderAuto115);
+  auto115Save(doc).then(function(){
+    if (t.tbm && auto115TbmDetailOpen){ auto115TbmDetailOpen = false; auto115TbmDetailId = ''; switchPage('toolbox-magnet'); switchTbmTab('tasks'); }
+    renderAuto115();
+  });
 }
 /* ==========================================================
  * 文件整理：云下载里已经有这个片子（自己下的、以前下的），只是文件名和夹名不规范
@@ -10027,18 +10115,22 @@ function openToolboxMagnet(){
   switchTbmTab('add');   /* 每次进页回到「添加」tab */
   switchPage('toolbox-magnet');
 }
-/* 磁力管理页 tab：添加 / 搜索（iOS 分段控件样式，与磁力弹窗一致） */
+/* 磁力管理页 tab：添加 / 搜索 / 任务（iOS 分段控件样式，与磁力弹窗一致） */
 function switchTbmTab(tab){
   var add = document.getElementById('tbmPanelAdd');
   var search = document.getElementById('tbmPanelSearch');
-  if (!add || !search) return;
+  var tasks = document.getElementById('tbmPanelTasks');
+  if (!add || !search || !tasks) return;
   add.style.display = tab === 'add' ? '' : 'none';
   search.style.display = tab === 'search' ? '' : 'none';
-  tabSlideSwap(tab === 'add' ? add : search, ['add','search'], tab);
+  tasks.style.display = tab === 'tasks' ? '' : 'none';
+  var panel = tab === 'add' ? add : (tab === 'search' ? search : tasks);
+  tabSlideSwap(panel, ['add','search','tasks'], tab);
   var tabs = document.querySelectorAll('#page-toolbox-magnet .mc-tab');
   for (var i = 0; i < tabs.length; i++){
     tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tbm') === tab);
   }
+  if (tab === 'tasks') renderTbmTasks();
 }
 /* 添加区可用性：未配置 115 Cookie → 灰态 + 提示（提交前还会再兜一次） */
 function refreshTbmAddState(){
@@ -10066,26 +10158,40 @@ function clearTbmAddInput(){
   if (inp){ inp.value = ''; inp.focus(); }
   toggleTbmAddClear();
 }
-/* 纯离线：提交到 115 云下载根目录，不建自动化任务、不落影片文档、不整理。
-   M4「115 文件整理」落地后，在此处挂整理规则即可升级为「离线 + 整理」，调用方无需改。 */
+/* 方案 A（v332）：工具箱磁力管理「离线到 115」= 建一条 tbm 任务（存磁力库文档）并自动跑 submit/wait。
+   下载完成后停在「待整理」，由用户在任务详情页选影片/剧集 + 手输标题触发整理（不调 TMDB）。 */
 function toolboxMagnetOffline(magnet){
   var m = (magnet != null ? magnet : ((document.getElementById('tbmMagnetInput') || {}).value || ''));
   m = (m || '').trim();
   if (!auto115IsOfflineLink(m)){ showToast('请粘贴有效的磁力或 ed2k 链接（magnet:? / ed2k:// 开头）', 'error'); return; }
   ensure115Cookie().then(function(ck){
     if (!ck){ showToast('请先到「设置 → 应用配置 → 115 配置」登录', 'error'); refreshTbmAddState(); return; }
-    showToast('正在提交离线…', 'info');
-    var body = 'url=' + encodeURIComponent(m) + '&wp_path_id=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
-    return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_url', body).then(function(res){
-      var d = (res && res.d) || {};
-      if (res && res.ok && (d.state === true || d.errcode === 10008 || (d.data && d.data.info_hash))){
-        showToast(d.errcode === 10008 ? '该磁力已在 115 云下载列表中' : '已提交到 115 云下载', 'success');
+    return auto115EnsureLibraryDoc().then(function(lib){
+      /* 去重：同一磁力已在库里（未中止）→ 不重复建任务、不重复离线 */
+      var h = auto115Btih(m), s = m.toLowerCase(), dup = false;
+      (lib.tasks || []).forEach(function(x){
+        if (!x || x.aborted || !x.tbm) return;
+        var xm = (x.magnet || '').toLowerCase();
+        if (h ? (auto115Btih(x.magnet || '') === h) : (xm === s)) dup = true;
+      });
+      if (dup){ showToast('这个磁力已经在任务列表里了', 'info'); return; }
+      var t = {
+        id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
+        tbm: true, type: 'tbm', external: true,   /* external：整理阶段复用「外部磁力」改名路径（按手输标题改名，不调 TMDB） */
+        magnet: m, magnetTitle: auto115OfflineTitle(m),
+        infoHash: h || '', offlineName: '',
+        steps: Auto115Core.newSteps('tbm'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+        filmId: 'tbm-library'
+      };
+      lib.tasks.unshift(t);
+      return auto115Save(lib).then(function(){
         var inp = document.getElementById('tbmMagnetInput');
         if (inp) inp.value = '';
         toggleTbmAddClear();
-      } else {
-        showToast(auto115ErrText(d, res, '离线提交失败'), 'error');
-      }
+        showToast('已加入离线任务，下载中…', 'success');
+        switchTbmTab('tasks'); renderTbmTasks();   /* 跳到任务列表，让用户看到进度 */
+        return auto115Run(t);                        /* 自动跑 submit/wait */
+      });
     });
   }).catch(function(e){ showToast((e && e.message) || '网络错误，请稍后重试', 'error'); });
 }
@@ -10110,6 +10216,108 @@ function toolboxMagnetSearch(){
   var inp = document.getElementById('tbmQueryInput');
   magnetSearchTo(((inp && inp.value) || '').trim(), document.getElementById('tbmResults'));
 }
+
+/* —— 方案 A（v332）：tbm 磁力库任务列表 + 任务详情页 —— */
+var tbmOrganizeType = 'movie';   // 整理表单当前选中的类型（影片/剧集）
+function renderTbmTasks(){
+  var box = document.getElementById('tbmTaskList');
+  if (!box) return;
+  var lib = auto115LibraryDoc;
+  var ts = (lib && lib.tasks) || [];
+  if (!ts.length){
+    box.innerHTML = '<div class="tmdb-msg">还没有离线任务。去「添加」粘贴磁力链离线到 115 吧。</div>';
+    return;
+  }
+  box.innerHTML = ts.map(function(t){
+    var st = auto115Status(t);
+    var title = auto115TaskTitle(t);
+    var sub = (t.tbmType ? '' : (t.magnetTitle || auto115OfflineTitle(t.magnet) || ''));
+    return '<div class="tbm-task-row" onclick="openTbmTaskDetail(\'' + t.id + '\')">'
+      + '<div class="tbm-task-row-main">'
+      + '<div class="tbm-task-row-title">' + escapeHtml(title) + '</div>'
+      + (sub ? '<div class="tbm-task-row-sub">' + escapeHtml(sub) + '</div>' : '')
+      + '</div>'
+      + '<span class="auto-task-badge ' + st.cls + '">' + escapeHtml(st.text) + '</span>'
+      + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
+      + '</div>';
+  }).join('');
+}
+/* 打开某条 tbm 任务的详情子页 */
+function openTbmTaskDetail(id){
+  var t = auto115Task(id);
+  if (!t){ showToast('任务不存在', 'error'); return; }
+  auto115TbmDetailOpen = true;
+  auto115TbmDetailId = id;
+  switchPage('toolbox-tbm-task');
+  renderTbmTaskDetail(id);
+}
+function tbmCloseDetail(){
+  auto115TbmDetailOpen = false;
+  auto115TbmDetailId = '';
+  switchPage('toolbox-magnet');
+  switchTbmTab('tasks');
+}
+/* 渲染任务详情：步骤进度 + 整理表单（仅在「下载完成 · 待整理」时显示） */
+function renderTbmTaskDetail(id){
+  var t = auto115Task(id);
+  if (!t) return;
+  var titleEl = document.getElementById('tbmTaskTitle');
+  if (titleEl) titleEl.textContent = auto115TaskTitle(t);
+  var stepsEl = document.getElementById('tbmTaskSteps');
+  if (stepsEl){
+    /* 复用影片自动化步骤渲染（auto115StepHtml 已全面任务级化，tbm 任务可直接用） */
+    var html = (t.steps || []).map(function(s){ return auto115StepHtml(t, s); }).join('');
+    if (!html) html = '<div class="tmdb-msg">暂无步骤</div>';
+    stepsEl.innerHTML = html;
+  }
+  /* 整理表单：仅当「下载完成且尚未整理」（wait=ok && 无 tbmType）时显示 */
+  var orgBox = document.getElementById('tbmOrganizeBox');
+  if (orgBox){
+    var canOrganize = !!(t.tbm && Auto115Core.getStep(t, 'wait').state === 'ok' && !t.tbmType);
+    orgBox.style.display = canOrganize ? '' : 'none';
+    if (canOrganize){
+      var input = document.getElementById('tbmTargetName');
+      if (input) input.value = t.targetName || '';
+      tbmSetType(t.tbmType || 'movie');
+    }
+  }
+}
+/* 整理表单：切换影片/剧集 */
+function tbmSetType(type){
+  tbmOrganizeType = type;
+  var btns = document.querySelectorAll('#tbmOrganizeBox .mc-tab');
+  for (var i = 0; i < btns.length; i++){
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-ot') === type);
+  }
+}
+/* 确认整理：写 tbmType/targetName，追加整理步骤（影片：定位/清理/移动/改名；剧集：定位/清理/移动/建季/改名/移入），从整理阶段重跑 */
+function tbmConfirmOrganize(){
+  var id = auto115TbmDetailId;
+  var t = auto115Task(id);
+  if (!t) return;
+  var input = document.getElementById('tbmTargetName');
+  var name = (input && input.value || '').trim();
+  if (!name){ showToast('请输入影片或剧集标题', 'error'); if (input) input.focus(); return; }
+  t.tbmType = tbmOrganizeType;        // 'movie' | 'tv'
+  t.type = tbmOrganizeType;           // 让 auto115TaskType 走对应步骤表（movie/tv）
+  t.targetName = name;                // 整理身份（外部磁力改名路径用）
+  /* 追加整理步骤：跳过 submit/wait（已跑完），从定位文件夹起步 */
+  var orgKeys = (t.tbmType === 'tv')
+    ? ['mkdir','cleanup','move','mkdir2','rename','move2']
+    : ['mkdir','cleanup','move','rename'];
+  orgKeys.forEach(function(k){
+    if (!Auto115Core.hasStep(t, k)) Auto115Core.getStep(t, k);   // 不存在才追加（重试整理幂等）
+  });
+  auto115Save(auto115DocOf(t)).then(function(){
+    showToast('开始整理…', 'info');
+    renderTbmTaskDetail(id);
+    return auto115Run(t);             // 自动跑整理写链（wait 已 ok → 重查进度后接定位/清理/改名）
+  });
+}
+/* 详情页通用操作：重试/删除（复用全局 auto115RetryTask / auto115RemoveTask，已库文档化） */
+function tbmRetryTask(id){ auto115RetryTask(id); }
+function tbmRemoveTask(id){ auto115RemoveTask(id); }
+function tbmAbortTask(id){ auto115Abort(id); }
 
 /* —— 概览长按操作：iOS 原生风格底部 Action Sheet —— */
 var overviewSuppressClick = false;
@@ -10775,7 +10983,9 @@ function bootApp(){
       syncSearchSourceUI();
       updateSearchPlaceholder();
       syncAdultPhraseRow();
-    }).catch(function(){})
+    }).catch(function(){}),
+    /* 方案 A：启动即加载 tbm 磁力库文档，保证后台探针/调度也能找到工具箱磁力任务 */
+    auto115EnsureLibraryDoc().catch(function(){})
   ]).then(function(){
     // ③ 加载影片列表（较重的同步渲染，放到一帧之后做，避免卡住启动页）
     setSplashStep('正在加载影片…');

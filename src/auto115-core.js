@@ -57,14 +57,24 @@
     { key: 'dir',    label: '准备文件夹' },
     { key: 'upload', label: '上传文件' }
   ];
-  api.STEP_TABLE = { offline: api.STEP_DEFS, tv: api.STEPS_TV, upload: api.STEPS_UPLOAD };
+  api.STEP_TABLE = { offline: api.STEP_DEFS, tv: api.STEPS_TV, upload: api.STEPS_UPLOAD, tbm: api.STEPS_TBM };
+  /* tbm 库任务：仅提交离线 + 等待离线完成两步；下载完成后停在「待整理」，由用户触发整理（方案 A，v332）。
+     整理时再按需追加 定位/清理/改名 等后续步骤，type/tbmType 决定影片/剧集走哪套写链。 */
+  api.STEPS_TBM = [
+    { key: 'submit', label: '提交离线' },
+    { key: 'wait', label: '等待离线完成' }
+  ];
 
   /* ---------- 任务模型纯函数 ---------- */
-  function taskType(t){ return (t && t.type === 'upload') ? 'upload' : 'offline'; }
+  function taskType(t){ if (!t) return 'offline'; if (t.type === 'upload') return 'upload'; if (t.type === 'tv') return 'tv'; if (t.type === 'tbm') return 'tbm'; return 'offline'; }
   api.taskType = taskType;
   /* 步骤表按任务类型取；旧任务没有 type 一律按 offline 处理（兼容存量数据） */
   api.newSteps = function (type, isTv) {
-    var table = api.STEP_TABLE[type] || (isTv ? api.STEPS_TV : api.STEP_DEFS);
+    var table;
+    if (type === 'tbm') table = api.STEPS_TBM;
+    else if (type === 'upload') table = api.STEPS_UPLOAD;
+    else if (type === 'tv') table = api.STEPS_TV;
+    else table = isTv ? api.STEPS_TV : api.STEP_DEFS;
     return table.map(function (s) { return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
   };
   api.getStep = function (t, key) {
@@ -72,6 +82,12 @@
     for (var i = 0; i < steps.length; i++) if (steps[i].key === key) return steps[i];
     var s = { key: key, state: 'idle', msg: '', at: 0, probes: 0 };
     steps.push(s); t.steps = steps; return s;
+  };
+  /* 仅判断步骤是否存在（不自动创建），用于 tbm 任务「下载完成但还没追加整理步骤」的判定 */
+  api.hasStep = function (t, key) {
+    var steps = (t && t.steps) || [];
+    for (var i = 0; i < steps.length; i++) if (steps[i].key === key) return true;
+    return false;
   };
   api.stepLabel = function (key) {
     var all = api.STEP_DEFS.concat(api.STEPS_TV).concat(api.STEPS_UPLOAD);
@@ -97,6 +113,8 @@
     if (wait.state === 'waiting') return { text: '等待中 · 已探 ' + (wait.probes || 0) + '/' + api.PROBE_MAX, cls: 'ab-wait' };
     if (api.getStep(t, 'submit').state === 'running') return { text: '提交中…', cls: 'ab-run' };
     if (wait.state === 'running') return { text: '离线中 (' + ((wait.probes || 0) + 1) + '/' + api.PROBE_MAX + ')', cls: 'ab-run' };
+    /* tbm 库任务：下载完成（wait=ok）但还没追加整理步骤（未触发整理）→ 停在「待整理」 */
+    if (t.tbm && wait.state === 'ok' && !t.tbmType) return { text: '下载完成 · 待整理', cls: 'ab-wait' };
     var allDefs = (isTv ? api.STEPS_TV : api.STEP_DEFS);
     for (var j = 2; j < allDefs.length; j++){
       if (api.getStep(t, allDefs[j].key).state === 'running'){

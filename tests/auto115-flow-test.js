@@ -51,6 +51,9 @@ try { vm.runInContext(src, ctx, { filename: 'ui-ios.js' }); }
 catch (e) { console.log('LOAD WARN:', e.message); }
 /* 关掉 115 节流闸：本测试按「调用次数」编排响应，任何真实等待都会打乱顺序（改为在独立的节流测试里覆盖） */
 try { vm.runInContext('C115_THROTTLE_ON = false;', ctx); } catch (e) { console.log('[DBG] 节流开关补丁异常:', e.message); }
+/* 把探测间隔压成 0：自动「首探延迟」在测试里立即触发（生产仍是 5/10/20，见 auto115-core PROBE_GAPS 注释）。
+   否则 auto115BeginWait 的真实 5s 首探会让跑完整管线的用例在 15ms drain 窗口内卡在 wait。 */
+try { vm.runInContext('Auto115Core.PROBE_GAPS = [0,0,0];', ctx); } catch (e) { console.log('[DBG] PROBE_GAPS 补丁异常:', e.message); }
 /* sanitizeName 桩（按 core-shared.js 真实实现）：必须在 ui-ios.js 加载之后赋值——
    加载时 `var sanitizeName = NfoCore.sanitizeName` 会把它覆盖成 noop（返回 {}），
    而 v324 起整理改夹名/建夹也走 sanitizeName（与上传同规则），不补桩这些用例全拿到 [object Object] */
@@ -143,6 +146,7 @@ const lz4LiteralForTest = (bytes) => {
   const t = { id: 't1', magnet: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01', magnetTitle: '测试磁力', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   doc.tasks.unshift(t);
   await ctx.auto115Run(t);
+  await new Promise(r => setTimeout(r, 20));   // v333：auto115BeginWait 把首探延迟到定时器，await auto115Run 不再等整条管线，这里补 drain 让探针链跑完
   const g = (k) => ctx.auto115GetStep(t, k).state;
   assert(g('submit') === 'ok', '步骤1 提交离线 = ok');
   assert(g('wait') === 'ok', '步骤2 等待离线完成 = ok');
@@ -170,6 +174,7 @@ const lz4LiteralForTest = (bytes) => {
   const t5 = { id: 't5', magnet: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef02', magnetTitle: '单文件磁力', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   doc.tasks.unshift(t5);
   await ctx.auto115Run(t5);
+  await new Promise(r => setTimeout(r, 20));   // v333：同上，补 drain 让延迟首探链跑完
   const g5 = (k) => ctx.auto115GetStep(t5, k).state;
   assert(g5('mkdir') === 'ok' && ctx.auto115GetStep(t5, 'mkdir').msg.indexOf('单文件') >= 0, '单文件落地识别');
   assert(g5('move') === 'skip', '清理步骤自动跳过（单文件无杂物）');
@@ -633,8 +638,9 @@ const lz4LiteralForTest = (bytes) => {
 
   /* 8. 排队串行化：同时点两个 115 离线 → 第二个排队，第一个终态后自动续跑 */
   script = { 'ac=add_task_url': { state: true, info_hash: 'H2', name: '排队任务' } };
-  /* 清掉前面用例遗留的 running 步骤，模拟「当前没有任务在跑」 */
-  (doc.tasks || []).forEach(function(x){ (x.steps || []).forEach(function(s){ if (s.state === 'running') s.state = 'ok'; }); });
+  /* 队列测试需要干净的 doc：只留 [tp0, tq]，清掉前面用例残留的脏任务（v333：auto115BeginWait 延迟首探 + auto115YieldLock 重入 kickStuck，会把残留的 ab-idle 任务当待续跑捡起来，污染本测试） */
+  doc.tasks = [];
+  ctx.auto115RunningId = '';
   const tq = { id: 'tq2', magnet: 'magnet:?xt=urn:btih:4444444444444444444444444444444444444444', magnetTitle: '排队任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   const tp0 = { id: 'tp0', magnet: 'magnet:?xt=urn:btih:0000000000000000000000000000000000000000', magnetTitle: '第一个任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   ctx.auto115GetStep(tp0, 'wait').state = 'running';   // 模拟正在跑
@@ -825,6 +831,7 @@ const lz4LiteralForTest = (bytes) => {
   const tNew2 = { id: 'tNew2', magnet: 'magnet:?xt=urn:btih:tv2222222222222222222222222222222222222', magnetTitle: '剧集磁力2', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   docTv2.tasks.unshift(tNew2);
   await ctx.auto115Run(tNew2);
+  await new Promise(r => setTimeout(r, 5));   // v333：清掉 tNew2 的延迟首探定时器
   assert(ctx.auto115GetStep(tNew2, 'submit').state === 'ok', '脏 runningId（不存在任务）被自动清理，新 TV 任务提交成功');
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
   ctx.auto115Doc = null;
@@ -1133,6 +1140,84 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.c115RiskHit('操作过于频繁') === false, '风控：30s 内重复命中不再计数（不刷屏）');
   assert(ctx.c115RiskHits === 1, '风控：重复命中只算一次（实测 ' + ctx.c115RiskHits + '）');
   vm.runInContext('C115_THROTTLE_ON = false; C115_T_WRITE = 1200; C115_T_READ = 350; C115_COOLDOWN = 60000; c115CooldownUntil = 0;', ctx);
+
+  /* —— 方案 A（v332）：tbm 磁力库任务模型 + 路由 + 整理 —— */
+  vm.runInContext('auto115RunningId = ""; auto115ExecDoc = null; auto115Doc = null; auto115LibraryDoc = null;', ctx);
+  /* 建一条 tbm 库文档 + 一条 tbm 任务（已下载完成，wait=ok，尚未整理） */
+  vm.runInContext("auto115LibraryDoc = { filmId:'tbm-library', filmTitle:'磁力库', type:'library', tasks:[] };", ctx);
+  const tbm = {
+    id: 'tbm1', tbm: true, type: 'tbm', external: true, magnet: 'magnet:?xt=urn:btih:TBMTESTAAAA',
+    magnetTitle: 'TBMTESTAAAA', infoHash: 'TBMTESTAAAA', steps: ctx.auto115NewSteps('tbm'),
+    createdAt: 1, fv: ctx.AUTO115_FLOW_VERSION || 2, filmId: 'tbm-library'
+  };
+  ctx.Auto115Core.getStep(tbm, 'submit').state = 'ok';
+  ctx.Auto115Core.getStep(tbm, 'wait').state = 'ok';
+  /* 用 ctx 注入任务对象（vm.runInContext 里拿不到外层 tbm 变量） */
+  ctx.__tbm = tbm;
+  vm.runInContext('auto115LibraryDoc.tasks.push(__tbm);', ctx);
+  delete ctx.__tbm;
+  assert(ctx.auto115DocOf(tbm) === ctx.auto115LibraryDoc, 'tbm 路由：auto115DocOf 返回库文档');
+  assert(ctx.auto115Task('tbm1') === tbm, 'tbm 路由：auto115Task 能在库文档里找到任务');
+  assert(ctx.auto115TaskIsTv(tbm) === false, 'tbm 任务（未整理）→ 默认非剧集');
+  assert(ctx.auto115Status(tbm).text === '下载完成 · 待整理', 'tbm 未整理 → 状态「下载完成 · 待整理」');
+  assert(ctx.auto115TaskTitle(tbm) === '磁力任务' || ctx.auto115TaskTitle(tbm).indexOf('TBMTESTAAAA') >= 0, 'tbm 未整理 → 标题取磁力名');
+  /* 模拟用户整理：选影片 + 手输标题 */
+  tbm.tbmType = 'movie'; tbm.type = 'movie'; tbm.targetName = '我的电影';
+  ['mkdir','cleanup','move','rename'].forEach(function(k){ if (!ctx.Auto115Core.hasStep(tbm, k)) ctx.Auto115Core.getStep(tbm, k); });
+  assert(ctx.auto115TaskIsTv(tbm) === false, 'tbm 整理为影片 → 仍非剧集');
+  assert(ctx.auto115TaskTitle(tbm) === '影片：我的电影', 'tbm 整理为影片 → 标题「影片：我的电影」');
+  assert(ctx.auto115StepDefs(tbm).length === 6, 'tbm 影片 → 步骤表 6 步（定位/清理/移动/改名 + 提交/等待）');
+  assert(ctx.auto115Status(tbm).text === '待提交', 'tbm 影片（已组织、步骤全空）→ 大状态「待提交」（将自动接整理跑）');
+  /* 模拟整理进行中：mkdir running */
+  ctx.Auto115Core.getStep(tbm, 'mkdir').state = 'running';
+  assert(ctx.auto115Status(tbm).text === '整理中 · 定位文件夹或影片', 'tbm 影片整理中 → 「整理中 · 定位文件夹或影片」');
+  ctx.Auto115Core.getStep(tbm, 'mkdir').state = 'ok';
+  /* 剧集整理路径 */
+  const tbm2 = { id: 'tbm2', tbm: true, type: 'tbm', external: true, magnet: 'magnet:?xt=urn:btih:TBMTVBBBB', magnetTitle: 'TBMTVBBBB', infoHash: 'TBMTVBBBB', steps: ctx.auto115NewSteps('tbm'), createdAt: 1, fv: ctx.AUTO115_FLOW_VERSION || 2, filmId: 'tbm-library' };
+  ctx.Auto115Core.getStep(tbm2, 'submit').state = 'ok'; ctx.Auto115Core.getStep(tbm2, 'wait').state = 'ok';
+  tbm2.tbmType = 'tv'; tbm2.type = 'tv'; tbm2.targetName = '我的剧集';
+  ['mkdir','cleanup','move','mkdir2','rename','move2'].forEach(function(k){ if (!ctx.Auto115Core.hasStep(tbm2, k)) ctx.Auto115Core.getStep(tbm2, k); });
+  assert(ctx.auto115TaskIsTv(tbm2) === true, 'tbm 整理为剧集 → 判为剧集');
+  assert(ctx.auto115StepDefs(tbm2).length === 8, 'tbm 剧集 → 步骤表 8 步（含建季/移入）');
+  assert(ctx.auto115TaskTitle(tbm2) === '剧集：我的剧集', 'tbm 整理为剧集 → 标题「剧集：我的剧集」');
+  /* 合成虚拟文档：tbm 任务的 auto115TaskDoc 应带 targetName 与正确 type（供清理/改名读身份） */
+  const tbmDoc = ctx.auto115TaskDoc(tbm2);
+  assert(tbmDoc && tbmDoc.filmTitle === '我的剧集' && tbmDoc.type === 'tv', 'tbm 剧集 auto115TaskDoc → 合成文档带标题且 type=tv');
+  vm.runInContext('auto115LibraryDoc = null; auto115Doc = null; auto115ExecDoc = null; auto115RunningId = "";', ctx);
+
+  /* —— 方案 A 续探回归（v333）：tbm 任务首探之后，全局轮询必须扫到磁力库文档、续探第 2/3 次 —— */
+  vm.runInContext('auto115RunningId = ""; auto115ExecDoc = null; auto115Doc = null; auto115LibraryDoc = { filmId:"tbm-library", filmTitle:"磁力库", type:"library", tasks:[] };', ctx);
+  script = { 'ac=task_lists': { tasks: [{ info_hash: 'TBMREPROBE11', name: 'TBMREPROBE11', percentDone: 50, status: 1, cid: 'ROOTCID' }] } };
+  const tbmP = { id: 'tbmP', tbm: true, type: 'tbm', external: true, magnet: 'magnet:?xt=urn:btih:TBMREPROBE11', magnetTitle: 'TBMREPROBE11', infoHash: 'TBMREPROBE11', steps: ctx.auto115NewSteps('tbm'), createdAt: 1, fv: 2, filmId: 'tbm-library' };
+  ctx.Auto115Core.getStep(tbmP, 'submit').state = 'ok';
+  ctx.Auto115Core.getStep(tbmP, 'wait').state = 'running'; ctx.Auto115Core.getStep(tbmP, 'wait').probes = 1;   // 已首探 1 次，仍在下载中
+  ctx.__tbmP = tbmP;
+  vm.runInContext('auto115LibraryDoc.tasks.push(__tbmP);', ctx);
+  delete ctx.__tbmP;
+  ctx.auto115ScheduleProbe(tbmP);   // 定全局轮询定时器（delay = probeDelay(1) = 0，PROBE_GAPS 已被全局压成 [0,0,0]）
+  await new Promise(r => setTimeout(r, 50));   // 让全局轮询定时器触发、跑完 3 次探测
+  assert(ctx.Auto115Core.getStep(tbmP, 'wait').probes === 3, 'tbm 续探：全局轮询扫到库文档，连续续探到 3 次（修复前只扫影片文档会卡在 1 不再续探）');
+  assert(ctx.Auto115Core.getStep(tbmP, 'wait').state === 'waiting', 'tbm 续探：3 次后转「等待中」');
+  vm.runInContext('auto115LibraryDoc = null; auto115Doc = null; auto115ExecDoc = null; auto115RunningId = "";', ctx);
+
+  /* —— 节点级排队（v332）回归：执行锁只在写链期间持有，等待下载期让出 —— */
+  vm.runInContext('auto115RunningId = ""; auto115ExecDoc = null; auto115Doc = null;', ctx);
+  const lkA = { id: 'lkA', queued: false, steps: [] };
+  const lkB = { id: 'lkB', queued: false, steps: [] };
+  const lkC = { id: 'lkC', queued: false, steps: [] };
+  assert(ctx.auto115EnsureLock(lkA) === true, '节点排队：空闲时 A 抢锁成功');
+  assert(ctx.auto115RunningId === 'lkA', '节点排队：A 成为锁主');
+  assert(ctx.auto115EnsureLock(lkB) === false, '节点排队：A 持锁时 B 抢锁失败（让出）');
+  assert(lkB.queued === true, '节点排队：B 抢锁失败被标记排队');
+  assert(ctx.auto115RunningId === 'lkA', '节点排队：B 抢锁失败不窃取锁');
+  ctx.auto115YieldLock(lkA);
+  assert(ctx.auto115RunningId === '', '节点排队：A 让出后锁释放');
+  assert(lkA.queued === false, '节点排队：A 让出后自身排队标记清空');
+  assert(ctx.auto115EnsureLock(lkB) === true, '节点排队：A 让出后 B 抢锁成功');
+  assert(ctx.auto115RunningId === 'lkB', '节点排队：B 成为锁主');
+  ctx.auto115YieldLock(lkC);   /* C 不是锁主 → 不应释放 B 的锁 */
+  assert(ctx.auto115RunningId === 'lkB', '节点排队：非锁主调用 YieldLock 不误释放他人锁');
+  vm.runInContext('auto115RunningId = ""; auto115ExecDoc = null; auto115Doc = null;', ctx);
 
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');

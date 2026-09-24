@@ -574,6 +574,21 @@
   }
   function auto115HoldLock(t) { auto115RunningId = t.id; auto115LockAt = Date.now(); }
   function auto115ReleaseLock() { auto115RunningId = ''; auto115LockAt = 0; }
+  /* 节点级排队（v332）：等待下载期间不再长期占用执行锁。
+     ① auto115YieldLock：本任务处于「离线下载中」时主动让出锁，让其他任务的提交/整理节点并行；
+        wait 步骤保持 running（继续被探针调度 + 状态显示「离线中」）。
+     ② auto115EnsureLock：探针回调重入时本任务通常不持有锁，先抢锁——抢到才继续；
+        抢不到（别的任务正在做整理写操作）就排队让出，等对方终态后 auto115KickStuck 重新拉起续跑。
+        来自 auto115Run / submit 链路的调用已持有锁，直接放行。 */
+  function auto115YieldLock(t) {
+    if (auto115RunningId === t.id) { auto115ReleaseLock(); auto115KickStuck(); }
+  }
+  function auto115EnsureLock(t) {
+    if (auto115RunningId === t.id) return true;
+    if (!auto115RunningId) { auto115HoldLock(t); t.queued = false; return true; }
+    if (!t.queued) t.queued = true;   /* 锁被占用：标记排队，等被 kick 续跑（wait 仍 running，探针继续） */
+    return false;
+  }
   /* 脏锁清理：锁指向的任务不存在 / 已中止 / 已终态 / 超过宽限期仍无任何 running 步骤 → 释放。
      最后一条是「卡在待提交」的根因：任务拿到锁后卡在读 Cookie 等异步环节，步骤迟迟不 running。 */
   function auto115ClearDirtyLock() {
@@ -938,11 +953,21 @@
         t.infoHash = ((d.info_hash || (d.data && d.data.info_hash) || auto115Btih(t.magnet)) || '').toUpperCase();
         t.offlineName = d.name || (d.data && d.data.name) || t.magnetTitle || '';
         auto115Set(t, 'submit', 'ok', d.errcode === 10008 ? '任务已在 115 列表中（复用）' : '已提交到云下载');
-        return auto115StepWait(t, true);
+        return auto115BeginWait(t);
       }
       auto115Set(t, 'submit', 'fail', auto115ErrText(d, res, '提交失败'));
       auto115Finish(t); return null;
     }).catch(function (e) { auto115Set(t, 'submit', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
+  }
+  function auto115BeginWait(t) {
+    /* v333：等待阶段启动器（PC 镜像 iOS）。提交 / 恢复 / 重试走到「等待离线」时，首探延迟 PROBE_GAPS[0]=5s，
+       不再立即探测——离线后 5s / 10s / 20s 各探一次，共 20s。手动「继续探测」按钮仍走 auto115StepWait 立即版。 */
+    if (!auto115EnsureLock(t)) return Promise.resolve(null);
+    var s = auto115Set(t, 'wait', 'running', '正在查询离线状态…');
+    s.probes = 0;
+    auto115YieldLock(t);
+    auto115ScheduleProbe(t);
+    return Promise.resolve(null);
   }
   function auto115StepWait(t, reset) {
     var s = auto115Set(t, 'wait', 'running', '正在查询离线状态…');
@@ -963,7 +988,7 @@
       s.probes = (s.probes || 0) + 1;
       if (s.probes >= AUTO115_PROBE_MAX) { auto115Set(t, 'wait', 'waiting', '已探测 ' + s.probes + ' 次，进度 ' + (info.percent != null ? info.percent + '%' : '未知')); auto115Finish(t); return null; }
       s.msg = '离线中 ' + (info.percent != null ? info.percent + '% ' : '') + '（' + s.probes + '/' + AUTO115_PROBE_MAX + '）';
-      pc115RenderAuto(); auto115Save(auto115DocOf(t) || auto115Doc); auto115ScheduleProbe(t); return null;
+      pc115RenderAuto(); auto115Save(auto115DocOf(t) || auto115Doc); auto115YieldLock(t); auto115ScheduleProbe(t); return null;
     }).catch(function (e) { auto115Set(t, 'wait', 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   }
   function auto115StepMkdir(t) {
@@ -1882,7 +1907,7 @@
       if (key === 'dir') return auto115StepUploadDir(t);
       if (key === 'upload') return auto115StepUploadFiles(t);
       if (key === 'submit') return auto115StepSubmit(t);
-      if (key === 'wait') return auto115StepWait(t, true);
+      if (key === 'wait') return auto115BeginWait(t);
       if (key === 'mkdir') return auto115StepMkdir(t);
       if (key === 'move') return isTvExec ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
       if (key === 'rename') return isTvExec ? auto115StepTvRenameVideos(t) : auto115StepRename(t);

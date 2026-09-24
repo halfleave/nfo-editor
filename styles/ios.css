@@ -1597,6 +1597,32 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #nfoTypeSheet .nfo-type-list { padding: 6px 16px calc(18px + env(safe-area-inset-bottom)); }
 #nfoTypeSheet .nfo-type-item { display: flex; align-items: center; gap: 13px; width: 100%; padding: 14px; margin-bottom: 10px; border: none; background: var(--card-fill); border-radius: var(--radius-lg); text-align: left; }
 #nfoTypeSheet .nfo-type-item:active { opacity: .75; }
+/* —— 方案 A：tbm 磁力库任务列表 / 任务详情 —— */
+.tbm-task-row { display: flex; align-items: center; gap: 10px; padding: 14px 12px; margin: 10px 0; background: var(--card-fill); border-radius: var(--radius-lg); -webkit-tap-highlight-color: transparent; }
+.tbm-task-row:active { opacity: .8; }
+.tbm-task-row-main { flex: 1; min-width: 0; }
+.tbm-task-row-title { font-size: 15px; font-weight: 600; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbm-task-row-sub { font-size: 12px; color: var(--label-3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbm-task-row .auto-task-arrow { flex: 0 0 auto; color: var(--label-3); width: 18px; height: 18px; }
+/* 任务详情页：步骤复用自动化卡片样式，但去掉卡片外框（已在外层容器） */
+#page-toolbox-tbm-task .tbm-task-steps { margin-top: 12px; }
+#page-toolbox-tbm-task .tbm-task-steps .auto-step { display: flex; align-items: center; justify-content: space-between; padding: 11px 12px; background: var(--card-fill); border-radius: var(--radius); margin-bottom: 8px; }
+#page-toolbox-tbm-task .tbm-task-steps .auto-step-label { font-size: 14px; color: var(--label); }
+#page-toolbox-tbm-task .tbm-task-steps .auto-step-msg { font-size: 12px; color: var(--label-3); margin-top: 2px; }
+#page-toolbox-tbm-task .tbm-task-steps .as-op-retry,
+#page-toolbox-tbm-task .tbm-task-steps .as-op-ghost { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--accent-fg); background: transparent; color: var(--accent); margin-left: 8px; }
+/* 整理表单 */
+.tbm-organize { margin-top: 18px; padding: 16px; background: var(--card-fill); border-radius: var(--radius-lg); }
+.tbm-organize-hint { font-size: 14px; font-weight: 600; color: var(--label); margin-bottom: 12px; }
+.tbm-organize-tabs { display: flex; margin-bottom: 12px; }
+.tbm-organize-tabs .mc-tab { flex: 1; }
+.tbm-target-input { width: 100%; border: none; background: var(--gray-fill); border-radius: var(--radius); padding: 11px 12px; font-size: 14px; color: var(--label); -webkit-user-select: text; }
+.tbm-target-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
+.tbm-organize .tbm-offline { width: 100%; margin: 12px 0 0; }
+.tbm-organize-note { font-size: 12px; color: var(--label-3); margin-top: 10px; line-height: 1.5; }
+.tbm-detail-ops { display: flex; gap: 12px; margin-top: 18px; }
+.tbm-detail-ops .op-start { flex: 1; border: 1px solid var(--accent-fg); background: transparent; color: var(--accent); border-radius: 20px; padding: 10px 0; font-size: 14px; font-weight: 600; }
+.tbm-detail-ops .tbm-remove { flex: 1; border: 1px solid var(--danger, #e0506a); background: transparent; color: var(--danger, #e0506a); border-radius: 20px; padding: 10px 0; font-size: 14px; font-weight: 600; }
 #nfoTypeSheet .nfo-type-icon { flex: none; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
 #nfoTypeSheet .nfo-type-icon svg { width: 21px; height: 21px; }
 #nfoTypeSheet .nfo-type-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
