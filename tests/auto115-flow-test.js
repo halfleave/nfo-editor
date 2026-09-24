@@ -1200,6 +1200,20 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.Auto115Core.getStep(tbmP, 'wait').state === 'waiting', 'tbm 续探：3 次后转「等待中」');
   vm.runInContext('auto115LibraryDoc = null; auto115Doc = null; auto115ExecDoc = null; auto115RunningId = "";', ctx);
 
+  /* —— v334 中断重启恢复回归：页面关闭后重开，孤儿 running 步骤（定时器已随关闭丢失）应被重置并自动续跑 —— */
+  vm.runInContext('auto115LibraryDoc = null; auto115Doc = null; auto115ExecDoc = null; auto115RunningId = "";', ctx);
+  const rec = { id: 'rec1', magnet: 'magnet:?xt=urn:btih:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC', magnetTitle: '恢复任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
+  ctx.Auto115Core.getStep(rec, 'submit').state = 'ok';                 // 模拟「上次会话离线途中退出」：submit 已成功，wait 停在 running
+  ctx.Auto115Core.getStep(rec, 'wait').state = 'running';
+  ctx.Auto115Core.getStep(rec, 'wait').probes = 1;
+  ctx.auto115Doc = { filmId: 'rec-film', filmTitle: '恢复影片', type: 'movie', tasks: [rec] };
+  assert(ctx.auto115ResetOrphanSteps() === true, '中断恢复：检测到孤儿 running 步骤并返回已变更');
+  assert(ctx.Auto115Core.getStep(rec, 'wait').state === 'idle', '中断恢复：孤儿 wait 步骤被重置为 idle，不再卡「进行中」');
+  ctx.auto115KickStuck();                                            // 模拟「再次打开」自动续跑
+  await new Promise(r => setTimeout(r, 5));
+  assert(ctx.auto115Status(rec).cls !== 'ab-idle', '中断恢复：KickStuck 自动接着跑该任务，不再停在待提交/待整理');
+  vm.runInContext('auto115LibraryDoc = null; auto115Doc = null; auto115ExecDoc = null; auto115RunningId = "";', ctx);
+
   /* —— 节点级排队（v332）回归：执行锁只在写链期间持有，等待下载期让出 —— */
   vm.runInContext('auto115RunningId = ""; auto115ExecDoc = null; auto115Doc = null;', ctx);
   const lkA = { id: 'lkA', queued: false, steps: [] };

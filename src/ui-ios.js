@@ -2326,6 +2326,8 @@ function auto115StepHtml(t, s){
   var dot = (s.state === 'ok') ? '✓' : (s.state === 'fail') ? '!' : (s.state === 'skip') ? '–' : '';
   var ops = '';
   if (s.state === 'fail') ops = '<button class="as-op-retry" onclick="auto115RetryStep(\'' + t.id + '\',\'' + s.key + '\')">重试</button>';
+  /* v334：卡住的步骤（running 但本会话无定时器驱动，如离线中途退出后重开）也允许手动重试，避免「一直进行中」无法挽回；wait 的 running 已有「中止」可退出 */
+  if (s.state === 'running' && s.key !== 'wait') ops = '<button class="as-op-retry" onclick="auto115RetryStep(\'' + t.id + '\',\'' + s.key + '\',true)">重试</button>';
   if (s.key === 'wait' && s.state === 'waiting'){
     ops = '<button class="as-op-retry" onclick="auto115ContinueProbe(\'' + t.id + '\')">继续探测</button>'
         + '<button class="as-op-ghost" onclick="auto115RetryStep(\'' + t.id + '\',\'submit\')">重新提交</button>';
@@ -2543,6 +2545,35 @@ function auto115SweepZombies(){
     if (docChanged) auto115Save(docs[di]);
   }
   if (changed){ renderAuto115(); updateAutoBadge(); }
+  return changed;
+}
+/* v334：中断重启恢复——把「孤儿 running 步骤」重置为 idle，让其能由 KickStuck 续跑。
+   判定依据：本会话 auto115RunningId 为空（没有任何任务真正在跑），说明页面是「全新打开 / 从后台回来时上一轮早已结束」，
+   那么所有 running 步骤背后的定时器/异步链都已随页面关闭丢失，是孤儿，必须重置，否则会永久卡在「进行中」。
+   注意：仅在 auto115RunningId 为空时调用（auto115Resume 已做门控），后台返回但确实有任务在跑时不重置，避免打断进行中的流水线。 */
+function auto115ResetOrphanSteps(){
+  var docs = [];
+  if (auto115Doc) docs.push(auto115Doc);
+  if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) docs.push(auto115ExecDoc);
+  if (auto115LibraryDoc) docs.push(auto115LibraryDoc);   /* 方案 A：tbm 库任务也要纳入恢复 */
+  var changed = false;
+  for (var di = 0; di < docs.length; di++){
+    var dts = docs[di].tasks || [];
+    for (var i = 0; i < dts.length; i++){
+      var t = dts[i];
+      if (!t || t.aborted) continue;
+      var st = auto115Status(t, docs[di]);
+      if (st.cls === 'ab-ok' || st.cls === 'ab-fail') continue;   // 已完成/已失败不碰
+      var steps = t.steps || [];
+      for (var j = 0; j < steps.length; j++){
+        if (steps[j].state === 'running'){
+          steps[j].state = 'idle'; steps[j].msg = ''; steps[j].probes = 0; steps[j].at = 0;
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed){ for (var k = 0; k < docs.length; k++) auto115Save(docs[k]); }
   return changed;
 }
 function auto115HoldLock(t){ auto115RunningId = t.id; auto115LockAt = Date.now(); }
@@ -4569,6 +4600,9 @@ function auto115Resume(){
   auto115SweepZombies();
   /* 清理脏 runningId：页面重新打开时如果它指向已终态/已删/占锁不跑的任务，必须释放 */
   auto115ClearDirtyLock();
+  /* v334：本会话没有任何任务在跑（全新打开 / 后台返回时上轮早已结束）→ 上轮遗留的 running 步骤都是孤儿（定时器随页面关闭已丢失），
+     先重置再续跑，避免永久卡在「进行中」无法继续 */
+  if (!auto115RunningId) auto115ResetOrphanSteps();
   var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function(x){ return auto115IsActive(x); });
   if (hasRunning) auto115ScheduleProbe();
   /* 上次会话遗留的排队任务 或 卡在待提交的任务：没有正在跑的任务时自动接着跑 */
@@ -4771,8 +4805,9 @@ function auto115RetryTask(tid){
   for (var i = 0; i < steps.length; i++){
     if (steps[i].state === 'fail') return auto115RetryStep(tid, steps[i].key);
   }
-  /* 没有失败步骤但整体还没跑起来（待提交/排队中/已中止）→ 直接从头强启，不再干等队列 */
-  if (auto115Status(t).cls === 'ab-idle') return auto115ForceStart(tid);
+  /* 没有失败步骤：待提交/排队/已中止/卡在「进行中」→ 直接从头强启，不再干等队列（v334：覆盖 ab-run/ab-wait 卡死场景） */
+  var st = auto115Status(t);
+  if (st.cls !== 'ab-ok' && st.cls !== 'ab-fail') return auto115ForceStart(tid);
   showToast('没有失败的步骤', 'info');
 }
 function auto115ContinueProbe(tid){
@@ -10987,6 +11022,9 @@ function bootApp(){
     /* 方案 A：启动即加载 tbm 磁力库文档，保证后台探针/调度也能找到工具箱磁力任务 */
     auto115EnsureLibraryDoc().catch(function(){})
   ]).then(function(){
+    // ②·⑤ 启动即恢复：方案 A 磁力库里上轮遗留的孤儿任务（running 步骤重置后续跑），与 openAuto115Page 里的 auto115Resume 互补
+    auto115ResetOrphanSteps();
+    auto115KickStuck();
     // ③ 加载影片列表（较重的同步渲染，放到一帧之后做，避免卡住启动页）
     setSplashStep('正在加载影片…');
     return new Promise(function(res){ requestAnimationFrame(function(){ renderOverview().then(res, res); }); });

@@ -789,6 +789,8 @@
     var dot = (s.state === 'ok') ? '✓' : (s.state === 'fail') ? '!' : (s.state === 'skip') ? '–' : '';
     var ops = '';
     if (s.state === 'fail') ops = '<button class="as-op-retry" onclick="auto115RetryStep(\'' + t.id + '\',\'' + s.key + '\')">重试</button>';
+    /* v334：卡住的步骤（running 但本会话无定时器驱动）也允许手动重试，避免「一直进行中」无法挽回；wait 的 running 已有「中止」可退出 */
+    if (s.state === 'running' && s.key !== 'wait') ops = '<button class="as-op-retry" onclick="auto115RetryStep(\'' + t.id + '\',\'' + s.key + '\',true)">重试</button>';
     if (s.key === 'wait' && s.state === 'waiting') {
       ops = '<button class="as-op-retry" onclick="auto115ContinueProbe(\'' + t.id + '\')">继续探测</button>'
         + '<button class="as-op-ghost" onclick="auto115RetryStep(\'' + t.id + '\',\'submit\')">重新提交</button>';
@@ -1834,10 +1836,35 @@
       ensure115Cookie().then(function (ck) { if (ck) pending.forEach(function (x) { auto115StepWait(x, false); }); });
     }, delay);
   }
+  /* v334：中断重启恢复——重置孤儿 running 步骤（iOS 同名函数说明一致；PC 无方案 A 磁力库，只扫影片文档）。
+     仅在 auto115RunningId 为空时由 auto115Resume 调用，后台返回但确有任务在跑时不重置，避免打断进行中的流水线。 */
+  function auto115ResetOrphanSteps() {
+    var docs = [];
+    if (auto115Doc) docs.push(auto115Doc);
+    if (auto115ExecDoc && auto115ExecDoc !== auto115Doc) docs.push(auto115ExecDoc);
+    var changed = false;
+    for (var di = 0; di < docs.length; di++) {
+      var dts = docs[di].tasks || [];
+      for (var i = 0; i < dts.length; i++) {
+        var t = dts[i];
+        if (!t || t.aborted) continue;
+        var st = auto115Status(t, docs[di]);
+        if (st.cls === 'ab-ok' || st.cls === 'ab-fail') continue;
+        var steps = t.steps || [];
+        for (var j = 0; j < steps.length; j++) {
+          if (steps[j].state === 'running') { steps[j].state = 'idle'; steps[j].msg = ''; steps[j].probes = 0; steps[j].at = 0; changed = true; }
+        }
+      }
+    }
+    if (changed) { for (var k = 0; k < docs.length; k++) auto115Save(docs[k]); }
+    return changed;
+  }
   function auto115Resume() {
     if (!auto115Doc) return;
     auto115SweepZombies();
     auto115ClearDirtyLock();
+    /* v334：本会话无任何任务在跑 → 上轮遗留的 running 步骤都是孤儿（定时器随关闭丢失），先重置再续跑 */
+    if (!auto115RunningId) auto115ResetOrphanSteps();
     var hasRunning = !!auto115RunningId || (auto115Doc.tasks || []).some(function (x) { return auto115IsActive(x); });
     if (hasRunning) auto115ScheduleProbe();
     if (!auto115RunningId) auto115KickStuck();
@@ -1928,8 +1955,9 @@
     if (!t) return;
     var steps = t.steps || [];
     for (var i = 0; i < steps.length; i++) if (steps[i].state === 'fail') return auto115RetryStep(tid, steps[i].key);
-    /* 没有失败步骤但整体还没跑起来（待提交/排队中/已中止）→ 直接从头强启，不再干等队列 */
-    if (auto115Status(t).cls === 'ab-idle') return auto115ForceStart(tid);
+    /* 没有失败步骤：待提交/排队/已中止/卡在「进行中」→ 直接从头强启（v334：覆盖 ab-run/ab-wait 卡死场景） */
+    var st = auto115Status(t);
+    if (st.cls !== 'ab-ok' && st.cls !== 'ab-fail') return auto115ForceStart(tid);
     showToast('没有失败的步骤', 'info');
   }
   function auto115ContinueProbe(tid) {
