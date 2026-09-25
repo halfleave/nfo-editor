@@ -84,7 +84,9 @@
     if (type === 'tbm') table = api.STEPS_TBM;
     else if (type === 'upload') table = api.STEPS_UPLOAD;
     else if (type === 'tv') table = api.STEPS_TV;
-    else if (type === 'multi') table = api.STEPS_MULTI;
+    /* 多磁力分两类（v338）：剧集自动化走完整 8 步（建季夹/改名/移入是真节点）；
+       电影自动化 6 步（无季夹概念）。磁力库多磁力仅下载，创建处直接用 'tbm' 2 步表。 */
+    else if (type === 'multi') table = isTv ? api.STEPS_TV : api.STEPS_MULTI;
     else table = isTv ? api.STEPS_TV : api.STEP_DEFS;
     return table.map(function (s) { return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
   };
@@ -93,6 +95,14 @@
     for (var i = 0; i < steps.length; i++) if (steps[i].key === key) return steps[i];
     var s = { key: key, state: 'idle', msg: '', at: 0, probes: 0 };
     steps.push(s); t.steps = steps; return s;
+  };
+  /* 只读查步骤（v338）：查不到返回 null，绝不自动补建。
+     status() 等高频读取必须用这个——此前用 getStep，会把任务步骤表里没有的 key
+     以 idle 幽灵形式 append 进 t.steps（剧集多磁力任务每次渲染都被补上 mkdir2/move2 两个空转节点）。 */
+  api.peekStep = function (t, key) {
+    var steps = (t && t.steps) || [];
+    for (var i = 0; i < steps.length; i++) if (steps[i].key === key) return steps[i];
+    return null;
   };
   /* 仅判断步骤是否存在（不自动创建），用于 tbm 任务「下载完成但还没追加整理步骤」的判定 */
   api.hasStep = function (t, key) {
@@ -105,7 +115,9 @@
     for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i].label;
     return key;
   };
-  /* 大状态合成。isTv 由调用方传入（引擎端读当前影片详情判定）。 */
+  /* 大状态合成。isTv 由调用方传入（引擎端读当前影片详情判定）。
+     v338：内部全部改用 peekStep 只读——getStep 会自动补建缺失步骤，
+     高频状态计算曾把 mkdir2/move2 等幽灵节点 append 进多磁力/磁力库任务。 */
   api.status = function (t, isTv) {
     var steps = t.steps || [];
     for (var i = 0; i < steps.length; i++){
@@ -114,26 +126,29 @@
     if (t.aborted) return { text: '已中止', cls: 'ab-idle' };
     if (taskType(t) === 'upload'){
       /* 上传任务只有两步；具体进度（上传中 (2/3)：xxx.jpg）写在步骤 msg 里，大状态只给粗粒度 */
-      var up = api.getStep(t, 'upload');
-      if (up.state === 'running') return { text: '上传中', cls: 'ab-run' };
-      if (api.getStep(t, 'dir').state === 'running') return { text: '准备中…', cls: 'ab-run' };
-      if (up.state === 'ok') return { text: '已完成', cls: 'ab-ok' };
+      var up = api.peekStep(t, 'upload');
+      if (up && up.state === 'running') return { text: '上传中', cls: 'ab-run' };
+      var dirS = api.peekStep(t, 'dir');
+      if (dirS && dirS.state === 'running') return { text: '准备中…', cls: 'ab-run' };
+      if (up && up.state === 'ok') return { text: '已完成', cls: 'ab-ok' };
       return { text: '待上传', cls: 'ab-idle' };
     }
-    var wait = api.getStep(t, 'wait');
-    if (wait.state === 'waiting') return { text: '等待中 · 已探 ' + (wait.probes || 0) + '/' + api.PROBE_MAX, cls: 'ab-wait' };
-    if (api.getStep(t, 'submit').state === 'running') return { text: '提交中…', cls: 'ab-run' };
-    if (wait.state === 'running') return { text: '离线中 (' + ((wait.probes || 0) + 1) + '/' + api.PROBE_MAX + ')', cls: 'ab-run' };
+    var wait = api.peekStep(t, 'wait');
+    if (wait && wait.state === 'waiting') return { text: '等待中 · 已探 ' + (wait.probes || 0) + '/' + api.PROBE_MAX, cls: 'ab-wait' };
+    var submitS = api.peekStep(t, 'submit');
+    if (submitS && submitS.state === 'running') return { text: '提交中…', cls: 'ab-run' };
+    if (wait && wait.state === 'running') return { text: '离线中 (' + ((wait.probes || 0) + 1) + '/' + api.PROBE_MAX + ')', cls: 'ab-run' };
     /* tbm 库任务：下载完成（wait=ok）但还没追加整理步骤（未触发整理）→ 停在「待整理」 */
-    if (t.tbm && wait.state === 'ok' && !t.tbmType) return { text: '下载完成 · 待整理', cls: 'ab-wait' };
+    if (t.tbm && wait && wait.state === 'ok' && !t.tbmType) return { text: '下载完成 · 待整理', cls: 'ab-wait' };
     var allDefs = (isTv ? api.STEPS_TV : api.STEP_DEFS);
     for (var j = 2; j < allDefs.length; j++){
-      if (api.getStep(t, allDefs[j].key).state === 'running'){
+      var rs = api.peekStep(t, allDefs[j].key);
+      if (rs && rs.state === 'running'){
         return { text: '整理中 · ' + allDefs[j].label, cls: 'ab-run' };
       }
     }
-    var cleanup = api.getStep(t, 'cleanup');
-    if (cleanup.state === 'ok' || cleanup.state === 'skip') return { text: '已完成', cls: 'ab-ok' };
+    var cleanup = api.peekStep(t, 'cleanup');
+    if (cleanup && (cleanup.state === 'ok' || cleanup.state === 'skip')) return { text: '已完成', cls: 'ab-ok' };
     if (t.queued) return { text: '排队中', cls: 'ab-wait' };
     /* 整理任务（云下载里已有文件）：没有离线步骤，未开跑时说「待整理」而不是「待提交」 */
     if (t.tidy) return { text: '待整理', cls: 'ab-idle' };

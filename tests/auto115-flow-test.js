@@ -1264,6 +1264,10 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115TaskTitle(tOff) === '多磁力任务（3 条）', '多磁力：离线任务标题 = 多磁力任务（3 条）');
   const tTbmM = { tbm: true, magnets: [{}, {}] };
   assert(ctx.auto115TaskTitle(tTbmM) === '磁力库·多磁力（2 条）', '多磁力：磁力库任务标题 = 磁力库·多磁力（2 条）');
+  /* v338：磁力库多磁力仅下载 → 2 步表（提交离线/等待离线完成），不再用 6 步 multi 表 */
+  const tbmSteps = ctx.Auto115Core.newSteps('tbm');
+  assert(tbmSteps.length === 2 && tbmSteps[0].key === 'submit' && tbmSteps[1].key === 'wait', '磁力库多磁力：步骤表 = 2 步（仅下载）');
+  assert(ctx.Auto115Core.newSteps('multi', false).length === 6, '电影多磁力：步骤表 = 6 步');
 
   // 11a. 电影多磁力（后缀模式）：每条磁力是 115 离线文件夹，穿透提取视频平铺进「影片名」夹（不再整夹套娃）
   ctx.auto115Doc = mkMultiDoc('movie', '测试影片');
@@ -1345,10 +1349,17 @@ const lz4LiteralForTest = (bytes) => {
     { dirCid: 'D3', dirName: 'Show.S02E01.mkv', state: 'done' },
     { dirCid: 'D4', dirName: 'Show.S02E02.mkv', state: 'done' },
     { dirCid: 'D5', dirName: 'Extra.Pack.mkv',  state: 'done' }   // 识别不到集号 → 进未识别夹
-  ], steps: ctx.auto115NewSteps('multi'), createdAt: Date.now() };
+  ], steps: ctx.Auto115Core.newSteps('multi', true), createdAt: Date.now() };   // v338：剧集多磁力 = 8 步表
+  assert(tTvSplit.steps.length === 8, '剧集多磁力：newSteps(multi, true) = 8 步（含建季夹/移入），实际=' + tTvSplit.steps.length);
   calls.length = 0;
-  await ctx.auto115StepRenameMulti(tTvSplit);
+  await ctx.auto115StepTvMkdir2Multi(tTvSplit);   // v338：从「新建季文件夹」节点进链（mkdir2 → rename → move2）
+  assert(ctx.auto115GetStep(tTvSplit, 'mkdir2').state === 'ok', '剧集多磁力·分季：mkdir2 = ok（' + ctx.auto115GetStep(tTvSplit, 'mkdir2').msg + '）');
   assert(ctx.auto115GetStep(tTvSplit, 'rename').state === 'ok', '剧集多磁力·分季：rename = ok');
+  assert(ctx.auto115GetStep(tTvSplit, 'move2').state === 'ok', '剧集多磁力·分季：move2 = ok（' + ctx.auto115GetStep(tTvSplit, 'move2').msg + '）');
+  /* v338 幽灵补步修复：status() 高频读取不得往任务上 append 缺失步骤 */
+  const stepsBeforeGhost = tTvSplit.steps.length;
+  for (let gi = 0; gi < 3; gi++) ctx.auto115Status(tTvSplit, ctx.auto115Doc);
+  assert(tTvSplit.steps.length === stepsBeforeGhost, '剧集多磁力·分季：status() 多次读取不补幽灵步骤（步骤数稳定=' + tTvSplit.steps.length + '）');
   const addsT = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(addsT.length === 3, '剧集多磁力·分季：建 3 个夹（未识别 + S01 + S02），实际=' + addsT.length);
   assert(addsT.some(b => b.indexOf('cname=未识别') >= 0), '剧集多磁力·分季：建「未识别」夹');
@@ -1375,10 +1386,12 @@ const lz4LiteralForTest = (bytes) => {
   const tTvN = { id: 'ttvn', type: 'offline', multi: true, magnets: [
     { dirCid: 'N1', dirName: 'Show.S01E01.mkv', state: 'done' },
     { dirCid: 'N2', dirName: 'Show.S01E02.mkv', state: 'done' }
-  ], steps: ctx.auto115NewSteps('multi'), createdAt: Date.now() };
+  ], steps: ctx.Auto115Core.newSteps('multi', true), createdAt: Date.now() };
   calls.length = 0;
-  await ctx.auto115StepRenameMulti(tTvN);
+  await ctx.auto115StepTvMkdir2Multi(tTvN);   // v338：mkdir2 → rename → move2 全链
+  assert(ctx.auto115GetStep(tTvN, 'mkdir2').state === 'ok', '剧集多磁力·不分季：mkdir2 = ok（' + ctx.auto115GetStep(tTvN, 'mkdir2').msg + '）');
   assert(ctx.auto115GetStep(tTvN, 'rename').state === 'ok', '剧集多磁力·不分季：rename = ok');
+  assert(ctx.auto115GetStep(tTvN, 'move2').state === 'ok', '剧集多磁力·不分季：move2 = ok');
   const addsN = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(addsN.length === 0, '剧集多磁力·不分季：全识别无未识别夹，不建任何文件夹，实际=' + addsN.length);
   assert(!addsN.some(b => /cname=S0\d/.test(b)), '剧集多磁力·不分季：无 S0x 季文件夹');
