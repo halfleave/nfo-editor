@@ -3834,62 +3834,135 @@ function auto115StepRenameMulti(t){
   var doc = auto115TaskDoc(t) || {};
   var partsPromise = (!isTv && doc.collectionId) ? auto115FetchCollectionParts(doc.collectionId) : Promise.resolve(null);
   return partsPromise.then(function(parts){
-    return auto115ComputeMultiTargets(t, ms, isTv, doc, parts);
-  }).then(function(jobs){
-    if (!jobs || !jobs.length){ auto115Set(t, 'rename', 'ok', '无需改名'); auto115Finish(t); return null; }
-    return auto115ApplyRenames(t, jobs, null).then(function(){
-      auto115Set(t, 'rename', 'ok', '已整理 ' + jobs.length + ' 条磁力');
-      auto115Finish(t); return null;
-    }).catch(function(e){
-      auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '改名失败'); auto115Finish(t); return null;
+    /* 穿透每条磁力的文件夹，提取里面的视频/字幕文件（与单磁力剧集一致：最终平铺进剧集/影片文件夹，而非整夹套娃） */
+    return auto115MultiPenetrate(ms, t).then(function(ms2){
+      return auto115ComputeMultiTargets(t, ms2, isTv, doc, parts).then(function(jobs){
+        if (!jobs || !jobs.length){ auto115Set(t, 'rename', 'ok', '无需改名'); auto115Finish(t); return null; }
+        return auto115ApplyRenames(t, jobs, null).then(function(){
+          /* 视频/字幕已移走，清理搬空的源文件夹（里面还剩文件则不删，避免误删） */
+          var srcDirs = ms2.filter(function(m){ return m._srcDirCid; }).map(function(m){ return m._srcDirCid; });
+          return auto115MultiCleanEmptyDirs(srcDirs).then(function(){
+            auto115Set(t, 'rename', 'ok', '已整理 ' + jobs.length + ' 条磁力');
+            auto115Finish(t); return null;
+          });
+        }).catch(function(e){
+          auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '改名失败'); auto115Finish(t); return null;
+        });
+      });
     });
   }).catch(function(e){
     auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '整理失败'); auto115Finish(t); return null;
   });
 }
+/* 多磁力穿透：把每条磁力（文件夹型）里面的视频/字幕文件提取出来，转成「视频/字幕条目」视角，
+   交给 auto115ComputeMultiTargets 按 SxxExx / 影片名+后缀 命名并平铺。与单磁力剧集 auto115StepTvGetItems 一致。
+   返回扁平数组（一条文件夹型磁力可能拆成 视频+字幕 多条）。无媒体可提取的文件夹保留为「整夹」兜底。 */
+function auto115MultiPenetrate(ms, t){
+  return Promise.all(ms.map(function(m){
+    if (m.noFolder || !m.dirCid){
+      return Promise.resolve([{
+        kind: m.noFolder ? 'video' : 'folder',
+        fid: m.videoFid || m.dirCid,
+        origName: m.videoName || m.dirName,
+        dirName: m.dirName, title: m.title, offlineName: m.offlineName,
+        isFolder: !m.noFolder, noFolder: m.noFolder,
+        _srcDirCid: m.dirCid || null
+      }]);
+    }
+    return auto115ListDir(m.dirCid).then(function(list){
+      /* auto115FlattenSubDirs 是异步（返回 Promise），必须 await 再解析视频/字幕，否则拿到的是 Promise 而非数组 */
+      return auto115FlattenSubDirs(t, list || []);
+    }).then(function(items){
+      var vids = (items || []).filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
+      var subs = (items || []).filter(function(it){ return it && it.fid && auto115IsSubtitle(it.n || it.name || ''); });
+      if (!vids.length && !subs.length){
+        return [{ kind: 'folder', fid: m.dirCid, origName: m.dirName, dirName: m.dirName, title: m.title, offlineName: m.offlineName, isFolder: true, _srcDirCid: m.dirCid }];
+      }
+      var out = [];
+      vids.sort(function(a, b){ return (b.s || 0) - (a.s || 0); });
+      vids.forEach(function(v){
+        out.push({ kind: 'video', fid: String(v.fid), origName: v.n || v.name || '', dirName: m.dirName, title: m.title, offlineName: m.offlineName, isFolder: false, _srcDirCid: m.dirCid });
+      });
+      subs.forEach(function(s){
+        out.push({ kind: 'sub', fid: String(s.fid), origName: s.n || s.name || '', dirName: m.dirName, title: m.title, offlineName: m.offlineName, isFolder: false, _srcDirCid: m.dirCid });
+      });
+      return out;
+    }).catch(function(){
+      return [{ kind: 'folder', fid: m.dirCid, origName: m.dirName, dirName: m.dirName, title: m.title, offlineName: m.offlineName, isFolder: true, _srcDirCid: m.dirCid }];
+    });
+  })).then(function(groups){ return [].concat.apply([], groups); });
+}
+/* 清理已搬空的磁力源文件夹：listDir 为空才 rb/delete，里面还有文件（如遗留 nfo/样本）则保留，避免误删 */
+function auto115MultiCleanEmptyDirs(dirCids){
+  var uniq = {}; (dirCids || []).forEach(function(c){ if (c) uniq[c] = true; });
+  var cids = Object.keys(uniq);
+  if (!cids.length) return Promise.resolve();
+  return Promise.all(cids.map(function(cid){
+    return auto115ListDir(cid).then(function(list){
+      if (!list || !list.length){
+        return auto115Post('https://webapi.115.com/rb/delete', 'fid=' + encodeURIComponent(cid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID)).then(function(res){
+          var d = res.d || {};
+          return (res.ok && (d.state === true || d.errno === 0)) ? true : null;
+        }).catch(function(){ return null; });
+      }
+      return null;
+    }).catch(function(){ return null; });
+  }));
+}
 /* 计算每条磁力的改名+移动作业（剧集/电影分支）；返回 jobs（每条带 pid=目标父目录） */
 function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
+  /* ms 已是由 auto115MultiPenetrate 产出的「穿透条目」：
+     视频 { kind:'video',  fid, origName, dirName, isFolder:false }
+     字幕 { kind:'sub',     fid, origName, dirName, isFolder:false }
+     整夹 { kind:'folder', fid, origName, dirName, isFolder:true }（无媒体可提取时兜底） */
   if (isTv){
     var showTitle = doc.filmTitle || '';
     return auto115EnsureTvRoot(showTitle).then(function(showCid){
       if (!showCid) throw new Error('创建剧集根文件夹失败');
-      return auto115EnsureDir(showCid, Auto115Core.UNRECOGNIZED_DIR).then(function(uncid){
-        /* 多季且总集数达标（SPLIT_MIN_EPISODES，默认 100）→ 建季文件夹；否则平铺到剧集根（命名仍带 SxxExx） */
-        var seasons = {}, vids = 0;
+      /* 先统计：识别到的集（分季判定）+ 未识别项数量（决定要不要建「未识别」夹） */
+      var seasons = {}, vids = 0, unrec = 0;
+      ms.forEach(function(m){
+        var ep = Auto115Core.detectEpisode(m.origName || m.dirName || m.offlineName || '');
+        if (ep && ep.episode){ var s = ep.season || 1; seasons[s] = true; vids++; }
+        else unrec++;
+      });
+      var keys = Object.keys(seasons).map(Number).sort(function(a, b){ return a - b; });
+      var needSplit = keys.length > 1 && vids >= Auto115Core.SPLIT_MIN_EPISODES;
+      var seasonCidMap = {};
+      var ensureSeasons = needSplit
+        ? Promise.all(keys.map(function(s){
+            return auto115EnsureDir(showCid, 'S' + auto115Pad2(s)).then(function(c){ seasonCidMap[s] = c; });
+          }))
+        : Promise.resolve(null);
+      /* 仅当有未识别项时才建「未识别」夹（全识别则不建，避免多一个空文件夹） */
+      var ensureUnrec = unrec > 0 ? auto115EnsureDir(showCid, Auto115Core.UNRECOGNIZED_DIR) : Promise.resolve(null);
+      return Promise.all([ensureSeasons, ensureUnrec]).then(function(arr){
+        var uncid = arr[1] || null;
+        var jobs = [];
         ms.forEach(function(m){
-          var ep = Auto115Core.detectEpisode(m.dirName || m.offlineName || '');
-          if (ep && ep.episode){ var s = ep.season || 1; seasons[s] = true; vids++; }
-        });
-        var keys = Object.keys(seasons).map(Number).sort(function(a, b){ return a - b; });
-        var needSplit = keys.length > 1 && vids >= Auto115Core.SPLIT_MIN_EPISODES;
-        var seasonCidMap = {};
-        var ensureSeasons = needSplit
-          ? Promise.all(keys.map(function(s){
-              return auto115EnsureDir(showCid, 'S' + auto115Pad2(s)).then(function(c){ seasonCidMap[s] = c; });
-            }))
-          : Promise.resolve(null);
-        return ensureSeasons.then(function(){
-          var jobs = [];
-          ms.forEach(function(m){
-            var ep = Auto115Core.detectEpisode(m.dirName || m.offlineName || '');
-            if (ep && ep.episode){
-              var s = ep.season || 1, e = ep.episode;
-              var name = auto115TvDirName(showTitle) + '.S' + auto115Pad2(s) + 'E' + auto115Pad2(e);
-              var pid = (needSplit && seasonCidMap[s]) ? seasonCidMap[s] : showCid;
-              if (m.noFolder){ var ext = (/\.[a-z0-9]+$/i.exec(m.videoName || '') || ['.mp4'])[0]; jobs.push({ fid: m.videoFid, name: name + ext, orig: m.videoName, pid: pid }); }
-              else jobs.push({ fid: m.dirCid, name: name, orig: m.dirName, pid: pid });
+          var ep = Auto115Core.detectEpisode(m.origName || m.dirName || m.offlineName || '');
+          if (ep && ep.episode){
+            var s = ep.season || 1, e = ep.episode;
+            var base = auto115TvDirName(showTitle) + '.S' + auto115Pad2(s) + 'E' + auto115Pad2(e);
+            var pid = (needSplit && seasonCidMap[s]) ? seasonCidMap[s] : showCid;
+            if (m.kind === 'sub'){
+              var lang = auto115SubLang(m.origName || '');
+              var subExt = (/\.[a-z0-9]+$/i.exec(m.origName || '') || ['.srt'])[0];
+              jobs.push({ fid: m.fid, name: base + (lang && lang !== 'und' ? '.' + lang : '') + subExt, orig: m.origName, pid: pid });
             } else {
-              /* 识别不到集号 → 整夹移入「未识别」夹，不改名 */
-              if (m.noFolder){ jobs.push({ fid: m.videoFid, name: m.videoName, orig: m.videoName, pid: uncid }); }
-              else jobs.push({ fid: m.dirCid, name: m.dirName, orig: m.dirName, pid: uncid });
+              var ext = (/\.[a-z0-9]+$/i.exec(m.origName || '') || ['.mp4'])[0];
+              jobs.push({ fid: m.fid, name: base + ext, orig: m.origName, pid: pid });
             }
-          });
-          return jobs;
+          } else {
+            /* 识别不到集号 → 移入「未识别」夹（无未识别夹时退回剧集根，不改名） */
+            jobs.push({ fid: m.fid, name: m.origName, orig: m.origName, pid: uncid || showCid });
+          }
         });
+        return jobs;
       });
     });
   }
-  /* 电影：区分后缀 / 按系列改名 */
+  /* 电影：区分后缀 / 按系列改名；穿透条目统一用 fid/origName，整夹(isFolder)不追加扩展名 */
   var filmTitle = doc.filmTitle || '';
   return auto115EnsureDir(C115_DEFAULT_DIR_CID, filmTitle).then(function(filmCid){
     if (!filmCid) throw new Error('创建影片文件夹失败');
@@ -3897,8 +3970,8 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
     var jobs = [];
     ms.forEach(function(m){
       var name = m.renameTo || filmTitle;
-      if (m.noFolder){ var ext = (/\.[a-z0-9]+$/i.exec(m.videoName || '') || ['.mp4'])[0]; jobs.push({ fid: m.videoFid, name: name + ext, orig: m.videoName, pid: filmCid }); }
-      else jobs.push({ fid: m.dirCid, name: name, orig: m.dirName, pid: filmCid });
+      var ext = (/\.[a-z0-9]+$/i.exec(m.origName || '') || ['.mp4'])[0];
+      jobs.push({ fid: m.fid, name: m.isFolder ? name : (name + ext), orig: m.origName, pid: filmCid });
     });
     return jobs;
   });
