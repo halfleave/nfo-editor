@@ -6938,7 +6938,14 @@ function fetchJavbusSearch(q, box){
   var url = base + path + '?keyword=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now();
   fetch(url, { cache: 'no-store' })
     .then(function(r){
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) {
+        // 把服务端返回的错误正文也读出来，便于定位（如 unknown route / JavBus 代理请求失败）
+        return r.text().then(function(txt){
+          var msg = txt || ('HTTP ' + r.status);
+          try { var j = JSON.parse(txt); if (j && j.error) msg = j.error + ' (HTTP ' + r.status + ')'; } catch (e) {}
+          throw new Error(msg);
+        });
+      }
       return r.json();
     })
     .then(function(res){
