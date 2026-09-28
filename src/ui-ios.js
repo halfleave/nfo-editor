@@ -5221,13 +5221,19 @@ function renderMagnetComposer(containerId){
   var rows = document.createElement('div'); rows.className = 'mc-rows';
   var inputRow = document.createElement('div'); inputRow.className = 'mc-input-row';
   var ta = document.createElement('textarea'); ta.className = 'mc-input'; ta.rows = 1;
-  ta.placeholder = '粘贴/输入磁力或 ed2k 链接（magnet:? / ed2k://），多条可逐条添加';
-  ta.onkeydown = function(e){ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); auto115ComposerAdd(containerId); } };
-  var pasteBtn = document.createElement('button'); pasteBtn.type = 'button'; pasteBtn.className = 'mc-paste'; pasteBtn.textContent = '粘贴';
-  pasteBtn.onclick = function(){ auto115ComposerPaste(containerId); };
-  var addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'mc-add'; addBtn.textContent = '添加';
+  ta.readOnly = true;   /* 禁止唤起键盘：点按自动读剪贴板填充（仅识别磁力/ed2k），长按仍可原生粘贴 */
+  ta.placeholder = '点按粘贴磁力链接';
+  ta.onclick = function(){
+    if ((ta.value || '').trim()) return;
+    if (!(navigator.clipboard && navigator.clipboard.readText)) return;
+    navigator.clipboard.readText().then(function(txt){
+      txt = (txt || '').trim();
+      if (/^(magnet:\?|ed2k:\/\/)/i.test(txt)) ta.value = txt;
+    }).catch(function(){});
+  };
+  var addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'mc-add'; addBtn.textContent = '+'; addBtn.setAttribute('aria-label', '添加');
   addBtn.onclick = function(){ auto115ComposerAdd(containerId); };
-  inputRow.appendChild(ta); inputRow.appendChild(pasteBtn); inputRow.appendChild(addBtn);
+  inputRow.appendChild(ta); inputRow.appendChild(addBtn);
   box.appendChild(rows); box.appendChild(inputRow);
 }
 function auto115ComposerAdd(containerId){
@@ -5244,17 +5250,7 @@ function auto115ComposerAdd(containerId){
     chip.appendChild(span); chip.appendChild(x);
     rows.appendChild(chip);
   });
-  ta.value = ''; ta.focus();
-}
-function auto115ComposerPaste(containerId){
-  var box = document.getElementById(containerId); if (!box) return;
-  var ta = box.querySelector('.mc-input'); if (!ta) return;
-  if (navigator.clipboard && navigator.clipboard.readText){
-    navigator.clipboard.readText().then(function(txt){
-      ta.value = ((ta.value && ta.value.trim()) ? (ta.value.trim() + '\n') : '') + (txt || '');
-      ta.focus();
-    }).catch(function(){ ta.focus(); });
-  } else { ta.focus(); }
+  ta.value = '';
 }
 function auto115ComposerValues(containerId){
   var box = document.getElementById(containerId); if (!box) return [];
@@ -5273,8 +5269,8 @@ function auto115ComposerReset(containerId){
 }
 function auto115AddMagnetTask(){
   var mags = auto115ComposerValues('magnetComposer').filter(Boolean);
-  if (!mags.length){ showToast('请至少添加一个磁力或 ed2k 链接', 'error'); return; }
-  if (mags.some(function(m){ return !auto115IsOfflineLink(m); })){ showToast('有不是有效磁力/ed2k 链接的内容，请检查', 'error'); return; }
+  if (!mags.length){ showToast('请先添加磁力链接', 'error'); return; }
+  if (mags.some(function(m){ return !auto115IsOfflineLink(m); })){ showToast('存在无效链接，请检查', 'error'); return; }
   auto115CloseMagnetModal();
   auto115EnsureDoc().then(function(doc){
     /* 去重：批内重复 / 已在该影片列表里 → 跳过 */
@@ -10775,8 +10771,8 @@ function toolboxMagnetOffline(magnet){
   } else {
     mags = auto115ComposerValues('tbmMagnetComposer').filter(Boolean);
   }
-  if (!mags.length){ showToast('请粘贴有效的磁力或 ed2k 链接（magnet:? / ed2k:// 开头）', 'error'); return; }
-  if (mags.some(function(m){ return !auto115IsOfflineLink(m); })){ showToast('有不是有效磁力/ed2k 链接的内容，请检查', 'error'); return; }
+  if (!mags.length){ showToast('请先添加磁力链接', 'error'); return; }
+  if (mags.some(function(m){ return !auto115IsOfflineLink(m); })){ showToast('存在无效链接，请检查', 'error'); return; }
   ensure115Cookie().then(function(ck){
     if (!ck){ showToast('请先到「设置 → 应用配置 → 115 配置」登录', 'error'); refreshTbmAddState(); return; }
     return auto115EnsureLibraryDoc().then(function(lib){
