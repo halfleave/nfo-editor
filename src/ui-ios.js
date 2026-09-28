@@ -6735,8 +6735,10 @@ function setTier(v){ return idbPut('kv', 'tier', v || ''); }
 /* 剧照档位上限：免费 1 张、中等 5 张、高级 8 张（高级不卡上限，可看全部；仅高级出现「加载更多」） */
 function getShotCap(){ var t = state.tier || ''; if (t === 'full') return 8; if (t === 'medium') return 5; return 1; }
 function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
-/* JavBus 基址：由「Worker 代理地址」自动推导（state.magnetWorker + '/javbus'），无需单独配置输入框 */
-function javbusApiBase(){ return (state.magnetWorker || '').replace(/\/+$/, '') + '/javbus'; }
+/* JavBus 基址：由「Worker 代理地址」自动推导（state.magnetWorker + '/javbus'），无需单独配置输入框。
+   必须带 DEFAULT_WORKER 兜底：否则未填 Worker 地址时 base 变成相对路径 /javbus，
+   请求会打到 GitHub Pages 自己域名（Pages 404），而 TMDB/磁力/字幕都有兜底唯独 javbus 挂 */
+function javbusApiBase(){ return (state.magnetWorker || DEFAULT_WORKER || '').replace(/\/+$/, '') + '/javbus'; }
 
 /* —— TMDB 常量 —— */
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
