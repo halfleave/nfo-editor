@@ -1134,6 +1134,7 @@ function fetchJavbusSearch(q, box){
       return r.json();
     })
     .then(function(res){
+      if (res && res.error){ box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(res.error) + '</div>'; return; }
       var movies = (res && res.movies) || [];
       if (!movies.length){
         // 无结果回退：FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内；放宽到「任意像番号的输入」也直查 /api/meta，
@@ -1155,8 +1156,7 @@ function fetchJavbusSearch(q, box){
       renderJavbusResults(movies, box);
     })
     .catch(function(e){
-      var msg = (e && e.message) ? e.message : '未知错误';
-    box.innerHTML = '<div class="tmdb-msg">试试其他神秘代码吧～</div>';
+      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((e && e.message) ? e.message : '未知错误') + '</div>';
   }).finally(function(){ stopLoadingRotator(); });
 }
 
