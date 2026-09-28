@@ -1185,8 +1185,9 @@ function applyJavbusResult(i){
   }
   var base = javbusApiBase();
   NfoCore.quotaInc('javSave');
+  var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
   showToast('加载详情中…');
-  fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(it.id))
+  fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(it.id) + jbCode)
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d){
       if (!d || !d.id) throw new Error('无详情数据');

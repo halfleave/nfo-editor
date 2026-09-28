@@ -6932,7 +6932,10 @@ function fetchJavbusSearch(q, box){
   var base = javbusApiBase();
   // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
   var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
-  var url = base + path + '?keyword=' + encodeURIComponent(q) + '&_=' + Date.now();
+  /* 与 115/AI 整理一致：把已填的激活码拼到 Worker 请求上，让 jav 搜索走个人配额桶，
+     否则一律走匿名桶（15 次/天），填了激活码的用户搜满后会被拦截成「未找到」 */
+  var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
+  var url = base + path + '?keyword=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now();
   fetch(url, { cache: 'no-store' })
     .then(function(r){
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -6945,7 +6948,7 @@ function fetchJavbusSearch(q, box){
         // 以补全 JavBus 无但 DMM 有的数据（DMM 按番号搜，关键词搜不了，故片名仍走 JavBus/未找到）
         var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
         if (looksLikeId) {
-          fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + '&_=' + Date.now(), { cache: 'no-store' })
+          fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now(), { cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
               if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
@@ -7009,8 +7012,9 @@ function applyJavbusResult(i){
     return;
   }
   var base = javbusApiBase();
+  var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
   showToast('加载详情中…');
-  fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(id))
+  fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(id) + jbCode)
     .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d){
       if (!d || !d.id) throw new Error('无详情数据');

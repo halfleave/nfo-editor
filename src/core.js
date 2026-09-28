@@ -1124,7 +1124,9 @@ function fetchJavbusSearch(q, box){
   var base = javbusApiBase();
   // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
   var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
-  var url = base + path + '?keyword=' + encodeURIComponent(q) + '&_=' + Date.now();
+  /* 与 115/AI 整理一致：拼上激活码走个人配额桶；否则走匿名桶（15 次/天），填码用户搜满后被拦成「未找到」 */
+  var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
+  var url = base + path + '?keyword=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now();
   NfoCore.quotaInc('javSearch');
   fetch(url, { cache: 'no-store' })
     .then(function(r){
@@ -1138,7 +1140,7 @@ function fetchJavbusSearch(q, box){
         // 以补全 JavBus 无但 DMM 有的数据（DMM 按番号搜，关键词搜不了，故片名仍走 JavBus/未找到）
         var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
         if (looksLikeId) {
-          fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + '&_=' + Date.now(), { cache: 'no-store' })
+          fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now(), { cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
               if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
