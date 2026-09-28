@@ -357,8 +357,21 @@
     return has ? n : null;
   };
   /* 从文件名解析 {season, episode}（season 默认 1）；认不到集返回 episode:null；什么都不认返回 null */
+  var TAIL_DOMAIN_RE = /[\[【(]([^)】\]]*(?:www\.|https?:\/\/|\.com|\.net|\.cc|\.xyz|\.tv|\.me|\.org|\.moe|\.vip|\.club)[^)】\]]*)[\]】)]/i;
   api.episodeOf = function (name) {
     name = String(name || '');
+    /* 剥资源站水印尾巴（如 [最新电影www.dyg7.com]）：括号内容含域名特征才剥，最多剥 3 层。
+       扩展名先分离——域名括号在「主干末尾」（后面只跟扩展名）即算尾部。 */
+    var extM = /\.[a-z0-9]+$/i.exec(name);
+    var ext = extM ? extM[0] : '';
+    var stem = extM ? name.slice(0, extM.index) : name;
+    for (var i = 0; i < 3; i++){
+      var tail = TAIL_DOMAIN_RE.exec(stem);
+      if (!tail) break;
+      if (tail.index + tail[0].length >= stem.replace(/\s+$/, '').length) stem = stem.slice(0, tail.index);
+      else break;   /* 域名括号不在主干末尾（后面还有别的字）→ 不剥，避免误伤正文名 */
+    }
+    name = stem + ext;
     var low = name.toLowerCase();
     var m;
     m = low.match(/s(\d{1,2})[.\-_ ]?e(\d{1,3})/); if (m) return { season: +m[1], episode: +m[2] };
@@ -377,7 +390,28 @@
     if (mn) return { season: 1, episode: +mn[1] };
     mn = base.match(/[.\-_\s](0\d{1,2}|[1-9]?\d)$/);
     if (mn) return { season: 1, episode: +mn[1] };
+    /* 开头独立数字兜底：193.1080p.HD国语中字…（集号开头+水印尾巴）→ 第 193 集。
+       数字后必须紧跟分隔符（「720p」后是字母不中）；只认 1~2 位或 0 开头 3 位（1080/1997 等 3~4 位大数不中）。 */
+    mn = base.match(/^(0\d{1,2}|[1-9]\d{0,2})[.\-_\s]/);
+    if (mn) return { season: 1, episode: +mn[1] };
     return null;
+  };
+  /* 从文件夹名解析季号（02 / S02 / Season 2 / 第二季 / 某剧S02 → 2）；认不出返回 0。
+     整体纯数字只认 1~2 位或 0 开头 3 位，防「1080」这类分辨率夹名误判。 */
+  api.seasonOfDir = function (name) {
+    name = String(name || '').trim();
+    if (!name) return 0;
+    var m = name.match(/s(\d{1,2})(?![\dp])/i); if (m) return +m[1];
+    m = name.match(/season\s*(\d{1,2})/i); if (m) return +m[1];
+    m = name.match(/第\s*([零一二两三四五六七八九十百\d]+)\s*季/); if (m) return api.cnNum(m[1]) || 0;
+    m = name.match(/^(0\d{1,2}|[1-9]\d?)$/); if (m) return +m[1];
+    return 0;
+  };
+  /* 文件名是否显式写了季号（S01E05 / 1x05 / Season 2 / 第三季）——季夹名覆盖时这类以文件名为准 */
+  api.explicitSeason = function (name) {
+    name = String(name || '').toLowerCase();
+    return /s\d{1,2}[.\-_ ]?e\d/.test(name) || /\d{1,2}[x×]\d{1,3}/.test(name) ||
+           /season\s*\d/.test(name) || /第\s*[零一二两三四五六七八九十百\d]+\s*季/.test(name);
   };
   api.ext = function (name) { var m = /\.[a-z0-9]+$/i.exec(name || ''); return m ? m[0] : ''; };
   api.pad2 = function (n) { n = Math.max(1, n | 0); return (n < 10 ? '0' : '') + n; };
@@ -390,8 +424,9 @@
     return api.tvDirName(showTitle) + '.S' + api.pad2(season) + 'E' + api.pad2(ep) + '.' + lang + (ext || '');
   };
   /* 纯函数：把扫描到的条目规划成「重命名（含移入季文件夹）+ 待删」列表。
-     items: [{fid, name}]（仅文件）。返回 {renames:[{fid,name}], deleteFids:[fid]} */
-  api.tvPlan = function (showTitle, items) {
+     items: [{fid, name}]（仅文件）。dirSeason: 源文件夹名解析出的季号（seasonOfDir，0=无）——
+     文件名没显式写季号时用它覆盖默认的 S01（如「02」夹里的 01.mkv → S02E01）。返回 {renames:[{fid,name}], deleteFids:[fid]} */
+  api.tvPlan = function (showTitle, items, dirSeason) {
     var vids = [], subs = [], junk = [];
     items.forEach(function (it) {
       var nm = it.name || '';
@@ -409,9 +444,14 @@
     function take(s, e) { occupied[key(s, e)] = true; }
     function nextEp(s) { var e = 1; while (occupied[key(s, e)]) e++; take(s, e); return e; }
     var vidPlan = [], unrecognized = [];
+    var effSeason = function (name, s) {
+      s = s || 1;
+      if (dirSeason && s === 1 && !api.explicitSeason(name)) return dirSeason;
+      return s;
+    };
     vids.forEach(function (it) {
       var ep = api.episodeOf(it.name);
-      if (ep && ep.episode){ var s = ep.season || 1; if (!occupied[key(s, ep.episode)]){ take(s, ep.episode); vidPlan.push({ fid: it.fid, season: s, ep: ep.episode, orig: it.name, size: it.s || 0 }); return; } }
+      if (ep && ep.episode){ var s = effSeason(it.name, ep.season); if (!occupied[key(s, ep.episode)]){ take(s, ep.episode); vidPlan.push({ fid: it.fid, season: s, ep: ep.episode, orig: it.name, size: it.s || 0 }); return; } }
       /* 认不出集号的视频：不臆造集号，整条保留原名，后续移入「未识别」文件夹（见 auto115StepTvMoveVideos / PC 对应步骤） */
       unrecognized.push({ fid: it.fid, name: it.name, orig: it.name, size: it.s || 0 });
     });
@@ -422,7 +462,7 @@
       var lang = api.subLang(it.name);
       if (!lang){ junk.push(it); return; }
       var ep = api.episodeOf(it.name);
-      if (ep && ep.episode){ var s2 = ep.season || 1; subPlan.push({ fid: it.fid, season: s2, ep: ep.episode, lang: lang, orig: it.name, size: it.s || 0 }); }
+      if (ep && ep.episode){ var s2 = effSeason(it.name, ep.season); subPlan.push({ fid: it.fid, season: s2, ep: ep.episode, lang: lang, orig: it.name, size: it.s || 0 }); }
       // 认不出集号 → 不改
     });
     var renames = [];

@@ -1069,7 +1069,7 @@
   function auto115TvVideoName(showTitle, season, ep, ext) { return Auto115Core.tvVideoName(showTitle, season, ep, ext); }
   function auto115TvSubName(showTitle, season, ep, lang, ext) { return Auto115Core.tvSubName(showTitle, season, ep, lang, ext); }
   /* 整理计划（识别季集号、字幕语言、待删清单）单点实现在 Auto115Core.tvPlan。 */
-  function auto115TvPlan(showTitle, items) { return Auto115Core.tvPlan(showTitle, items); }
+  function auto115TvPlan(showTitle, items, dirSeason) { return Auto115Core.tvPlan(showTitle, items, dirSeason); }
   /* 是否分季（阈值判定）单点实现在 Auto115Core.tvNeedSeasonSplit；阈值常量 SPLIT_MIN_EPISODES 也在 core。 */
   var AUTO115_SPLIT_MIN_EPISODES = Auto115Core.SPLIT_MIN_EPISODES;
   function auto115TvNeedSeasonSplit(plan) { return Auto115Core.tvNeedSeasonSplit(plan); }
@@ -1113,7 +1113,7 @@
     auto115Set(t, 'move', 'running', '正在识别并清除无关文件…');
     if (!t.offlineDirCid && !t.noFolder){ auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
     return auto115StepTvGetItems(t).then(function (items) {
-      var plan = auto115TvPlan((auto115TaskDoc(t) || {}).filmTitle, items);
+      var plan = auto115TvPlan((auto115TaskDoc(t) || {}).filmTitle, items, Auto115Core.seasonOfDir(t.offlineDirName));
       if (!plan.renames.length){ auto115Set(t, 'move', 'fail', '没有可识别的视频文件，点「重试」'); auto115Finish(t); return null; }
       t.tvPlan = plan;
       var delIds = plan.deleteFids.filter(Boolean);

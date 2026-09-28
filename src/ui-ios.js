@@ -2986,7 +2986,7 @@ function auto115TvDirName(showTitle){ return Auto115Core.tvDirName(showTitle); }
 function auto115TvVideoName(showTitle, season, ep, ext){ return Auto115Core.tvVideoName(showTitle, season, ep, ext); }
 function auto115TvSubName(showTitle, season, ep, lang, ext){ return Auto115Core.tvSubName(showTitle, season, ep, lang, ext); }
 /* 纯函数：整理计划（识别季集号、字幕语言、待删清单）单点实现在 Auto115Core.tvPlan。 */
-function auto115TvPlan(showTitle, items){ return Auto115Core.tvPlan(showTitle, items); }
+function auto115TvPlan(showTitle, items, dirSeason){ return Auto115Core.tvPlan(showTitle, items, dirSeason); }
 /* 是否分季（阈值判定）单点实现在 Auto115Core.tvNeedSeasonSplit；阈值常量 SPLIT_MIN_EPISODES 也在 core。 */
 var AUTO115_SPLIT_MIN_EPISODES = Auto115Core.SPLIT_MIN_EPISODES;
 function auto115TvNeedSeasonSplit(plan){ return Auto115Core.tvNeedSeasonSplit(plan); }
@@ -3032,7 +3032,7 @@ function auto115StepTvCleanupFiles(t){
   auto115Set(t, 'move', 'running', '正在识别并清除无关文件…');
   if (!t.offlineDirCid && !t.noFolder){ auto115Set(t, 'move', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
   return auto115StepTvGetItems(t).then(function(items){
-    var plan = auto115TvPlan((auto115TaskDoc(t) || {}).filmTitle, items);
+    var plan = auto115TvPlan((auto115TaskDoc(t) || {}).filmTitle, items, Auto115Core.seasonOfDir(t.offlineDirName));
     if (!plan.renames.length){ auto115Set(t, 'move', 'fail', '没有可识别的视频文件，点「重试」'); auto115Finish(t); return null; }
     t.tvPlan = plan;
     var delIds = plan.deleteFids.filter(Boolean);
@@ -4033,11 +4033,20 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
     var showTitle = doc.filmTitle || '';
     return auto115EnsureTvRoot(showTitle).then(function(showCid){
       if (!showCid) throw new Error('创建剧集根文件夹失败');
-      /* 先统计：识别到的集（分季判定）+ 未识别项数量（决定要不要建「未识别」夹） */
+      /* 先统计：识别到的集（分季判定）+ 未识别项数量（决定要不要建「未识别」夹）。
+         季夹名季号覆盖：文件名没显式写季号（如纯数字 01.mkv）时，用磁力源夹名（如「02」）的季号，不误标 S01。 */
+      var effSeason = function(m, ep){
+        var s = (ep && ep.season) || 1;
+        if (s === 1 && !Auto115Core.explicitSeason(m.origName || '')){
+          var ds = Auto115Core.seasonOfDir(m.dirName || '');
+          if (ds > 0) return ds;
+        }
+        return s;
+      };
       var seasons = {}, vids = 0, unrec = 0;
       ms.forEach(function(m){
         var ep = Auto115Core.detectEpisode(m.origName || m.dirName || m.offlineName || '');
-        if (ep && ep.episode){ var s = ep.season || 1; seasons[s] = true; vids++; }
+        if (ep && ep.episode){ seasons[effSeason(m, ep)] = true; vids++; }
         else unrec++;
       });
       var keys = Object.keys(seasons).map(Number).sort(function(a, b){ return a - b; });
@@ -4056,7 +4065,7 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
         ms.forEach(function(m){
           var ep = Auto115Core.detectEpisode(m.origName || m.dirName || m.offlineName || '');
           if (ep && ep.episode){
-            var s = ep.season || 1, e = ep.episode;
+            var s = effSeason(m, ep), e = ep.episode;
             var base = auto115TvDirName(showTitle) + '.S' + auto115Pad2(s) + 'E' + auto115Pad2(e);
             var pid = (needSplit && seasonCidMap[s]) ? seasonCidMap[s] : showCid;
             if (m.kind === 'sub'){

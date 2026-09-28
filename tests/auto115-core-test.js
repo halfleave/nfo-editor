@@ -143,6 +143,36 @@ assert(p6names.indexOf('竞女.S01E11.und.ass') >= 0, 'tvPlan：数字字幕 11 
 assert(subNames5.length === 0, 'tvPlan：认不出集号的字幕不改名（无兜底），不会编出 E13、E14');
 assert(plan5.deleteFids.indexOf('s1') < 0 && plan5.deleteFids.indexOf('s6') < 0, 'tvPlan：认不出集号的字幕仍然保留，不进删除清单');
 
+/* ---------- episodeOf 增强：剥水印尾巴 + 开头数字兜底 ---------- */
+assert((api.episodeOf('193.1080p.HD国语中字无水印[最新电影www.dyg7.com].mkv') || {}).episode === 193, 'episodeOf：剥域名尾巴后开头数字 193 → 第 193 集');
+assert((api.episodeOf('Show.06[www.dyg7.com].mkv') || {}).episode === 6, 'episodeOf：域名尾巴剥掉后末尾数字 06 → 第 6 集');
+assert((api.episodeOf('Show.06【www.dyg7.com】.mkv') || {}).episode === 6, 'episodeOf：全角域名尾巴【】同样剥掉');
+assert(api.episodeOf('Show.[HD中字].mkv') === null, 'episodeOf：括号无域名特征不剥、不误判');
+assert(api.episodeOf('1080.名字.mkv') === null && api.episodeOf('1997.故事.mkv') === null, 'episodeOf：开头 3~4 位大数（分辨率/年份）不当集号');
+assert(api.episodeOf('720p.mkv') === null, 'episodeOf：720p 数字后跟字母不中开头规则');
+assert((api.episodeOf('Show.S02E05.mkv') || {}).season === 2, 'episodeOf：显式 SxxEyy 季号回归不受影响');
+
+/* ---------- seasonOfDir：文件夹名解析季号 ---------- */
+assert(api.seasonOfDir('02') === 2 && api.seasonOfDir('S02') === 2 && api.seasonOfDir('s2') === 2, 'seasonOfDir：02 / S02 / s2 → 2');
+assert(api.seasonOfDir('Season 2') === 2 && api.seasonOfDir('第二季') === 2 && api.seasonOfDir('第2季') === 2, 'seasonOfDir：Season 2 / 第二季 / 第2季 → 2');
+assert(api.seasonOfDir('某某剧S02') === 2, 'seasonOfDir：剧名+S02 混合夹名 → 2');
+assert(api.seasonOfDir('1080') === 0 && api.seasonOfDir('海报') === 0 && api.seasonOfDir('') === 0, 'seasonOfDir：分辨率/普通名/空名 → 0（不覆盖）');
+
+/* ---------- explicitSeason：显式季号标记 ---------- */
+assert(api.explicitSeason('Show.S01E05.mkv') && api.explicitSeason('1x05.mkv') && api.explicitSeason('第三季 第5集.mkv'), 'explicitSeason：SxxEyy / 1x05 / 中文季 → true');
+assert(!api.explicitSeason('05.mkv') && !api.explicitSeason('第5集.mkv'), 'explicitSeason：纯数字 / 只有集号 → false');
+
+/* ---------- tvPlan dirSeason：季夹名季号覆盖 ---------- */
+const plan7 = api.tvPlan('Show', [
+  { fid: 'a', name: '01.mkv' }, { fid: 'b', name: '02.mkv' }, { fid: 'c', name: '03.mkv' },
+  { fid: 'd', name: 'Show.S03E05.mkv' },
+  { fid: 'e', name: '01.ass' }
+], 2);
+const p7names = plan7.renames.map(r => r.name);
+assert(p7names.indexOf('Show.S02E01.mkv') >= 0 && p7names.indexOf('Show.S02E02.mkv') >= 0 && p7names.indexOf('Show.S02E03.mkv') >= 0, 'tvPlan：02 夹里纯数字 01/02/03 → S02E01~03');
+assert(p7names.indexOf('Show.S03E05.mkv') >= 0, 'tvPlan：文件名显式 S03E05 以文件名为准，不被夹名覆盖');
+assert(p7names.indexOf('Show.S02E01.und.ass') >= 0, 'tvPlan：数字字幕同样按夹名季号覆盖');
+
 /* ---------- 分季阈值 ---------- */
 const mkPlan = (list) => ({ renames: list.map(n => ({ name: n })) });
 const one = api.tvNeedSeasonSplit(mkPlan(['A.S01E01.mkv', 'A.S01E02.srt']));
