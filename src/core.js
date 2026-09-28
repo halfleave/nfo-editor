@@ -456,7 +456,7 @@ function populateFromJAV(d){
   resetSourceState();
   state.adult = true;
   state.source = 'jav';   // 记录来源，供「刷新」按源刷新
-  var n = NfoCore.normalizeJavFilm(d, { workerBase: state.magnetWorker });
+  var n = NfoCore.normalizeJavFilm(d, { workerBase: state.magnetWorker || DEFAULT_WORKER });
 
   setFieldVal('title', n.title);
   setFieldVal('originaltitle', n.title);   // 原始标题 = 原标题
@@ -513,7 +513,7 @@ function populateFromJavbus(d, hintTags){
   state.adult = true;   // JavBus 内容均为成人 → 编辑页显示 AV 字段
   state.source = 'javbus';   // 记录来源，供「刷新」按源刷新
   state.javbusId = (d && (d.id)) || state.dvdId || null;   // 记录番号，供刷新重新拉取
-  var n = NfoCore.normalizeJavbusFilm(d, { workerBase: state.magnetWorker });
+  var n = NfoCore.normalizeJavbusFilm(d, { workerBase: state.magnetWorker || DEFAULT_WORKER });
 
   setFieldVal('title', n.title);
   setFieldVal('originaltitle', n.title);
@@ -811,7 +811,7 @@ function applyFilmData(film){
   updateState();
 }
 
-function javCoverUrl(raw){ return NfoCore.javCoverUrl(raw, state.magnetWorker); }
+function javCoverUrl(raw){ return NfoCore.javCoverUrl(raw, state.magnetWorker || DEFAULT_WORKER); }
 function javbusImgUrl(raw){ return NfoCore.proxyImgUrl(raw, state.magnetWorker || DEFAULT_WORKER); }
 function normalizeTextField(v){
   if (v == null || v === '') return '';

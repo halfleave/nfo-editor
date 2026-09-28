@@ -6978,8 +6978,8 @@ function fetchJavbusSearch(q, box){
 }
 /* 封面域名 pics.dmm.co.jp 无 CORS 头，已配 Worker 时经 /img 路由代理以绕跨域。
    搜索列表与保存导入共用同一代理 URL，浏览器即可命中缓存、避免重复拉取 */
-function javCoverUrl(raw){ return NfoCore.javCoverUrl(raw, state.magnetWorker); }
-function javbusImgUrl(raw){ return NfoCore.proxyImgUrl(raw, state.magnetWorker); }
+function javCoverUrl(raw){ return NfoCore.javCoverUrl(raw, state.magnetWorker || DEFAULT_WORKER); }
+function javbusImgUrl(raw){ return NfoCore.proxyImgUrl(raw, state.magnetWorker || DEFAULT_WORKER); }
 /* JavBus 搜索结果列表渲染 + 点选拉详情 */
 var lastJavbusResults = [];
 function renderJavbusResults(items, box){
@@ -7070,7 +7070,7 @@ function populateFromJAV(d){
   resetSourceState();
   state.adult = true;
   state.source = 'jav';   // 记录来源，供「刷新」按源刷新
-  var n = NfoCore.normalizeJavFilm(d, { workerBase: state.magnetWorker });
+  var n = NfoCore.normalizeJavFilm(d, { workerBase: state.magnetWorker || DEFAULT_WORKER });
 
   setFieldVal('title', n.title);
   setFieldVal('originaltitle', n.title);   // 原始标题 = 原标题
@@ -7132,7 +7132,7 @@ function populateFromJavbus(d, hintTags){
   state.adult = true;   // JavBus 内容均为成人 → 编辑页显示 AV 字段
   state.source = 'javbus';   // 记录来源，供「刷新」按源刷新
   state.javbusId = (d && (d.id)) || state.dvdId || null;   // 记录番号，供刷新重新拉取
-  var n = NfoCore.normalizeJavbusFilm(d, { workerBase: state.magnetWorker });
+  var n = NfoCore.normalizeJavbusFilm(d, { workerBase: state.magnetWorker || DEFAULT_WORKER });
 
   setFieldVal('title', n.title);
   setFieldVal('originaltitle', n.title);
