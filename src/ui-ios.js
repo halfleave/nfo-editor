@@ -3029,6 +3029,18 @@ function auto115StepTvGetItems(t){
     /* 始终穿透子文件夹（种子套层结构） */
     return auto115FlattenSubDirs(t, list);
   }).then(function(list){
+    /* 相关夹并入（v345）：同剧多次离线落在其他夹的内容一并整理；主夹按 cid、剧集根夹名按名字排除 */
+    var _doc = auto115TaskDoc(t) || {};
+    var exCids = {}; exCids[String(t.offlineDirCid)] = 1;
+    var exNames = {}; exNames[auto115TvDirName(_doc.filmTitle || '')] = 1;
+    return auto115FindRelatedDirs(_doc.filmTitle, exCids, exNames).then(function(rel){
+      if (!rel.length) return list;
+      t._relatedCids = rel.map(function(r){ return r.cid; });
+      return Promise.all(rel.map(function(r){
+        return auto115ListDir(r.cid).then(function(l2){ return auto115FlattenSubDirs(t, l2 || []); }).catch(function(){ return []; });
+      })).then(function(gs){ return list.concat.apply(list, gs); });
+    });
+  }).then(function(list){
     return list.map(function(it){ var sz = it.s || 0; return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: sz, size: sz }; }).filter(function(it){ return (it.fid || it.cid) && it.name; });
   });
 }
@@ -3297,6 +3309,20 @@ function auto115StepMove(t){
   return auto115ListDir(t.offlineDirCid).then(function(list){
     /* 始终穿透子文件夹（种子套层结构，顶层有视频也可能有嵌套内容） */
     return auto115FlattenSubDirs(t, list);
+  }).then(function(list){
+    /* 相关夹并入（v345）：同一部片多次离线落在多个夹时，夹名含标题的其他夹内容一并参选，
+       选片/版本/分碟逻辑照常处理；目标影片夹按名字排除。 */
+    var _doc = auto115TaskDoc(t) || {};
+    var exCids = {}; exCids[String(t.offlineDirCid)] = 1;
+    var exNames = {}; exNames[sanitizeName(_doc.filmTitle || '')] = 1;
+    if (_doc.filmTitle) exNames[_doc.filmTitle] = 1;
+    return auto115FindRelatedDirs(_doc.filmTitle, exCids, exNames).then(function(rel){
+      if (!rel.length) return list;
+      t._relatedCids = rel.map(function(r){ return r.cid; });
+      return Promise.all(rel.map(function(r){
+        return auto115ListDir(r.cid).then(function(l2){ return auto115FlattenSubDirs(t, l2 || []); }).catch(function(){ return []; });
+      })).then(function(gs){ return list.concat.apply(list, gs); });
+    });
   }).then(function(list){
     var vids = list.filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
     if (!vids.length){ auto115Set(t, 'move', 'fail', '这个文件夹里没有视频'); auto115Finish(t); return null; }
@@ -3891,11 +3917,23 @@ function auto115MultiPlan(t){
   var doc = auto115TaskDoc(t) || {};
   var partsPromise = (!isTv && doc.collectionId) ? auto115FetchCollectionParts(doc.collectionId) : Promise.resolve(null);
   return partsPromise.then(function(parts){
-    return auto115MultiPenetrate(ms, t).then(function(ms2){
-      return auto115ComputeMultiTargets(t, ms2, isTv, doc, parts).then(function(jobs){
-        c = { ms2: ms2, jobs: jobs || [], isTv: isTv, doc: doc };
-        auto115MultiPlans[t.id] = c;
-        return c;
+    /* 相关夹并入（v345）：扫根目录把「夹名含标题」的其他离线夹一并当源夹穿透，
+       同一部片分多次离线的内容全部归拢整理；目标夹（剧集根夹/影片夹）按名字排除。 */
+    var exCids = {}, exNames = {};
+    ms.forEach(function(m){ if (m.dirCid) exCids[String(m.dirCid)] = 1; });
+    var targetName = isTv ? auto115TvDirName(doc.filmTitle) : sanitizeName(doc.filmTitle || '');
+    if (targetName) exNames[targetName] = 1;
+    if (doc.filmTitle && doc.filmTitle !== targetName) exNames[doc.filmTitle] = 1;
+    return auto115FindRelatedDirs(doc.filmTitle, exCids, exNames).then(function(rel){
+      var all = rel.length ? ms.concat(rel.map(function(r){
+        return { dirCid: r.cid, dirName: r.name, state: 'done', _related: true, title: doc.filmTitle };
+      })) : ms;
+      return auto115MultiPenetrate(all, t).then(function(ms2){
+        return auto115ComputeMultiTargets(t, ms2, isTv, doc, parts).then(function(jobs){
+          c = { ms2: ms2, jobs: jobs || [], isTv: isTv, doc: doc };
+          auto115MultiPlans[t.id] = c;
+          return c;
+        });
       });
     });
   });
@@ -3972,6 +4010,23 @@ function auto115StepMove2Multi(t){
     auto115Set(t, 'move2', 'fail', (e && e.message) ? e.message : '移入失败'); auto115Finish(t); return null;
   });
 }
+/* 扫云下载根目录找「标题相关夹」（v345）：同一部片/剧分多次离线会落在多个夹
+   （离线任务名不同、或被旧的未整理夹占名），只整理本任务定位到的夹会漏内容。
+   规则：文件夹名含完整标题（≥2 字）即相关；调用方用 exCids/exNames 排除任务已知源夹与目标夹
+   （剧集根夹 / 影片夹——它们是移入的目标，绝不能当源）。失败静默返回空（不影响主流程）。 */
+function auto115FindRelatedDirs(title, exCids, exNames){
+  var t = (title || '').trim();
+  if (!t || t.length < 2) return Promise.resolve([]);
+  return auto115ListDir(C115_DEFAULT_DIR_CID).then(function(list){
+    return (list || []).filter(function(it){
+      if (!it || !it.cid || it.fid) return false;                    /* 只要文件夹 */
+      if (exCids && exCids[String(it.cid)]) return false;            /* 本任务已定位的源夹 */
+      var nm = it.n || it.name || '';
+      if (exNames && exNames[nm]) return false;                      /* 目标夹名 */
+      return nm.indexOf(t) >= 0;
+    }).map(function(it){ return { cid: String(it.cid), name: it.n || it.name || '' }; });
+  }).catch(function(){ return []; });
+}
 /* 多磁力穿透：把每条磁力（文件夹型）里面的视频/字幕文件提取出来，转成「视频/字幕条目」视角，
    交给 auto115ComputeMultiTargets 按 SxxExx / 影片名+后缀 命名并平铺。与单磁力剧集 auto115StepTvGetItems 一致。
    返回扁平数组（一条文件夹型磁力可能拆成 视频+字幕 多条）。无媒体可提取的文件夹保留为「整夹」兜底。 */
@@ -3994,6 +4049,7 @@ function auto115MultiPenetrate(ms, t){
       var vids = (items || []).filter(function(it){ return it && it.fid && auto115IsVideoName(it.n || it.name || ''); });
       var subs = (items || []).filter(function(it){ return it && it.fid && auto115IsSubtitle(it.n || it.name || ''); });
       if (!vids.length && !subs.length){
+        if (m._related) return [];   /* 相关夹没媒体就不产出：不做整夹兜底，防二次执行把夹里遗留文件整夹搬走 */
         return [{ kind: 'folder', fid: m.dirCid, origName: m.dirName, dirName: m.dirName, title: m.title, offlineName: m.offlineName, isFolder: true, _srcDirCid: m.dirCid }];
       }
       var out = [];
@@ -4226,17 +4282,23 @@ function auto115StepCleanup(t){
 /* 自动删除已并入的临时离线目录（不显示在 UI，rename 完成后静默触发）。
    失败也不回退——临时目录留着用户可以手动清，不影响主流程。 */
 function auto115RemoveTmpDir(t){
-  if (!t.finalDirCid || t.noFolder) return Promise.resolve();
-  if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID || t.offlineDirCid === t.finalDirCid) return Promise.resolve();
-  var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
-  return auto115Post('https://webapi.115.com/rb/delete', delBody).then(function(res){
-    if (res.ok && ((res.d || {}).state === true || (res.d || {}).errno === 0)){
-      /* 静默成功 */ return;
-    }
-    /* 失败：toast 提示一次，不抛错 */
-    showToast('临时目录未删，可手动清理：' + (t.offlineDirName || ''), 'info');
-    return;
-  }).catch(function(){ /* 网络错误静默，不影响主流程 */ });
+  /* 相关夹（v345 并入的标题相关离线夹）收尾：搬空的删掉、有遗留的留着——独立于主夹删除执行
+     （单磁力剧集主夹已改名成根夹时会跳过主夹删除，但相关夹仍要清理） */
+  var rel = (t && t._relatedCids) ? t._relatedCids : [];
+  if (t) t._relatedCids = null;
+  var main = Promise.resolve();
+  if (t.finalDirCid && !t.noFolder && t.offlineDirCid && t.offlineDirCid !== C115_DEFAULT_DIR_CID && t.offlineDirCid !== t.finalDirCid){
+    var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+    main = auto115Post('https://webapi.115.com/rb/delete', delBody).then(function(res){
+      if (res.ok && ((res.d || {}).state === true || (res.d || {}).errno === 0)){
+        /* 静默成功 */ return;
+      }
+      /* 失败：toast 提示一次，不抛错 */
+      showToast('临时目录未删，可手动清理：' + (t.offlineDirName || ''), 'info');
+      return;
+    }).catch(function(){ /* 网络错误静默，不影响主流程 */ });
+  }
+  return main.then(function(){ return rel.length ? auto115MultiCleanEmptyDirs(rel) : null; });
 }
 /* —— NFO/海报/剧照 上传（详情页自动化已完成项，手动触发）—— 115 4.0 上传协议 ——
    3.0 sampleinitupload 老通道已被 115 废弃（OSS 收下文件但回调注册端点永远回 state:false「参数错误」，
