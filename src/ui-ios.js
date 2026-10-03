@@ -2170,8 +2170,12 @@ function auto115EnsureDoc(){
   var film = currentDetailFilm;
   if (!film) return Promise.reject(new Error('未打开影片'));
   var d = film.data || {};
-  // 剧集判定：优先从影片持久数据读，其次运行时 state； persisted film.data 更稳（state 可能被重置）
-  var isTv = (state.tmdbMediaType === 'tv') || (d.media_type === 'tv') || (d.tmdbMediaType === 'tv');
+  // 剧集判定：影片自身持久数据优先；state.tmdbMediaType 是搜索框全局状态（残留上一次浏览的值），
+  // 只在影片数据完全没标类型时兜底——否则电影/番号影片会被「上次看过的剧集」残留误判成 TV（v344）
+  var isTv;
+  if (d.tmdbMediaType === 'tv' || d.media_type === 'tv') isTv = true;
+  else if (d.tmdbMediaType === 'movie' || d.media_type === 'movie') isTv = false;
+  else isTv = (state.tmdbMediaType === 'tv');
   // 番号只认显式字段；不再用 originaltitle 做兜底：否则像 "Madrid, 1987" 这种带年份的英文名会被误判为番号，导致普通影片被收进文件夹。
   var dvdId = (d.dvdId || d.content_id || '').toString().trim();
   var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
@@ -2187,7 +2191,7 @@ function auto115EnsureDoc(){
     auto115Doc.dvdId = dvdId || auto115Doc.dvdId || '';
     auto115Doc.originalTitle = d.originaltitle || '';
     auto115Doc.year = year || auto115Doc.year || '';
-    auto115Doc.type = isTv ? 'tv' : (auto115Doc.type || 'movie');
+    auto115Doc.type = isTv ? 'tv' : 'movie';   /* v344：判定已按影片数据优先，直接覆盖（清掉历史误判落库的 'tv' 脏值） */
   }
   return idbGet('kv', auto115Key(film.id)).then(function(v){
     var needSave = false;
@@ -2220,7 +2224,7 @@ function auto115EnsureDoc(){
       auto115Doc.dvdId = dvdId || '';
       auto115Doc.originalTitle = d.originaltitle || v.originalTitle || '';
       auto115Doc.year = year || v.year || auto115Doc.year || '';
-      auto115Doc.type = isTv ? 'tv' : (v.type || auto115Doc.type || 'movie');
+      auto115Doc.type = isTv ? 'tv' : 'movie';   /* v344：同上，覆盖持久层里的历史误判值 */
     }
     if (needSave) auto115Save(auto115Doc);   // v338 步骤清洗落库（下次打开不再重复清洗）
     auto115RefreshDerived();
