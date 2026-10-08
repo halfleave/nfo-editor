@@ -555,6 +555,7 @@ function normalizeJavbusFilm(d, opts){
         poster: state.poster || null, originalPoster: state.originalPoster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
         posterCandidates: state.posterCandidates || null, fanartCandidates: state.fanartCandidates || null,
         gallery: state.gallery || [], galleryLinks: state.galleryLinks || [], hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null,
+        collectionId: state.collectionId || null,   /* v348：TMDB 合集 ID（belongs_to_collection.id），合集反查开关 */
         tmdbMediaType: state.tmdbMediaType || 'movie',
         javbusId: state.javbusId || null,
         javbusMagnets: (state.javbusMagnets || []).slice()

@@ -539,8 +539,18 @@
      used 记录已占用部名，避免多条磁力对应到同一部。尽力而为，拿不准返回 null（由调用方回退后缀）。 */
   api.matchCollectionPart = function (m, parts, used) {
     if (!parts || !parts.length) return null;
-    var nm = String(m.dirName || m.title || m.offlineName || '').toLowerCase();
+    /* v348：分隔符归一化——磁力文件名用点/下划线连接（Police.Academy.1984），标题是空格（Police Academy），不归一永远匹配不上 */
+    var nm = String(m.dirName || m.title || m.offlineName || '').toLowerCase().replace(/[\s._\-]+/g, ' ').trim();
     var usedMap = used || {};
+    /* v348：一部片可命中两个名字——中文标题 title 与原文名 originalTitle（英文文件名场景） */
+    function partTitles(p){
+      var a = String(p.title || '').toLowerCase().replace(/[\s._\-]+/g, ' ').trim();
+      var b = String(p.originalTitle || p.original_title || '').toLowerCase().replace(/[\s._\-]+/g, ' ').trim();
+      var out = [];
+      if (a) out.push(a);
+      if (b && b !== a) out.push(b);
+      return out;
+    }
     /* ① 序号标记 → 映射到 parts[序号-1]
        覆盖两种词序：数字在前（2part / 第2部 / 2nd）与关键字在前（Part2 / part 1 / cd1 / disc2） */
     var ROMAN = { ii:2, iii:3, iv:4, v:5, vi:6, vii:7, viii:8, ix:9, x:10 };
@@ -568,16 +578,25 @@
       for (var j = 0; j < parts.length; j++){
         var pj = parts[j];
         if (usedMap[pj.id || pj.title]) continue;
-        var tj = String(pj.title || '').toLowerCase();
-        if (tj && tj.indexOf(head) === 0 && (j + 1) === num) return pj;
+        /* v348：部名同时试中文标题与原文名（Police.Academy 英文文件名场景） */
+        var titles2 = partTitles(pj);
+        for (var k = 0; k < titles2.length; k++){
+          if (titles2[k] && titles2[k].indexOf(head) === 0 && (j + 1) === num) return pj;
+        }
       }
     }
-    /* ③ 标题子串模糊匹配：parts 某部标题是文件名的子串，最长标题优先（赌神2 不被赌神抢走）；
+    /* ③ 标题子串模糊匹配：parts 某部标题（含原文名）是文件名的子串，最长标题优先（赌神2 不被赌神抢走）；
        最长候选已被占用 → 直接放弃，不降级到更短标题（避免把赌神2 的文件错标成赌神） */
     var cands = parts.filter(function (p) {
-      var pt = String(p.title || '').toLowerCase();
-      return pt && nm.indexOf(pt) >= 0;
-    }).sort(function (a, b) { return String(b.title || '').length - String(a.title || '').length; });
+      var arr = partTitles(p), best = 0;
+      for (var ci = 0; ci < arr.length; ci++){
+        if (arr[ci] && nm.indexOf(arr[ci]) >= 0 && arr[ci].length > best) best = arr[ci].length;
+      }
+      return best > 0;
+    }).sort(function (a, b) {
+      function bestLen(p){ var arr = partTitles(p), best = 0; for (var ci = 0; ci < arr.length; ci++){ if (arr[ci] && nm.indexOf(arr[ci]) >= 0 && arr[ci].length > best) best = arr[ci].length; } return best; }
+      return bestLen(b) - bestLen(a);
+    });
     if (cands.length && !usedMap[cands[0].id || cands[0].title]) return cands[0];
     return null;
   };

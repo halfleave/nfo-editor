@@ -399,7 +399,7 @@ var state = {
   actors: [],
   studio: '', label: '', series: '', dvdId: '',
   personPhoto: null,
-  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null,
+  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null, collectionId: null,
   posterCandidates: [], fanartCandidates: [], gallery: [], galleryLinks: [],
   autoClear: '3d',
   appearance: 'auto',
@@ -2179,8 +2179,8 @@ function auto115EnsureDoc(){
   // 番号只认显式字段；不再用 originaltitle 做兜底：否则像 "Madrid, 1987" 这种带年份的英文名会被误判为番号，导致普通影片被收进文件夹。
   var dvdId = (d.dvdId || d.content_id || '').toString().trim();
   var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
-  /* v347：合集 ID（TMDB belongs_to_collection）——合集反查的开关，从未写入过导致反查成死代码 */
-  var collId = (d.belongs_to_collection && d.belongs_to_collection.id) ? String(d.belongs_to_collection.id) : '';
+  /* v348：合集 ID——新数据存 data.collectionId；旧数据/直连 TMDB 响应兜底 belongs_to_collection */
+  var collId = d.collectionId || ((d.belongs_to_collection && d.belongs_to_collection.id) ? String(d.belongs_to_collection.id) : '');
   /* v327：这部片已有执行绑定文档（正在跑/跑过）→ 直接复用同一对象，保证执行器手里的任务引用
      不被「新建文档 + 库合并」换成反序列化副本（换了引用，进度就会写到孤儿对象上） */
   if (auto115ExecDoc && auto115ExecDoc.filmId === film.id && auto115Doc !== auto115ExecDoc) auto115Doc = auto115ExecDoc;
@@ -5116,7 +5116,8 @@ function auto115FetchCollectionParts(collectionId){
     return NfoCore.tmdbRequest('/collection/' + collectionId, { language: 'zh-CN' }, opts);
   }).then(function(d){
     var parts = (d && d.parts) || [];
-    return parts.map(function(p){ return { id: p.id, title: p.title || '', release_date: p.release_date || '' }; });
+    /* v348：带上原文名（original_title）——磁力文件名常是英文（Police.Academy.1984…），只有中文标题会匹配不上 */
+    return parts.map(function(p){ return { id: p.id, title: p.title || '', originalTitle: p.original_title || p.original_name || '', release_date: p.release_date || '' }; });
   }).catch(function(){ return null; });
 }
 /* 上传 NFO 之后：普通影片本来平铺在云下载根目录，现在有了文件夹，把对应的视频也移进去 */
@@ -7264,7 +7265,7 @@ function resetSourceState(){
   state.year = ''; state.mpaa = ''; state.countries = []; state.genres = [];
   state.directors = []; state.actors = []; state.adult = false;
   state.dvdId = ''; state.studio = ''; state.label = ''; state.series = '';
-  state.trailer = null; state.tmdbId = null; state.javbusId = null;
+  state.trailer = null; state.tmdbId = null; state.collectionId = null; state.javbusId = null;
   state.javbusMagnets = []; state.source = '';
   state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null; state.originalPoster = null;
   state.posterCandidates = []; state.fanartCandidates = []; state.gallery = []; state.galleryLinks = []; state.hasSubtitle = false;
@@ -7824,6 +7825,9 @@ function populateFromTMDB(d){
 
   // TMDB 字段归一化已抽至共享核心 src/core-shared.js（纯逻辑，不读全局 state）
   var n = NfoCore.normalizeTmdbFilm(d, { isTV: state.tmdbMediaType === 'tv', actorLimit: 5 });
+  /* v348：合集 ID 只在 TMDB 原始响应里有（belongs_to_collection），归一化后必须在这里捕获存进 state，
+     否则保存时 buildFilmFromCurrent 拿不到 → 合集反查永远空转 */
+  state.collectionId = (d && d.belongs_to_collection && d.belongs_to_collection.id) ? String(d.belongs_to_collection.id) : null;
   var title = n.title, orig = n.originaltitle, date = n.date, year = n.year,
       runtime = n.runtime, overview = n.overview, rating = n.rating,
       countries = n.countries, genres = n.genres, cert = n.cert;
@@ -8156,6 +8160,7 @@ function applyFilmData(film){
   cropOriginals.detailPoster = state.detailPoster;
   state.trailer = d.trailer || null;
   state.tmdbId = d.tmdbId || null;
+  state.collectionId = d.collectionId || null;   /* v348：回填合集 ID（重存/刷新时不丢） */
   var tEl = document.getElementById('trailer');
   if (tEl){ tEl.value = state.trailer || ''; var th = document.getElementById('trailerHint'); if (th){ th.textContent = state.trailer ? ('已识别预告片 ID：' + state.trailer) : ''; th.className = 'trailer-hint' + (state.trailer ? ' ok' : ''); } }
   if (state.poster) renderMediaThumb('poster', state.poster); else clearMediaThumb('poster');

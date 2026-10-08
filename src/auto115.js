@@ -649,8 +649,8 @@
     // 番号只认显式字段；不再用 originaltitle 做兜底：否则像 "Madrid, 1987" 这种带年份的英文名会被误判为番号，导致普通影片被误判为番号片。
     var dvdId = (d.dvdId || d.content_id || '').toString().trim();
     var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
-    /* v347：合集 ID（TMDB belongs_to_collection）——合集反查的开关 */
-    var collId = (d.belongs_to_collection && d.belongs_to_collection.id) ? String(d.belongs_to_collection.id) : '';
+    /* v348：合集 ID——新数据存 data.collectionId；旧数据/直连 TMDB 响应兜底 belongs_to_collection */
+    var collId = d.collectionId || ((d.belongs_to_collection && d.belongs_to_collection.id) ? String(d.belongs_to_collection.id) : '');
     /* v327：这部片已有执行绑定文档（正在跑/跑过）→ 直接复用同一对象，保证执行器手里的任务引用
        不被「新建文档 + 库合并」换成反序列化副本（换了引用，进度就会写到孤儿对象上） */
     if (auto115ExecDoc && auto115ExecDoc.filmId === film.id && auto115Doc !== auto115ExecDoc) auto115Doc = auto115ExecDoc;
@@ -1381,7 +1381,8 @@
       return NfoCore.tmdbRequest('/collection/' + collectionId, { language: 'zh-CN' }, opts);
     }).then(function (d) {
       if (!d || !d.parts) return null;
-      return (d.parts || []).map(function (p) { return { id: p.id, title: p.title, release_date: p.release_date }; });
+      /* v348：带上原文名——磁力文件名常是英文（Police.Academy…），只有中文标题匹配不上 */
+      return (d.parts || []).map(function (p) { return { id: p.id, title: p.title || '', originalTitle: p.original_title || p.original_name || '', release_date: p.release_date || '' }; });
     }).catch(function () { return null; });
   }
   function auto115MoviePrepMultiParts(t, keep, others) {

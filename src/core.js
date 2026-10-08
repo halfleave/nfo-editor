@@ -34,7 +34,7 @@ var state = {
   actors: [],
   studio: '', label: '', series: '', dvdId: '',
   personPhoto: null,
-  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null,
+  poster: null, fanart: null, logo: null, detailPoster: null, hasSubtitle: false, trailer: null, tmdbId: null, collectionId: null,
   posterCandidates: [], fanartCandidates: [], gallery: [], galleryLinks: [],
   autoClear: 'never',
   appearance: 'auto',
@@ -583,6 +583,8 @@ function populateFromTMDB(d){
 
   // TMDB 字段归一化已抽至共享核心 src/core-shared.js（纯逻辑，不读全局 state）
   var n = NfoCore.normalizeTmdbFilm(d, { isTV: state.tmdbMediaType === 'tv', actorLimit: 11 });
+  /* v348：合集 ID 只在 TMDB 原始响应里有（belongs_to_collection），归一化后必须在这里捕获存进 state */
+  state.collectionId = (d && d.belongs_to_collection && d.belongs_to_collection.id) ? String(d.belongs_to_collection.id) : null;
   var title = n.title, orig = n.originaltitle, date = n.date, year = n.year,
       runtime = n.runtime, overview = n.overview, rating = n.rating,
       countries = n.countries, genres = n.genres, cert = n.cert;
@@ -799,6 +801,7 @@ function applyFilmData(film){
   cropOriginals.detailPoster = state.detailPoster;
   state.trailer = d.trailer || null;
   state.tmdbId = d.tmdbId || null;
+  state.collectionId = d.collectionId || null;   /* v348：回填合集 ID */
   var tEl = document.getElementById('trailer');
   if (tEl){ tEl.value = state.trailer || ''; var th = document.getElementById('trailerHint'); if (th){ th.textContent = state.trailer ? ('已识别预告片 ID：' + state.trailer) : ''; th.className = 'trailer-hint' + (state.trailer ? ' ok' : ''); } }
   if (state.poster) renderMediaThumb('poster', state.poster); else clearMediaThumb('poster');
@@ -852,7 +855,7 @@ function resetSourceState(){
   state.year = ''; state.mpaa = ''; state.countries = []; state.genres = [];
   state.directors = []; state.actors = []; state.adult = false;
   state.dvdId = ''; state.studio = ''; state.label = ''; state.series = '';
-  state.trailer = null; state.tmdbId = null; state.javbusId = null;
+  state.trailer = null; state.tmdbId = null; state.collectionId = null; state.javbusId = null;
   state.javbusMagnets = []; state.source = '';
   state.poster = null; state.fanart = null; state.logo = null; state.detailPoster = null; state.originalPoster = null;
   state.posterCandidates = []; state.fanartCandidates = []; state.gallery = []; state.galleryLinks = []; state.hasSubtitle = false;

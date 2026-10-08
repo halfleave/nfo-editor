@@ -298,5 +298,19 @@ var planCol2 = api.planMovieNames([
 ], { filmTitle: '赌神', collectionId: 999, parts: collParts });
 assert(planCol2.mode === 'suffix', 'planMovieNames：任一未命中整批回退后缀（不误标成别的电影）');
 
+/* ---------- v348：原文名（originalTitle）匹配 —— 英文文件名 × 中文合集标题 ---------- */
+var enParts = [
+  { id: 201, title: '警察学校', originalTitle: 'Police Academy', release_date: '1984-03-22' },
+  { id: 202, title: '警察学校2：首个任务', originalTitle: 'Police Academy 2: Their First Assignment', release_date: '1985-03-29' },
+  { id: 203, title: '警察学校3：初为人师', originalTitle: 'Police Academy 3: Back in Training', release_date: '1986-03-21' }
+];
+assert(api.matchCollectionPart({ dirName: 'Police.Academy.1984.1080p.BluRay.x264' }, enParts, {}).id === 201, '原文名：Police.Academy.1984 命中第 1 部（英文文件名×中文标题）');
+assert(api.matchCollectionPart({ dirName: 'Police.Academy.2.Their.First.Assignment.1985' }, enParts, {}).id === 202, '原文名：英文第 2 部命中');
+assert(api.matchCollectionPart({ dirName: '警察学校3.1986.mkv' }, enParts, {}).id === 203, '中文名照常命中（前缀+序号）');
+var planCol3 = api.planMovieNames([
+  { dirName: 'Police.Academy.1984.1080p' }, { dirName: 'Police.Academy.2.1985.1080p' }, { dirName: 'Police.Academy.3.1986.1080p' }
+], { filmTitle: '警察学校', collectionId: 888, parts: enParts });
+assert(planCol3.mode === 'series' && planCol3.names[0] === '警察学校' && planCol3.names[1] === '警察学校2：首个任务' && planCol3.names[2] === '警察学校3：初为人师', 'planMovieNames：英文文件名全命中按中文名改名');
+
 console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ auto115-core 全部通过');
 process.exit(process.exitCode || 0);
