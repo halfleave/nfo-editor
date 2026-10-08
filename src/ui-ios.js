@@ -3331,11 +3331,12 @@ function auto115MoviePrepMultiParts(t, keep, others){
   return auto115EnsureCollectionId(doc).then(function(cid){
     if (!cid) return null;
     var ms = keep.concat(others).map(function(it){ return { dirName: it.n || it.name || '', title: it.n || it.name || '' }; });
-    return auto115FetchCollectionParts(cid).then(function(parts){
-      if (!parts || !parts.length) return null;
+    return auto115FetchCollectionParts(cid).then(function(coll){
+      if (!coll || !coll.parts || !coll.parts.length) return null;
+      var parts = coll.parts;
       /* 主视频批：维持 v336 整批语义（全部命中按部名，任一落空回退后缀） */
       var keepMs = ms.slice(0, keep.length);
-      Auto115Core.planMovieNames(keepMs, { filmTitle: doc.filmTitle, collectionId: cid, parts: parts });
+      var keepPlan = Auto115Core.planMovieNames(keepMs, { filmTitle: doc.filmTitle, collectionId: cid, parts: parts });
       var nameMap = {}, extMap = {};
       keep.forEach(function(it, i){
         var fid = String(it.fid);
@@ -3359,6 +3360,17 @@ function auto115MoviePrepMultiParts(t, keep, others){
       });
       t._keepPartNames = nameMap; t._keepExts = extMap;
       t._otherPartNames = oNameMap; t._otherExts = oExtMap;
+      /* v351：合集归夹——识别成功（主批按部名 或 有其他部命中）且 TMDB 有合集名时，
+         在云下载根下确保「合集名」文件夹并记到任务上，rename 把主视频与命中的其他部都归进去 */
+      if (coll.name && (keepPlan.mode === 'series' || Object.keys(oNameMap).length)){
+        var dirName = sanitizeName(coll.name);
+        if (dirName){
+          return auto115EnsureDir(C115_DEFAULT_DIR_CID, dirName).then(function(ccid){
+            if (ccid){ t._collDirCid = String(ccid); t._collDirName = dirName; }
+            return null;
+          }).catch(function(){ return null; });
+        }
+      }
       return null;
     });
   });
@@ -3373,6 +3385,9 @@ function auto115OtherPartJobs(t){
   var oNameMap = t._otherPartNames || null; t._otherPartNames = null;
   var oExtMap = t._otherExts || null; t._otherExts = null;
   if (!oNameMap || !t.keptOthers || !t.keptOthers.length) return null;
+  /* v351：合集归夹——命中的部带 pid 移进合集夹（_collDirCid 在改名函数里先读走主视频用，这里消费掉） */
+  var collCid = t._collDirCid || null; t._collDirCid = null;
+  t._collDirName = null;
   var jobs = [], moved = {};
   var otherSubs = t.otherSubs || []; t.otherSubs = null;
   t.keptOthers.forEach(function(o){
@@ -3380,13 +3395,13 @@ function auto115OtherPartJobs(t){
     var nm = oNameMap[fid];
     if (!nm) return;
     var ext = (oExtMap && oExtMap[fid]) || (/\.[a-z0-9]+$/i.exec(o.name || '') || ['.mp4'])[0];
-    jobs.push({ fid: fid, name: nm + ext, orig: o.name, size: o.size || 0 });
+    jobs.push({ fid: fid, name: nm + ext, orig: o.name, size: o.size || 0, pid: collCid });
     moved[fid] = true;
     /* v350：该部的字幕跟随搬出（清理阶段按词干认领的 otherSubs） */
     for (var si = 0; si < otherSubs.length; si++){
       var s = otherSubs[si];
       if (String(s.host) !== fid) continue;
-      jobs.push({ fid: s.fid, name: Auto115Core.subNameForVideo(nm + ext, s.name), orig: s.name, size: s.size || 0 });
+      jobs.push({ fid: s.fid, name: Auto115Core.subNameForVideo(nm + ext, s.name), orig: s.name, size: s.size || 0, pid: collCid });
     }
   });
   if (!jobs.length) return null;
@@ -3694,9 +3709,13 @@ function auto115StepRename(t){
   /* 单磁力电影多视频系列反查（v336）：命中系列部名的逐条按部名改名；用完即清，避免污染后续单次改名 */
   var partNameMap = t._keepPartNames || null; t._keepPartNames = null;
   var partExtMap = t._keepExts || null; t._keepExts = null;
+  /* v351：合集归夹——主视频与命中的其他部一起进合集夹（先读走，OtherPartJobs 里会消费掉） */
+  var collDirCid = t._collDirCid || null; t._collDirCid = null;
+  var collDirName = t._collDirName || null; t._collDirName = null;
   var othersJob = auto115OtherPartJobs(t);   /* v347：反查命中的合集其他视频（按部名改名→平铺云下载根目录） */
   var multi = keep.length > 1;
-  var prev = t.external ? null : (t.forcedMergeCid ? { cid: t.forcedMergeCid, name: t.finalDirName } : auto115FindMergeTarget(t));
+  var prev = t.external ? null : (t.forcedMergeCid ? { cid: t.forcedMergeCid, name: t.finalDirName }
+    : (collDirCid ? { cid: collDirCid, name: collDirName } : auto115FindMergeTarget(t)));
   if (prev){
     t.finalDirCid = prev.cid;
     t.finalDirName = prev.name;
@@ -3752,15 +3771,15 @@ function auto115StepRename(t){
           auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + jobs[0].name
             + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + jobs.length + ' 个文件') : ''))
             + (conflictPlan.skipped ? ('（' + conflictPlan.skipped + ' 个已存在相同文件，跳过）') : '')
-            + (movedN ? ('；合集其他 ' + movedN + ' 部已按片名放云下载') : '')
+            + (movedN ? ('；合集其他 ' + movedN + ' 部已归入合集文件夹') : '')
             + (auto115HasKeptOthers(t) ? ('；' + t.keptOtherVideos + ' 部未识别为合集，保留原夹') : ''));
           /* 只搬主视频（含字幕）；反查没命中的其他视频维持保护 → 临时夹也不删 */
           if (auto115HasKeptOthers(t)){ auto115Finish(t); return null; }
           return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
         };
-        /* v347：合集其他视频按部名搬到云下载根目录（失败不阻塞主流程，维持保护） */
+        /* v347：合集其他视频按部名搬出（v351 起带 pid 归入合集夹；失败不阻塞主流程，维持保护） */
         if (othersJob){
-          return auto115ApplyRenames(t, othersJob.jobs, C115_DEFAULT_DIR_CID).then(function(){
+          return auto115ApplyRenames(t, othersJob.jobs, collDirCid || C115_DEFAULT_DIR_CID).then(function(){
             return afterMain(auto115PruneKeptOthers(t, othersJob.moved));
           }).catch(function(){ return afterMain(0); });
         }
@@ -3791,7 +3810,7 @@ function auto115StepRename(t){
   auto115Set(t, 'rename', 'running', needRename ? ('正在改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + (jobs.length) + ' 个文件') : ''))) : '正在核对文件名…');
   var afterRenameNoPrev = function(movedN){
     t.videoName = jobs[0].name;
-    var movedMsg = movedN ? ('；合集其他 ' + movedN + ' 部已按片名放云下载') : '';
+    var movedMsg = movedN ? ('；合集其他 ' + movedN + ' 部已按片名归档') : '';
     if (!needRename) auto115Set(t, 'rename', 'ok', '文件名已符合规则，无需改名' + movedMsg);
     else auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + jobs.length + ' 个文件') : '')) + movedMsg);
     return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
@@ -3819,9 +3838,12 @@ function auto115StepRenameFlat(t){
   /* v347：主视频多 part 也接系列反查（此前平铺分支没接，命中只能落 .cdN）+ 合集其他视频搬运 */
   var partNameMap = t._keepPartNames || null; t._keepPartNames = null;
   var partExtMap = t._keepExts || null; t._keepExts = null;
+  /* v351：合集归夹——平铺分支的主视频也进合集夹（先读走，OtherPartJobs 里会消费掉） */
+  var collDirCid = t._collDirCid || null; t._collDirCid = null;
+  var collDirName = t._collDirName || null; t._collDirName = null;
   var othersJob = auto115OtherPartJobs(t);
-  auto115Set(t, 'rename', 'running', t.noFolder ? '正在核对文件名…' : '正在把视频移到云下载…');
-  return auto115ListDir(C115_DEFAULT_DIR_CID).then(function(list){
+  auto115Set(t, 'rename', 'running', t.noFolder && !collDirCid ? '正在核对文件名…' : (collDirCid ? '正在移入合集文件夹…' : '正在把视频移到云下载…'));
+  return auto115ListDir(collDirCid || C115_DEFAULT_DIR_CID).then(function(list){
     var stems = {}, i;
     for (i = 0; i < (list || []).length; i++){
       var it = list[i];
@@ -3839,11 +3861,11 @@ function auto115StepRenameFlat(t){
       var dupSize = stems[baseName.toLowerCase()];
       if (dupSize != null && Math.abs(t.videoSize - dupSize) < 1){
         t.videoName = baseName + ext;
-        t.flatVideoFid = keep[0]; t.flatVideoName = t.videoName;
+        if (!collDirCid){ t.flatVideoFid = keep[0]; t.flatVideoName = t.videoName; }
         auto115Set(t, 'rename', 'ok', '云下载已有同名同大小的「' + t.videoName + '」，跳过重复文件');
         /* 次清晰度版本仍要改名搬到根目录；夹里还有合集保留下来的其他视频 → 临时夹整体保留不动 */
         var dupSvJob = auto115SecondVersionJob(t);
-        var dupSv = dupSvJob ? auto115ApplyRenames(t, [dupSvJob], t.noFolder ? null : C115_DEFAULT_DIR_CID) : Promise.resolve(null);
+        var dupSv = dupSvJob ? auto115ApplyRenames(t, [dupSvJob], collDirCid || (t.noFolder ? null : C115_DEFAULT_DIR_CID)) : Promise.resolve(null);
         return dupSv.then(function(){
           var afterDupFlat = function(){
             if (!t.noFolder && auto115HasKeptOthers(t)){ auto115RefreshDerived(); auto115Finish(t); return null; }
@@ -3897,27 +3919,28 @@ function auto115StepRenameFlat(t){
     var svJobFlat = auto115SecondVersionJob(t);
     if (svJobFlat) jobs = jobs.concat([svJobFlat]);
     var subCount = (t.subInfos || []).length;
-    /* noFolder（散装视频本来就在根目录）只改名不移动；其余先移到根目录再改名 */
-    var target = t.noFolder ? null : C115_DEFAULT_DIR_CID;
-    t.finalDirCid = C115_DEFAULT_DIR_CID;
-    t.finalDirName = '';
+    /* noFolder（散装视频本来就在根目录）只改名不移动；其余先移到根目录再改名。
+       v351：合集识别成功 → 主视频连同字幕移进合集夹（noFolder 也要移动） */
+    var target = collDirCid || (t.noFolder ? null : C115_DEFAULT_DIR_CID);
+    t.finalDirCid = collDirCid || C115_DEFAULT_DIR_CID;
+    t.finalDirName = collDirCid ? collDirName : '';
     return auto115ApplyRenames(t, jobs, target).then(function(){
       t.videoName = jobs[0].name;
-      t.flatVideoFid = keep[0];
-      t.flatVideoName = jobs[0].name;
+      if (!collDirCid){ t.flatVideoFid = keep[0]; t.flatVideoName = jobs[0].name; }
       var afterMainFlat = function(movedN){
-        var msg = t.noFolder ? ('已改名为：' + jobs[0].name) : ('已移到云下载并改名为：' + jobs[0].name);
+        var msg = collDirCid ? ('已移入合集文件夹「' + collDirName + '」，改名为：' + jobs[0].name)
+          : (t.noFolder ? ('已改名为：' + jobs[0].name) : ('已移到云下载并改名为：' + jobs[0].name));
         if (multi || subCount) msg += ' 等 ' + jobs.length + ' 个文件';
-        if (movedN) msg += '；合集其他 ' + movedN + ' 部已按片名放云下载';
+        if (movedN) msg += '；合集其他 ' + movedN + ' 部已归入合集文件夹';
         if (!t.noFolder && auto115HasKeptOthers(t)) msg += '；' + t.keptOtherVideos + ' 部未识别为合集，保留原夹';
         auto115Set(t, 'rename', 'ok', msg);
         /* 反查没命中的其他视频维持保护 → 临时夹也不删 */
         if (!t.noFolder && auto115HasKeptOthers(t)){ auto115RefreshDerived(); auto115Finish(t); return null; }
         return auto115RemoveTmpDir(t).then(function(){ auto115RefreshDerived(); auto115Finish(t); return null; });
       };
-      /* v347：合集其他视频按部名搬到云下载根目录（失败不阻塞主流程，维持保护） */
+      /* v347：合集其他视频按部名搬出（v351 起带 pid 归入合集夹；失败不阻塞主流程，维持保护） */
       if (othersJob){
-        return auto115ApplyRenames(t, othersJob.jobs, C115_DEFAULT_DIR_CID).then(function(){
+        return auto115ApplyRenames(t, othersJob.jobs, collDirCid || C115_DEFAULT_DIR_CID).then(function(){
           return afterMainFlat(auto115PruneKeptOthers(t, othersJob.moved));
         }).catch(function(){ return afterMainFlat(0); });
       }
@@ -4084,20 +4107,23 @@ function auto115MultiPlan(t){
   var isTv = auto115TaskIsTv(t);
   var doc = auto115TaskDoc(t) || {};
   var partsPromise = (!isTv && doc.collectionId) ? auto115FetchCollectionParts(doc.collectionId) : Promise.resolve(null);
-  return partsPromise.then(function(parts){
+  return partsPromise.then(function(coll){
+    var parts = (coll && coll.parts) || null;   /* v351：FetchCollectionParts 改回 {name, parts} */
     /* 相关夹并入（v345）：扫根目录把「夹名含标题」的其他离线夹一并当源夹穿透，
-       同一部片分多次离线的内容全部归拢整理；目标夹（剧集根夹/影片夹）按名字排除。 */
+       同一部片分多次离线的内容全部归拢整理；目标夹（剧集根夹/影片夹/合集夹）按名字排除。 */
     var exCids = {}, exNames = {};
     ms.forEach(function(m){ if (m.dirCid) exCids[String(m.dirCid)] = 1; });
     var targetName = isTv ? auto115TvDirName(doc.filmTitle) : sanitizeName(doc.filmTitle || '');
     if (targetName) exNames[targetName] = 1;
     if (doc.filmTitle && doc.filmTitle !== targetName) exNames[doc.filmTitle] = 1;
+    /* v351：合集名夹也是目标夹，绝不能当源夹穿透 */
+    if (!isTv && coll && coll.name && sanitizeName(coll.name)) exNames[sanitizeName(coll.name)] = 1;
     return auto115FindRelatedDirs(doc.filmTitle, exCids, exNames).then(function(rel){
       var all = rel.length ? ms.concat(rel.map(function(r){
         return { dirCid: r.cid, dirName: r.name, state: 'done', _related: true, title: doc.filmTitle };
       })) : ms;
       return auto115MultiPenetrate(all, t).then(function(ms2){
-        return auto115ComputeMultiTargets(t, ms2, isTv, doc, parts).then(function(jobs){
+        return auto115ComputeMultiTargets(t, ms2, isTv, doc, coll).then(function(jobs){
           c = { ms2: ms2, jobs: jobs || [], isTv: isTv, doc: doc };
           auto115MultiPlans[t.id] = c;
           return c;
@@ -4313,11 +4339,14 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
       });
     });
   }
-  /* 电影：区分后缀 / 按系列改名；穿透条目统一用 fid/origName，整夹(isFolder)不追加扩展名 */
+  /* 电影：区分后缀 / 按系列改名；穿透条目统一用 fid/origName，整夹(isFolder)不追加扩展名。
+     v351：合集全命中（mode=series）→ 落点改用 TMDB 合集名文件夹；否则沿用影片名文件夹 */
   var filmTitle = doc.filmTitle || '';
-  return auto115EnsureDir(C115_DEFAULT_DIR_CID, filmTitle).then(function(filmCid){
+  var collParts = (parts && parts.parts) ? parts.parts : null;
+  var planRes = Auto115Core.planMovieNames(ms, { filmTitle: filmTitle, collectionId: doc.collectionId, parts: collParts });
+  var collDirName = (planRes.mode === 'series' && parts && parts.name) ? sanitizeName(parts.name) : '';
+  return auto115EnsureDir(C115_DEFAULT_DIR_CID, collDirName || filmTitle).then(function(filmCid){
     if (!filmCid) throw new Error('创建影片文件夹失败');
-    Auto115Core.planMovieNames(ms, { filmTitle: filmTitle, collectionId: doc.collectionId, parts: parts });
     var jobs = [];
     ms.forEach(function(m){
       var name = m.renameTo || filmTitle;
@@ -5167,7 +5196,11 @@ function auto115FetchCollectionParts(collectionId){
   }).then(function(d){
     var parts = (d && d.parts) || [];
     /* v348：带上原文名（original_title）——磁力文件名常是英文（Police.Academy.1984…），只有中文标题会匹配不上 */
-    return parts.map(function(p){ return { id: p.id, title: p.title || '', originalTitle: p.original_title || p.original_name || '', release_date: p.release_date || '' }; });
+    /* v351：同时带回合集名称（d.name）——合集归夹用文件夹名 */
+    return {
+      name: (d && d.name) || '',
+      parts: parts.map(function(p){ return { id: p.id, title: p.title || '', originalTitle: p.original_title || p.original_name || '', release_date: p.release_date || '' }; })
+    };
   }).catch(function(){ return null; });
 }
 /* 上传 NFO 之后：普通影片本来平铺在云下载根目录，现在有了文件夹，把对应的视频也移进去 */
