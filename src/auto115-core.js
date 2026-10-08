@@ -598,6 +598,21 @@
       return bestLen(b) - bestLen(a);
     });
     if (cands.length && !usedMap[cands[0].id || cands[0].title]) return cands[0];
+    /* ④ 年份兜底（v350）：文件名只有副标题（Their First Assignment.1985）够不着全称部名
+       （Police Academy 2: Their First Assignment）时，用文件名里的年份对部名上映年份；
+       唯一对上才认，同年多部拿不准不硬标。 */
+    var yTokens = {};
+    var ys = nm.match(/(19|20)\d{2}/g) || [];
+    for (var yi = 0; yi < ys.length; yi++) yTokens[ys[yi]] = 1;
+    if (ys.length){
+      var byYear = [];
+      for (var yj = 0; yj < parts.length; yj++){
+        var py = parts[yj];
+        if (usedMap[py.id || py.title]) continue;
+        if (yTokens[String(py.release_date || '').slice(0, 4)]) byYear.push(py);
+      }
+      if (byYear.length === 1) return byYear[0];
+    }
     return null;
   };
   /* 计算每条磁力的改名目标（影片自动化入口·电影多磁力）。

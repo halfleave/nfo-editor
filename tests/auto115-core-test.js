@@ -312,5 +312,17 @@ var planCol3 = api.planMovieNames([
 ], { filmTitle: '警察学校', collectionId: 888, parts: enParts });
 assert(planCol3.mode === 'series' && planCol3.names[0] === '警察学校' && planCol3.names[1] === '警察学校2：首个任务' && planCol3.names[2] === '警察学校3：初为人师', 'planMovieNames：英文文件名全命中按中文名改名');
 
+/* ---------- v350：年份兜底 —— 副标题文件名（Their First Assignment.1985）够不着全称部名 ---------- */
+assert(api.matchCollectionPart({ dirName: 'Their.First.Assignment.1985.720p.HDTV.x264-HDCTV' }, enParts, {}).id === 202, '年份兜底：Their.First.Assignment.1985 命中第 2 部');
+assert(api.matchCollectionPart({ dirName: 'Back.in.Training.1986.720p.HDTV.x264-HDCTV' }, enParts, {}).id === 203, '年份兜底：Back.in.Training.1986 命中第 3 部');
+var yu = {}; yu[201] = true;
+assert(api.matchCollectionPart({ dirName: 'Police.Academy.1984.另一个版本' }, enParts, yu) === null, '年份兜底：已占用的部不靠年份重复命中');
+var ambParts = [
+  { id: 301, title: '双龙会', originalTitle: 'Twin Dragons', release_date: '1990-01-01' },
+  { id: 302, title: '无敌幸运星', originalTitle: 'Lucky Star', release_date: '1990-06-01' }
+];
+assert(api.matchCollectionPart({ dirName: 'Whatever.1990.1080p' }, ambParts, {}) === null, '年份兜底：同年两部拿不准不硬标');
+assert(api.matchCollectionPart({ dirName: 'Whatever.1991.1080p' }, enParts, {}) === null, '年份兜底：文件名年份没有对应部不认');
+
 console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ auto115-core 全部通过');
 process.exit(process.exitCode || 0);

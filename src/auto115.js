@@ -655,7 +655,7 @@
        不被「新建文档 + 库合并」换成反序列化副本（换了引用，进度就会写到孤儿对象上） */
     if (auto115ExecDoc && auto115ExecDoc.filmId === film.id && auto115Doc !== auto115ExecDoc) auto115Doc = auto115ExecDoc;
     if (!auto115Doc) {
-      auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, originalTitle: d.originaltitle || '', year: year, type: isTv ? 'tv' : 'movie', collectionId: collId, tasks: [] };
+      auto115Doc = { filmId: film.id, filmTitle: d.title || '', dvdId: dvdId, originalTitle: d.originaltitle || '', year: year, type: isTv ? 'tv' : 'movie', collectionId: collId, tmdbId: (d.tmdbId || '').toString(), tasks: [] };
     } else {
       auto115Doc.filmId = film.id;
       auto115Doc.filmTitle = d.title || auto115Doc.filmTitle || '';
@@ -665,6 +665,7 @@
       auto115Doc.year = year || auto115Doc.year || '';
       auto115Doc.type = isTv ? 'tv' : 'movie';   /* v344 镜像：判定已按影片数据优先，直接覆盖清脏值 */
       auto115Doc.collectionId = collId;          /* v347：以影片当前数据为准 */
+      auto115Doc.tmdbId = (d.tmdbId || auto115Doc.tmdbId || '').toString();   /* v349：供合集 ID 自愈查询 */
     }
     return idbGet('kv', auto115Key(film.id)).then(function (v) {
       if (v && v.tasks) {
@@ -1385,17 +1386,38 @@
       return (d.parts || []).map(function (p) { return { id: p.id, title: p.title || '', originalTitle: p.original_title || p.original_name || '', release_date: p.release_date || '' }; });
     }).catch(function () { return null; });
   }
+  /* v349：合集 ID 自愈（镜像 iOS）——老影片资料缺 collectionId 时按 tmdbId / 标题+年份查 TMDB 补上并落库 */
+  function auto115EnsureCollectionId(doc) {
+    if (doc.collectionId) return Promise.resolve(doc.collectionId);
+    if (doc.type === 'tv') return Promise.resolve('');
+    return Promise.all([getTMDBKey(), getActivationCode()]).then(function (res) {
+      var opts = { ownKey: res[0] || '', workerBase: state.magnetWorker || DEFAULT_WORKER, code: res[1] || '' };
+      if (doc.tmdbId) return NfoCore.tmdbRequest('/movie/' + doc.tmdbId, { language: 'zh-CN' }, opts);
+      var params = { language: 'zh-CN', query: doc.filmTitle };
+      if (doc.year) params.primary_release_year = doc.year;
+      return NfoCore.tmdbRequest('/search/movie', params, opts).then(function (s) {
+        var r = (s && s.results && s.results[0]) || null;
+        return r ? NfoCore.tmdbRequest('/movie/' + r.id, { language: 'zh-CN' }, opts) : null;
+      });
+    }).then(function (d) {
+      var cid = (d && d.belongs_to_collection && d.belongs_to_collection.id) ? String(d.belongs_to_collection.id) : '';
+      if (cid) { doc.collectionId = cid; if (d && d.id) doc.tmdbId = String(d.id); auto115Save(); }
+      return cid;
+    }).catch(function () { return ''; });
+  }
   function auto115MoviePrepMultiParts(t, keep, others) {
     var doc = auto115TaskDoc(t) || {};
     others = others || [];
     /* v347：合集保护留下的其他视频也参与反查（镜像 iOS）。主视频批保持整批语义；其他视频逐条匹配。 */
-    if (!doc.collectionId) return Promise.resolve(null);
     if (!((keep && keep.length >= 2) || others.length >= 1)) return Promise.resolve(null);
-    var ms = keep.concat(others).map(function (it) { return { dirName: it.n || it.name || '', title: it.n || it.name || '' }; });
-    return auto115FetchCollectionParts(doc.collectionId).then(function (parts) {
+    /* v349：collectionId 缺失时自愈补查（老影片不用手动刷新） */
+    return auto115EnsureCollectionId(doc).then(function (cid) {
+      if (!cid) return null;
+      var ms = keep.concat(others).map(function (it) { return { dirName: it.n || it.name || '', title: it.n || it.name || '' }; });
+      return auto115FetchCollectionParts(cid).then(function (parts) {
       if (!parts || !parts.length) return null;
       var keepMs = ms.slice(0, keep.length);
-      Auto115Core.planMovieNames(keepMs, { filmTitle: doc.filmTitle, collectionId: doc.collectionId, parts: parts });
+      Auto115Core.planMovieNames(keepMs, { filmTitle: doc.filmTitle, collectionId: cid, parts: parts });
       var nameMap = {}, extMap = {};
       keep.forEach(function (it, i) {
         var fid = String(it.fid);
@@ -1420,14 +1442,20 @@
       t._keepPartNames = nameMap; t._keepExts = extMap;
       t._otherPartNames = oNameMap; t._otherExts = oExtMap;
       return null;
+      });
     });
   }
   /* v347：反查命中的合集其他视频 → 按各自部名改名，平铺搬到云下载根目录（镜像 iOS） */
+  /* 词干归一：去扩展名、小写、分隔符归一（v350 字幕认领用，镜像 iOS） */
+  function auto115SubStem(n) {
+    return String(n || '').replace(/\.[a-z0-9]+$/i, '').toLowerCase().replace(/[\s._\-]+/g, ' ').trim();
+  }
   function auto115OtherPartJobs(t) {
     var oNameMap = t._otherPartNames || null; t._otherPartNames = null;
     var oExtMap = t._otherExts || null; t._otherExts = null;
     if (!oNameMap || !t.keptOthers || !t.keptOthers.length) return null;
     var jobs = [], moved = {};
+    var otherSubs = t.otherSubs || []; t.otherSubs = null;
     t.keptOthers.forEach(function (o) {
       var fid = String(o.fid);
       var nm = oNameMap[fid];
@@ -1435,6 +1463,12 @@
       var ext = (oExtMap && oExtMap[fid]) || (/\.[a-z0-9]+$/i.exec(o.name || '') || ['.mp4'])[0];
       jobs.push({ fid: fid, name: nm + ext, orig: o.name, size: o.size || 0 });
       moved[fid] = true;
+      /* v350：该部的字幕跟随搬出（清理阶段按词干认领的 otherSubs，镜像 iOS） */
+      for (var si = 0; si < otherSubs.length; si++) {
+        var s = otherSubs[si];
+        if (String(s.host) !== fid) continue;
+        jobs.push({ fid: s.fid, name: Auto115Core.subNameForVideo(nm + ext, s.name), orig: s.name, size: s.size || 0 });
+      }
     });
     if (!jobs.length) return null;
     return { jobs: jobs, moved: moved };
@@ -1585,6 +1619,19 @@
       }
       t.keptOtherVideos = keptVids;
       t.keptOthers = keptOthers;
+      /* v350：其他视频的字幕不跟主片走——按词干认领摘出存 t.otherSubs，rename 时随各自视频搬出（镜像 iOS） */
+      if (keptOthers.length) {
+        var _oStems = {};
+        keptOthers.forEach(function (o) { _oStems[auto115SubStem(o.name)] = String(o.fid); });
+        var _mainSubs = [];
+        t.otherSubs = [];
+        (t.subInfos || []).forEach(function (s) {
+          var host = _oStems[auto115SubStem(s.name)];
+          if (host) t.otherSubs.push({ fid: s.fid, name: s.name, size: s.size || 0, host: host });
+          else _mainSubs.push(s);
+        });
+        t.subInfos = _mainSubs;
+      }
       var subCount = (t.subInfos || []).length;
       var keptMsg = keptVids ? ('，另保留 ' + keptVids + ' 个其他视频（可能是合集，未删除）') : '';
       if (!delIds.length) { auto115Set(t, 'move', 'ok', '只有 ' + keep.length + ' 个视频' + (subCount ? '、' + subCount + ' 个字幕' : '') + keptMsg + '，无需清理'); return auto115MoviePrepMultiParts(t, keep, keptOthers).then(function () { return auto115StepRename(t); }); }
@@ -1713,7 +1760,7 @@
               + (multi ? (' 等 ' + allJobs.length + ' 个文件') : (subJobs.length ? (' 等 ' + allJobs.length + ' 个文件') : ''))
               + (conflictPlan.skipped ? ('（' + conflictPlan.skipped + ' 个已存在相同文件，跳过）') : '')
               + (movedN ? ('；合集其他 ' + movedN + ' 部已按片名放云下载') : '')
-              + (auto115HasKeptOthers(t) ? '；其他视频保留在原文件夹' : ''));
+              + (auto115HasKeptOthers(t) ? ('；' + t.keptOtherVideos + ' 部未识别为合集，保留原夹') : ''));
             /* 反查没命中的其他视频维持保护 → 临时夹也不删 */
             if (auto115HasKeptOthers(t)) { auto115Finish(t); return null; }
             return auto115RemoveTmpDir(t).then(function () { auto115Finish(t); return null; });
@@ -1748,7 +1795,7 @@
     var afterRenameNoPrev = function (movedN) {
       t.videoName = jobs[0].name;
       var movedMsg = movedN ? ('；合集其他 ' + movedN + ' 部已按片名放云下载') : '';
-      var keptTail = auto115HasKeptOthers(t) ? '；其他视频保留在原文件夹' : '';
+      var keptTail = auto115HasKeptOthers(t) ? ('；' + t.keptOtherVideos + ' 部未识别为合集，保留原夹') : '';
       if (!needRename) auto115Set(t, 'rename', 'ok', '文件名已符合规则，无需改名' + movedMsg + keptTail);
       else auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个视频') : '') + movedMsg + keptTail);
       /* 夹里还有合集保护留下来的其他视频 → 临时夹整体保留不动 */
