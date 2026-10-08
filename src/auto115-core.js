@@ -559,13 +559,26 @@
       var p0 = parts[ordNum - 1];
       if (!usedMap[p0.id || p0.title]) return p0;
     }
-    /* ② 标题关键词模糊匹配：parts 某部标题是磁力名的子串（去年份/符号后） */
-    for (var i = 0; i < parts.length; i++){
-      var p = parts[i];
-      if (usedMap[p.id || p.title]) continue;
-      var pt = String(p.title || '').toLowerCase();
-      if (pt && nm.indexOf(pt) >= 0) return p;
+    /* ② 前缀+序号：文件名「标题+数字」（赌神3 / 碟中谍6）→ 标题以该前缀开头且序号对应的部。
+       部标题常带副标题（赌神3之少年赌神 / 碟中谍6：全面瓦解），子串匹配够不着，靠这条兜住；
+       不加这条「碟中谍6」会被子串误判成第 1 部「碟中谍」。 */
+    var m3 = nm.match(/^(.+?)[\s._\-]*0*(\d{1,2})(?=[\s._\-]|$)/);
+    if (m3){
+      var head = m3[1], num = parseInt(m3[2], 10);
+      for (var j = 0; j < parts.length; j++){
+        var pj = parts[j];
+        if (usedMap[pj.id || pj.title]) continue;
+        var tj = String(pj.title || '').toLowerCase();
+        if (tj && tj.indexOf(head) === 0 && (j + 1) === num) return pj;
+      }
     }
+    /* ③ 标题子串模糊匹配：parts 某部标题是文件名的子串，最长标题优先（赌神2 不被赌神抢走）；
+       最长候选已被占用 → 直接放弃，不降级到更短标题（避免把赌神2 的文件错标成赌神） */
+    var cands = parts.filter(function (p) {
+      var pt = String(p.title || '').toLowerCase();
+      return pt && nm.indexOf(pt) >= 0;
+    }).sort(function (a, b) { return String(b.title || '').length - String(a.title || '').length; });
+    if (cands.length && !usedMap[cands[0].id || cands[0].title]) return cands[0];
     return null;
   };
   /* 计算每条磁力的改名目标（影片自动化入口·电影多磁力）。

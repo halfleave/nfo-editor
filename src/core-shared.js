@@ -670,7 +670,7 @@ function normalizeJavbusFilm(d, opts){
     if (code) wu.searchParams.set('code', code);
     // 配额计数：仅服务端代理路径消耗共享配额（自填 key 直连不计数）。search/save 区分；/videos、/images、/person 为读取不计；详情按 id 去重避免语言兜底重复计数
     if (path.indexOf('/search') >= 0) quotaInc('tmdbSearch');
-    else if (path.indexOf('/videos') < 0 && path.indexOf('/images') < 0 && path.indexOf('/person/') < 0) {
+    else if (path.indexOf('/videos') < 0 && path.indexOf('/images') < 0 && path.indexOf('/person/') < 0 && path.indexOf('/collection/') < 0) {
       var _m = path.match(/\/(movie|tv)\/(\d+)/); var _id = _m ? _m[2] : null; var _day = quotaDayKey();
       if (!_id || !(quotaSaveSeen[_day] && quotaSaveSeen[_day][_id])) {
         quotaInc('tmdbSave');

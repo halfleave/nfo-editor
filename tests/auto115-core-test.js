@@ -277,5 +277,26 @@ assert(api.movieVideoName({ filmTitle: '赌神', year: '1989' }) === '赌神.198
 /* ---------- 探测延迟 ---------- */
 assert(api.probeDelay(0) === 5000 && api.probeDelay(1) === 5000 && api.probeDelay(2) === 10000 && api.probeDelay(9) === 10000, 'probeDelay 5s/5s/10s 封顶');
 
+/* ---------- v347：合集反查（matchCollectionPart 最长标题优先 / planMovieNames 系列与回退） ---------- */
+var collParts = [
+  { id: 101, title: '赌神', release_date: '1989-12-14' },
+  { id: 102, title: '赌神2', release_date: '1994-01-20' },
+  { id: 103, title: '赌神3之少年赌神', release_date: '1996-12-14' }
+];
+assert(api.matchCollectionPart({ dirName: '赌神2.1994.1080p.BluRay' }, collParts, {}).id === 102, '反查：赌神2 命中第 2 部（最长标题优先，不被第 1 部抢走）');
+assert(api.matchCollectionPart({ dirName: '赌神.1989.1080p' }, collParts, {}).id === 101, '反查：赌神 命中第 1 部');
+assert(api.matchCollectionPart({ dirName: '赌神3.1996.mkv' }, collParts, {}).id === 103, '反查：赌神3 命中第 3 部');
+assert(api.matchCollectionPart({ dirName: '完全不相关的电影.2020.mkv' }, collParts, {}) === null, '反查：无关文件不硬凑');
+var collUsed = {}; var collP2 = api.matchCollectionPart({ dirName: '赌神2.mkv' }, collParts, collUsed); collUsed[collP2.id] = true;
+assert(api.matchCollectionPart({ dirName: '赌神2.另一个版本.mkv' }, collParts, collUsed) === null, '反查：已占用的部不再重复命中');
+var planCol1 = api.planMovieNames([
+  { dirName: '赌神.1989.1080p' }, { dirName: '赌神2.1994.1080p' }, { dirName: '赌神3.1996.1080p' }
+], { filmTitle: '赌神2', collectionId: 999, parts: collParts });
+assert(planCol1.mode === 'series' && planCol1.names[0] === '赌神' && planCol1.names[1] === '赌神2' && planCol1.names[2] === '赌神3之少年赌神', 'planMovieNames：全命中按部名');
+var planCol2 = api.planMovieNames([
+  { dirName: '赌神.1989.1080p' }, { dirName: '认不出的东西.mkv' }
+], { filmTitle: '赌神', collectionId: 999, parts: collParts });
+assert(planCol2.mode === 'suffix', 'planMovieNames：任一未命中整批回退后缀（不误标成别的电影）');
+
 console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ auto115-core 全部通过');
 process.exit(process.exitCode || 0);
