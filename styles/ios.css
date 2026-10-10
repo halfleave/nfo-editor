@@ -181,6 +181,12 @@ img { display: block; }
   pointer-events: auto; -webkit-tap-highlight-color: transparent;
 }
 .detail-topbar button svg { width: 24px; height: 24px; }
+/* 修复A：详情页顶部暗色渐变遮罩（仅最顶一小段向下渐隐），压暗亮背景让白色文字/返回键清晰 */
+.detail-top-fade {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 3; pointer-events: none;
+  height: calc(var(--sat) + 96px);
+  background: linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0));
+}
 .detail-scroll {
   position: fixed; inset: 0; z-index: 5;
   padding-top: 40vh;
@@ -402,7 +408,7 @@ img { display: block; }
 
 /* 顶部大标题栏（fixed 固定顶部，避免 sticky 在 iOS 滚动子容器内失效） */
 .page-bar, .home-header {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+  position: relative; z-index: 5;
   padding: calc(var(--sat) + 18px) var(--pad) 10px;
   background: var(--glass);
   backdrop-filter: saturate(180%) blur(20px);
@@ -445,6 +451,8 @@ img { display: block; }
 #page-edit { overflow: visible; }
 #page-edit .page-bar { position: fixed; flex-shrink: 0; }
 #page-edit .page-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-top: calc(var(--sat) + 68px); padding-bottom: calc(var(--sab) + 92px); }
+#page-edit-tv .page-bar { position: fixed; flex-shrink: 0; }
+#page-edit-tv .page-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-top: calc(var(--sat) + 68px); padding-bottom: calc(var(--sab) + 92px); }
 .home-tab {
   flex: 1; text-align: center; padding: 8px 0; font-size: 14px; font-weight: 600;
   color: #717374; border-radius: 20px; transition: all .2s;
@@ -453,9 +461,11 @@ img { display: block; }
 
 /* 滚动区 */
 .page-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 var(--pad) calc(var(--sab) + 92px); overscroll-behavior: contain; will-change: transform; }
-#page-settings .page-scroll { padding-top: calc(var(--sat) + 64px); }
-#page-home .page-scroll { padding-top: calc(var(--sat) + 118px); }
-#page-search .page-scroll { padding-top: calc(var(--sat) + 84px); }
+#page-settings .page-scroll { padding-top: 0; }
+#page-home .page-scroll { padding-top: 0; }
+#page-search .page-scroll { padding-top: 0; }
+/* 一级页面顶栏移入滚动容器后：水平内边距改由 .page-scroll 提供，避免双重缩进 */
+#page-home .home-header, #page-search .page-bar, #page-settings .page-bar { padding-left: 0; padding-right: 0; }
 .meta-panel { display: none; }
 .meta-panel.active { display: block; }
 
