@@ -9,7 +9,7 @@
  * 改版时递增下方 CACHE 版本号，旧缓存会在 activate 阶段被清理。
  * 逐版本变更记录见 git log，此处不再罗列。
  */
-const CACHE = 'nfo-ios-v375';
+const CACHE = 'nfo-ios-v376';
 const APP_SHELL = ['./nfo-editor-ios.html', './manifest.json', './src/core-shared.js', './src/pinyin-initial.js', './src/auto115-core.js', './src/toolbox-core.js', './src/tidy-core.js', './styles/ios.css', './src/ui-ios.js', './src/qrcode.min.js'];
 // 注意：真实 Worker 部署在 Vercel（nfo-magnet-proxy-vercel.vercel.app），并非 Cloudflare 的 *.workers.dev，
 // 故此处须同时匹配 vercel.app 上的 Worker 域名，否则「Worker 请求永远走网络、不缓存」的规则对其不生效，

@@ -1131,12 +1131,31 @@ function fc2Num(q){
   if (/^\d{5,10}$/.test(s)) return s;
   return '';
 }
+/* AV 搜索网络层失败自动重试（同 iOS v364 思路）：信号瞬断掐断请求（Load failed）等 3s 重试一次；
+   有 HTTP 状态码的业务错不重试，避免重复计配额 */
+function javFetchRetry(url, opts){
+  opts = opts || {};
+  var retried = false;
+  return new Promise(function(resolve, reject){
+    var run = function(){
+      fetch(url, opts).then(resolve).catch(function(e){
+        if (!retried && e && e.name !== 'AbortError' && (e.name === 'TypeError' || /load failed|network|无法连接/i.test(String(e.message || '')))){
+          retried = true;
+          setTimeout(run, 3000);
+          return;
+        }
+        reject(e);
+      });
+    };
+    run();
+  });
+}
 /* FC2 专用搜索链（javbus 搜不到 FC2PPV，实测确认）：番号分流到 javbus-scraper /api/fc2/search
    （fc2ppvdb 双域直查 + 站内搜索 best-effort）→ 空结果再直查 /api/meta（getFc2Meta 级联 + DMM 兜底） */
 function fetchFc2Search(num, box, jbCode){
   var base = javbusApiBase();
   var url = base + '/api/fc2/search?keyword=' + encodeURIComponent(num) + (jbCode || '') + '&_=' + Date.now();
-  fetch(url, { cache: 'no-store' })
+  javFetchRetry(url, { cache: 'no-store' })
     .then(function(r){
       if (!r.ok) {
         return r.text().then(function(txt){
@@ -1151,7 +1170,7 @@ function fetchFc2Search(num, box, jbCode){
       if (res && res.error){ box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(res.error) + '</div>'; return; }
       var movies = (res && res.movies) || [];
       if (movies.length){ renderJavbusResults(movies, box); return; }
-      fetch(base + '/api/meta?dvd_id=' + encodeURIComponent('FC2-' + num) + (jbCode || '') + '&_=' + Date.now(), { cache: 'no-store' })
+      javFetchRetry(base + '/api/meta?dvd_id=' + encodeURIComponent('FC2-' + num) + (jbCode || '') + '&_=' + Date.now(), { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
           if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
@@ -1160,7 +1179,9 @@ function fetchFc2Search(num, box, jbCode){
         .catch(function () { box.innerHTML = '<div class="tmdb-msg">未找到：FC2-' + escapeHtml(num) + '</div>'; });
     })
     .catch(function(e){
-      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((e && e.message) ? e.message : '未知错误') + '</div>';
+      var m = (e && e.message) || '';
+      var friendly = /load failed|network|无法连接/i.test(m) ? '网络波动，请再点一次搜索' : m;
+      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(friendly || '未知错误') + '</div>';
     }).finally(function(){ stopLoadingRotator(); });
 }
 
@@ -1176,7 +1197,7 @@ function fetchJavbusSearch(q, box){
   var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
   var url = base + path + '?keyword=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now();
   NfoCore.quotaInc('javSearch');
-  fetch(url, { cache: 'no-store' })
+  javFetchRetry(url, { cache: 'no-store' })
     .then(function(r){
       if (!r.ok) {
         // 把服务端返回的错误正文也读出来，便于定位（如 unknown route / JavBus 代理请求失败）
@@ -1196,7 +1217,7 @@ function fetchJavbusSearch(q, box){
         // 以补全 JavBus 无但 DMM 有的数据（DMM 按番号搜，关键词搜不了，故片名仍走 JavBus/未找到）
         var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
         if (looksLikeId) {
-          fetch(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now(), { cache: 'no-store' })
+          javFetchRetry(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now(), { cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
               if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
@@ -1211,7 +1232,9 @@ function fetchJavbusSearch(q, box){
       renderJavbusResults(movies, box);
     })
     .catch(function(e){
-      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((e && e.message) ? e.message : '未知错误') + '</div>';
+      var m = (e && e.message) || '';
+      var friendly = /load failed|network|无法连接/i.test(m) ? '网络波动，请再点一次搜索' : m;
+      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(friendly || '未知错误') + '</div>';
   }).finally(function(){ stopLoadingRotator(); });
 }
 
