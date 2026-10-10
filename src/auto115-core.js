@@ -74,6 +74,17 @@
     { key: 'move',    label: '移动' },
     { key: 'rename',  label: '重命名' }
   ];
+  /* 单磁力剧集 6 步（期三第 2 刀）：mkdir2（建季夹）/move2（移入季夹）退役并入 rename
+     （判分季→建季夹→改名→冲突感知移入→未识别归拢→收尾一次完成）。
+     旧表 STEPS_TV 仍服务剧集多磁力（8 步）与存量任务的兼容分发。 */
+  api.STEPS_TV_SINGLE = [
+    { key: 'submit',  label: '提交离线' },
+    { key: 'wait',    label: '等待离线完成' },
+    { key: 'mkdir',   label: '定位文件夹' },
+    { key: 'cleanup', label: '修改标题文件夹' },
+    { key: 'move',    label: '清除无关文件' },
+    { key: 'rename',  label: '整理改名与归位' }
+  ];
 
   /* ---------- 任务模型纯函数 ---------- */
   function taskType(t){ if (!t) return 'offline'; if (t.type === 'upload') return 'upload'; if (t.type === 'tv') return 'tv'; if (t.type === 'tbm') return 'tbm'; return 'offline'; }
@@ -83,11 +94,11 @@
     var table;
     if (type === 'tbm') table = api.STEPS_TBM;
     else if (type === 'upload') table = api.STEPS_UPLOAD;
-    else if (type === 'tv') table = api.STEPS_TV;
-    /* 多磁力分两类（v338）：剧集自动化走完整 8 步（建季夹/改名/移入是真节点）；
+    /* 单磁力剧集走 6 步新表（期三第 2 刀）；多磁力剧集仍走 8 步旧表（建季夹/移入是真节点）。
        电影自动化 6 步（无季夹概念）。磁力库多磁力仅下载，创建处直接用 'tbm' 2 步表。 */
+    else if (type === 'tv') table = api.STEPS_TV_SINGLE;
     else if (type === 'multi') table = isTv ? api.STEPS_TV : api.STEPS_MULTI;
-    else table = isTv ? api.STEPS_TV : api.STEP_DEFS;
+    else table = isTv ? api.STEPS_TV_SINGLE : api.STEP_DEFS;
     return table.map(function (s) { return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
   };
   api.getStep = function (t, key) {
@@ -115,6 +126,27 @@
     for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i].label;
     return key;
   };
+  /* 任务卡动态步骤（期三第 1 刀，纯展示层——执行链不动）：
+     ① 任务还没开跑（全部 idle）→ 显示完整表，当作计划预览；
+     ② 已开跑 → 只显示到最后一个非 idle 步骤 + 紧跟的下一个待跑步骤，
+        不再挂一排灰色的未来节点（剧集 8 步卡缩到实际发生的 3~5 步）；
+     ③ skip 保留（有明确「跳过」语义要展示）；submit/wait 归属文档的 idle 残留照常裁掉；
+     ④ tidy 任务隐藏 submit/wait（内部复用离线表，界面无关）；upload 只显示自己的两步。 */
+  api.visibleSteps = function (t) {
+    var steps = (t && t.steps) || [];
+    var out = steps;
+    if (t && t.tidy) out = out.filter(function (s) { return s.key !== 'submit' && s.key !== 'wait'; });
+    if (t && t.type === 'upload'){
+      var uk = {};
+      api.STEPS_UPLOAD.forEach(function (s) { uk[s.key] = 1; });
+      out = out.filter(function (s) { return uk[s.key]; });
+    }
+    var last = -1;
+    for (var i = 0; i < out.length; i++) if (out[i].state && out[i].state !== 'idle') last = i;
+    if (last < 0) return out.slice();   /* 未开跑：整表预览 */
+    var end = (last + 1 < out.length) ? last + 1 : last;
+    return out.slice(0, end + 1);
+  };
   /* 大状态合成。isTv 由调用方传入（引擎端读当前影片详情判定）。
      v338：内部全部改用 peekStep 只读——getStep 会自动补建缺失步骤，
      高频状态计算曾把 mkdir2/move2 等幽灵节点 append 进多磁力/磁力库任务。 */
@@ -140,7 +172,7 @@
     if (wait && wait.state === 'running') return { text: '离线中 (' + ((wait.probes || 0) + 1) + '/' + api.PROBE_MAX + ')', cls: 'ab-run' };
     /* tbm 库任务：下载完成（wait=ok）但还没追加整理步骤（未触发整理）→ 停在「待整理」 */
     if (t.tbm && wait && wait.state === 'ok' && !t.tbmType) return { text: '下载完成 · 待整理', cls: 'ab-wait' };
-    var allDefs = (isTv ? api.STEPS_TV : api.STEP_DEFS);
+    var allDefs = (isTv ? api.STEPS_TV.concat(api.STEPS_TV_SINGLE) : api.STEP_DEFS);
     for (var j = 2; j < allDefs.length; j++){
       var rs = api.peekStep(t, allDefs[j].key);
       if (rs && rs.state === 'running'){
@@ -338,6 +370,15 @@
     return base + '.' + lang + ext;
   };
 
+  /* v352：合集文件夹名——TMDB 合集中文名常自带「系列/合集/Collection」尾巴（如「警察学校系列」），
+     做文件夹名时剥掉；剥完为空则退回原名 */
+  api.stripCollTag = function (name) {
+    var raw = String(name || '').trim();
+    var s = raw.replace(/[（(]\s*(系列|合集|Collection)\s*[)）]\s*$/i, '')
+               .replace(/\s*(系列|合集|Collection)\s*$/i, '').trim();
+    return s || raw;
+  };
+
   /* ---------- 剧集（TV）命名与解析 ---------- */
   /* 中文数字 → 阿拉伯数字（支持 零~九十九；纯阿拉伯直接转） */
   api.cnNum = function (s) {
@@ -414,7 +455,7 @@
            /season\s*\d/.test(name) || /第\s*[零一二两三四五六七八九十百\d]+\s*季/.test(name);
   };
   api.ext = function (name) { var m = /\.[a-z0-9]+$/i.exec(name || ''); return m ? m[0] : ''; };
-  api.pad2 = function (n) { n = Math.max(1, n | 0); return (n < 10 ? '0' : '') + n; };
+  api.pad2 = function (n) { n = (n | 0); if (n < 0) n = 0; return (n < 10 ? '0' : '') + n; };
   /* 剧集根文件夹名（只取标题，与用户定的 剧集标题/ 结构一致） */
   api.tvDirName = function (showTitle) { return api.cleanName(showTitle) || 'show'; };
   api.tvVideoName = function (showTitle, season, ep, ext) {
@@ -445,7 +486,8 @@
     function nextEp(s) { var e = 1; while (occupied[key(s, e)]) e++; take(s, e); return e; }
     var vidPlan = [], unrecognized = [];
     var effSeason = function (name, s) {
-      s = s || 1;
+      /* S00（特别篇）是合法季号，不能被 || 吞成 1——否则特别篇抢占 S01E01、正片反被挤进未识别（探针实测踩中） */
+      if (s == null) s = 1;
       if (dirSeason && s === 1 && !api.explicitSeason(name)) return dirSeason;
       return s;
     };
@@ -857,6 +899,82 @@
       if (!second || best.score - second.score >= api.TIDY_GAP) ok = true;
     }
     return { ok: ok, best: best, candidates: items.slice(0, 8) };
+  };
+
+  /* ===== 统一定位级联（v354 期一，纯函数）：offline / tidy 两条定位链共用一套找法 =====
+     cands：{ folders:[原始条目], files:[原始文件条目], vids:[视频文件条目] }
+     opt：{ mode:'offline'|'tidy', offlineName, createdAt, slackMs, titles, year, itemTime(fn) }
+     返回 { kind:'dir'|'file', item, score } 或 null。
+     offline 级联：①种子名精确夹 → ②提交时间窗夹 → ③种子名精确文件 → ④时间窗文件
+                → ⑤相似度评分兜底（文件夹 vs 视频文件比分，v354 新增：offline 也有兜底）
+     tidy 级联：相似度评分（文件夹 vs 视频文件比分，分数严格大于才让散装视频赢） */
+  api.locatePlan = function (cands, opt) {
+    opt = opt || {};
+    var folders = (cands && cands.folders) || [];
+    var files = (cands && cands.files) || [];
+    var vids = (cands && cands.vids) || [];
+    var iT = opt.itemTime || function () { return 0; };
+    var i;
+    if (opt.mode !== 'tidy'){
+      /* ① 种子名精确（115 BT 离线通常落地为以种子名命名的文件夹） */
+      if (opt.offlineName){
+        for (i = 0; i < folders.length; i++){ if ((folders[i].n || '') === opt.offlineName) return { kind: 'dir', item: folders[i], score: 100 }; }
+      }
+      /* ② 兜底：任务提交时间窗内最新的文件夹（列表已按时间倒序） */
+      if (opt.createdAt != null){
+        for (i = 0; i < folders.length; i++){
+          if (iT(folders[i]) >= opt.createdAt - (opt.slackMs || 0)) return { kind: 'dir', item: folders[i], score: 0 };
+        }
+      }
+      /* ③ 单文件磁力：种子名精确 */
+      if (opt.offlineName){
+        for (i = 0; i < files.length; i++){ if ((files[i].n || '') === opt.offlineName) return { kind: 'file', item: files[i], score: 100 }; }
+      }
+      /* ④ 时间窗文件 */
+      if (opt.createdAt != null){
+        for (i = 0; i < files.length; i++){
+          if (iT(files[i]) >= opt.createdAt - (opt.slackMs || 0)) return { kind: 'file', item: files[i], score: 0 };
+        }
+      }
+      /* ⑤ 相似度兜底前仍需有标题可比；tidy 模式直接进相似度 */
+      if (!(opt.titles || []).length) return null;
+    }
+    var m = api.matchTidyDir(folders, opt.titles, opt.year);
+    var mv = api.matchTidyDir(vids, opt.titles, opt.year);
+    var bestF = (m.ok && m.best) ? m.best : null;
+    var bestV = (mv.ok && mv.best) ? mv.best : null;
+    if (!bestF && !bestV) return null;
+    if (bestV && (!bestF || bestV.score > bestF.score)) return { kind: 'file', item: bestV, score: bestV.score };
+    if (bestF) return { kind: 'dir', item: bestF, score: bestF.score };
+    return null;
+  };
+
+  /* ===== 统一整理计划（v354 期二）：条目 {op, fid, name, orig, pid, size, linked} =====
+     op：'mkdir' 建夹（name 必填，pid=父目录） | 'del' 删除（fid 必填，pid=所在父目录）
+       | 'rename' 只改名（fid+name 必填） | 'move' 移动（可带改名；pid=目标父目录）
+     与 AI 整理四字段 {旧文件路径,旧名,新文件路径,新名} 同构，是期三步骤表收敛的通用货币。 */
+  api.PLAN_OPS = ['mkdir', 'del', 'rename', 'move'];
+  api.planEntry = function (e) {
+    if (!e || api.PLAN_OPS.indexOf(e.op) < 0) return null;
+    if ((e.op === 'del' || e.op === 'rename' || e.op === 'move') && e.fid == null) return null;
+    if ((e.op === 'mkdir' || e.op === 'rename' || e.op === 'move') && !e.name) return null;
+    var out = { op: e.op };
+    var keys = ['fid', 'name', 'orig', 'pid', 'size', 'linked'];
+    for (var i = 0; i < keys.length; i++){ if (e[keys[i]] != null) out[keys[i]] = e[keys[i]]; }
+    return out;
+  };
+  api.normalizePlan = function (entries) {
+    var out = [];
+    for (var i = 0; i < (entries || []).length; i++){
+      var e = api.planEntry(entries[i]);
+      if (e) out.push(e);
+    }
+    return out;
+  };
+  api.splitPlan = function (entries) {
+    var g = { mkdirs: [], dels: [], renames: [], moves: [] };
+    api.normalizePlan(entries).forEach(function (e){ g[e.op + 's'].push(e); });
+    return g;
   };
 
   global.Auto115Core = api;

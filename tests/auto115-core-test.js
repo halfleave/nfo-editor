@@ -324,5 +324,84 @@ var ambParts = [
 assert(api.matchCollectionPart({ dirName: 'Whatever.1990.1080p' }, ambParts, {}) === null, '年份兜底：同年两部拿不准不硬标');
 assert(api.matchCollectionPart({ dirName: 'Whatever.1991.1080p' }, enParts, {}) === null, '年份兜底：文件名年份没有对应部不认');
 
+/* ---------- v354 期一：locatePlan 统一定位级联 ---------- */
+var lpNow = 1700000000000;
+var lpSlack = api.DIR_SLACK_MS;
+function lpDirs(names){ return names.map(function(n){ return { cid: 'c_' + n, n: n, s: 0 }; }); }
+function lpFiles(names){ return names.map(function(n){ return { fid: 'f_' + n, n: n, s: 123 }; }); }
+/* offline：①种子名精确夹 */
+var lpHit = api.locatePlan({ folders: lpDirs(['赌神', '别的夹']), files: lpFiles([]), vids: [] },
+  { mode: 'offline', offlineName: '别的夹', createdAt: lpNow, slackMs: lpSlack, titles: ['赌神'], itemTime: function(){ return lpNow; } });
+assert(lpHit && lpHit.kind === 'dir' && lpHit.item.n === '别的夹', 'locatePlan offline：种子名精确夹最优先');
+/* offline：②时间窗夹（种子名不中时取时间窗内最新） */
+lpHit = api.locatePlan({ folders: lpDirs(['时间窗夹']), files: [], vids: [] },
+  { mode: 'offline', offlineName: '种子名', createdAt: lpNow - 1000, slackMs: lpSlack, titles: [], itemTime: function(){ return lpNow; } });
+assert(lpHit && lpHit.kind === 'dir' && lpHit.item.n === '时间窗夹', 'locatePlan offline：时间窗夹次优先');
+/* offline：③种子名精确文件（无夹命中时） */
+lpHit = api.locatePlan({ folders: lpDirs([]), files: lpFiles(['赌神.mkv']), vids: [] },
+  { mode: 'offline', offlineName: '赌神.mkv', createdAt: lpNow, slackMs: lpSlack, titles: [], itemTime: function(){ return lpNow; } });
+assert(lpHit && lpHit.kind === 'file' && lpHit.item.n === '赌神.mkv', 'locatePlan offline：种子名精确文件');
+/* offline：⑤相似度兜底（v354 新增——种子名/时间窗都落空时按标题相似度，夹与散装视频比分） */
+lpHit = api.locatePlan({ folders: lpDirs(['赌神.1989.1080p']), files: lpFiles(['赌神.1989.720p.mkv']), vids: lpFiles(['赌神.1989.720p.mkv']) },
+  { mode: 'offline', offlineName: '完全不相关的种子名', createdAt: lpNow - lpSlack * 10, slackMs: lpSlack, titles: ['赌神'], itemTime: function(){ return 0; } });
+assert(lpHit && lpHit.kind === 'dir' && lpHit.item.n === '赌神.1989.1080p', 'locatePlan offline：相似度兜底能定位文件夹（平分时夹优先；以前直接失败）');
+/* offline：无标题可比 → null */
+lpHit = api.locatePlan({ folders: lpDirs(['随便']), files: [], vids: [] },
+  { mode: 'offline', offlineName: 'x', createdAt: lpNow - lpSlack * 10, slackMs: lpSlack, titles: [], itemTime: function(){ return 0; } });
+assert(lpHit === null, 'locatePlan offline：无标题不兜底');
+/* tidy：夹 vs 散装视频比分，分高者赢；分数严格大于才让视频赢 */
+var tidyV = api.locatePlan({ folders: lpDirs(['赌神.God.of.Gamblers.1989']), files: lpFiles(['赌神.1989.720p.mkv']), vids: lpFiles(['赌神.1989.720p.mkv']) },
+  { mode: 'tidy', titles: ['赌神'], year: '1989' });
+assert(tidyV && tidyV.kind === 'file' && tidyV.item.n === '赌神.1989.720p.mkv', 'locatePlan tidy：散装视频分更高时赢（89>85）');
+var tidyF = api.locatePlan({ folders: lpDirs(['赌神.God.of.Gamblers.1989']), files: [], vids: [] },
+  { mode: 'tidy', titles: ['赌神'], year: '1989' });
+assert(tidyF && tidyF.kind === 'dir', 'locatePlan tidy：能定位文件夹');
+assert(api.locatePlan({ folders: lpDirs(['无关夹']), files: [], vids: [] }, { mode: 'tidy', titles: ['赌神'] }) === null, 'locatePlan tidy：分不够不采用');
+
+/* ---------- v354 期二：统一计划条目 planEntry / normalizePlan / splitPlan ---------- */
+assert(api.planEntry({ op: 'move', fid: 'f1', name: 'a.mkv', orig: 'b.mkv', pid: 'p1', size: 5 }) != null, 'planEntry：合法 move 条目通过');
+assert(api.planEntry({ op: 'bad' }) === null, 'planEntry：未知 op 拒绝');
+assert(api.planEntry({ op: 'del' }) === null, 'planEntry：del 缺 fid 拒绝');
+assert(api.planEntry({ op: 'mkdir' }) === null, 'planEntry：mkdir 缺 name 拒绝');
+assert(api.planEntry({ op: 'rename', fid: 'f1', name: '' }) === null, 'planEntry：rename 缺 name 拒绝');
+assert(api.planEntry({ op: 'mkdir', name: '新夹', pid: 'p9' }).pid === 'p9', 'planEntry：mkdir 保留 pid');
+var sp = api.splitPlan([
+  { op: 'mkdir', name: '夹' },
+  { op: 'del', fid: 'd1' },
+  { op: 'rename', fid: 'r1', name: 'x' },
+  { op: 'move', fid: 'm1', name: 'y', pid: 'p1' },
+  null,
+  { op: 'del' }
+]);
+assert(sp.mkdirs.length === 1 && sp.dels.length === 1 && sp.renames.length === 1 && sp.moves.length === 1, 'splitPlan：按 op 分组且过滤非法条目');
+assert(api.normalizePlan([{ op: 'move', fid: 'f1', name: 'a' }, 'junk']).length === 1, 'normalizePlan：跳过非对象条目');
+
+/* S00 特别篇（v357 修：effSeason 不得把 0 吞成 1，pad2 允许 0 —— 探针实测踩中） */
+var s00Plan = api.tvPlan('太空堡垒卡拉狄加', [
+  { fid: 'sp', name: 'Battlestar.Galactica.S00E01.Razor.1080p.mkv' },
+  { fid: 'e1', name: 'Battlestar.Galactica.S01E01.33.Minutes.1080p.mkv' }
+], 0);
+assert(s00Plan.renames.length === 2 && s00Plan.unrecognized.length === 0, 'S00 特别篇 + 正片都要进改名计划');
+assert(s00Plan.renames[0].name === '太空堡垒卡拉狄加.S00E01.mkv', 'S00 特别篇保留 0 季号');
+assert(s00Plan.renames[1].name === '太空堡垒卡拉狄加.S01E01.mkv', '正片 S01E01 不被特别篇挤占');
+assert(api.pad2(0) === '00' && api.pad2(1) === '01' && api.pad2(12) === '12', 'pad2：0 补零为 00，其余不变');
+
+/* 任务卡动态步骤（期三第 1 刀） */
+var vsT = { steps: api.newSteps('tv', true) };
+assert(api.visibleSteps(vsT).length === 6, 'visibleSteps：未开跑显示整表（计划预览，单磁力剧集 6 步）');
+api.getStep(vsT, 'submit').state = 'ok';
+api.getStep(vsT, 'wait').state = 'running';
+assert(api.visibleSteps(vsT).length === 3, 'visibleSteps：进行中只显示进度+下一个待跑');
+api.getStep(vsT, 'mkdir').state = 'ok';
+api.getStep(vsT, 'cleanup').state = 'skip';
+api.getStep(vsT, 'move').state = 'running';
+var vsMid = api.visibleSteps(vsT);
+assert(vsMid.length === 6 && vsMid[vsMid.length - 1].key === 'rename', 'visibleSteps：skip 保留且只多看一步');
+var vsTidy = { tidy: 1, steps: api.newSteps('', false) };
+assert(api.visibleSteps(vsTidy).every(function (s) { return s.key !== 'submit' && s.key !== 'wait'; }), 'visibleSteps：tidy 隐藏 submit/wait');
+var vsUp = { type: 'upload', steps: api.newSteps('upload') };
+api.getStep(vsUp, 'wait');   /* 旧数据残留的幽灵 wait */
+assert(api.visibleSteps(vsUp).length === 2 && api.visibleSteps(vsUp)[0].key === 'dir', 'visibleSteps：upload 只显示自己的两步');
+
 console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ auto115-core 全部通过');
 process.exit(process.exitCode || 0);

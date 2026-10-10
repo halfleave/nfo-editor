@@ -636,26 +636,35 @@ const lz4LiteralForTest = (bytes) => {
   assert(editCall2 && decodeURIComponent(editCall2.body).indexOf('IPX-486.B.mkv') >= 0, '第三个视频改名 番号.B.ext');
   assert(tn.finalDirCid === 'DIR777', '第三个任务同样并入 DIR777');
 
-  /* 8. 排队串行化：同时点两个 115 离线 → 第二个排队，第一个终态后自动续跑 */
+  /* 8. 节点级排队（v353）：A 占锁跑写链时，B 的提交/等待节点照常并行不排队；
+     B 进写节点（mkdir）才排队，A 终态后锁推进、B 的写节点自动续跑 */
   script = { 'ac=add_task_url': { state: true, info_hash: 'H2', name: '排队任务' } };
-  /* 队列测试需要干净的 doc：只留 [tp0, tq]，清掉前面用例残留的脏任务（v333：auto115BeginWait 延迟首探 + auto115YieldLock 重入 kickStuck，会把残留的 ab-idle 任务当待续跑捡起来，污染本测试） */
   doc.tasks = [];
   ctx.auto115RunningId = '';
   const tq = { id: 'tq2', magnet: 'magnet:?xt=urn:btih:4444444444444444444444444444444444444444', magnetTitle: '排队任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
   const tp0 = { id: 'tp0', magnet: 'magnet:?xt=urn:btih:0000000000000000000000000000000000000000', magnetTitle: '第一个任务', steps: ctx.auto115NewSteps(), createdAt: Date.now(), fv: 2 };
-  ctx.auto115GetStep(tp0, 'wait').state = 'running';   // 模拟正在跑
+  ctx.auto115GetStep(tp0, 'rename').state = 'running';   // A 正在写节点（占锁）
   doc.tasks.unshift(tp0);
   doc.tasks.unshift(tq);
   ctx.auto115RunningId = 'tp0';
   await ctx.auto115Run(tq);
-  assert(tq.queued === true, '同时启动第二个任务 → 转入排队');
-  assert(ctx.auto115GetStep(tq, 'submit').msg.indexOf('排队中') >= 0, '排队提示可见');
-  assert(ctx.auto115GetStep(tq, 'submit').state === 'idle', '排队期间不提交离线');
-  ctx.auto115GetStep(tp0, 'wait').state = 'ok';     // 终态：模拟第一个任务跑完
-  ctx.auto115Finish(ctx.auto115Task('tp0'));   // 第一个任务到达终态
-  assert(ctx.auto115RunningId === 'tq2', '第一个任务终态后队列推进到排队任务');
-  await Promise.resolve();   // 等 ensure115Cookie 的 .then 微任务（不引入宏任务，避免唤醒桩 DOM 的启动定时器）
-  assert(ctx.auto115GetStep(tq, 'submit').state === 'running', '排队任务自动开始提交离线');
+  assert(tq.queued !== true, 'A 占锁写链中，B 的提交节点不再整条排队（v353 节点级）');
+  assert(ctx.auto115GetStep(tq, 'submit').state === 'ok', 'B 立即提交离线（不受 A 写链影响）');
+  assert(ctx.auto115GetStep(tq, 'wait').state === 'running', 'B 随即进入等待离线（探针并行）');
+  /* B 下载完成（探到 done）→ 进 mkdir 写节点 → A 还占锁 → 排队 */
+  await ctx.auto115StepMkdir(tq);
+  assert(tq.queued === true, 'B 的写节点在 A 写链期间转入排队');
+  assert(ctx.auto115GetStep(tq, 'mkdir').msg.indexOf('排队中') >= 0, '写节点排队提示可见');
+  assert(ctx.auto115GetStep(tq, 'mkdir').state === 'idle', '排队期间不动 115 目录');
+  /* A 终态 → 释放锁 + 踢队列 */
+  ctx.auto115GetStep(tp0, 'rename').state = 'ok';
+  ctx.auto115Finish(ctx.auto115Task('tp0'));
+  assert(tq.queued === false, 'A 终态后队列推进到 B');
+  /* B 的写节点拿到锁续跑（WriteEnter 同步抢锁） */
+  const pmk = ctx.auto115StepMkdir(tq);
+  assert(ctx.auto115RunningId === 'tq2', 'B 的写节点接管执行锁');
+  assert(ctx.auto115GetStep(tq, 'mkdir').state === 'running', 'B 写节点开始跑');
+  await pmk;
 
   /* 9. 剧集（TV）离线分支：判定 / 中文数字解析 / 集数标记（含中文数字）/ 字幕语言取舍 / 命名 / 分发 */
   assert(ctx.auto115Doc.type === 'movie' || ctx.auto115Doc.type === 'tv', 'auto115Doc.type 字段存在（默认 movie/tv 二选一）');
@@ -738,7 +747,7 @@ const lz4LiteralForTest = (bytes) => {
           { fid: 'J1', n: 'sample.mp4', s: 5000 }
         ] };
       }
-      /* 第二次起：move2 的 MoveInto / 空季夹探测再列目录——原地改名后同名同大小 → 全部跳过不搬 */
+      /* 第二次起：改名节点收尾的 MoveInto / 空季夹探测再列目录——原地改名后同名同大小 → 全部跳过不搬 */
       return { state: true, data: [
         { fid: 'V1', n: '权力的游戏.S01E01.mkv', s: 900 },
         { fid: 'V2', n: '权力的游戏.S01E02.mkv', s: 900 },
@@ -759,9 +768,9 @@ const lz4LiteralForTest = (bytes) => {
   await ctx.auto115StepCleanup(ttv);
   assert(ctx.auto115GetStep(ttv, 'cleanup').state === 'ok', 'TV 修改标题文件夹 cleanup = ok（先定容器）');
   assert(ctx.auto115GetStep(ttv, 'move').state === 'ok', 'TV 清除无关文件 move = ok');
-  assert(ctx.auto115GetStep(ttv, 'mkdir2').state === 'skip', 'TV 只有一季 → 不分季（mkdir2 skip）');
-  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 修改视频名称 rename = ok（命名仍带 SxxExx）');
-  assert(ctx.auto115GetStep(ttv, 'move2').state === 'ok' && ctx.auto115GetStep(ttv, 'move2').msg.indexOf('无需移动') >= 0, 'TV 不分季且文件已在剧集根 → 无需移动（' + ctx.auto115GetStep(ttv, 'move2').msg + '）');
+  assert(!ctx.Auto115Core.hasStep(ttv, 'mkdir2') && !ctx.Auto115Core.hasStep(ttv, 'move2'), '期三：单磁力剧集不再有 mkdir2/move2 幽灵节点');
+  assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 整理改名与归位 rename = ok（命名仍带 SxxExx）');
+  assert(ctx.auto115GetStep(ttv, 'rename').msg.indexOf('无需移动') >= 0, 'TV 不分季且文件已在剧集根 → 无需移动（' + ctx.auto115GetStep(ttv, 'rename').msg + '）');
   const editBodies = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.mkv') >= 0), '改名含 权力的游戏.S01E01.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.mkv') >= 0), '改名含 权力的游戏.S01E02.mkv');
@@ -805,8 +814,7 @@ const lz4LiteralForTest = (bytes) => {
   ['submit', 'wait', 'mkdir'].forEach(k => { ctx.auto115GetStep(ttot, k).state = 'ok'; });
   calls.length = 0;
   await ctx.auto115StepCleanup(ttot);
-  assert(ctx.auto115GetStep(ttot, 'mkdir2').state === 'skip' && ctx.auto115GetStep(ttot, 'mkdir2').msg.indexOf('无需分季') >= 0, '古战场传奇：2 季不足阈值 → 不分季平铺');
-  assert(ctx.auto115GetStep(ttot, 'move2').state === 'ok' && ctx.auto115GetStep(ttot, 'move2').msg.indexOf('已把 3 个文件') >= 0, '古战场传奇：嵌在老季夹里的 3 个文件搬到剧集根（' + ctx.auto115GetStep(ttot, 'move2').msg + '）');
+  assert(ctx.auto115GetStep(ttot, 'rename').state === 'ok' && ctx.auto115GetStep(ttot, 'rename').msg.indexOf('已把 3 个文件') >= 0, '古战场传奇：2 季不足阈值不分季，嵌在老季夹里的 3 个文件搬到剧集根（' + ctx.auto115GetStep(ttot, 'rename').msg + '）');
   const otMoves = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(otMoves.every(b => b.indexOf('pid=DIROT') >= 0) && ['O1', 'O2', 'O3'].every(f => otMoves.some(b => b.indexOf('fid=' + f) >= 0)), '古战场传奇：O1/O2/O3 全部移入「古战场传奇」根');
   const otDels = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => decodeURIComponent(c.body || ''));
@@ -916,10 +924,9 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115GetStep(tTvM, 'cleanup').state === 'ok', 'TV 同名夹已存在：改标题文件夹转 ok（不失败）');
   assert(tTvM.tvMergeCid === 'MERGE1' && tTvM.finalDirCid === 'MERGE1', '并入目标为已存在的同名剧集夹');
   assert(ctx.auto115GetStep(tTvM, 'move').state === 'ok', '后续清理文件步骤继续执行');
-  assert(ctx.auto115GetStep(tTvM, 'mkdir2').state === 'skip', '单季并入：不分季（mkdir2 skip）');
+  assert(!ctx.Auto115Core.hasStep(tTvM, 'mkdir2') && !ctx.Auto115Core.hasStep(tTvM, 'move2'), '单季并入：无 mkdir2/move2 节点');
   assert(!calls.some(c => c.url.indexOf('files/add') >= 0), '单季并入时不新建季文件夹');
-  assert(ctx.auto115GetStep(tTvM, 'rename').state === 'ok', '视频改名步骤 ok');
-  assert(ctx.auto115GetStep(tTvM, 'move2').state === 'ok', '移入同名剧集夹步骤 ok');
+  assert(ctx.auto115GetStep(tTvM, 'rename').state === 'ok', '合并节点：改名+移入同名剧集夹一次完成');
   const mvCalls = calls.filter(c => c.url.indexOf('files/move') >= 0);
   assert(mvCalls.some(c => c.body.indexOf('pid=MERGE1') >= 0), '视频已平铺移入同名剧集夹 MERGE1');
   const editCallsM = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
@@ -960,7 +967,7 @@ const lz4LiteralForTest = (bytes) => {
   docTvS.tasks.unshift(tSp1);
   calls.length = 0; listSplitCalls = 0;
   await ctx.auto115StepCleanup(tSp1);
-  assert(ctx.auto115GetStep(tSp1, 'mkdir2').state === 'skip', '多季但总集数不足阈值 → 不分季（mkdir2 skip）');
+  assert(ctx.auto115GetStep(tSp1, 'rename').state === 'ok' && !calls.some(c => c.url.indexOf('files/add') >= 0), '多季但总集数不足阈值 → 不分季平铺（合并节点内不建季夹）');
   assert(!calls.some(c => c.url.indexOf('files/add') >= 0), '不足阈值时不新建季文件夹');
   const editSp1 = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(editSp1.some(b => b.indexOf('多季剧.S02E01.mkv') >= 0), '平铺不分季时命名仍带季集号（S02E01）');
@@ -970,10 +977,10 @@ const lz4LiteralForTest = (bytes) => {
   docTvS.tasks.unshift(tSp2);
   calls.length = 0; listSplitCalls = 0;
   await ctx.auto115StepCleanup(tSp2);
-  assert(ctx.auto115GetStep(tSp2, 'mkdir2').state === 'ok', '多季且达到阈值 → 建季文件夹（mkdir2 ok）');
+  assert(ctx.auto115GetStep(tSp2, 'rename').state === 'running' || ctx.auto115GetStep(tSp2, 'rename').state === 'ok', '多季且达到阈值 → 合并节点执行（建季夹+移入）');
   const addSp2 = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(addSp2.length === 2 && addSp2.some(b => b.indexOf('cname=S01') >= 0) && addSp2.some(b => b.indexOf('cname=S02') >= 0), '新建 S01 与 S02 两个季文件夹');
-  assert(ctx.auto115GetStep(tSp2, 'move2').state === 'ok', '达到阈值时移入对应季文件夹（move2 ok）');
+  assert(ctx.auto115GetStep(tSp2, 'rename').state === 'ok' && ctx.auto115GetStep(tSp2, 'rename').msg.indexOf('已移入') >= 0, '达到阈值时移入对应季文件夹（' + ctx.auto115GetStep(tSp2, 'rename').msg + '）');
   const mvSp2 = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(mvSp2.some(b => b.indexOf('pid=S01NEW') >= 0) && mvSp2.some(b => b.indexOf('pid=S02NEW') >= 0), '视频分别移入 S01 / S02');
   ctx.Auto115Core.SPLIT_MIN_EPISODES = 100;
@@ -1176,9 +1183,9 @@ const lz4LiteralForTest = (bytes) => {
   const tbm2 = { id: 'tbm2', tbm: true, type: 'tbm', external: true, magnet: 'magnet:?xt=urn:btih:TBMTVBBBB', magnetTitle: 'TBMTVBBBB', infoHash: 'TBMTVBBBB', steps: ctx.auto115NewSteps('tbm'), createdAt: 1, fv: ctx.AUTO115_FLOW_VERSION || 2, filmId: 'tbm-library' };
   ctx.Auto115Core.getStep(tbm2, 'submit').state = 'ok'; ctx.Auto115Core.getStep(tbm2, 'wait').state = 'ok';
   tbm2.tbmType = 'tv'; tbm2.type = 'tv'; tbm2.targetName = '我的剧集';
-  ['mkdir','cleanup','move','mkdir2','rename','move2'].forEach(function(k){ if (!ctx.Auto115Core.hasStep(tbm2, k)) ctx.Auto115Core.getStep(tbm2, k); });
+  ['mkdir','cleanup','move','rename'].forEach(function(k){ if (!ctx.Auto115Core.hasStep(tbm2, k)) ctx.Auto115Core.getStep(tbm2, k); });
   assert(ctx.auto115TaskIsTv(tbm2) === true, 'tbm 整理为剧集 → 判为剧集');
-  assert(ctx.auto115StepDefs(tbm2).length === 8, 'tbm 剧集 → 步骤表 8 步（含建季/移入）');
+  assert(ctx.auto115StepDefs(tbm2).length === 6, 'tbm 剧集 → 步骤表 6 步（期三：建季/移入并入改名节点）');
   assert(ctx.auto115TaskTitle(tbm2) === '剧集：我的剧集', 'tbm 整理为剧集 → 标题「剧集：我的剧集」');
   /* 合成虚拟文档：tbm 任务的 auto115TaskDoc 应带 targetName 与正确 type（供清理/改名读身份） */
   const tbmDoc = ctx.auto115TaskDoc(tbm2);
