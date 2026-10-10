@@ -1289,7 +1289,7 @@
       });
     }).then(function (list) {
       /* 体积字段两个名字都给：tvPlan 读 it.s */
-      return list.map(function (it) { return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: it.s || 0, size: it.s || 0 }; }).filter(function (it) { return (it.fid || it.cid) && it.name; });
+      return list.map(function (it) { return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: it.s || 0, size: it.s || 0, _season: it._season || 0 }; }).filter(function (it) { return (it.fid || it.cid) && it.name; });
     });
   }
   function auto115StepTvCleanupFiles(t){
@@ -1563,15 +1563,21 @@
   /* 子文件夹穿透（对齐移动端 v270/v271）：115 离线的种子常是「种子名/内层夹/视频」的套层结构，
      只扫一层看不到视频。始终下钻（最多 3 层、每层最多 10 个夹），EXCLUDE 名字的子夹（sample/预告…）跳过；
      内容合并进工作列表，后续保留/删除/改名全按 fid，不受层级影响。 */
-  function auto115FlattenSubDirs(t, list, depth) {
+  function auto115FlattenSubDirs(t, list, depth, season) {
     depth = depth || 0;
     list = list || [];
     if (depth >= 3) return Promise.resolve(list);
-    var EXCL = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
+    var EXCL = Auto115Core.TECH_JUNK_RE;   // v368 统一清洗名单；特典/花絮夹改为下钻（v366 有内容素材约定）
     var subs = list.filter(function (it) { return it && it.cid && !it.fid && !EXCL.test(it.n || it.name || ''); });
     if (!subs.length) return Promise.resolve(list);
     return Promise.all(subs.slice(0, 10).map(function (s) {
-      return auto115ListDir(s.cid).then(function (inner) { return auto115FlattenSubDirs(t, inner, depth + 1); }).catch(function () { return []; });
+      /* v365：穿透时记住「来源季夹」的季号（S01/S02/第二季…），带给夹内文件供 tvPlan 定季，
+         避免多季打平后同集号互相挤占（iOS 同构）；更深层若又出现季夹名则覆盖，否则继承上层 */
+      var ssn = Auto115Core.seasonOfDir(s.n || s.name || '') || season || 0;
+      return auto115ListDir(s.cid).then(function (inner) {
+        var tagged = ssn ? (inner || []).map(function (it) { var o = Object.assign({}, it); o._season = ssn; return o; }) : inner;
+        return auto115FlattenSubDirs(t, tagged, depth + 1, ssn);
+      }).catch(function () { return []; });
     })).then(function (inners) {
       var merged = list.slice();
       inners.forEach(function (inner) { merged = merged.concat(inner || []); });
@@ -1737,7 +1743,7 @@
       var subs = list.filter(function (it) { return it && it.fid && !auto115IsVideoName(it.n || it.name || '') && auto115IsSubtitle(it.n || it.name || ''); });
       t.subInfos = subs.map(function (it) { return { fid: String(it.fid), name: it.n || it.name || '', lang: Auto115Core.subLang(it.n || it.name || '') }; });
       var subFids = (t.subInfos || []).map(function (s) { return s.fid; });
-      var EXCLUDE = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
+      var EXCLUDE = Auto115Core.MOVIE_EXCLUDE_RE;   // 主视频候选宽名单（含花絮/特典）
       var mainCands = vids.filter(function (it) { return !EXCLUDE.test(it.n || it.name || ''); });
       var pool = mainCands.length ? mainCands : vids;
       /* 强信号优先：番号（AV）走归一化子串（番号独特性强）；标题/原始标题走整词边界匹配（v262 修 V2），
@@ -1834,7 +1840,7 @@
           if (dupFids.indexOf(String(it.fid)) >= 0) { delIds.push(String(it.fid)); continue; }      // 重复副本
           if (lowDelFids[String(it.fid)]) { delIds.push(String(it.fid)); continue; }                // 第三档以下清晰度
           if (t.secondVersion && String(it.fid) === t.secondVersion.fid) continue;                  // 次清晰度跟随改名
-          if (auto115IsVideoName(nmz) && !EXCLUDE.test(nmz)) {
+          if (auto115IsVideoName(nmz) && !Auto115Core.TECH_JUNK_RE.test(nmz)) {
             var sz = auto115VidSize(it);
             /* 远小于主视频（< 主视频×20%，夹在 5MB–50MB）→ 大概率是广告/片头 → 删；
                阈值算不出（0）或取不到体积 → 一律保留，不冒险 */
@@ -1845,7 +1851,7 @@
             continue;
           }
           delIds.push(String(it.fid));
-        } else if (it.cid) { if (String(it.cid) !== C115_DEFAULT_DIR_CID && EXCLUDE.test(nmz)) delIds.push(String(it.cid)); }
+        } else if (it.cid) { if (String(it.cid) !== C115_DEFAULT_DIR_CID && Auto115Core.TECH_JUNK_RE.test(nmz)) delIds.push(String(it.cid)); }
       }
       t.keptOtherVideos = keptVids;
       t.keptOthers = keptOthers;

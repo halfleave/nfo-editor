@@ -285,7 +285,39 @@
     return api.looksDvd(t.targetName) ? t.targetName.trim() : api.cleanName(t.targetName);
   };
   api.vidSize = function (it) { return Number(it.s != null ? it.s : it.size) || 0; };
-  api.isVideoName = function (n) { return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm|iso)$/i.test(n || ''); };
+  /* ---------- 清洗漏斗（有序规则表 v368，与 EP_RULES 同章法）----------
+     章法（nfo-plan-naming-rules.md 同款）：从「绝不能留」到「默认保留」分五环判定一个文件：
+       第1环 危险/恶意文件（exe/lnk/scr/zipx…，Cleanuparr 经验：这类文件卡库还带毒）；
+       第2环 技术性杂物视频（sample/预告/trailer/DVD菜单——是视频但没有内容价值）；
+       第3环 字幕白名单；第4环 视频白名单；第5环 其余一切（txt/jpg/nfo/url/压缩包等非内容文件）。
+     返回 'video' | 'sub' | 'junk' | 'other'：video/sub = 内容，参与识别改名，绝不当垃圾删；
+     junk = 立即删除；other = 非内容文件，调用方按各自约定处理（当前两条链都删）。
+     新增清洗规则三步走（同 EP_RULES）：①按环号插表 ②补正反用例 ③check.js 全绿。 */
+  api.TECH_JUNK_RE = /sample|预告|trailer|preview|menu/i;   // 技术性杂物视频名（tvPlan/电影链/打平下钻三处共用）
+  /* 电影链主视频候选排除（宽名单）：花絮/特典/extra/bonus 是有内容素材（v366 约定）不当垃圾删，
+     但也不该参与「哪部是正片」的候选——只用于候选筛选，清洗删除一律用 TECH_JUNK_RE 窄名单 */
+  api.MOVIE_EXCLUDE_RE = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
+  api.CLEAN_RULES = [
+    { ring: 1, note: '危险/恶意扩展（exe/lnk/bat/cmd/scr/msi/zipx——绝不进媒体库）',
+      fn: function (n) { return /\.(exe|lnk|bat|cmd|scr|msi|zipx)$/i.test(n) ? 'junk' : null; } },
+    { ring: 2, note: '技术性杂物视频（sample/预告/trailer/preview/menu——是视频但无内容价值）',
+      fn: function (n) { return (api.isVideoName(n) && api.TECH_JUNK_RE.test(n)) ? 'junk' : null; } },
+    { ring: 3, note: '字幕白名单（srt/ass/ssa/sub/idx/vtt/smi/lrc/sup——蓝光 PGS 补 sup）',
+      fn: function (n) { return api.isSubtitle(n) ? 'sub' : null; } },
+    { ring: 4, note: '视频白名单（常用 12 种 + vob/m2ts/mts/divx/asf/f4v/ogm/mxf/3gp——白名单外的真实视频此前会被误删）',
+      fn: function (n) { return api.isVideoName(n) ? 'video' : null; } },
+    { ring: 5, note: '其余一切非内容文件（txt/jpg/nfo/url/zip…）→ other（非内容，调用方决定去留；当前都删）',
+      fn: function () { return 'other'; } }
+  ];
+  api.fileClass = function (name) {
+    var n = String(name || '');
+    for (var i = 0; i < api.CLEAN_RULES.length; i++){
+      var hit = api.CLEAN_RULES[i].fn(n);
+      if (hit) return hit;
+    }
+    return 'other';
+  };
+  api.isVideoName = function (n) { return /\.(mp4|mkv|avi|rmvb|mov|ts|flv|wmv|m4v|mpg|mpeg|webm|iso|m2ts|mts|vob|divx|asf|f4v|ogm|mxf|3gp)$/i.test(n || ''); };
   /* 清晰度分级：同名影片多版本去歧义用（v263）。命中越高清分越高，认不出 → 0（不参与清晰度比较） */
   api.qualityRank = function (name) {
     var n = String(name || '').toLowerCase();
@@ -353,7 +385,7 @@
     return false;
   };
   /* 字幕扩展名：不含 .txt（说明/压制信息.txt 会被当字幕保留，误伤太多） */
-  api.isSubtitle = function (name) { return /\.(srt|ass|ssa|sub|idx|vtt|smi|lrc)$/i.test(name || ''); };
+  api.isSubtitle = function (name) { return /\.(srt|ass|ssa|sub|idx|vtt|smi|lrc|sup)$/i.test(name || ''); };
   /* 字幕语言：识别中文（简中 zh / 繁中 zt）；无法识别语言 → 仍保留，标记 und（unknown） */
   api.subLang = function (name) {
     var n = (name || '').toLowerCase();
@@ -380,6 +412,32 @@
   };
 
   /* ---------- 剧集（TV）命名与解析 ---------- */
+  /* 特殊集识别（guessit episodeDetails 经验：Bonus/Ova/Omake/Unaired/Special/Pilot 同思路）：
+     番外/特别篇/特别编/SP/OVA/OAD/Omake/Unaired/Pilot/Special——媒体库惯例统一编入第 0 季 S00Exx。
+     只在「无正片集号」时生效；文件名明确写了 SxxEyy 的（如 S00E01.番外）走正常路径。 */
+  api.SPECIAL_EP_RE = /番外|特別篇|特别篇|特别编|特別編|花絮|特典|(^|[^a-z0-9])(sp\d{0,2}|ova|oad|omake|unaired|pilot|special|extras?|bonus)($|[^a-z0-9])/i;
+  api.isSpecialName = function (name) { return api.SPECIAL_EP_RE.test(String(name || '')); };
+  /* 有没有显式 SxxEyy（季.集成对写法）——特殊集让位给它 */
+  var EXPLICIT_SXXEYY_RE = /s\d{1,2}[.\-_ ]?e\d/i;
+  api.hasSxxEyy = function (name) { return EXPLICIT_SXXEYY_RE.test(String(name || '')); };
+  /* 多磁力路径特殊集分配：给无集号的特殊集按序编 S00Exx（避开文件名已显式占用的 S00 槽位）。
+     items: [{name, fid}]；返回与输入同序的数组 [{special:bool, ep:number|null}] */
+  api.specialAssign = function (items) {
+    var used = {};
+    (items || []).forEach(function (it) {
+      var m = /s(\d{1,2})[.\-_ ]?e(\d{1,3})/i.exec(it && it.name || '');
+      if (m && +m[1] === 0) used[+m[2]] = true;
+    });
+    return (items || []).map(function (it) {
+      var nm = (it && it.name) || '';
+      if (api.isSpecialName(nm) && !EXPLICIT_SXXEYY_RE.test(nm)) {
+        var e = 1; while (used[e]) e++;
+        used[e] = true;
+        return { special: true, ep: e };
+      }
+      return { special: false, ep: null };
+    });
+  };
   /* 中文数字 → 阿拉伯数字（支持 零~九十九；纯阿拉伯直接转） */
   api.cnNum = function (s) {
     if (s == null) return null;
@@ -399,6 +457,38 @@
   };
   /* 从文件名解析 {season, episode}（season 默认 1）；认不到集返回 episode:null；什么都不认返回 null */
   var TAIL_DOMAIN_RE = /[\[【(]([^)】\]]*(?:www\.|https?:\/\/|\.com|\.net|\.cc|\.xyz|\.tv|\.me|\.org|\.moe|\.vip|\.club)[^)】\]]*)[\]】)]/i;
+  /* ---------- 集号识别漏斗（有序规则表 v367）----------
+     章法（nfo-plan-naming-rules.md）：从内到外五环，环号越小越标准、越先试——
+       第1环 国际标准写法（SxxEyy / 1x05）；第2环 编号词标准写法（第N集/话、EP、中文范围）；
+       第3环 结构化弱标记（方括号纯数字、数字跟尾巴、纯数字）；第4环 仅季号契约；
+       兜底 = 全不中返回 null（保护：不臆造集号，调用方送未识别夹）。
+     新增规则三步走（写进 AI-COLLAB）：①在表里按环号插一行（ring+note+fn，fn 只依赖 ctx 不看外面）；
+     ②在 tests/auto115-core-test.js「识别漏斗」块补正反用例；③跑 node tools/check.js 全绿才算完。
+     禁止绕过表直接往 episodeOf 里加 if——表本身就是文档，顺序即优先级。 */
+  api.EP_RULES = [
+    { ring: 1, note: 'SxxEyy（国际标准，含 Sxx-Eyy/Sxx.Eyy）',
+      fn: function (c) { var m = c.low.match(/s(\d{1,2})[.\-_ ]?e(\d{1,3})/); return m ? { season: +m[1], episode: +m[2] } : null; } },
+    { ring: 1, note: '1x05（点叉季集，含×）',
+      fn: function (c) { var m = c.low.match(/(\d{1,2})[x×](\d{1,3})/); return m ? { season: +m[1], episode: +m[2] } : null; } },
+    { ring: 2, note: '第N集 / 第N话 / 第N話（编号词，季号供后续弱匹配继承）',
+      fn: function (c) { return c.epCn ? { season: c.season, episode: api.cnNum(c.epCn[1]) || 1 } : null; } },
+    { ring: 2, note: '第01-02集 / 第1~3话（中文范围多集，只认起始集——多集合并改名的已知边界）',
+      fn: function (c) { var m = c.name.match(/第\s*(\d{1,3})\s*[-~～]\s*\d{1,3}\s*[集话話]/); return m ? { season: c.season, episode: +m[1] } : null; } },
+    { ring: 2, note: 'EP05 / E05（编号词前缀；v367 起排在括号规则前——显式编号比方括号更标准）',
+      fn: function (c) { var m = c.low.match(/\b(?:ep|e)(\d{1,3})/); return m ? { season: c.season, episode: +m[1] } : null; } },
+    { ring: 3, note: '[05] / (05)（括号内纯数字整包；年份 4 位不中）',
+      fn: function (c) { var m = c.low.match(/[\[\(](\d{1,3})[\]\)]/); return m ? { season: c.season, episode: +m[1] } : null; } },
+    { ring: 3, note: 'Show - 05 [1080p]（数字紧跟括号限定尾巴；含柯南式 3 位绝对集数，4 位年份不中）',
+      fn: function (c) { var m = c.low.match(/(?:^|[.\-_\s])(0\d{1,2}|[1-9]\d{1,2})(?=\s*[\[\(])/); return m ? { season: c.season, episode: +m[1] } : null; } },
+    { ring: 3, note: 'Show.08.1080p（数字紧跟分辨率；720/1080 本体不中只当集号前导）',
+      fn: function (c) { var m = c.low.match(/(?:^|[.\-_\s])(0\d{1,2}|[1-9]?\d)(?=\.\d{3,4}[pi])/); return m ? { season: c.season, episode: +m[1] } : null; } },
+    { ring: 3, note: '01.ass / 剧名.03.ass（纯数字整体，或末尾独立数字；只认 1~2 位或 0 开头 3 位，避分辨率误判）',
+      fn: function (c) { var m = c.base.match(/^(0\d{1,2}|[1-9]?\d)$/) || c.base.match(/[.\-_\s](0\d{1,2}|[1-9]?\d)$/); return m ? { season: c.season, episode: +m[1] } : null; } },
+    { ring: 3, note: '193.1080p.HD国语…（开头独立数字；数字后必须紧跟分隔符，3~4 位大数不中）',
+      fn: function (c) { var m = c.base.match(/^(0\d{1,2}|[1-9]\d{0,2})[.\-_\s]/); return m ? { season: c.season, episode: +m[1] } : null; } },
+    { ring: 4, note: '仅季号（第N季但全片无集号）→ 保留 {season, episode:null} 契约（调用方按 ep.episode 判空，不臆造集号）',
+      fn: function (c) { return c.seasonCn ? { season: c.season, episode: null } : null; } }
+  ];
   api.episodeOf = function (name) {
     name = String(name || '');
     /* 剥资源站水印尾巴（如 [最新电影www.dyg7.com]）：括号内容含域名特征才剥，最多剥 3 层。
@@ -413,28 +503,21 @@
       else break;   /* 域名括号不在主干末尾（后面还有别的字）→ 不剥，避免误伤正文名 */
     }
     name = stem + ext;
-    var low = name.toLowerCase();
-    var m;
-    m = low.match(/s(\d{1,2})[.\-_ ]?e(\d{1,3})/); if (m) return { season: +m[1], episode: +m[2] };
-    m = low.match(/(\d{1,2})[x×](\d{1,3})/); if (m) return { season: +m[1], episode: +m[2] };
-    m = low.match(/[\[\(](\d{1,3})[\]\)]/); if (m) return { season: 1, episode: +m[1] };
-    m = low.match(/\b(?:ep|e)(\d{1,3})/); if (m) return { season: 1, episode: +m[1] };
-    var seasonCn = name.match(/第\s*([零一二两三四五六七八九十百\d]+)\s*[季部]/);
-    var epCn = name.match(/第\s*([零一二两三四五六七八九十百\d]+)\s*集/);
-    var season = seasonCn ? (api.cnNum(seasonCn[1]) || 1) : 1;
-    if (epCn) return { season: season, episode: api.cnNum(epCn[1]) || 1 };
-    if (seasonCn) return { season: season, episode: null };
-    /* 纯数字 / 末尾独立数字：01.ass、02.srt、剧名.03.ass → 直接当集号。
-       只认 1~2 位数字、或以 0 开头的 3 位数字（001/012），避开 720/1080 这类分辨率误判成集号。 */
-    var base = name.replace(/\.[a-z0-9]+$/i, '').trim();
-    var mn = base.match(/^(0\d{1,2}|[1-9]?\d)$/);
-    if (mn) return { season: 1, episode: +mn[1] };
-    mn = base.match(/[.\-_\s](0\d{1,2}|[1-9]?\d)$/);
-    if (mn) return { season: 1, episode: +mn[1] };
-    /* 开头独立数字兜底：193.1080p.HD国语中字…（集号开头+水印尾巴）→ 第 193 集。
-       数字后必须紧跟分隔符（「720p」后是字母不中）；只认 1~2 位或 0 开头 3 位（1080/1997 等 3~4 位大数不中）。 */
-    mn = base.match(/^(0\d{1,2}|[1-9]\d{0,2})[.\-_\s]/);
-    if (mn) return { season: 1, episode: +mn[1] };
+    /* 规则表统一入口：预处理只做一次（水印剥离/大小写/中文季集预解析/去扩展名主干），
+       各条规则 fn 只认 ctx，互不依赖执行副作用。 */
+    var ctx = {
+      name: name,
+      low: name.toLowerCase(),
+      base: name.replace(/\.[a-z0-9]+$/i, '').trim(),
+      seasonCn: name.match(/第\s*([零一二两三四五六七八九十百\d]+)\s*[季部]/),
+      epCn: name.match(/第\s*([零一二两三四五六七八九十百\d]+)\s*[集话話]/)
+    };
+    /* 此前「第二季.[05]」会因弱匹配默认 season:1 而错标 S01——中文季号预解析后供第 2/3 环继承 */
+    ctx.season = ctx.seasonCn ? (api.cnNum(ctx.seasonCn[1]) || 1) : 1;
+    for (var r = 0; r < api.EP_RULES.length; r++){
+      var hit = api.EP_RULES[r].fn(ctx);
+      if (hit) return hit;
+    }
     return null;
   };
   /* 从文件夹名解析季号（02 / S02 / Season 2 / 第二季 / 某剧S02 → 2）；认不出返回 0。
@@ -471,11 +554,11 @@
     var vids = [], subs = [], junk = [];
     items.forEach(function (it) {
       var nm = it.name || '';
-      if (api.isVideoName(nm)){
-        if (/sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i.test(nm)) junk.push(it);
-        else vids.push(it);
-      }
-      else if (api.isSubtitle(nm)) subs.push(it);
+      /* v368 清洗漏斗统一分类：junk（危险文件/技术杂物视频）删，video/sub 内容保留参与识别，
+         other（txt/jpg/nfo 等非内容文件）也清；视频白名单扩充后 vob/m2ts 等不再被误删 */
+      var fc = api.fileClass(nm);
+      if (fc === 'video') vids.push(it);
+      else if (fc === 'sub') subs.push(it);
       else junk.push(it);
     });
     vids.sort(function (a, b) { return a.name > b.name ? 1 : (a.name < b.name ? -1 : 0); });
@@ -484,18 +567,32 @@
     var occupied = {};
     function take(s, e) { occupied[key(s, e)] = true; }
     function nextEp(s) { var e = 1; while (occupied[key(s, e)]) e++; take(s, e); return e; }
-    var vidPlan = [], unrecognized = [];
-    var effSeason = function (name, s) {
+    var vidPlan = [], unrecognized = [], specials = [];
+    var effSeason = function (name, s, it) {
       /* S00（特别篇）是合法季号，不能被 || 吞成 1——否则特别篇抢占 S01E01、正片反被挤进未识别（探针实测踩中） */
       if (s == null) s = 1;
-      if (dirSeason && s === 1 && !api.explicitSeason(name)) return dirSeason;
+      if (s === 1 && !api.explicitSeason(name)){
+        /* v365：穿透子文件夹收集时带上「来源季夹」的季号（item._season，如 S01/S02 夹）。
+           它比目录级 dirSeason 更具体：三季同集号不再撞车（此前打平后 32 个文件只认出 10 个）。 */
+        if (it && it._season) return it._season;
+        if (dirSeason) return dirSeason;
+      }
       return s;
     };
     vids.forEach(function (it) {
-      var ep = api.episodeOf(it.name);
-      if (ep && ep.episode){ var s = effSeason(it.name, ep.season); if (!occupied[key(s, ep.episode)]){ take(s, ep.episode); vidPlan.push({ fid: it.fid, season: s, ep: ep.episode, orig: it.name, size: it.s || 0 }); return; } }
+      var nm = it.name || '';
+      /* 特殊集（番外/OVA/SP/特别篇…）且没写明 SxxEyy → 统一编入第 0 季 S00Exx（媒体库惯例）。
+         不吃弱集号匹配（如「番外.2.mp4」的 2），避免特别篇误占正片集号槽位 */
+      if (api.isSpecialName(nm) && !api.hasSxxEyy(nm)){ specials.push(it); return; }
+      var ep = api.episodeOf(nm);
+      if (ep && ep.episode){ var s = effSeason(nm, ep.season, it); if (!occupied[key(s, ep.episode)]){ take(s, ep.episode); vidPlan.push({ fid: it.fid, season: s, ep: ep.episode, orig: nm, size: it.s || 0 }); return; } }
       /* 认不出集号的视频：不臆造集号，整条保留原名，后续移入「未识别」文件夹（见 auto115StepTvMoveVideos / PC 对应步骤） */
-      unrecognized.push({ fid: it.fid, name: it.name, orig: it.name, size: it.s || 0 });
+      unrecognized.push({ fid: it.fid, name: nm, orig: nm, size: it.s || 0 });
+    });
+    /* 特殊集按名称顺序排 S00：显式 S00Exx 已占的槽自动跳过（nextEp 从 1 找空位） */
+    specials.forEach(function (it) {
+      var e = nextEp(0);
+      vidPlan.push({ fid: it.fid, season: 0, ep: e, orig: it.name, size: it.s || 0 });
     });
     /* 字幕不做兜底：只有能从文件名里明确认出集号（S01E01 / 第1集 / 01.ass 等）才改名；
        认不出的保持原名不动、仍然保留（绝不进删除清单），避免误配到错误的集。 */
@@ -504,7 +601,7 @@
       var lang = api.subLang(it.name);
       if (!lang){ junk.push(it); return; }
       var ep = api.episodeOf(it.name);
-      if (ep && ep.episode){ var s2 = effSeason(it.name, ep.season); subPlan.push({ fid: it.fid, season: s2, ep: ep.episode, lang: lang, orig: it.name, size: it.s || 0 }); }
+      if (ep && ep.episode){ var s2 = effSeason(it.name, ep.season, it); subPlan.push({ fid: it.fid, season: s2, ep: ep.episode, lang: lang, orig: it.name, size: it.s || 0 }); }
       // 认不出集号 → 不改
     });
     var renames = [];

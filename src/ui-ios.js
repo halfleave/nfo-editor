@@ -3108,7 +3108,7 @@ function auto115StepTvGetItems(t){
       })).then(function(gs){ return list.concat.apply(list, gs); });
     });
   }).then(function(list){
-    return list.map(function(it){ var sz = it.s || 0; return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: sz, size: sz }; }).filter(function(it){ return (it.fid || it.cid) && it.name; });
+    return list.map(function(it){ var sz = it.s || 0; return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: sz, size: sz, _season: it._season || 0 }; }).filter(function(it){ return (it.fid || it.cid) && it.name; });
   });
 }
 function auto115StepTvCleanupFiles(t){
@@ -3380,15 +3380,22 @@ function auto115TvMovePhase(t, stepKey){
    只扫一层会漏掉嵌套的视频/字幕，且顶层有视频时子夹里也可能藏着次清晰度或合集里的其他片子。
    因此无论顶层有没有视频，都下钻子文件夹（最多 3 层、每层最多 10 个夹）把内容合并进工作列表；
    后续保留/删除/改名全部按 fid 操作，不受层级影响。EXCLUDE 名字的子夹（sample/预告…）不下钻。 */
-function auto115FlattenSubDirs(t, list, depth){
+function auto115FlattenSubDirs(t, list, depth, season){
   depth = depth || 0;
   list = list || [];
   if (depth >= 3) return Promise.resolve(list);
-  var EXCL = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
+  var EXCL = Auto115Core.TECH_JUNK_RE;   // v368 统一清洗名单；特典/花絮夹改为下钻（v366 有内容素材约定）
   var subs = list.filter(function(it){ return it && it.cid && !it.fid && !EXCL.test(it.n || it.name || ''); });
   if (!subs.length) return Promise.resolve(list);
   return Promise.all(subs.slice(0, 10).map(function(s){
-    return auto115ListDir(s.cid).then(function(inner){ return auto115FlattenSubDirs(t, inner, depth + 1); }).catch(function(){ return []; });
+    /* v365：穿透时记住「来源季夹」的季号（S01/S02/第二季…），带给夹内文件供 tvPlan 定季，
+       避免多季打平后同集号互相挤占（此前刺客伍六七 S01~S03 打平，32 个文件只认出 10 个）；
+       更深层若又出现季夹名则覆盖（更具体），否则继承上层 */
+    var ssn = Auto115Core.seasonOfDir(s.n || s.name || '') || season || 0;
+    return auto115ListDir(s.cid).then(function(inner){
+      var tagged = ssn ? (inner || []).map(function(it){ var o = Object.assign({}, it); o._season = ssn; return o; }) : inner;
+      return auto115FlattenSubDirs(t, tagged, depth + 1, ssn);
+    }).catch(function(){ return []; });
   })).then(function(inners){
     var merged = list.slice();
     inners.forEach(function(inner){ merged = merged.concat(inner || []); });
@@ -3545,8 +3552,8 @@ function auto115StepMove(t){
     var subs = list.filter(function(it){ return it && it.fid && !auto115IsVideoName(it.n || it.name || '') && auto115IsSubtitle(it.n || it.name || ''); });
     t.subInfos = subs.map(function(it){ return { fid: String(it.fid), name: it.n || it.name || '', lang: Auto115Core.subLang(it.n || it.name || '') }; });
     var subFids = (t.subInfos || []).map(function(s){ return s.fid; });
-    // 排除明显非正片（sample/预告/特典/花絮等），不参与主视频候选
-    var EXCLUDE = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
+    // 排除明显非正片（宽名单 core.MOVIE_EXCLUDE_RE：含花絮/特典），不参与主视频候选
+    var EXCLUDE = Auto115Core.MOVIE_EXCLUDE_RE;
     var mainCands = vids.filter(function(it){ return !EXCLUDE.test(it.n || it.name || ''); });
     var pool = mainCands.length ? mainCands : vids;
     // 强信号优先：番号（AV）走归一化子串（番号独特性强）；标题/原始标题（影片）走整词边界匹配（v262 修 V2），
@@ -3654,7 +3661,7 @@ function auto115StepMove(t){
         if (dupFids.indexOf(String(it.fid)) >= 0){ delIds.push(String(it.fid)); continue; }   // 判重出的重复副本 → 删
         if (lowDelFids[String(it.fid)]){ delIds.push(String(it.fid)); continue; }             // 第三档及以下清晰度 → 删（最多保留两个清晰度）
         if (t.secondVersion && String(it.fid) === t.secondVersion.fid) continue;               // 次清晰度版本跟随改名，不算其他视频
-        if (auto115IsVideoName(nmz) && !EXCLUDE.test(nmz)){
+        if (auto115IsVideoName(nmz) && !Auto115Core.TECH_JUNK_RE.test(nmz)){
           var sz = auto115VidSize(it);
           // 远小于主视频（< 主视频×20%，夹在 5MB–50MB）→ 大概率是广告/片头/水印片 → 删；
           // 阈值算不出来（0）或取不到体积 → 一律保留，不冒险
@@ -3667,7 +3674,7 @@ function auto115StepMove(t){
         }
         delIds.push(String(it.fid));
       }
-      else if (it.cid){ if (String(it.cid) !== C115_DEFAULT_DIR_CID && EXCLUDE.test(nmz)) delIds.push(String(it.cid)); }
+      else if (it.cid){ if (String(it.cid) !== C115_DEFAULT_DIR_CID && Auto115Core.TECH_JUNK_RE.test(nmz)) delIds.push(String(it.cid)); }
     }
     t.keptOtherVideos = keptVids;
     t.keptOthers = keptOthers;
@@ -4407,10 +4414,13 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
         }
         return s;
       };
+      /* 特殊集（番外/OVA/SP…）无集号 → S00Exx：specialAssign 单点在 core，与 tvPlan 同规则 */
+      var spAsg = Auto115Core.specialAssign(ms.map(function(m){ return { fid: m.fid, name: m.origName || m.dirName || m.offlineName || '' }; }));
       var seasons = {}, vids = 0, unrec = 0;
-      ms.forEach(function(m){
+      ms.forEach(function(m, i){
         var ep = Auto115Core.detectEpisode(m.origName || m.dirName || m.offlineName || '');
         if (ep && ep.episode){ seasons[effSeason(m, ep)] = true; vids++; }
+        else if (spAsg[i].special && m.kind !== 'sub'){ seasons[0] = true; vids++; }
         else unrec++;
       });
       var keys = Object.keys(seasons).map(Number).sort(function(a, b){ return a - b; });
@@ -4426,7 +4436,7 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
       return Promise.all([ensureSeasons, ensureUnrec]).then(function(arr){
         var uncid = arr[1] || null;
         var jobs = [];
-        ms.forEach(function(m){
+        ms.forEach(function(m, i){
           var ep = Auto115Core.detectEpisode(m.origName || m.dirName || m.offlineName || '');
           if (ep && ep.episode){
             var s = effSeason(m, ep), e = ep.episode;
@@ -4440,6 +4450,11 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
               var ext = (/\.[a-z0-9]+$/i.exec(m.origName || '') || ['.mp4'])[0];
               jobs.push({ op: 'move', fid: m.fid, name: base + ext, orig: m.origName, pid: pid });
             }
+          } else if (spAsg[i].special && m.kind !== 'sub'){
+            /* 特殊集：S00Exx（序号在统计阶段已由 specialAssign 定好） */
+            var spExt = (/\.[a-z0-9]+$/i.exec(m.origName || '') || ['.mp4'])[0];
+            var spPid = (needSplit && seasonCidMap[0]) ? seasonCidMap[0] : showCid;
+            jobs.push({ op: 'move', fid: m.fid, name: auto115TvDirName(showTitle) + '.S00E' + auto115Pad2(spAsg[i].ep) + spExt, orig: m.origName, pid: spPid });
           } else {
             /* 识别不到集号 → 移入「未识别」夹（无未识别夹时退回剧集根，不改名） */
             jobs.push({ op: 'move', fid: m.fid, name: m.origName, orig: m.origName, pid: uncid || showCid });
@@ -6549,6 +6564,7 @@ function openStillsStream(idx){
   track.innerHTML = html;
   document.getElementById('stillsStreamMask').classList.add('show');
   document.getElementById('stillsStreamModal').classList.add('show');
+  document.documentElement.classList.add('stills-open');
   // 滚动到点击的剧照（顶部留一点黑块间距）
   var target = track.querySelector('img.ss-img[data-idx="' + previewIndex + '"]');
   if (target) track.scrollTop = Math.max(0, target.offsetTop - 8);
@@ -6556,6 +6572,7 @@ function openStillsStream(idx){
 function closeStillsStream(){
   document.getElementById('stillsStreamMask').classList.remove('show');
   document.getElementById('stillsStreamModal').classList.remove('show');
+  document.documentElement.classList.remove('stills-open');
   var track = document.getElementById('stillsStreamTrack');
   if (track){ track.innerHTML = ''; track.onscroll = null; }
 }

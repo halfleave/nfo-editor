@@ -1341,7 +1341,7 @@ const lz4LiteralForTest = (bytes) => {
     'files?cid=D2': { state: true, data: [ { fid: 'V2', n: 'Show.S01E02.mkv', s: 100 } ] },
     'files?cid=D3': { state: true, data: [ { fid: 'V3', n: 'Show.S02E01.mkv', s: 100 } ] },
     'files?cid=D4': { state: true, data: [ { fid: 'V4', n: 'Show.S02E02.mkv', s: 100 } ] },
-    'files?cid=D5': { state: true, data: [ { fid: 'V5', n: 'Extra.Pack.mkv', s: 100 } ] },
+    'files?cid=D5': { state: true, data: [ { fid: 'V5', n: 'Random.Clip.mkv', s: 100 } ] },
     'files/add': () => {
       /* 并发建夹时 NEW+n 序号不确定；改从请求体 cname 推导稳定 cid，让 move 断言可确定性校验 */
       const last = calls[calls.length - 1];
@@ -1357,7 +1357,7 @@ const lz4LiteralForTest = (bytes) => {
     { dirCid: 'D2', dirName: 'Show.S01E02.mkv', state: 'done' },
     { dirCid: 'D3', dirName: 'Show.S02E01.mkv', state: 'done' },
     { dirCid: 'D4', dirName: 'Show.S02E02.mkv', state: 'done' },
-    { dirCid: 'D5', dirName: 'Extra.Pack.mkv',  state: 'done' }   // 识别不到集号 → 进未识别夹
+    { dirCid: 'D5', dirName: 'Random.Clip.mkv',  state: 'done' }   // 识别不到集号 → 进未识别夹（v366 起 Extra 属特殊集走 S00，夹具换真认不出的名字）
   ], steps: ctx.Auto115Core.newSteps('multi', true), createdAt: Date.now() };   // v338：剧集多磁力 = 8 步表
   assert(tTvSplit.steps.length === 8, '剧集多磁力：newSteps(multi, true) = 8 步（含建季夹/移入），实际=' + tTvSplit.steps.length);
   calls.length = 0;

@@ -455,5 +455,77 @@ lpHit = api.locatePlan({ folders: lpDirs([]), files: [], vids: lpFiles(['赌神.
   { mode: 'offline', offlineName: '完全不相关的种子名', createdAt: lpNow - lpSlack * 10, slackMs: lpSlack, titles: ['赌神'], itemTime: function () { return 0; } });
 assert(lpHit && lpHit.kind === 'file' && lpHit.item.n === '赌神.1989.mkv', 'locatePlan offline：相似度兜底无夹可选时定位散装视频');
 
+/* v365：来源季夹提示 _season —— 多季穿透打平后同集号不再撞车（用户刺客伍六七 S01~S03 实测踩中） */
+var flat3 = [];
+['01', '02', '03'].forEach(function (n) { flat3.push({ fid: 'a' + n, name: n + '.1080p.HD国语中字无水印[66影视].mp4', _season: 1 }); });
+['01', '02', '03'].forEach(function (n) { flat3.push({ fid: 'b' + n, name: '[' + n + '][最强发型师][AVC][GB][1080P].HD.mp4', _season: 2 }); });
+['01', '02', '03'].forEach(function (n) { flat3.push({ fid: 'c' + n, name: n + '.1080p.HD国语中字无水印[66影视].mp4', _season: 3 }); });
+var flatPlan = api.tvPlan('刺客伍六七', flat3, 0);
+assert(flatPlan.renames.length === 9 && flatPlan.unrecognized.length === 0, 'tvPlan _season：三季打平 9 个文件全部识别（此前只认出 3 个）');
+var flatNames = flatPlan.renames.map(function (r) { return r.name; });
+assert(flatNames.indexOf('刺客伍六七.S01E01.mp4') >= 0 && flatNames.indexOf('刺客伍六七.S02E02.mp4') >= 0 && flatNames.indexOf('刺客伍六七.S03E03.mp4') >= 0, 'tvPlan _season：各自归到正确季');
+var exOver = api.tvPlan('X', [{ fid: 'e', name: 'X.S03E05.mkv', _season: 1 }], 0);
+assert(exOver.renames[0].name === 'X.S03E05.mkv', 'tvPlan _season：文件名显式季号优先于来源季夹');
+var dsFall = api.tvPlan('Y', [{ fid: 'd', name: '05.mkv' }], 2);
+assert(dsFall.renames[0].name === 'Y.S02E05.mkv', 'tvPlan _season：无提示时回退目录级 dirSeason（原行为不变）');
+var dsHint = api.tvPlan('Y', [{ fid: 'd', name: '05.mkv', _season: 3 }], 2);
+assert(dsHint.renames[0].name === 'Y.S03E05.mkv', 'tvPlan _season：来源季夹比目录级 dirSeason 更具体、优先采用');
+
+/* v366：特殊集（番外/OVA/SP/特别篇…）→ S00Exx（guessit episodeDetails 经验，TMDB/媒体库第 0 季惯例） */
+assert(api.isSpecialName('刺客伍六七.番外.1080p.HD.mp4'), 'isSpecialName：番外');
+assert(api.isSpecialName('某剧.SP01.mkv') && api.isSpecialName('[G]某剧 OVA [1080p].mkv') && api.isSpecialName('某剧.OAD.mkv'), 'isSpecialName：SP/OVA/OAD');
+assert(api.isSpecialName('某剧.特别篇.mkv') && api.isSpecialName('某剧.特别编.mkv'), 'isSpecialName：特别篇/特别编');
+assert(!api.isSpecialName('刺客伍六七.第01话.1080p.mkv') && !api.isSpecialName('wasp.2019.1080p.mkv'), 'isSpecialName：正片与含 sp 字母词不误判');
+var spItems = [
+  { fid: 'v1', name: '剧.第01话.1080p.mkv' },
+  { fid: 'v2', name: '剧.第02话.1080p.mkv' },
+  { fid: 'p1', name: 'Show.S00E01.番外前传.mkv' },
+  { fid: 'p2', name: '剧.番外.1080p.HD.mp4' },
+  { fid: 'p3', name: '剧.番外2.mp4' },
+  { fid: 'p4', name: '[G] OVA [1080p].mkv' },
+  { fid: 'p5', name: '剧.SP01.mp4' }
+];
+var spPlan = api.tvPlan('剧名', spItems, 0);
+assert(spPlan.renames.length === 7 && spPlan.unrecognized.length === 0, 'tvPlan 特殊集：7 个全部识别（此前番外/OVA/SP 全落未识别）');
+var spNames = spPlan.renames.map(function (r) { return r.name; });
+assert(spNames.indexOf('剧名.S00E01.mkv') >= 0, 'tvPlan 特殊集：显式 S00E01 保持原编号');
+assert(spNames.indexOf('剧名.S00E02.mkv') >= 0 && spNames.indexOf('剧名.S00E03.mp4') >= 0 && spNames.indexOf('剧名.S00E04.mp4') >= 0 && spNames.indexOf('剧名.S00E05.mp4') >= 0, 'tvPlan 特殊集：无集号番外/OVA/SP 顺延 S00E02~E05');
+assert(spNames.indexOf('剧名.S01E01.mkv') >= 0 && spNames.indexOf('剧名.S01E02.mkv') >= 0, 'tvPlan 特殊集：正片集号不被特殊集挤占');
+assert(api.episodeOf('剧.第01话.mkv').episode === 1 && api.episodeOf('剧.第十二話.mkv').episode === 12, 'episodeOf：中文「话/話」集号');
+assert(JSON.stringify(api.episodeOf('剧.第二季.[05].mkv')) === '{"season":2,"episode":5}', 'episodeOf：中文季号贯通方括号集号（此前误标 S01E05）');
+assert(api.episodeOf('Show - 05 [1080p].mkv').episode === 5 && api.episodeOf('Show.08.1080p.mkv').episode === 8, 'episodeOf：集号后跟括号限定/分辨率尾巴（此前落未识别）');
+assert(api.episodeOf('Show.2013.1080p.mkv') === null && api.episodeOf('2012.2009.1080p.BluRay.mkv') === null, 'episodeOf：年份/电影名不被新模式误判');
+assert(api.episodeOf('第一季.mkv') && api.episodeOf('第一季.mkv').season === 1 && api.episodeOf('第一季.mkv').episode === null, 'episodeOf：仅季号保留 {season, episode:null} 契约');
+var spAsg = api.specialAssign([{ fid: 'a', name: '剧.番外.mkv' }, { fid: 'b', name: '剧.S00E02.mkv' }, { fid: 'c', name: '剧.OVA.mkv' }]);
+assert(spAsg[0].special && spAsg[0].ep === 1 && !spAsg[1].special && spAsg[2].special && spAsg[2].ep === 3, 'specialAssign：跳过显式占用的 S00E02、顺延编号');
+
+/* ---------- 识别漏斗（v367 规则表化）---------- */
+assert(Array.isArray(api.EP_RULES) && api.EP_RULES.length >= 10, 'EP_RULES：规则表存在且条目数合理');
+assert(api.EP_RULES.every(function (r) { return r.ring >= 1 && r.ring <= 4 && r.note && typeof r.fn === 'function'; }), 'EP_RULES：每条规则都带环号/说明/函数');
+var rings = api.EP_RULES.map(function (r) { return r.ring; });
+assert(rings.every(function (v, i) { return i === 0 || v >= rings[i - 1]; }), 'EP_RULES：环号从内到外非递减（顺序即优先级）');
+assert(api.episodeOf('Show.[05].E06.mkv').episode === 6, '漏斗：显式编号词 E06 比方括号 [05] 更内环、优先生效（v367 换序）');
+assert(api.episodeOf('Show (7) ep8.mkv').episode === 8, '漏斗：ep8 同样赢过括号 (7)');
+assert(api.episodeOf('Show.S01E05.[2023].mkv').episode === 5 && api.episodeOf('Show.S01E05.[2023].mkv').season === 1, '漏斗：SxxEyy 最内环，括号年份不影响');
+assert(api.episodeOf('第二季.[05].mkv').season === 2 && api.episodeOf('第二季.[05].mkv').episode === 5, '漏斗：中文季号被弱匹配继承（第2环预解析贯通）');
+assert(api.episodeOf('Show.[05].mkv').episode === 5 && api.episodeOf('Show - 05 [1080p].mkv').episode === 5, '漏斗：第3环弱标记行为不回归');
+assert(api.episodeOf('第一季.mkv').episode === null, '漏斗：第4环仅季号契约保留');
+
+/* ---------- 清洗漏斗（v368 规则表化）---------- */
+assert(Array.isArray(api.CLEAN_RULES) && api.CLEAN_RULES.length === 5, 'CLEAN_RULES：五环规则表存在');
+assert(api.CLEAN_RULES.every(function (r) { return r.ring >= 1 && r.ring <= 5 && r.note && typeof r.fn === 'function'; }), 'CLEAN_RULES：每条带环号/说明/函数');
+(function(){ var rings = api.CLEAN_RULES.map(function (r) { return r.ring; }); assert(rings.every(function (v, i) { return i === 0 || v >= rings[i - 1]; }), 'CLEAN_RULES：环号非递减'); })();
+assert(api.fileClass('说明.lnk') === 'junk' && api.fileClass('setup.exe') === 'junk' && api.fileClass('购盘.zipx') === 'junk', '清洗：危险文件最内环判 junk');
+assert(api.fileClass('sample.mkv') === 'junk' && api.fileClass('预告.mp4') === 'junk' && api.fileClass('DVD.menu.vob') === 'junk', '清洗：sample/预告/菜单视频判 junk');
+assert(api.fileClass('sub.sup') === 'sub' && api.fileClass('E01.srt') === 'sub', '清洗：字幕白名单含 sup');
+['movie.vob','movie.m2ts','clip.mts','film.divx','old.asf','video.f4v','anime.ogm','cam.mxf','phone.3gp'].forEach(function (n) {
+  assert(api.fileClass(n) === 'video', '清洗：真实视频 ' + n + ' 不再被当非内容误删（白名单扩充）');
+});
+assert(api.fileClass('海报.jpg') === 'other' && api.fileClass('说明.txt') === 'other' && api.fileClass('movie.nfo') === 'other', '清洗：非内容文件判 other（调用方决定去留）');
+var tvJunk = api.tvPlan('剧', [{ fid: 'a', name: 'E01.mkv' }, { fid: 'b', name: 'movie.vob' }, { fid: 'c', name: 'sample.mp4' }, { fid: 'd', name: '广告.lnk' }], 0);
+assert(tvJunk.deleteFids.indexOf('c') >= 0 && tvJunk.deleteFids.indexOf('d') >= 0 && tvJunk.deleteFids.indexOf('b') < 0, 'tvPlan：sample/危险文件删、vob 保留');
+assert(api.TECH_JUNK_RE.test('sample') && !api.TECH_JUNK_RE.test('花絮'), '清洗：TECH_JUNK_RE 窄名单不含花絮/特典（v366 约定贯通）');
+assert(api.MOVIE_EXCLUDE_RE.test('花絮') && api.MOVIE_EXCLUDE_RE.test('sample'), '清洗：MOVIE_EXCLUDE_RE 宽名单仅用于主视频候选');
+
 console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ auto115-core 全部通过');
 process.exit(process.exitCode || 0);
