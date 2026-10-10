@@ -51,6 +51,8 @@ try { vm.runInContext(src, ctx, { filename: 'ui-ios.js' }); }
 catch (e) { console.log('LOAD WARN:', e.message); }
 /* 关掉 115 节流闸：本测试按「调用次数」编排响应，任何真实等待都会打乱顺序（改为在独立的节流测试里覆盖） */
 try { vm.runInContext('C115_THROTTLE_ON = false;', ctx); } catch (e) { console.log('[DBG] 节流开关补丁异常:', e.message); }
+/* 网络层失败自动重试的等待压成 0：故意模拟断网的用例立刻拿到第二次（同样失败的）结果，不让真实 3s 拖慢测试 */
+try { vm.runInContext('C115_RETRY_WAIT = 0;', ctx); } catch (e) { console.log('[DBG] 重试等待补丁异常:', e.message); }
 /* 把探测间隔压成 0：自动「首探延迟」在测试里立即触发（生产仍是 5/10/20，见 auto115-core PROBE_GAPS 注释）。
    否则 auto115BeginWait 的真实 5s 首探会让跑完整管线的用例在 15ms drain 窗口内卡在 wait。 */
 try { vm.runInContext('Auto115Core.PROBE_GAPS = [0,0,0];', ctx); } catch (e) { console.log('[DBG] PROBE_GAPS 补丁异常:', e.message); }

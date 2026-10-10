@@ -1136,6 +1136,7 @@ var C115_THROTTLE_ON = true; // 总开关（自动化流程测试会关掉：那
 var C115_T_WRITE = 1200;    // 写操作最小间隔（毫秒）
 var C115_T_READ = 350;      // 读操作最小间隔
 var C115_COOLDOWN = 60000;  // 命中风控后的冷却时长
+var C115_RETRY_WAIT = 3000; // 网络层失败自动重试前的等待（流程测试会压成 0；只重试一次）
 var c115LastAt = 0;         // 上一次请求发起时间
 var c115CooldownUntil = 0;  // 冷却截止时间戳
 var c115Queue = [];
@@ -1223,6 +1224,9 @@ async function c115ProxyFetch(targetUrl, opts){
   }
   var waitMs = c115AdaptiveDelay(); // 仅「连续失败过」才 >0，正常路径为 0
   if (waitMs > 0) await c115Sleep(waitMs);
+  /* 网络层自动重试（v364）：切后台/锁屏/信号瞬断会掐断请求（Safari 报 Load failed），
+     等 C115_RETRY_WAIT 毫秒悄悄重试一次；115 业务报错（有 status）不重试，避免写操作重复执行 */
+  function c115FetchOnce(){
   return fetch(proxyUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1271,6 +1275,11 @@ async function c115ProxyFetch(targetUrl, opts){
     var err = new Error((e && e.message ? e.message : '网络错误') + ' [' + proxyUrl + ']');
     err.network = true; err.url = proxyUrl; err.original = e;
     throw err;
+  });
+  }
+  return c115FetchOnce().catch(function(e){
+    if (e && e.network) return c115Sleep(C115_RETRY_WAIT).then(c115FetchOnce);  // 仅网络层失败重试一次
+    throw e;
   });
 }
 function set115Status(text, type){
@@ -6530,11 +6539,12 @@ function openStillsStream(idx){
   var track = document.getElementById('stillsStreamTrack');
   if (!track) return;
   // 竖向瀑布流：首张上方黑块 + 每张剧照 + 张间黑块（最后一张下方自然也有黑块）
-  var html = '<div class="stills-stream-block"></div>';
+  var html = '<div class="stills-stream-block ss-block-top"></div>';
   for (var i = 0; i < previewList.length; i++){
     html += '<img class="ss-img" data-idx="' + i + '" src="' + escapeAttr(NfoCore.stillDisplayUrl(previewList[i])) +
             '" alt="剧照' + (i + 1) + '" loading="' + (i < 4 ? 'eager' : 'lazy') + '">';
-    html += '<div class="stills-stream-block"></div>';
+    var blockCls = (i === previewList.length - 1) ? 'stills-stream-block ss-block-edge' : 'stills-stream-block';
+    html += '<div class="' + blockCls + '"></div>';
   }
   track.innerHTML = html;
   document.getElementById('stillsStreamMask').classList.add('show');

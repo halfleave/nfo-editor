@@ -39,6 +39,80 @@
   }
   function c115Sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
+  /* ---------- 115 限流闸（v361：PC 镜像手机端 c115Call，防封号三件套）----------
+     ① 串行：所有 115 请求排一条队，任何时刻只有一个在飞（并发本身就是明显特征）；
+     ② 最小间隔：写操作（改名/移动/删除/建夹/导出）默认 1.2s，读操作（列目录/轮询）0.35s；
+     ③ 熔断：一旦 115 回「操作过于频繁 / 系统检测异常」或 HTTP 403/405/429，立刻冷却 60s，
+        期间所有请求自动排队等待 —— 不给「失败后继续猛打」的机会（那正是封号的临界点）。
+     注意是「最小间隔」而非「限速」：距上次调用已超过间隔就立即放行。 */
+  var C115_THROTTLE_ON = true;  // 总开关（保留给隔离测试：真实等待会打乱按调用次数编排的用例）
+  var C115_T_WRITE = 1200;      // 写操作最小间隔（毫秒）
+  var C115_T_READ = 350;        // 读操作最小间隔
+  var C115_COOLDOWN = 60000;    // 命中风控后的冷却时长
+  var C115_RETRY_WAIT = 3000;   // 网络层失败自动重试前的等待（只重试一次）
+  var c115LastAt = 0;           // 上一次请求发起时间
+  var c115CooldownUntil = 0;    // 冷却截止时间戳
+  var c115Queue = [];
+  var c115Busy = false;         // 有请求正在飞
+  var c115RiskHits = 0;         // 本次会话命中风控的次数
+  var c115RiskAt = 0;           // 上次提示时间（30s 内只提示一次，避免刷屏）
+  var C115_WRITE_RE = /files\/(edit|add|move|copy|batch_rename|batch_edit|export_dir)|rb\/delete/;
+  function c115IsWrite(url){ return C115_WRITE_RE.test(String(url || '')); }
+  function c115RiskActive(){ return Date.now() < c115CooldownUntil; }
+  /* PC 页面不加载 tidy-core.js → 软风控文案正则本地副本（与 tidy-core RISK_RE 保持一致） */
+  var C115_RISK_RE = /(过于频繁|操作频繁|请求频繁|频繁|检测异常|异常行为|风控|访问受限|稍后再试|暂时无法|请求过多|访问速度过快|系统繁忙|请稍候)/;
+  /* 命中风控 → 冷却 + 提示（30s 内不重复计数/提示） */
+  function c115RiskHit(reason){
+    var now = Date.now();
+    var fresh = (now - c115RiskAt) > 30000;
+    if (fresh){ c115RiskAt = now; c115RiskHits++; }
+    c115CooldownUntil = now + C115_COOLDOWN;
+    if (fresh){
+      var tip = String(reason || '').slice(0, 24);
+      showToast('115 提示「' + tip + '」，已自动暂停 60 秒再继续', 'error');
+    }
+    return fresh;
+  }
+  /* 排队执行：任何时刻只有一个 115 请求在飞，且两次请求之间至少隔 gap（写/读不同）。
+     空闲且无需等待时直接发（微任务里发，不绕 setTimeout），避免给单发请求平白加延迟。 */
+  function c115Call(kind, fn){
+    if (!C115_THROTTLE_ON){
+      try { return Promise.resolve(fn()); } catch (e){ return Promise.reject(e); }
+    }
+    var gap = (kind === 'write') ? C115_T_WRITE : C115_T_READ;
+    var now = Date.now();
+    var wait = Math.max(0, c115LastAt + gap - now, c115CooldownUntil - now);
+    if (!c115Busy && !c115Queue.length && wait <= 0){
+      c115Busy = true; c115LastAt = now;
+      return Promise.resolve().then(fn).then(function (v){
+        c115Busy = false; c115Pump(); return v;
+      }, function (e){
+        c115Busy = false; c115Pump(); throw e;
+      });
+    }
+    return new Promise(function (resolve, reject){
+      c115Queue.push({ kind: kind, run: fn, resolve: resolve, reject: reject });
+      c115Pump();
+    });
+  }
+  function c115Pump(){
+    if (c115Busy || !c115Queue.length) return;
+    c115Busy = true;
+    var job = c115Queue[0];
+    var gap = (job.kind === 'write') ? C115_T_WRITE : C115_T_READ;
+    var now = Date.now();
+    var wait = Math.max(0, c115LastAt + gap - now, c115CooldownUntil - now);
+    setTimeout(function (){
+      c115Queue.shift();
+      c115LastAt = Date.now();
+      Promise.resolve().then(job.run).then(function (v){
+        c115Busy = false; c115Pump(); job.resolve(v);
+      }, function (e){
+        c115Busy = false; c115Pump(); job.reject(e);
+      });
+    }, wait > 0 ? wait + Math.floor(Math.random() * 180) : 0);
+  }
+
   async function c115ProxyFetch(targetUrl, opts) {
     opts = opts || {};
     var base = c115ProxyBase();
@@ -55,8 +129,14 @@
       if (opts.headers && opts.headers['Content-Type']) form += '&ct=' + encodeURIComponent(opts.headers['Content-Type']);
       if (opts.b64) form += '&b64=1';
     }
-    var waitMs = c115AdaptiveDelay();
-    if (waitMs > 0) await c115Sleep(waitMs);
+    /* 限流闸（v361）：写/读分流，全站一条队；软风控文案 + HTTP 403/405/429 触发熔断冷却 */
+    return c115Call(c115IsWrite(targetUrl) ? 'write' : 'read', function () {
+      var waitMs = c115AdaptiveDelay();
+      var pre = waitMs > 0 ? c115Sleep(waitMs) : Promise.resolve();
+      return pre.then(function () {
+        /* 网络层自动重试（v364）：切后台/锁屏/信号瞬断掐断请求（Load failed）→ 等待后重试一次；
+           115 业务报错（有 status）不重试，避免写操作重复执行 */
+        function c115FetchOnce(){
     return fetch(proxyUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -72,7 +152,14 @@
       return r.text().then(function (txt) {
         var d = {};
         try { d = JSON.parse(txt); } catch (_) { d = { raw: txt.slice(0, 300) }; }
+        /* 115 的「软风控」是 HTTP 200 + {state:false,error:"操作过于频繁…"} —— 必须单独识别，
+           否则会被当成一条普通失败吞掉，然后继续猛打（那才是真正会被封号的动作） */
+        if (d && d.state === false){
+          var msg = String(d.error || d.msg || d.message || '');
+          if (msg && C115_RISK_RE.test(msg)) c115RiskHit(msg);
+        }
         if (!r.ok) {
+          if (r.status === 403 || r.status === 405 || r.status === 429) c115RiskHit('HTTP ' + r.status);
           var errMsg = d && d.error ? d.error : ('HTTP ' + r.status);
           if (d && d.debug) errMsg += ' | ' + JSON.stringify(d.debug);
           var err = new Error(errMsg); err.status = r.status; err.body = txt.slice(0, 300); err.data = d;
@@ -86,7 +173,14 @@
       var err = new Error((e && e.message ? e.message : '网络错误') + ' [' + proxyUrl + ']');
       err.network = true; err.url = proxyUrl; err.original = e;
       throw err;
+      });
+      }
+      return c115FetchOnce().catch(function (e) {
+        if (e && e.network) return c115Sleep(C115_RETRY_WAIT).then(c115FetchOnce);  // 仅网络层失败重试一次
+        throw e;
+      });
     });
+  });
   }
 
   /* ---------- 加密辅助（Web Crypto） ---------- */
@@ -2566,7 +2660,16 @@
     addUploadTask: auto115AddUploadTask,
     clearDone: auto115ClearDone,
     offline: c115Offline,
-    refreshBadge: pc115UpdateBadge
+    refreshBadge: pc115UpdateBadge,
+    /* 限流闸测试钩子（仅供隔离测试用；下划线前缀=非业务 API） */
+    _gate: {
+      call: c115Call,
+      isWrite: c115IsWrite,
+      riskHit: c115RiskHit,
+      riskActive: c115RiskActive,
+      setThrottle: function (v){ C115_THROTTLE_ON = !!v; },
+      snap: function (){ return { lastAt: c115LastAt, cooldownUntil: c115CooldownUntil, queued: c115Queue.length, busy: c115Busy, riskHits: c115RiskHits }; }
+    }
   };
 
 })(window);
