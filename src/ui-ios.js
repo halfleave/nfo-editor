@@ -8918,6 +8918,11 @@ function renderFilmDetail(film){
   el2.style.display = tags.length ? '' : 'none';
   // 播放预告按钮：后端 /meta 已带回真实 DMM 预览 mp4（d.trailer）则应用内播放；没有则禁用，绝不回退外跳 missav
   currentDetailTrailer = (typeof d.trailer === 'string' && d.trailer) ? d.trailer : '';   // 仅接受字符串；后端若误回非字符串（如 {}）一律当无预告片处理，杜绝 YouTube 误弹窗
+  // 预告片改走 Worker 流式代理：DMM/R18 CDN 手机直连会被墙或 TLS 失败（2026-10-10 实测 awspv3001.r18.com
+  // ERR_SSL_PROTOCOL_ERROR），且 r18 老域名已半死。包代理后所有播放/外开统一走 /javbus/api/video（Worker 对其豁免配额）
+  if (currentDetailTrailer && isDirectVideoUrl(currentDetailTrailer)){
+    currentDetailTrailer = javbusApiBase() + '/api/video?url=' + encodeURIComponent(currentDetailTrailer);
+  }
   // 播放预告按钮：仅当后端 /meta 真带回可播放的预告片（DMM 动态签名 mp4 或 YouTube ID）时才启用；
   // 没有预告片则禁用并提示「暂无预告片」，绝不显示「播放预告片」却不响应（此前 isAvTrailer 误把无预告片的 AV 也启用，点击无反应）。
   var extBtn = document.getElementById('trailerExtBtn');
