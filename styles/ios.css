@@ -701,9 +701,10 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .stills-stream-mask.show { opacity: 1; pointer-events: auto; }
 .stills-stream-modal { position: fixed; inset: 0; z-index: 721; display: none; background: #000; }
 .stills-stream-modal.show { display: block; }
-.stills-stream-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 100; height: calc(44px + env(safe-area-inset-top)); padding-top: calc(env(safe-area-inset-top) + 20px); display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; box-sizing: border-box; pointer-events: none; }
-.stills-stream-close { pointer-events: auto; width: 36px; height: 36px; border-radius: 50%; border: none; background: rgba(0,0,0,0.5); color: #fff; font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
-.stills-stream-close:active { background: rgba(0,0,0,0.7); }
+.stills-stream-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: calc(var(--sat) + 8px) 12px 8px; display: flex; align-items: flex-start; justify-content: flex-start; box-sizing: border-box; pointer-events: none; }
+.stills-stream-close { pointer-events: auto; width: 44px; height: 44px; border-radius: 50%; border: none; background: rgba(255,255,255,0.22); backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px); color: #fff; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+.stills-stream-close:active { opacity: .6; }
+.stills-stream-close svg { width: 24px; height: 24px; }
 .stills-stream-track { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; background: #000; scrollbar-width: none; }
 .stills-stream-track::-webkit-scrollbar { display: none; }
 .stills-stream-track img.ss-img { display: block; width: 100%; height: auto; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
