@@ -498,6 +498,23 @@ assert(api.episodeOf('Show.2013.1080p.mkv') === null && api.episodeOf('2012.2009
 assert(api.episodeOf('第一季.mkv') && api.episodeOf('第一季.mkv').season === 1 && api.episodeOf('第一季.mkv').episode === null, 'episodeOf：仅季号保留 {season, episode:null} 契约');
 var spAsg = api.specialAssign([{ fid: 'a', name: '剧.番外.mkv' }, { fid: 'b', name: '剧.S00E02.mkv' }, { fid: 'c', name: '剧.OVA.mkv' }]);
 assert(spAsg[0].special && spAsg[0].ep === 1 && !spAsg[1].special && spAsg[2].special && spAsg[2].ep === 3, 'specialAssign：跳过显式占用的 S00E02、顺延编号');
+/* v369：PV（宣传视频）补入特殊集（用户真机刺客伍六七 S01 夹 PV 未处理反馈） */
+assert(api.isSpecialName('PV.1080p.HD国语中字无水印[66影视www.66Ys.Co].mp4'), 'PV 开头带水印尾巴 → 特殊集');
+assert(api.isSpecialName('剧.PV01.mkv') && api.isSpecialName('pv2.1080p.mp4'), 'PV01/pv2 各种写法 → 特殊集');
+assert(!api.isSpecialName('pvz实况.mp4') && !api.isSpecialName('Show.EPV05.mkv'), 'pvz/EPV 等 pv 粘连写法不误判');
+var pvPlan = api.tvPlan('刺客伍六七', [{ fid: 'p1', name: '刺客伍六七.S00E01.mp4' }, { fid: 'p2', name: 'PV.1080p.HD国语中字无水印[66影视www.66Ys.Co].mp4' }], 0);
+assert(pvPlan.renames.some(function (r) { return r.name === '刺客伍六七.S00E02.mp4'; }), 'tvPlan：PV 在 S00E01 已占用时顺延编为 S00E02');
+
+/* ---------- v372 动漫 OP/ED 族清洗（用户拍板：直接删不留 S00，VidHub 按 SxxExx 识别）---------- */
+assert(api.ANIME_JUNK_RE.test('NCOP.mkv') && api.ANIME_JUNK_RE.test('NCED2.1080p.mkv') && api.ANIME_JUNK_RE.test('OP1.mp4') && api.ANIME_JUNK_RE.test('ED.mkv') && api.ANIME_JUNK_RE.test('片头曲.mp4') && api.ANIME_JUNK_RE.test('片尾.1080p.mp4'), 'ANIME_JUNK_RE：NCOP/NCED2/OP1/ED/片头曲/片尾 全中');
+assert(!api.ANIME_JUNK_RE.test('Open.mkv') && !api.ANIME_JUNK_RE.test('Red.mkv') && !api.ANIME_JUNK_RE.test('EP01.mkv') && !api.ANIME_JUNK_RE.test('pvz实况.mp4'), 'ANIME_JUNK_RE：Open/Red/EP01/pvz 粘连词不误伤');
+var opPlan = api.tvPlan('剧', [{ fid: 'a', name: '第01话.mkv' }, { fid: 'b', name: 'NCOP.mkv' }, { fid: 'c', name: 'OP1.mp4' }, { fid: 'd', name: '片尾.mp4' }], 0);
+assert(opPlan.deleteFids.length === 3 && opPlan.deleteFids.indexOf('b') >= 0 && opPlan.deleteFids.indexOf('c') >= 0 && opPlan.deleteFids.indexOf('d') >= 0, 'tvPlan：OP/ED 族进删除名单');
+assert(opPlan.renames.length === 1 && opPlan.renames[0].fid === 'a', 'tvPlan：正片不受 OP/ED 清洗影响');
+/* v373 顺序修正：集标题里带 Ending/OP 字样但认得出集号的正片不能误删 */
+var epPlan = api.tvPlan('剧', [{ fid: 'a', name: 'Show.EP01.The.Ending.1080p.mkv' }, { fid: 'b', name: 'Show.EP02.The.Opening.1080p.mkv' }, { fid: 'c', name: 'NCOP.mkv' }], 0);
+assert(epPlan.renames.length === 2 && epPlan.renames[0].fid === 'a' && epPlan.renames[1].fid === 'b', 'tvPlan：集标题带 Ending/Opening 的正片保留并正常改名');
+assert(epPlan.deleteFids.length === 1 && epPlan.deleteFids[0] === 'c', 'tvPlan：无集号 NCOP 仍删除');
 
 /* ---------- 识别漏斗（v367 规则表化）---------- */
 assert(Array.isArray(api.EP_RULES) && api.EP_RULES.length >= 10, 'EP_RULES：规则表存在且条目数合理');

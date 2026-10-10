@@ -4418,9 +4418,11 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
       var spAsg = Auto115Core.specialAssign(ms.map(function(m){ return { fid: m.fid, name: m.origName || m.dirName || m.offlineName || '' }; }));
       var seasons = {}, vids = 0, unrec = 0;
       ms.forEach(function(m, i){
-        var ep = Auto115Core.detectEpisode(m.origName || m.dirName || m.offlineName || '');
+        var nm0 = m.origName || m.dirName || m.offlineName || '';
+        var ep = Auto115Core.detectEpisode(nm0);
         if (ep && ep.episode){ seasons[effSeason(m, ep)] = true; vids++; }
         else if (spAsg[i].special && m.kind !== 'sub'){ seasons[0] = true; vids++; }
+        else if (m.kind !== 'sub' && Auto115Core.ANIME_JUNK_RE.test(nm0)){ /* v372：OP/ED 族直接删，不计未识别（不建空夹） */ }
         else unrec++;
       });
       var keys = Object.keys(seasons).map(Number).sort(function(a, b){ return a - b; });
@@ -4455,10 +4457,13 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
             var spExt = (/\.[a-z0-9]+$/i.exec(m.origName || '') || ['.mp4'])[0];
             var spPid = (needSplit && seasonCidMap[0]) ? seasonCidMap[0] : showCid;
             jobs.push({ op: 'move', fid: m.fid, name: auto115TvDirName(showTitle) + '.S00E' + auto115Pad2(spAsg[i].ep) + spExt, orig: m.origName, pid: spPid });
-          } else {
-            /* 识别不到集号 → 移入「未识别」夹（无未识别夹时退回剧集根，不改名） */
-            jobs.push({ op: 'move', fid: m.fid, name: m.origName, orig: m.origName, pid: uncid || showCid });
-          }
+        } else if (m.kind !== 'sub' && Auto115Core.ANIME_JUNK_RE.test(m.origName || m.dirName || m.offlineName || '')){
+          /* v372：动漫 OP/ED 族（NCOP/NCED/OP/ED/片头/片尾…）直接删——与 tvPlan 同规则（VidHub 按 SxxExx 识别，无集号 OP/ED 不保留） */
+          jobs.push({ op: 'del', fid: m.fid, name: m.origName, orig: m.origName, pid: m.dirCid || showCid });
+        } else {
+          /* 识别不到集号 → 移入「未识别」夹（无未识别夹时退回剧集根，不改名） */
+          jobs.push({ op: 'move', fid: m.fid, name: m.origName, orig: m.origName, pid: uncid || showCid });
+        }
         });
         return jobs;
       });
@@ -7357,14 +7362,58 @@ function searchJAV(){
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   fetchJavbusSearch(q, box);
 }
+/* FC2 番号归一：FC2-PPV-123 / FC2PPV123 / FC2-123 / FC2 123 → '123'；裸数字(5-10位)也按 FC2；非 FC2 返回 '' */
+function fc2Num(q){
+  var s = (q || '').trim();
+  var m = /^fc2[-_ ]?(?:ppv)?[-_ ]?(\d{3,10})$/i.exec(s);
+  if (m) return m[1];
+  if (/^\d{5,10}$/.test(s)) return s;
+  return '';
+}
+/* FC2 专用搜索链（javbus 搜不到 FC2PPV，实测确认）：番号分流到 javbus-scraper /api/fc2/search
+   （fc2ppvdb 双域直查 + 站内搜索 best-effort）→ 空结果再直查 /api/meta（getFc2Meta 级联 + DMM 兜底） */
+function fetchFc2Search(num, box, jbCode){
+  var base = javbusApiBase();
+  var url = base + '/api/fc2/search?keyword=' + encodeURIComponent(num) + (jbCode || '') + '&_=' + Date.now();
+  fetch(url, { cache: 'no-store' })
+    .then(function(r){
+      if (!r.ok) {
+        return r.text().then(function(txt){
+          var msg = txt || ('HTTP ' + r.status);
+          try { var j = JSON.parse(txt); if (j && j.error) msg = j.error + ' (HTTP ' + r.status + ')'; } catch (e) {}
+          throw new Error(msg);
+        });
+      }
+      return r.json();
+    })
+    .then(function(res){
+      if (res && res.error){ box.innerHTML = '<div class="tmdb-msg">FC2 出错：' + escapeHtml(res.error) + '</div>'; return; }
+      var movies = (res && res.movies) || [];
+      if (movies.length){ renderJavbusResults(movies, box); return; }
+      fetch(base + '/api/meta?dvd_id=' + encodeURIComponent('FC2-' + num) + (jbCode || '') + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
+          else box.innerHTML = '<div class="tmdb-msg">未找到：FC2-' + escapeHtml(num) + '</div>';
+        })
+        .catch(function () { box.innerHTML = '<div class="tmdb-msg">未找到：FC2-' + escapeHtml(num) + '</div>'; });
+    })
+    .catch(function(e){
+      box.innerHTML = '<div class="tmdb-msg">FC2 出错：' + escapeHtml((e && e.message) ? e.message : '未知错误') + '</div>';
+    }).finally(function(){ stopLoadingRotator(); });
+}
 /* JavBus 搜索（仅 JavBus，无 R18 兜底）：关键词/番号 → 列表 */
 function fetchJavbusSearch(q, box){
   var base = javbusApiBase();
-  // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
-  var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
   /* 与 115/AI 整理一致：把已填的激活码拼到 Worker 请求上，让 jav 搜索走个人配额桶，
      否则一律走匿名桶（15 次/天），填了激活码的用户搜满后会被拦截成「未找到」 */
   var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
+  /* FC2 番号分流：javbus 搜不到 FC2PPV，一律走 FC2 专用链（fc2ppvdb） */
+  var fc2n = fc2Num(q);
+  if (fc2n){ fetchFc2Search(fc2n, box, jbCode); return; }
+  // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
+  // （javbus-scraper 已做双区互备：当前区 0 结果自动补搜另一区）
+  var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
   var url = base + path + '?keyword=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now();
   fetch(url, { cache: 'no-store' })
     .then(function(r){

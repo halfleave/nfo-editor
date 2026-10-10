@@ -294,6 +294,12 @@
      junk = 立即删除；other = 非内容文件，调用方按各自约定处理（当前两条链都删）。
      新增清洗规则三步走（同 EP_RULES）：①按环号插表 ②补正反用例 ③check.js 全绿。 */
   api.TECH_JUNK_RE = /sample|预告|trailer|preview|menu/i;   // 技术性杂物视频名（tvPlan/电影链/打平下钻三处共用）
+  /* 剧集链专属：动漫 OP/ED 族清洗（v372，用户拍板：直接删、不留 S00——VidHub 等媒体库按 SxxExx 识别，
+     无集号 OP/ED 占 S00 槽没有意义；AniDB 的 C 集编号（s00e1xx）没有媒体库认，实现无价值）。
+     命中：NCOP/NCED/OP/OP1/ED/ED2/Opening/Ending/片头（曲）/片尾（曲）；只在 tvPlan（剧集链）生效，
+     电影链不用（电影没有 OP/ED，裸 ED 边界在电影名里有理论误判面）。
+     防误伤：op/ed 粘连字母不中（Open/EP01/Red/pvz——前后必须是非字母数字边界）。 */
+  api.ANIME_JUNK_RE = /(^|[^a-z0-9])(ncop\d{0,2}|nced\d{0,2}|op\d{0,2}|ed\d{0,2}|opening|ending|片头曲?|片尾曲?)($|[^a-z0-9])/i;
   /* 电影链主视频候选排除（宽名单）：花絮/特典/extra/bonus 是有内容素材（v366 约定）不当垃圾删，
      但也不该参与「哪部是正片」的候选——只用于候选筛选，清洗删除一律用 TECH_JUNK_RE 窄名单 */
   api.MOVIE_EXCLUDE_RE = /sample|预告|trailer|preview|特典|extra|花絮|menu|bonus/i;
@@ -413,9 +419,10 @@
 
   /* ---------- 剧集（TV）命名与解析 ---------- */
   /* 特殊集识别（guessit episodeDetails 经验：Bonus/Ova/Omake/Unaired/Special/Pilot 同思路）：
-     番外/特别篇/特别编/SP/OVA/OAD/Omake/Unaired/Pilot/Special——媒体库惯例统一编入第 0 季 S00Exx。
-     只在「无正片集号」时生效；文件名明确写了 SxxEyy 的（如 S00E01.番外）走正常路径。 */
-  api.SPECIAL_EP_RE = /番外|特別篇|特别篇|特别编|特別編|花絮|特典|(^|[^a-z0-9])(sp\d{0,2}|ova|oad|omake|unaired|pilot|special|extras?|bonus)($|[^a-z0-9])/i;
+     番外/特别篇/特别编/SP/OVA/OAD/Omake/Unaired/Pilot/Special/PV——媒体库惯例统一编入第 0 季 S00Exx。
+     PV=宣传视频（动漫资源常见，v369 用户真机反馈补入）。只在「无正片集号」时生效；
+     文件名明确写了 SxxEyy 的（如 S00E01.番外）走正常路径。 */
+  api.SPECIAL_EP_RE = /番外|特別篇|特别篇|特别编|特別編|花絮|特典|(^|[^a-z0-9])(sp\d{0,2}|ova|oad|omake|unaired|pilot|special|extras?|bonus|pv\d{0,2})($|[^a-z0-9])/i;
   api.isSpecialName = function (name) { return api.SPECIAL_EP_RE.test(String(name || '')); };
   /* 有没有显式 SxxEyy（季.集成对写法）——特殊集让位给它 */
   var EXPLICIT_SXXEYY_RE = /s\d{1,2}[.\-_ ]?e\d/i;
@@ -557,7 +564,14 @@
       /* v368 清洗漏斗统一分类：junk（危险文件/技术杂物视频）删，video/sub 内容保留参与识别，
          other（txt/jpg/nfo 等非内容文件）也清；视频白名单扩充后 vob/m2ts 等不再被误删 */
       var fc = api.fileClass(nm);
-      if (fc === 'video') vids.push(it);
+      if (fc === 'video'){
+        /* v372：动漫 OP/ED 族（NCOP/NCED/OP1/ED2/片头/片尾）直接删——用户拍板不留 S00（VidHub 按 SxxExx 识别）。
+           只在此处判定、不进 fileClass：电影链共用 fileClass，裸 ED 边界对电影正片有误删风险。
+           v373 顺序修正：只清「认不出集号」的 OP/ED——Show.EP01.The.Ending.1080p 这类集标题里
+           带 Ending/OP 字样的正片不能误删（先问 episodeOf，认得出集号就保留） */
+        if (api.ANIME_JUNK_RE.test(nm) && !api.episodeOf(nm)) junk.push(it);
+        else vids.push(it);
+      }
       else if (fc === 'sub') subs.push(it);
       else junk.push(it);
     });

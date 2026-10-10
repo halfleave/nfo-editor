@@ -1342,6 +1342,7 @@ const lz4LiteralForTest = (bytes) => {
     'files?cid=D3': { state: true, data: [ { fid: 'V3', n: 'Show.S02E01.mkv', s: 100 } ] },
     'files?cid=D4': { state: true, data: [ { fid: 'V4', n: 'Show.S02E02.mkv', s: 100 } ] },
     'files?cid=D5': { state: true, data: [ { fid: 'V5', n: 'Random.Clip.mkv', s: 100 } ] },
+    'files?cid=D6': { state: true, data: [ { fid: 'V6', n: 'NCOP.mkv', s: 100 } ] },
     'files/add': () => {
       /* 并发建夹时 NEW+n 序号不确定；改从请求体 cname 推导稳定 cid，让 move 断言可确定性校验 */
       const last = calls[calls.length - 1];
@@ -1357,7 +1358,8 @@ const lz4LiteralForTest = (bytes) => {
     { dirCid: 'D2', dirName: 'Show.S01E02.mkv', state: 'done' },
     { dirCid: 'D3', dirName: 'Show.S02E01.mkv', state: 'done' },
     { dirCid: 'D4', dirName: 'Show.S02E02.mkv', state: 'done' },
-    { dirCid: 'D5', dirName: 'Random.Clip.mkv',  state: 'done' }   // 识别不到集号 → 进未识别夹（v366 起 Extra 属特殊集走 S00，夹具换真认不出的名字）
+    { dirCid: 'D5', dirName: 'Random.Clip.mkv',  state: 'done' },  // 识别不到集号 → 进未识别夹（v366 起 Extra 属特殊集走 S00，夹具换真认不出的名字）
+    { dirCid: 'D6', dirName: 'NCOP.mkv',         state: 'done' }   // v372：OP/ED 族 → 直接删，不进未识别夹
   ], steps: ctx.Auto115Core.newSteps('multi', true), createdAt: Date.now() };   // v338：剧集多磁力 = 8 步表
   assert(tTvSplit.steps.length === 8, '剧集多磁力：newSteps(multi, true) = 8 步（含建季夹/移入），实际=' + tTvSplit.steps.length);
   calls.length = 0;
@@ -1365,6 +1367,11 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115GetStep(tTvSplit, 'mkdir2').state === 'ok', '剧集多磁力·分季：mkdir2 = ok（' + ctx.auto115GetStep(tTvSplit, 'mkdir2').msg + '）');
   assert(ctx.auto115GetStep(tTvSplit, 'rename').state === 'ok', '剧集多磁力·分季：rename = ok');
   assert(ctx.auto115GetStep(tTvSplit, 'move2').state === 'ok', '剧集多磁力·分季：move2 = ok（' + ctx.auto115GetStep(tTvSplit, 'move2').msg + '）');
+  /* v372：NCOP 进删除作业（rb/delete 含 V6），且不进移入名单 */
+  const opDelBodies = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(opDelBodies.some(b => b.indexOf('V6') >= 0), '剧集多磁力·分季：NCOP 走删除作业（rb/delete 含 V6）');
+  const opMoveBodies = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+  assert(!opMoveBodies.some(b => b.indexOf('V6') >= 0), '剧集多磁力·分季：NCOP 不进移入名单');
   /* v338 幽灵补步修复：status() 高频读取不得往任务上 append 缺失步骤 */
   const stepsBeforeGhost = tTvSplit.steps.length;
   for (let gi = 0; gi < 3; gi++) ctx.auto115Status(tTvSplit, ctx.auto115Doc);

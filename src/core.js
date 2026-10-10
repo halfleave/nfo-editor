@@ -1123,12 +1123,57 @@ function applyDetailTint(url, bgEl){
   img.src = url;
 }
 
+/* FC2 番号归一：FC2-PPV-123 / FC2PPV123 / FC2-123 / FC2 123 → '123'；裸数字(5-10位)也按 FC2；非 FC2 返回 '' */
+function fc2Num(q){
+  var s = (q || '').trim();
+  var m = /^fc2[-_ ]?(?:ppv)?[-_ ]?(\d{3,10})$/i.exec(s);
+  if (m) return m[1];
+  if (/^\d{5,10}$/.test(s)) return s;
+  return '';
+}
+/* FC2 专用搜索链（javbus 搜不到 FC2PPV，实测确认）：番号分流到 javbus-scraper /api/fc2/search
+   （fc2ppvdb 双域直查 + 站内搜索 best-effort）→ 空结果再直查 /api/meta（getFc2Meta 级联 + DMM 兜底） */
+function fetchFc2Search(num, box, jbCode){
+  var base = javbusApiBase();
+  var url = base + '/api/fc2/search?keyword=' + encodeURIComponent(num) + (jbCode || '') + '&_=' + Date.now();
+  fetch(url, { cache: 'no-store' })
+    .then(function(r){
+      if (!r.ok) {
+        return r.text().then(function(txt){
+          var msg = txt || ('HTTP ' + r.status);
+          try { var j = JSON.parse(txt); if (j && j.error) msg = j.error + ' (HTTP ' + r.status + ')'; } catch (e) {}
+          throw new Error(msg);
+        });
+      }
+      return r.json();
+    })
+    .then(function(res){
+      if (res && res.error){ box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(res.error) + '</div>'; return; }
+      var movies = (res && res.movies) || [];
+      if (movies.length){ renderJavbusResults(movies, box); return; }
+      fetch(base + '/api/meta?dvd_id=' + encodeURIComponent('FC2-' + num) + (jbCode || '') + '&_=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
+          else box.innerHTML = '<div class="tmdb-msg">未找到：FC2-' + escapeHtml(num) + '</div>';
+        })
+        .catch(function () { box.innerHTML = '<div class="tmdb-msg">未找到：FC2-' + escapeHtml(num) + '</div>'; });
+    })
+    .catch(function(e){
+      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((e && e.message) ? e.message : '未知错误') + '</div>';
+    }).finally(function(){ stopLoadingRotator(); });
+}
+
 function fetchJavbusSearch(q, box){
   var base = javbusApiBase();
-  // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
-  var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
   /* 与 115/AI 整理一致：拼上激活码走个人配额桶；否则走匿名桶（15 次/天），填码用户搜满后被拦成「未找到」 */
   var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
+  /* FC2 番号分流：javbus 搜不到 FC2PPV，一律走 FC2 专用链（fc2ppvdb） */
+  var fc2n = fc2Num(q);
+  if (fc2n){ fetchFc2Search(fc2n, box, jbCode); return; }
+  // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
+  // （javbus-scraper 已做双区互备：当前区 0 结果自动补搜另一区）
+  var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
   var url = base + path + '?keyword=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now();
   NfoCore.quotaInc('javSearch');
   fetch(url, { cache: 'no-store' })
