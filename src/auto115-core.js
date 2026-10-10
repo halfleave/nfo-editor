@@ -375,7 +375,7 @@
   api.stripCollTag = function (name) {
     var raw = String(name || '').trim();
     var s = raw.replace(/[（(]\s*(系列|合集|Collection)\s*[)）]\s*$/i, '')
-               .replace(/\s*(系列|合集|Collection)\s*$/i, '').trim();
+               .replace(/\s*[.。_\-]*(系列|合集|Collection)\s*$/i, '').trim();
     return s || raw;
   };
 

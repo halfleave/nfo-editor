@@ -403,5 +403,57 @@ var vsUp = { type: 'upload', steps: api.newSteps('upload') };
 api.getStep(vsUp, 'wait');   /* 旧数据残留的幽灵 wait */
 assert(api.visibleSteps(vsUp).length === 2 && api.visibleSteps(vsUp)[0].key === 'dir', 'visibleSteps：upload 只显示自己的两步');
 
+/* ---------- v355~v359 统一整理 · 补充用例 ---------- */
+
+/* v359：STEPS_TV_SINGLE 6 步新表（mkdir2/move2 并入 rename 合并节点） */
+assert(api.STEPS_TV_SINGLE.length === 6, '单磁力剧集 6 步新表');
+assert(api.STEPS_TV_SINGLE.map(function (s) { return s.key; }).join(',') === 'submit,wait,mkdir,cleanup,move,rename', '6 步新表键序：无 mkdir2/move2');
+assert(api.STEPS_TV_SINGLE[5].label === '整理改名与归位', '合并节点标签=整理改名与归位');
+assert(api.STEPS_TV.length === 8 && api.STEPS_TV.some(function (s) { return s.key === 'mkdir2'; }) && api.STEPS_TV.some(function (s) { return s.key === 'move2'; }), '8 步旧表保留（剧集多磁力仍用）');
+
+/* v359：newSteps 按任务类型路由步骤表 */
+assert(api.newSteps('tv').length === 6 && api.newSteps('tv').every(function (s) { return s.key !== 'mkdir2' && s.key !== 'move2'; }), "type='tv' 单磁力剧集 → 6 步新表");
+var nsMultiTv = api.newSteps('multi', true);
+assert(nsMultiTv.length === 8 && nsMultiTv[5].key === 'mkdir2' && nsMultiTv[7].key === 'move2', "type='multi'+剧集 → 8 步旧表（建季夹/移入是真节点）");
+assert(api.newSteps('multi', false).length === 6, "type='multi'+电影 → multi 6 步");
+assert(api.newSteps(undefined, true).length === 6, '存量无 type + isTv → 6 步新表');
+assert(api.newSteps('offline', false)[3].key === 'cleanup' && api.newSteps('offline', false).length === 6, 'offline 电影表不受影响（6 步键序不变）');
+
+/* v359：status 大状态在 6 步表上的表现 */
+var s6fail = { steps: api.newSteps('tv', true) };
+api.getStep(s6fail, 'rename').state = 'fail';
+assert(api.status(s6fail, true).cls === 'ab-fail', '6 步表 rename 失败 → 红色失败态');
+var s6run = { steps: api.newSteps('tv', true) };
+api.getStep(s6run, 'submit').state = 'ok';
+api.getStep(s6run, 'wait').state = 'ok';
+api.getStep(s6run, 'mkdir').state = 'ok';
+api.getStep(s6run, 'cleanup').state = 'ok';
+api.getStep(s6run, 'rename').state = 'running';
+assert(api.status(s6run, true).text === '整理中 · 修改视频名称' || api.status(s6run, true).cls === 'ab-run', '6 步表 rename 运行中 → 整理中态（共享键回退主表标签）');
+var s6done = { steps: api.newSteps('tv', true) };
+['submit', 'wait', 'mkdir', 'cleanup', 'move', 'rename'].forEach(function (k) { api.getStep(s6done, k).state = 'ok'; });
+assert(api.status(s6done, true).text === '已完成', '6 步表全 ok → 已完成');
+assert(api.visibleSteps(s6run).length === 6 && api.visibleSteps(s6run)[5].key === 'rename', 'visibleSteps：进行中显示到 running 步（前缀切片含中间 idle 的 move，共 6 项）');
+
+/* v359：旧 8 步任务（存量/多磁力）状态不受影响 */
+var s8old = { steps: api.newSteps('multi', true) };
+api.getStep(s8old, 'mkdir2').state = 'running';
+assert(api.status(s8old, true).text === '整理中 · 新建季文件夹', '存量 8 步任务 mkdir2 running → 正常显示');
+
+/* v352：stripCollTag 合集夹名剥尾巴 */
+assert(api.stripCollTag('警察学校系列') === '警察学校', 'stripCollTag：剥「系列」尾巴');
+assert(api.stripCollTag('警察学校（系列）') === '警察学校', 'stripCollTag：剥全角括号（系列）');
+assert(api.stripCollTag('警察学校(合集)') === '警察学校', 'stripCollTag：剥半角括号(合集)');
+assert(api.stripCollTag('The.Godfather.Collection') === 'The.Godfather', 'stripCollTag：剥 Collection（不区分大小写）');
+assert(api.stripCollTag('复仇者联盟4系列') === '复仇者联盟4', 'stripCollTag：数字+系列尾巴照剥');
+assert(api.stripCollTag('赌神') === '赌神', 'stripCollTag：无尾巴原样返回');
+assert(api.stripCollTag('系列') === '系列', 'stripCollTag：剥完为空退回原名');
+assert(api.stripCollTag('') === '', 'stripCollTag：空入空出');
+
+/* v355：locatePlan offline 兜底只有散装视频时选文件 */
+lpHit = api.locatePlan({ folders: lpDirs([]), files: [], vids: lpFiles(['赌神.1989.mkv']) },
+  { mode: 'offline', offlineName: '完全不相关的种子名', createdAt: lpNow - lpSlack * 10, slackMs: lpSlack, titles: ['赌神'], itemTime: function () { return 0; } });
+assert(lpHit && lpHit.kind === 'file' && lpHit.item.n === '赌神.1989.mkv', 'locatePlan offline：相似度兜底无夹可选时定位散装视频');
+
 console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ auto115-core 全部通过');
 process.exit(process.exitCode || 0);
