@@ -3001,30 +3001,74 @@ function auto115LooksDvd(s){ return Auto115Core.looksDvd(s); }
 function auto115CleanName(s){ return Auto115Core.cleanName(s); }
 function auto115ExternalBaseName(t){ return Auto115Core.externalBaseName(t); }
 function auto115VidSize(it){ return Auto115Core.vidSize(it); }
-function auto115ApplyRenames(t, jobs, targetCid, mode){
+function auto115ApplyRenames(t, jobs, targetCid, mode, opts){
   /* mode（v338）：null = 移动+改名合并执行（电影多磁力）；'rename' = 只改名（剧集多磁力改名节点）；
-     'move' = 只移动（剧集多磁力移入节点——改名不改 fid，直接按 job.pid 移进季夹） */
-  return jobs.reduce(function(p, job){
-    if (!job || !job.fid) return p;
-    return p.then(function(){
-      var chain = Promise.resolve();
-      /* 目标父目录：优先用 job.pid（每条任务可带独立父目录，如剧集未识别夹），否则用统一的 targetCid */
-      var pid = job.pid || targetCid;
-      if (mode !== 'rename' && pid){
-        chain = chain.then(function(){ return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(job.fid) + '&pid=' + encodeURIComponent(pid)); });
-      }
-      /* 只移动模式：跳过改名 */
-      if (mode === 'move') return chain;
-      /* 文件名已符合规则（目标名 === 当前名）→ 跳过改名请求（move 照常执行） */
-      if (job.orig != null && job.orig === job.name) return chain;
-      return chain.then(function(){
-        return auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(job.fid) + '&file_name=' + encodeURIComponent(job.name));
-      }).then(function(res){
-        var d = res.d || {};
-        if (!(res.ok && (d.state === true || d.errno === 0))) throw new Error('改名失败');
+     'move' = 只移动（剧集多磁力移入节点——改名不改 fid，直接按 job.pid 移进季夹）
+     v383 批量提速：旧版逐条 files/edit + files/move，每个请求都吃 c115Call 写节流（1.2s/条），
+     51 个文件要串行一分多钟——这就是整理任务「最后一步改名特别慢」的根源。
+     现改为：移动按目标夹分组批量 files/move（fid 逗号拼，工具箱整理链同款）；改名走
+     files/batch_rename（≤100/批，TidyCore.batchRenameBody/readRenameResult）。
+     N 个文件从 N 次写请求压成「目标夹数 + ⌈N/100⌉」次。批量失败退回旧版逐条兜底，
+     且不再像旧版那样一失败就中止整条链（部分成功也算成功）。
+     视觉进度（用户需求）：每完成一项 auto115Set 回写「正在移动/改名…（n/total）」，
+     节点文案由 opts.step（默认 'rename'）定位。 */
+  opts = opts || {};
+  var stepKey = opts.step || 'rename';
+  var list = (jobs || []).filter(function(j){ return j && j.fid; });
+  if (!list.length) return Promise.resolve();
+  var total = list.length, prog = 0;
+  function tick(msg){ prog++; if (total > 1) auto115Set(t, stepKey, 'running', msg + '…（' + prog + '/' + total + '）'); }
+  var p = Promise.resolve();
+  /* 一阶段：移动（mode!=='rename'）——按目标夹分组，一组一次批量 move */
+  var mvOk = 0, mvFail = 0;
+  if (mode !== 'rename'){
+    var byPid = {};
+    list.forEach(function(j){ var pid = j.pid || targetCid; if (pid) (byPid[pid] = byPid[pid] || []).push(j); });
+    Object.keys(byPid).forEach(function(pid){
+      p = p.then(function(){
+        var g = byPid[pid];
+        return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(g.map(function(j){ return j.fid; }).join(',')) + '&pid=' + encodeURIComponent(pid)).then(function(){
+          mvOk += g.length; g.forEach(function(){ tick('正在移动'); });
+        }, function(){
+          /* 批量移动失败 → 逐条兜底 */
+          return g.reduce(function(cp, j){
+            return cp.then(function(){
+              return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(j.fid) + '&pid=' + encodeURIComponent(pid)).then(function(){ mvOk++; }, function(){ mvFail++; }).then(function(){ tick('正在移动'); });
+            });
+          }, Promise.resolve());
+        });
       });
     });
-  }, Promise.resolve());
+  }
+  /* 二阶段：改名（mode!=='move' 且名字有变化）——⌈N/100⌉ 次批量 batch_rename */
+  if (mode !== 'move'){
+    var rn = list.filter(function(j){ return j.orig == null || j.orig !== j.name; });
+    var okN = 0, failN = 0;
+    TidyCore.chunkPlan(rn, TidyCore.RENAME_BATCH).forEach(function(chunk){
+      p = p.then(function(){
+        return auto115Post('https://webapi.115.com/files/batch_rename', TidyCore.batchRenameBody(chunk)).then(function(res){
+          var r = TidyCore.readRenameResult((res && res.d) || {}, chunk);
+          okN += r.ok; failN += r.fail;
+          for (var i = 0; i < chunk.length; i++) tick('正在改名');
+        }).catch(function(){
+          /* 批量改名失败（网络/风控）→ 退回旧版逐条 files/edit */
+          return chunk.reduce(function(cp, j){
+            return cp.then(function(){
+              return auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(j.fid) + '&file_name=' + encodeURIComponent(j.name)).then(function(res2){
+                var d = res2.d || {};
+                if (res2.ok && (d.state === true || d.errno === 0)) okN++; else failN++;
+              }).catch(function(){ failN++; }).then(function(){ tick('正在改名'); });
+            });
+          }, Promise.resolve());
+        });
+      });
+    });
+    p = p.then(function(){
+      /* 全军覆没才报错（与旧版语义等价）；部分失败静默，节点文案照常收尾 */
+      if (!okN && !mvOk && (failN + mvFail)) throw new Error('改名失败');
+    });
+  }
+  return p;
 }
 
 /* v354 期二：统一执行漏斗。所有整理动作按计划条目 op 分派——
@@ -3056,7 +3100,7 @@ function auto115ExecPlan(t, entries, opts){
     });
   }
   var rest = plan.renames.concat(plan.moves);
-  if (rest.length) chain = chain.then(function(){ return auto115ApplyRenames(t, rest, opts.targetCid, opts.mode); });
+  if (rest.length) chain = chain.then(function(){ return auto115ApplyRenames(t, rest, opts.targetCid, opts.mode, opts); });
   return chain;
 }
 /* v356 期三收口：散装 job（{fid,name,orig,size,pid}）打 op:'move' 标转计划条目，供 ExecPlan 执行 */
@@ -3249,7 +3293,7 @@ function auto115StepTvMkdirSeasons(t){
 }
 /* 把一批已改好名的文件移入目标文件夹：目标里已有同名文件时——大小相同视为同一文件直接跳过，
    大小不同则目标名加 .2 避免撞名。返回 Promise<{moved, skipped}> */
-function auto115MoveInto(t, jobs, targetCid){
+function auto115MoveInto(t, jobs, targetCid, opts){
   var res = { moved: 0, skipped: 0 };
   return auto115ListDir(targetCid).then(function(list){
     /* 冲突决策（同名同大小跳过 / 不同加 .2）单点实现在 Auto115Core.planMoveJobs */
@@ -3258,7 +3302,7 @@ function auto115MoveInto(t, jobs, targetCid){
     var todo = plan.todo;
     res.moved = todo.length;
     if (!todo.length) return res;
-    return auto115ApplyRenames(t, todo, targetCid).then(function(){ return res; });
+    return auto115ApplyRenames(t, todo, targetCid, undefined, opts).then(function(){ return res; });
   });
 }
 /* 剧集临时夹里的「遗留文件」：tvPlan 认不出集号但被保留的视频/字幕（v256 起不删不改名）。
@@ -3316,7 +3360,7 @@ function auto115TvMovePhase(t, stepKey){
     unrecPromise = auto115EnsureDir(rootCid, Auto115Core.UNRECOGNIZED_DIR).then(function(uncid){
       if (!uncid) return null;
       var jobs = plan.unrecognized.map(function(u){ return { fid: u.fid, name: u.name, orig: u.orig || u.name, size: u.size }; });
-      return auto115MoveInto(t, jobs, uncid);
+      return auto115MoveInto(t, jobs, uncid, { step: stepKey });
     }).catch(function(){ return null; });
   }
   return unrecPromise.then(function(){
@@ -3338,7 +3382,7 @@ function auto115TvMovePhase(t, stepKey){
       return Promise.resolve(null);
     }
     var flatJobs = plan.renames.map(function(r){ return { fid: r.fid, name: r.name, orig: r.name, size: r.size }; });
-    return auto115MoveInto(t, flatJobs, flatTarget).then(function(res){
+    return auto115MoveInto(t, flatJobs, flatTarget, { step: stepKey }).then(function(res){
       /* moved=0：文件本来就都在剧集根（原地改名后同名同大小被跳过）→ 换个说法避免误导 */
       auto115Set(t, stepKey, 'ok', res.moved
         ? ('已把 ' + res.moved + ' 个文件放到「' + flatName + '」' + (res.skipped ? ('（跳过 ' + res.skipped + ' 个已存在的相同文件）') : ''))
@@ -3374,7 +3418,7 @@ function auto115TvMovePhase(t, stepKey){
   var p = Promise.resolve();
   seasonKeys.forEach(function(s){
     p = p.then(function(){
-      return auto115MoveInto(t, bySeason[s], map[s]).then(function(res){ moved += res.moved; skipped += res.skipped; });
+      return auto115MoveInto(t, bySeason[s], map[s], { step: stepKey }).then(function(res){ moved += res.moved; skipped += res.skipped; });
     });
   });
   return p.then(function(){
@@ -4325,8 +4369,8 @@ function auto115StepMove2Multi(t){
   auto115Set(t, 'move2', 'running', '正在移入对应季文件夹…');
   return auto115MultiPlan(t).then(function(plan){
     if (!plan || !plan.jobs.length){ auto115Set(t, 'move2', 'ok', '没有需要移动的文件'); auto115Finish(t); return null; }
-    /* v354 期二：移入统一走 ExecPlan（mode='move'，按 job.pid 移进季夹） */
-    return auto115ExecPlan(t, plan.jobs, { mode: 'move' }).then(function(){
+    /* v354 期二：移入统一走 ExecPlan（mode='move'，按 job.pid 移进季夹）；step 指向本节点防进度串台 */
+    return auto115ExecPlan(t, plan.jobs, { mode: 'move', step: 'move2' }).then(function(){
       var srcDirs = plan.ms2.filter(function(m){ return m._srcDirCid; }).map(function(m){ return m._srcDirCid; });
       return auto115MultiCleanEmptyDirs(srcDirs).then(function(){
         auto115Set(t, 'move2', 'ok', '已移入 ' + plan.jobs.length + ' 个文件');

@@ -41,6 +41,7 @@ ctx.loadFilm = noop; ctx.copyText = noop;
 vm.createContext(ctx);
 
 try { vm.runInContext(fs.readFileSync(SRC + 'auto115-core.js', 'utf8'), ctx, { filename: 'auto115-core.js' }); } catch (e) { console.log('[DBG] core 加载异常:', e.message); }
+try { vm.runInContext(fs.readFileSync(SRC + 'tidy-core.js', 'utf8'), ctx, { filename: 'tidy-core.js' }); } catch (e) { console.log('[DBG] tidy-core 加载异常:', e.message); } /* v383: auto115.js 批量改名依赖 TidyCore */
 try { vm.runInContext(fs.readFileSync(SRC + 'auto115.js', 'utf8'), ctx, { filename: 'auto115.js' }); }
 catch (e) { console.log('LOAD WARN:', e.message); }
 

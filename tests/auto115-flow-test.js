@@ -45,8 +45,11 @@ const noop = function(){ return {}; };
 ctx.NfoCore = new Proxy({ isAvFilm: (f) => !!(f && f.data && f.data.dvdId) }, { get: (t, k) => (k in t ? t[k] : noop) });
 ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx;
 vm.createContext(ctx);
-/* 先加载真实 Auto115Core（纯逻辑单点真相），再加载 ui-ios.js —— 后者的纯函数均转发 core */
+/* 先加载真实 Auto115Core（纯逻辑单点真相），再加载 ui-ios.js —— 后者的纯函数均转发 core；
+   tidy-core.js（v383 起 auto115ApplyRenames 批量改名依赖 TidyCore）同样加载真实实现 */
+const tidySrc = fs.readFileSync(SRC_DIR + 'tidy-core.js', 'utf8');
 vm.runInContext(coreSrc, ctx, { filename: 'auto115-core.js' });
+try { vm.runInContext(tidySrc, ctx, { filename: 'tidy-core.js' }); } catch (e) { console.log('[DBG] tidy-core 加载异常:', e.message); }
 try { vm.runInContext(src, ctx, { filename: 'ui-ios.js' }); }
 catch (e) { console.log('LOAD WARN:', e.message); }
 /* 关掉 115 节流闸：本测试按「调用次数」编排响应，任何真实等待都会打乱顺序（改为在独立的节流测试里覆盖） */
@@ -79,6 +82,15 @@ let script = {};
 let calls = [];
 ctx.c115ProxyFetch = async function (url, opts) {
   calls.push({ url, body: opts && opts.body, opts });
+  /* v383：改名改走批量接口 files/batch_rename（body 形如 files_new_name[F1]=X&…）。
+     这里把一条批量请求展开成 N 条旧版 files/edit 形状的记录（fid=F1&file_name=X），
+     既有「改名断言查 files/edit body」的用例无需逐条改写；计数断言不受影响（仅追加记录） */
+  if (url.indexOf('files/batch_rename') >= 0 && opts && opts.body){
+    decodeURIComponent(opts.body).split('&').forEach(function(kv){
+      const m = kv.match(/^files_new_name\[(.+?)\]=(.*)$/);
+      if (m) calls.push({ url: 'https://webapi.115.com/files/edit', body: 'fid=' + m[1] + '&file_name=' + m[2], synthetic: true });
+    });
+  }
   const hit = Object.keys(script).find(k => url.indexOf(k) >= 0);
   const r = hit ? script[hit] : { state: true };
   let d = typeof r === 'function' ? r(calls.filter(c => c.url === url).length, url, opts || {}) : r;
@@ -352,7 +364,8 @@ const lz4LiteralForTest = (bytes) => {
   await ctx.auto115StepRename(tqual);
   assert(ctx.auto115GetStep(tqual, 'rename').state === 'ok', '多清晰度：rename = ok（' + ctx.auto115GetStep(tqual, 'rename').msg + '）');
   const renQ = calls.filter(c => c.url.indexOf('files/edit') >= 0 || c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
-  assert(renQ.some(b => b.indexOf('fid=Q2') >= 0), '多清晰度：720p（Q2）跟随改名/搬出（有对应 files 请求）');
+  /* v383：move 改批量后 body 是 fid=Q1,Q2 逗号列表，用边界匹配代替前缀匹配 */
+  assert(renQ.some(b => /fid=[^&]*\bQ2\b/.test(b)), '多清晰度：720p（Q2）跟随改名/搬出（有对应 files 请求）');
   doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
 
   /* 2i. 改名追加清晰度（v263）：原文件名带 1080p → 平铺改名 赌神.1989.1080p.mp4 */
@@ -818,7 +831,8 @@ const lz4LiteralForTest = (bytes) => {
   await ctx.auto115StepCleanup(ttot);
   assert(ctx.auto115GetStep(ttot, 'rename').state === 'ok' && ctx.auto115GetStep(ttot, 'rename').msg.indexOf('已把 3 个文件') >= 0, '古战场传奇：2 季不足阈值不分季，嵌在老季夹里的 3 个文件搬到剧集根（' + ctx.auto115GetStep(ttot, 'rename').msg + '）');
   const otMoves = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
-  assert(otMoves.every(b => b.indexOf('pid=DIROT') >= 0) && ['O1', 'O2', 'O3'].every(f => otMoves.some(b => b.indexOf('fid=' + f) >= 0)), '古战场传奇：O1/O2/O3 全部移入「古战场传奇」根');
+  /* v383：move 批量化后 fid 是逗号列表，用边界匹配核对每个文件都在清单里 */
+  assert(otMoves.every(b => b.indexOf('pid=DIROT') >= 0) && ['O1', 'O2', 'O3'].every(f => otMoves.some(b => new RegExp('fid=[^&]*\\b' + f + '\\b').test(b))), '古战场传奇：O1/O2/O3 全部移入「古战场传奇」根');
   const otDels = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(otDels.some(b => b.indexOf('pid=DIROT') >= 0 && b.indexOf('OTS1') >= 0) && otDels.some(b => b.indexOf('pid=DIROT') >= 0 && b.indexOf('OTS2') >= 0), '古战场传奇：搬空的老季夹 OTS1/OTS2 被删除');
   ctx.auto115Doc.type = 'movie'; ctx.auto115Doc.filmTitle = '测试影片'; ctx.auto115Doc.dvdId = 'IPX-486';

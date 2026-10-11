@@ -1172,28 +1172,66 @@
   function auto115VidSize(it) { return Auto115Core.vidSize(it); }
   /* v356 期三收口：与 iOS 同构——补 mode 参数（null=移动+改名合并 / 'rename' 只改名 / 'move' 只移动）
      与逐条 job.pid（优先于 targetCid）。此前 PC 不认 pid，合集归夹靠 targetCid 兜底，现在语义一致。 */
-  function auto115ApplyRenames(t, jobs, targetCid, mode) {
-    return jobs.reduce(function (p, job) {
-      if (!job || !job.fid) return p;
-      return p.then(function () {
-        var chain = Promise.resolve();
-        /* 目标父目录：优先用 job.pid（每条任务可带独立父目录，如季夹/合集夹），否则用统一的 targetCid */
-        var pid = job.pid || targetCid;
-        if (mode !== 'rename' && pid) {
-          chain = chain.then(function () { return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(job.fid) + '&pid=' + encodeURIComponent(pid)); });
-        }
-        /* 只移动模式：跳过改名 */
-        if (mode === 'move') return chain;
-        /* 文件名已符合规则（目标名 === 当前名）→ 跳过改名请求（move 照常执行） */
-        if (job.orig != null && job.orig === job.name) return chain;
-        return chain.then(function () {
-          return auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(job.fid) + '&file_name=' + encodeURIComponent(job.name));
-        }).then(function (res) {
-          var d = res.d || {};
-          if (!(res.ok && (d.state === true || d.errno === 0))) throw new Error('改名失败');
+  function auto115ApplyRenames(t, jobs, targetCid, mode, opts) {
+    /* mode（v338）：null = 移动+改名合并执行 / 'rename' = 只改名 / 'move' = 只移动
+       v383 批量提速（iOS 镜像）：旧版逐条 files/edit + files/move，每个请求都吃写节流（1.2s/条），
+       N 个文件串行 N×1.2s——「最后一步改名特别慢」的根源。现改为：移动按目标夹分组批量
+       files/move（fid 逗号拼）；改名走 files/batch_rename（≤100/批，TidyCore.batchRenameBody/
+       readRenameResult，tidy-core.js 已在 PC html 挂载）。批量失败退回旧版逐条兜底，
+       不再一失败中止整条链。进度：每完成一项 auto115Set 回写「正在移动/改名…（n/total）」，
+       节点由 opts.step（默认 'rename'）定位。 */
+    opts = opts || {};
+    var stepKey = opts.step || 'rename';
+    var list = (jobs || []).filter(function (j) { return j && j.fid; });
+    if (!list.length) return Promise.resolve();
+    var total = list.length, prog = 0;
+    function tick(msg) { prog++; if (total > 1) auto115Set(t, stepKey, 'running', msg + '…（' + prog + '/' + total + '）'); }
+    var p = Promise.resolve();
+    var mvOk = 0, mvFail = 0;
+    if (mode !== 'rename') {
+      var byPid = {};
+      list.forEach(function (j) { var pid = j.pid || targetCid; if (pid) (byPid[pid] = byPid[pid] || []).push(j); });
+      Object.keys(byPid).forEach(function (pid) {
+        p = p.then(function () {
+          var g = byPid[pid];
+          return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(g.map(function (j) { return j.fid; }).join(',')) + '&pid=' + encodeURIComponent(pid)).then(function () {
+            mvOk += g.length; g.forEach(function () { tick('正在移动'); });
+          }, function () {
+            return g.reduce(function (cp, j) {
+              return cp.then(function () {
+                return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(j.fid) + '&pid=' + encodeURIComponent(pid)).then(function () { mvOk++; }, function () { mvFail++; }).then(function () { tick('正在移动'); });
+              });
+            }, Promise.resolve());
+          });
         });
       });
-    }, Promise.resolve());
+    }
+    if (mode !== 'move') {
+      var rn = list.filter(function (j) { return j.orig == null || j.orig !== j.name; });
+      var okN = 0, failN = 0;
+      TidyCore.chunkPlan(rn, TidyCore.RENAME_BATCH).forEach(function (chunk) {
+        p = p.then(function () {
+          return auto115Post('https://webapi.115.com/files/batch_rename', TidyCore.batchRenameBody(chunk)).then(function (res) {
+            var r = TidyCore.readRenameResult((res && res.d) || {}, chunk);
+            okN += r.ok; failN += r.fail;
+            for (var i = 0; i < chunk.length; i++) tick('正在改名');
+          }).catch(function () {
+            return chunk.reduce(function (cp, j) {
+              return cp.then(function () {
+                return auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(j.fid) + '&file_name=' + encodeURIComponent(j.name)).then(function (res2) {
+                  var d = res2.d || {};
+                  if (res2.ok && (d.state === true || d.errno === 0)) okN++; else failN++;
+                }).catch(function () { failN++; }).then(function () { tick('正在改名'); });
+              });
+            }, Promise.resolve());
+          });
+        });
+      });
+      p = p.then(function () {
+        if (!okN && !mvOk && (failN + mvFail)) throw new Error('改名失败');
+      });
+    }
+    return p;
   }
   /* v354 期二（iOS 镜像）：统一执行漏斗。计划条目 op 分派——mkdir → EnsureDir；del → DeleteBatch（按 pid 分组）；
      rename/move → ApplyRenames（PC 版暂无 mode 参数，targetCid 直传；PC 无多磁力链）。 */
@@ -1221,7 +1259,7 @@
       });
     }
     var rest = plan.renames.concat(plan.moves);
-    if (rest.length) chain = chain.then(function () { return auto115ApplyRenames(t, rest, opts.targetCid, opts.mode); });
+    if (rest.length) chain = chain.then(function () { return auto115ApplyRenames(t, rest, opts.targetCid, opts.mode, opts); });
     return chain;
   }
   /* v356 期三收口：散装 job（{fid,name,orig,size,pid}）打 op:'move' 标转计划条目，供 ExecPlan 执行（iOS 镜像） */
@@ -1411,7 +1449,7 @@
   }
   /* 把一批已改好名的文件移入目标文件夹：目标里已有同名文件时——大小相同视为同一文件直接跳过，
      大小不同则目标名加 .2 避免撞名。返回 Promise<{moved, skipped}> */
-  function auto115MoveInto(t, jobs, targetCid){
+  function auto115MoveInto(t, jobs, targetCid, opts){
     var res = { moved: 0, skipped: 0 };
     return auto115ListDir(targetCid).then(function (list) {
       /* 冲突决策（同名同大小跳过 / 不同加 .2）单点实现在 Auto115Core.planMoveJobs */
@@ -1420,7 +1458,7 @@
       var todo = plan.todo;
       res.moved = todo.length;
       if (!todo.length) return res;
-      return auto115ApplyRenames(t, todo, targetCid).then(function () { return res; });
+      return auto115ApplyRenames(t, todo, targetCid, undefined, opts).then(function () { return res; });
     });
   }
   function auto115StepTvMoveVideos(t){
@@ -1450,7 +1488,7 @@
       }).then(function (uncid) {
         if (!uncid) return null;
         var jobs = plan.unrecognized.map(function (u) { return { fid: u.fid, name: u.name, orig: u.orig || u.name, size: u.size }; });
-        return auto115MoveInto(t, jobs, uncid);
+        return auto115MoveInto(t, jobs, uncid, { step: stepKey });
       }).catch(function () { return null; });
     }
     return unrecPromise.then(function () {
@@ -1471,7 +1509,7 @@
         return Promise.resolve(null);
       }
       var flatJobs = plan.renames.map(function (r) { return { fid: r.fid, name: r.name, orig: r.name, size: r.size }; });
-      return auto115MoveInto(t, flatJobs, flatTarget).then(function (res) {
+      return auto115MoveInto(t, flatJobs, flatTarget, { step: stepKey }).then(function (res) {
         auto115Set(t, stepKey, 'ok', res.moved
           ? ('已把 ' + res.moved + ' 个文件放到「' + flatName + '」' + (res.skipped ? ('（跳过 ' + res.skipped + ' 个已存在的相同文件）') : ''))
           : ('文件已在「' + flatName + '」内，无需移动' + (res.skipped ? ('（核对 ' + res.skipped + ' 个文件）') : '')));
@@ -1506,7 +1544,7 @@
     var p = Promise.resolve();
     seasonKeys.forEach(function (s) {
       p = p.then(function () {
-        return auto115MoveInto(t, bySeason[s], map[s]).then(function (res) { moved += res.moved; skipped += res.skipped; });
+        return auto115MoveInto(t, bySeason[s], map[s], { step: stepKey }).then(function (res) { moved += res.moved; skipped += res.skipped; });
       });
     });
     return p.then(function () {
