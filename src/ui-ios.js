@@ -6957,11 +6957,15 @@ function resetExpireTimer(id){
     });
   }).catch(function(){ showToast('重置失败，请再试', 'error'); });
 }
+var hiResPool = {};            // 影片id → 高清封面 dataURL：不再整段 base64 塞进 HTML 属性（方案二），渲染字符串瘦身
+var renderOverviewSeq = 0;     // 分帧渲染防串台：新一轮渲染开始后，旧渲染还没铺完的批次自动作废
 function renderOverview(){
   var grid = document.getElementById('overviewGrid');
   var empty = document.getElementById('overviewEmpty');
   if (!grid) return Promise.resolve();
+  var seq = ++renderOverviewSeq;
   return listFilms().then(function(films){
+    if (seq !== renderOverviewSeq) return;
     if (!state.themeHidden) films = films.filter(function(f){ return !isAvFilm(f); });
     else if (state.overviewTab === 'xv') films = films.filter(function(f){ return isAvFilm(f); });
     else films = films.filter(function(f){ return !isAvFilm(f); });
@@ -6971,15 +6975,18 @@ function renderOverview(){
       return;
     }
     empty.style.display = 'none';
-    grid.innerHTML = films.map(function(f){
+    hiResPool = {};
+    /* 单卡 HTML（原内联构建抽出，内容不变） */
+    function ovCardHtml(f){
       var enc = escapeAttr(encodeURIComponent(f.id));
       var subOn = !!(f.data && f.data.hasSubtitle);   // 持久化字幕标记
       var d0 = f.data || {};
       var lightUrl = d0.poster || f.posterDataUrl || '';   // 轻量封面（搜索列表自带的小图）优先秒显
-      var hiRes = f.posterDataUrl || '';                    // 高清大图：后台加载完后替换
+      var hiRes = f.posterDataUrl || '';                    // 高清大图：只进 hiResPool，渲染完由 applyOverviewHiResSwap 后台换图
+      if (hiRes && hiRes !== lightUrl) hiResPool[f.id] = hiRes;
       var posterCls = (isAvFilm(f) && lightUrl) ? 'mc-poster av-poster' : 'mc-poster';
       var poster = lightUrl
-        ? '<div class="' + posterCls + '"' + (hiRes && hiRes !== lightUrl ? ' data-hires="' + escapeAttr(hiRes) + '"' : '') + ' style="background-image:url(' + escapeAttr(lightUrl) + ')">' + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
+        ? '<div class="' + posterCls + '"' + (hiRes && hiRes !== lightUrl ? ' data-hrid="' + enc + '"' : '') + ' style="background-image:url(' + escapeAttr(lightUrl) + ')">' + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
         : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>';
       var hasTrailer = !!(f.data && f.data.trailer);
       var badgeHtml = '';
@@ -6995,20 +7002,44 @@ function renderOverview(){
       // 避免片名含单引号时 escapeAttr 转义破坏 JS 字符串导致点击失效。
       return '<div class="movie-card-wrap" data-id="' + enc + '">'
            + '<div class="movie-card">' + poster + badges + lock + trBadge + expMask + '</div>' + title + '</div>';
-    }).join('');
-    bindOverviewLongPress();
-    applyOverviewPosterCrop();
-    applyOverviewHiResSwap();
+    }
+    /* 分帧渲染（用户拍板「前九个秒出+其余异步加载」）：先铺前 9 张（一屏）立即可见，
+       其余分批异步补齐——整墙卡片一次性 innerHTML 重建是 tab 切换卡顿的主因 */
+    var BATCH = 9, idx = 0;
+    function afterChunk(startIdx){
+      bindOverviewLongPress(startIdx);
+      applyOverviewPosterCrop();
+      applyOverviewHiResSwap();
+    }
+    function nextChunk(){
+      if (seq !== renderOverviewSeq || idx >= films.length) return;
+      var slice = films.slice(idx, idx + BATCH);
+      var startIdx = idx;
+      grid.insertAdjacentHTML('beforeend', slice.map(ovCardHtml).join(''));
+      idx += slice.length;
+      afterChunk(startIdx);
+      if (idx < films.length){
+        // 首批铺完等真正上屏一帧再补后续批（后续批用 0 延时连续铺）
+        if (startIdx === 0) requestAnimationFrame(function(){ setTimeout(nextChunk, 0); });
+        else setTimeout(nextChunk, 0);
+      }
+    }
+    grid.innerHTML = '';
+    nextChunk();
   }).catch(function(){
+    if (seq !== renderOverviewSeq) return;   // 旧渲染的失败不得清掉新一轮内容
     grid.innerHTML = '';
     empty.style.display = '';
   });
 }
-/* 首页 AV 封面方向感知：宽海报裁右半部分使用，竖海报直接使用（复用 cropRightHalfAuto） */
+/* 首页 AV 封面方向感知：宽海报裁右半部分使用，竖海报直接使用（复用 cropRightHalfAuto）；
+   分帧渲染会多次调用，cropDone 标记防同一张重复裁（cropRightHalfAuto 无缓存，重跑就是重复画布开销） */
 function applyOverviewPosterCrop(){
   var nodes = document.querySelectorAll('.mc-poster.av-poster');
   if (!nodes || !nodes.length) return;
   nodes.forEach(function(el){
+    if (el.dataset.cropDone) return;
+    el.dataset.cropDone = '1';
     var bg = el.style.backgroundImage || '';
     var m = bg.match(/url\(["']?([^"')]+)["']?\)/);
     if (!m) return;
@@ -7018,13 +7049,18 @@ function applyOverviewPosterCrop(){
     }).catch(function(){});
   });
 }
-/* 首页封面：轻量图秒显后，后台加载高清 dataURL 并替换（AV 同步重裁右半） */
+/* 首页封面：轻量图秒显后，后台加载高清 dataURL 并替换（AV 同步重裁右半）；
+   高清 dataURL 存 hiResPool（渲染时填充），HTML 里只放 data-hrid 影片id 引用 */
 function applyOverviewHiResSwap(){
-  var nodes = document.querySelectorAll('.mc-poster[data-hires]');
+  var nodes = document.querySelectorAll('.mc-poster[data-hrid]');
   if (!nodes || !nodes.length) return;
   nodes.forEach(function(el){
-    var hr = el.getAttribute('data-hires');
+    if (el.dataset.hrGo) return;   // 分帧多次调用防重复加载
+    var wrap = el.closest('.movie-card-wrap');
+    if (!wrap) return;
+    var hr = hiResPool[decodeURIComponent(wrap.getAttribute('data-id') || '')];
     if (!hr) return;
+    el.dataset.hrGo = '1';
     var setBg = function(u){ el.style.backgroundImage = 'url(' + escapeAttr(u) + ')'; };
     var img = new Image();
     img.onload = function(){
@@ -11519,9 +11555,9 @@ function tbmAbortTask(id){ auto115Abort(id); }
 
 /* —— 概览长按操作：iOS 原生风格底部 Action Sheet —— */
 var overviewSuppressClick = false;
-function bindOverviewLongPress(){
+function bindOverviewLongPress(startIdx){
   var cards = document.querySelectorAll('#overviewGrid .movie-card-wrap');
-  for (var i = 0; i < cards.length; i++){
+  for (var i = (startIdx || 0); i < cards.length; i++){
     (function(card){
       var timer = null, startX = 0, startY = 0, triggered = false;
       function getPoint(e){
