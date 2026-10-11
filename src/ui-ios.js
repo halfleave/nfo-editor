@@ -326,7 +326,9 @@ var CTX_ICONS = {
   unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M7 10V8a5 5 0 0 1 9.9-1"/></svg>',
   /* meta：元数据（NFO 文档）图标——替代原下载箭头，避免「实际是导出元数据」被误读成下载视频 */
   meta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>',
-  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>'
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
+  /* clock：重置清除计时（长按菜单「重置清除」专用，与「刷新」的循环箭头区分开） */
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
 };
 function showContextSheet(title, items, anchor){
   document.getElementById('contextSheetTitle').textContent = title || '操作';
@@ -1650,6 +1652,22 @@ function flushPendingTranslate(id){
     state.pendingTranslateIds.delete(id);
     startFilmTranslation(id); // 此时数据已加载完（silentRefresh 已补存），再翻译标题/简介
   }
+}
+/* 详情页进入兜底翻译（v379 补充）：打开详情发现标题/简介仍是日文、且当前没有翻译在跑/排队/曾失败时，
+   触发一次后台翻译。为何需要：历史上任何漏入翻译队列的路径（如刷新覆盖保存）都会让日文停在原文，
+   此兜底保证「只要用户看到日文就一定会被翻」。防重复三闸：pending/在途跳过（markPendingTranslate 会接管）、
+   曾失败跳过（translateFailedIds，详情页简介下方有「重新翻译」手动按钮兜底）、翻译配置缺失跳过。 */
+function maybeDetailFallbackTranslate(film){
+  try {
+    if (!film || !film.id) return;
+    var id = film.id;
+    if (state.pendingTranslateIds.has(id) || state.translatingInFlight.has(id) || state.translatingIds.has(id)) return;
+    if (state.translateFailedIds.has(id)) return;   // 曾失败：不自动反复重试，走详情页手动「重新翻译」
+    var need = computeTranslateNeed(film);
+    if (!need.title && !need.plot) return;
+    if (!translateConfigReady() && (state.tier || '') !== 'full') return;
+    startFilmTranslation(id);   // 内部再自校验一次（在途不重入/配置把关），失败入 translateFailedIds 并 toast
+  } catch(e) {}
 }
 /* 读取当前应用配置输入（元数据 / 激活码 / AI 翻译）并持久化到 state + IndexedDB（静默，不弹提示） */
 function persistApiSettings(allowClear){
@@ -4366,7 +4384,7 @@ function auto115MultiPenetrate(ms, t){
       var out = [];
       vids.sort(function(a, b){ return (b.s || 0) - (a.s || 0); });
       vids.forEach(function(v){
-        out.push({ kind: 'video', fid: String(v.fid), origName: v.n || v.name || '', dirName: m.dirName, title: m.title, offlineName: m.offlineName, isFolder: false, _srcDirCid: m.dirCid });
+        out.push({ kind: 'video', fid: String(v.fid), origName: v.n || v.name || '', s: v.s || 0, dirName: m.dirName, title: m.title, offlineName: m.offlineName, isFolder: false, _srcDirCid: m.dirCid });
       });
       subs.forEach(function(s){
         out.push({ kind: 'sub', fid: String(s.fid), origName: s.n || s.name || '', dirName: m.dirName, title: m.title, offlineName: m.offlineName, isFolder: false, _srcDirCid: m.dirCid });
@@ -4423,6 +4441,7 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
         if (ep && ep.episode){ seasons[effSeason(m, ep)] = true; vids++; }
         else if (spAsg[i].special && m.kind !== 'sub'){ seasons[0] = true; vids++; }
         else if (m.kind !== 'sub' && Auto115Core.ANIME_JUNK_RE.test(nm0)){ /* v372：OP/ED 族直接删，不计未识别（不建空夹） */ }
+        else if (m.kind !== 'sub' && Auto115Core.isAdPromoVideo(nm0, m.s)){ /* v381：推广广告视频（话术+体积<5MB）直接删，不计未识别 */ }
         else unrec++;
       });
       var keys = Object.keys(seasons).map(Number).sort(function(a, b){ return a - b; });
@@ -4459,6 +4478,9 @@ function auto115ComputeMultiTargets(t, ms, isTv, doc, parts){
             jobs.push({ op: 'move', fid: m.fid, name: auto115TvDirName(showTitle) + '.S00E' + auto115Pad2(spAsg[i].ep) + spExt, orig: m.origName, pid: spPid });
         } else if (m.kind !== 'sub' && Auto115Core.ANIME_JUNK_RE.test(m.origName || m.dirName || m.offlineName || '')){
           /* v372：动漫 OP/ED 族（NCOP/NCED/OP/ED/片头/片尾…）直接删——与 tvPlan 同规则（VidHub 按 SxxExx 识别，无集号 OP/ED 不保留） */
+          jobs.push({ op: 'del', fid: m.fid, name: m.origName, orig: m.origName, pid: m.dirCid || showCid });
+        } else if (m.kind !== 'sub' && Auto115Core.isAdPromoVideo(m.origName || m.dirName || m.offlineName || '', m.s)){
+          /* v381：推广广告视频（「更多XX下载请访问/打包下载」话术+体积<5MB 双条件）直接删——与清理环节同规则 */
           jobs.push({ op: 'del', fid: m.fid, name: m.origName, orig: m.origName, pid: m.dirCid || showCid });
         } else {
           /* 识别不到集号 → 移入「未识别」夹（无未识别夹时退回剧集根，不改名） */
@@ -6915,6 +6937,26 @@ function setWelcome(){
   var wd = ['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
   document.getElementById('datePill').textContent = (now.getMonth() + 1) + '月' + now.getDate() + '日 ' + wd;
 }
+/* 「即将清除」遮罩判定：仅 14d/3d 模式（6h 窗口太短、预警无意义），距清除剩不足 1 天且未锁定；
+   已过期的影片由 clearExpiredFilms 直接删除，等不到遮罩 */
+function isFilmExpiringSoon(f){
+  var ms = (state.autoClear === '14d') ? 14 * 864e5 : (state.autoClear === '3d') ? 3 * 864e5 : 0;
+  if (!ms || f.locked) return false;
+  var remain = (f.updatedAt || 0) + ms - Date.now();
+  return remain > 0 && remain < 864e5;
+}
+/* 长按菜单「重置清除」：仅把 updatedAt 归到当前时间，让清除计时从头再走（14d/3d 模式剩不足 1 天时菜单出现此；
+   注意不是刷新——不做任何网络请求，影片元数据/封面/锁定状态全部原样保留）。重置后遮罩立即消失 */
+function resetExpireTimer(id){
+  loadFilm(id).then(function(film){
+    if (!film) return;
+    film.updatedAt = Date.now();
+    return saveFilm(film).then(function(){
+      showToast('已重置清除计时', 'success');
+      renderOverview();
+    });
+  }).catch(function(){ showToast('重置失败，请再试', 'error'); });
+}
 function renderOverview(){
   var grid = document.getElementById('overviewGrid');
   var empty = document.getElementById('overviewEmpty');
@@ -6946,12 +6988,13 @@ function renderOverview(){
       var badges = badgeHtml ? '<div class="mc-badges">' + badgeHtml + '</div>' : '';
       var lock = f.locked ? '<div class="mc-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V8a6 6 0 1 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/></svg></div>' : '';
       var trBadge = (state.translatingIds && state.translatingIds.has(f.id)) ? '<div class="mc-translating"><span class="tr-spin"></span></div>' : '';
+      var expMask = isFilmExpiringSoon(f) ? '<div class="mc-expire-mask"><span>即将清除该影片</span></div>' : '';
       var cardTitle = (isAvFilm(f) && f.data && f.data.dvdId) ? (f.data.dvdId || '').toUpperCase() : (f.title || f.id);
       var title = '<div class="mc-title">' + escapeHtml(cardTitle) + '</div>';
       // 注意：点击走 addEventListener 绑定（见 bindOverviewLongPress），不在此内联 onclick 嵌入 id，
       // 避免片名含单引号时 escapeAttr 转义破坏 JS 字符串导致点击失效。
       return '<div class="movie-card-wrap" data-id="' + enc + '">'
-           + '<div class="movie-card">' + poster + badges + lock + trBadge + '</div>' + title + '</div>';
+           + '<div class="movie-card">' + poster + badges + lock + trBadge + expMask + '</div>' + title + '</div>';
     }).join('');
     bindOverviewLongPress();
     applyOverviewPosterCrop();
@@ -8039,6 +8082,10 @@ function refreshFromJavbus(film){
       return saveFilm(f).then(function(){
         renderOverview();
         showToast('已从 JavBus 刷新元数据', 'success');
+        /* 刷新覆盖保存后日文标题/简介重新排队翻译：与首次保存同链路（markPendingTranslate 内部
+           已按 metaSource/翻译配置把关，TMDB 来源与无翻译配置时自动跳过），6s 自flush 兜底 +
+           silentRefreshCurrentFilm 的 flushPendingTranslate 双保险 */
+        NfoCore.markPendingTranslate(film.id);
         return imgP;   // 继续等待封面/剧照加载
       }).then(function(){ return silentRefreshCurrentFilm(); });
     })
@@ -8738,6 +8785,7 @@ function openFilmDetail(encId){
     if (!film) return showToast('未找到影片', 'error');
     currentDetailFilmId = film.id;
     renderFilmDetail(film);
+    maybeDetailFallbackTranslate(film);   // 兜底：详情页看到日文且没在翻 → 触发一次后台翻译（翻完自动刷新详情简介）
     switchPage('detail');
     auto115Doc = null;                 // 切影片：重置自动化文档，按新影片重新载入并刷新角标
     auto115EnsureDoc().then(updateAutoBadge).catch(function(){});
@@ -11493,7 +11541,7 @@ function bindOverviewLongPress(){
           loadFilm(id).then(function(film){
             var locked = film && film.locked;
             var isCustom = film && film.source === 'custom';
-            showContextSheet('影片操作', [
+            var sheet = [
               { label: '编辑', icon: 'pencil', onClick: function(){ editReturnToDetail = true; newFilm(); openFilm(encodeURIComponent(id)); } },
               { label: '刷新', icon: 'refresh', onClick: function(){ refreshFilm(id); }, disabled: isCustom },
               { label: '下载元数据', icon: 'meta', onClick: function(){ downloadMetadata(id); } },
@@ -11501,7 +11549,10 @@ function bindOverviewLongPress(){
               { label: '删除', danger: true, onClick: function(){
                   deleteFilm(id).then(function(){ showToast('已删除'); renderOverview(); });
                 } }
-            ], { x: startX, y: startY });
+            ];
+            /* 仅「即将清除」影片出现：重置的是清除计时（updatedAt 归零重来），不刷新影片数据 */
+            if (film && isFilmExpiringSoon(film)) sheet.splice(2, 0, { label: '重置清除', icon: 'clock', onClick: function(){ resetExpireTimer(id); } });
+            showContextSheet('影片操作', sheet, { x: startX, y: startY });
           }).catch(function(){
             showContextSheet('影片操作', [
               { label: '编辑', icon: 'pencil', onClick: function(){ editReturnToDetail = true; newFilm(); openFilm(encodeURIComponent(id)); } },
@@ -12091,6 +12142,11 @@ function bootApp(){
   setupBigTitle();
   setWelcome();
   setInterval(setWelcome, 60000);
+  /* 「即将清除」遮罩定时刷新：跨过「剩 1 天」门槛时列表自动点亮遮罩（仅首页可见时，静默无提示） */
+  setInterval(function(){
+    var g = document.getElementById('overviewGrid');
+    if (g && g.offsetParent) renderOverview();
+  }, 60000);
   renderCountryChips();
   renderGenreChips();
   loadPresets().then(function(){ renderCountryChips(); renderGenreChips(); }).catch(function(){});

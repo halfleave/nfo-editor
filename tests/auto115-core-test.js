@@ -529,11 +529,19 @@ assert(api.episodeOf('Show.[05].mkv').episode === 5 && api.episodeOf('Show - 05 
 assert(api.episodeOf('第一季.mkv').episode === null, '漏斗：第4环仅季号契约保留');
 
 /* ---------- 清洗漏斗（v368 规则表化）---------- */
-assert(Array.isArray(api.CLEAN_RULES) && api.CLEAN_RULES.length === 5, 'CLEAN_RULES：五环规则表存在');
+assert(Array.isArray(api.CLEAN_RULES) && api.CLEAN_RULES.length === 6, 'CLEAN_RULES：六环规则表存在（v381 加推广广告环）');
 assert(api.CLEAN_RULES.every(function (r) { return r.ring >= 1 && r.ring <= 5 && r.note && typeof r.fn === 'function'; }), 'CLEAN_RULES：每条带环号/说明/函数');
 (function(){ var rings = api.CLEAN_RULES.map(function (r) { return r.ring; }); assert(rings.every(function (v, i) { return i === 0 || v >= rings[i - 1]; }), 'CLEAN_RULES：环号非递减'); })();
 assert(api.fileClass('说明.lnk') === 'junk' && api.fileClass('setup.exe') === 'junk' && api.fileClass('购盘.zipx') === 'junk', '清洗：危险文件最内环判 junk');
 assert(api.fileClass('sample.mkv') === 'junk' && api.fileClass('预告.mp4') === 'junk' && api.fileClass('DVD.menu.vob') === 'junk', '清洗：sample/预告/菜单视频判 junk');
+/* v381 推广广告视频：话术 + 体积双条件 */
+var AD1 = '【更多高清剧集下载请访问 www.DDHDTV.com】【更多剧集打包下载请访问 www.DDHDTV.com】.mkv';
+var AD2 = '【更多电视剧集下载请访问 www.DDHDTV.com】【更多剧集打包下载请访问 www.DDHDTV.com】.mkv';
+assert(api.isAdPromoVideo(AD1, 622 * 1024) && api.isAdPromoVideo(AD2, 622 * 1024), '广告识别：DDHDTV 推广话术+小体积命中');
+assert(api.fileClass(AD1, 622 * 1024) === 'junk', '清洗：推广广告视频（话术+<5MB）判 junk');
+assert(api.fileClass(AD1, 500 * 1024 * 1024) === 'video', '清洗：同话术但体积 500MB（大体积有真实内容）保守保留');
+assert(api.fileClass(AD1) === 'video', '清洗：推广话术但未传体积 → 不判广告（不能只根据名称清洗）');
+assert(!api.isAdPromoVideo('[www.ttg.net] 药屋少女的呢喃.S01E01.mkv', 600 * 1024 * 1024) && !api.isAdPromoVideo('药屋少女的呢喃.S01E01.mkv', 600 * 1024 * 1024), '广告识别：发布组站点标签/普通正片不误判');
 assert(api.fileClass('sub.sup') === 'sub' && api.fileClass('E01.srt') === 'sub', '清洗：字幕白名单含 sup');
 ['movie.vob','movie.m2ts','clip.mts','film.divx','old.asf','video.f4v','anime.ogm','cam.mxf','phone.3gp'].forEach(function (n) {
   assert(api.fileClass(n) === 'video', '清洗：真实视频 ' + n + ' 不再被当非内容误删（白名单扩充）');

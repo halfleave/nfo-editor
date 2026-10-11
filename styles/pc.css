@@ -769,6 +769,21 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
 }
 .poster-lock svg { width: 12px; height: 12px; }
 
+/* 即将自动清除：白色半透明遮罩（仅按天清除模式剩不足 1 天时显示，锁定影片除外）——与 iOS 同构 */
+.mc-expire-mask {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: rgba(255,255,255,0.72);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.mc-expire-mask span {
+  font-size: 11px; font-weight: 600; color: #1c1c1e; text-align: center;
+  padding: 3px 8px; border-radius: 8px;
+  background: rgba(255,255,255,0.9);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  line-height: 1.5;
+}
+
 /* hover 浮现的操作条 */
 .poster-actions {
   position: absolute; top: 8px; right: 8px; display: flex; gap: 5px;
@@ -806,6 +821,7 @@ body:not(.theme-hidden) .search-src-seg button[data-source="jav"] { display: non
 }
 .list-row:hover { background: var(--surface-hover); }
 .list-thumb {
+  position: relative;
   width: 48px; height: 72px; flex: 0 0 auto; border-radius: var(--radius-xs);
   overflow: hidden; background: var(--surface-sunken); border: 1px solid var(--border);
 }

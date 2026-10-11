@@ -982,6 +982,19 @@ html.stills-open, html.stills-open body { background: #000; }
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
 .movie-card .mc-lock svg { width: 13px; height: 13px; display: block; }
+/* 即将自动清除：白色半透明遮罩（仅 14d/3d 模式剩不足 1 天时显示，锁定影片除外） */
+.movie-card .mc-expire-mask {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: rgba(255,255,255,0.72);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.movie-card .mc-expire-mask span {
+  font-size: 11px; font-weight: 600; color: #1c1c1e; text-align: center;
+  padding: 4px 9px; border-radius: 9px;
+  background: rgba(255,255,255,0.9);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
 .movie-card .mc-translating {
   position: absolute; top: 6px; right: 6px; z-index: 3;
   width: 22px; height: 22px; border-radius: 50%;

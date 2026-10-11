@@ -561,12 +561,13 @@ function posterCardHtml(f){
   var lock = f.locked ? '<span class="poster-lock">' + ICON.lock + '</span>' : '';
   var title = (f.adult && d.dvdId) ? String(d.dvdId).toUpperCase() : (f.title || f.id);
   var translating = (state.translatingIds && state.translatingIds.has(f.id)) ? '<div class="mc-translating"><span class="tr-spin"></span></div>' : '';
+  var expMask = isFilmExpiringSoon(f) ? '<div class="mc-expire-mask"><span>即将清除该影片</span></div>' : '';
   var bits = [];
   if (d.year || f.year) bits.push(escapeHtml(String(d.year || f.year)));
   if (d.runtime || f.runtime) bits.push(escapeHtml(String(d.runtime || f.runtime)) + ' 分钟');
   var sub = bits.length ? '<div class="poster-sub">' + bits.join('<span class="dot">·</span>') + '</div>' : '';
   return '<div class="poster-card' + (subOn ? ' has-sub' : '') + '" data-id="' + enc + '">'
-       +   '<div class="poster-art">' + art + badges + lock + (subOn ? '<span class="img-sub-badge">字幕</span>' : '') + translating
+       +   '<div class="poster-art">' + art + badges + lock + (subOn ? '<span class="img-sub-badge">字幕</span>' : '') + translating + expMask
        +     '<div class="poster-actions">'
        +       '<button class="pa-btn" data-act="edit" title="编辑">' + CTX_ICONS.pencil + '</button>'
        +       '<button class="pa-btn danger" data-act="del" title="删除">' + CTX_ICONS.trash + '</button>'
@@ -599,8 +600,9 @@ function listRowHtml(f){
   if (runtime) meta.push('<span class="lm-runtime">' + escapeHtml(String(runtime)) + ' 分钟</span>');
   var when = f.updatedAt ? new Date(f.updatedAt).toLocaleDateString('zh-CN') : '';
   var translating = (state.translatingIds && state.translatingIds.has(f.id)) ? '<div class="mc-translating"><span class="tr-spin"></span></div>' : '';
+  var expMask = isFilmExpiringSoon(f) ? '<div class="mc-expire-mask"><span>即将清除该影片</span></div>' : '';
   return '<div class="list-row" data-id="' + enc + '">'
-       +   '<div class="list-thumb">' + thumb + translating + '</div>'
+       +   '<div class="list-thumb">' + thumb + translating + expMask + '</div>'
        +   '<div class="list-main">'
        +     '<div class="list-name">' + escapeHtml(title) + (f.data && f.data.hasSubtitle ? ' <span class="sub-badge sub-badge-sub">字幕</span>' : '') + '</div>'
        +     '<div class="list-desc">' + (plot ? escapeHtml(plot) : '<span class="list-empty">暂无简介</span>') + '</div>'

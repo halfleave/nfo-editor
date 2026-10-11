@@ -294,6 +294,17 @@
      junk = 立即删除；other = 非内容文件，调用方按各自约定处理（当前两条链都删）。
      新增清洗规则三步走（同 EP_RULES）：①按环号插表 ②补正反用例 ③check.js 全绿。 */
   api.TECH_JUNK_RE = /sample|预告|trailer|preview|menu/i;   // 技术性杂物视频名（tvPlan/电影链/打平下钻三处共用）
+  /* 网站推广广告视频（v381，真机实锤：DDHDTV 种子附带的「【更多高清剧集下载请访问 www.xxx.com】…」宣传 mkv，
+     622KB 纯广告）。命中「更多XX下载/下载请访问/打包下载」等推广话术的视频 → 直接删。
+     体积双条件（用户拍板：不能只看名称）：正片一般不会小于 5MB，话术命中 + 体积 <5MB 才判广告——
+     防止万一有正片文件名带相似字样被误删（大体积=有真实内容，保守保留走未识别）。
+     注意：只匹配推广「话术短语」，不匹配裸 www./域名——发布组常把站点名当标签写进文件名（[www.xx.com]片名.mkv），裸匹配会误删正片。 */
+  api.AD_PROMO_RE = /(更多(高清|电视剧?集?|电影|动漫|资源)(打包)?下载|下载请访问|打包下载|请访问\s*www\.|visit\s+(us|www)|download\s+(from|at)\s+www)/i;
+  api.AD_PROMO_MAX_BYTES = 5 * 1024 * 1024;   // 5MB：低于此体积极的推广宣传视频才删
+  api.isAdPromoVideo = function (name, size) {
+    var sz = Number(size) || 0;
+    return api.isVideoName(name) && api.AD_PROMO_RE.test(name) && sz > 0 && sz < api.AD_PROMO_MAX_BYTES;
+  };
   /* 剧集链专属：动漫 OP/ED 族清洗（v372，用户拍板：直接删、不留 S00——VidHub 等媒体库按 SxxExx 识别，
      无集号 OP/ED 占 S00 槽没有意义；AniDB 的 C 集编号（s00e1xx）没有媒体库认，实现无价值）。
      命中：NCOP/NCED/OP/OP1/ED/ED2/Opening/Ending/片头（曲）/片尾（曲）；只在 tvPlan（剧集链）生效，
@@ -308,6 +319,8 @@
       fn: function (n) { return /\.(exe|lnk|bat|cmd|scr|msi|zipx)$/i.test(n) ? 'junk' : null; } },
     { ring: 2, note: '技术性杂物视频（sample/预告/trailer/preview/menu——是视频但无内容价值）',
       fn: function (n) { return (api.isVideoName(n) && api.TECH_JUNK_RE.test(n)) ? 'junk' : null; } },
+    { ring: 2, note: '推广广告视频（「更多XX下载请访问/打包下载」话术 + 体积<5MB 双条件——纯广告无内容，直接删；缺体积/大体积不判，保守保留）',
+      fn: function (n, size) { return api.isAdPromoVideo(n, size) ? 'junk' : null; } },
     { ring: 3, note: '字幕白名单（srt/ass/ssa/sub/idx/vtt/smi/lrc/sup——蓝光 PGS 补 sup）',
       fn: function (n) { return api.isSubtitle(n) ? 'sub' : null; } },
     { ring: 4, note: '视频白名单（常用 12 种 + vob/m2ts/mts/divx/asf/f4v/ogm/mxf/3gp——白名单外的真实视频此前会被误删）',
@@ -315,10 +328,10 @@
     { ring: 5, note: '其余一切非内容文件（txt/jpg/nfo/url/zip…）→ other（非内容，调用方决定去留；当前都删）',
       fn: function () { return 'other'; } }
   ];
-  api.fileClass = function (name) {
+  api.fileClass = function (name, size) {
     var n = String(name || '');
     for (var i = 0; i < api.CLEAN_RULES.length; i++){
-      var hit = api.CLEAN_RULES[i].fn(n);
+      var hit = api.CLEAN_RULES[i].fn(n, size);
       if (hit) return hit;
     }
     return 'other';
@@ -562,8 +575,9 @@
     items.forEach(function (it) {
       var nm = it.name || '';
       /* v368 清洗漏斗统一分类：junk（危险文件/技术杂物视频）删，video/sub 内容保留参与识别，
-         other（txt/jpg/nfo 等非内容文件）也清；视频白名单扩充后 vob/m2ts 等不再被误删 */
-      var fc = api.fileClass(nm);
+         other（txt/jpg/nfo 等非内容文件）也清；视频白名单扩充后 vob/m2ts 等不再被误删。
+         v381：传体积给 fileClass——推广广告视频（话术+体积<5MB 双条件）据此判 junk */
+      var fc = api.fileClass(nm, api.vidSize(it));
       if (fc === 'video'){
         /* v372：动漫 OP/ED 族（NCOP/NCED/OP1/ED2/片头/片尾）直接删——用户拍板不留 S00（VidHub 按 SxxExx 识别）。
            只在此处判定、不进 fileClass：电影链共用 fileClass，裸 ED 边界对电影正片有误删风险。

@@ -1895,6 +1895,16 @@ function clearExpiredFilms(){
   });
 }
 
+/* 「即将清除」遮罩判定（与 iOS isFilmExpiringSoon 同构）：仅按天清除的模式（6h 窗口太短不预警），
+   距清除剩不足 1 天且未锁定；支持 Nd 泛化配置 */
+function isFilmExpiringSoon(f){
+  var dm = /^(\d+)d$/.exec(state.autoClear || '');
+  var ms = dm ? parseInt(dm[1], 10) * 864e5 : 0;
+  if (!ms || f.locked) return false;
+  var remain = (f.updatedAt || 0) + ms - Date.now();
+  return remain > 0 && remain < 864e5;
+}
+
 function parsePhraseText(text){
   text = (text || '').trim();
   // 支持 JSON 数组 或 {"phrases":[...]}
