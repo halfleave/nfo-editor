@@ -1586,6 +1586,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .detail-auto-btn { position: relative; width: 36px; height: 36px; border-radius: 18px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.28); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: none; color: #fff; -webkit-tap-highlight-color: transparent; }
 .detail-auto-btn svg { width: 21px; height: 21px; }
 .detail-auto-btn:active { opacity: .6; }
+/* 顶栏右侧按钮组（一键离线 / 115 自动化）：topbar 是 space-between，包一层让返回键仍贴左、两个功能键成组贴右 */
+.detail-topbar-actions { display: flex; align-items: center; gap: 10px; }
 .auto-badge { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 0 2px rgba(0,0,0,0.28); }
 .auto-badge-red { background: #ff3b30; }
 .auto-badge-run { background: #ffcc00; }

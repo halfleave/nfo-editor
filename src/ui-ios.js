@@ -1302,6 +1302,7 @@ function open115Sheet(){
     if (ta && cookie) ta.value = cookie;
     state.c115Cookie = cookie;
     updateAutoEntryBtn();    // Cookie 变了（含被清空）→ 详情页「自动化」按钮跟着显隐
+    updateDetailOfflineBtn();   // v384：一键离线按钮同源显隐
     reset115QrButton(); // 始终显示【展示二维码】按钮，进入时不自动生成二维码
     auto115EnsureOpenAuth(); // 弹窗打开时，已登录则自动授权（已授权且未过期不重复）
   }).catch(function(){ reset115QrButton(); });
@@ -1523,6 +1524,7 @@ function verify115(silent){
       state.c115Cookie = cookie;
       idbPut('kv', C115_COOKIE_KEY, cookie).catch(function(){});
       updateAutoEntryBtn();    // 登录成功 → 详情页「自动化」按钮随之出现
+      updateDetailOfflineBtn();   // v384：一键离线按钮同源显隐
       auto115EnsureOpenAuth(); // 自检成功即自动开放平台授权（不重复授权）
     })
     .catch(function(e){
@@ -2079,6 +2081,15 @@ function updateAutoEntryBtn(){
     if (el) el.style.display = c ? '' : 'none';
   }).catch(function(){ var el = document.getElementById('dtActAuto'); if (el) el.style.display = 'none'; });
 }
+/* 详情页顶栏「一键离线」按钮（v384）：只对「有番号 + 已有磁力列表 + 已登录 115」的影片显形，
+   其余情况一律藏起来——按钮出现即代表可点即用，不做点了才报错的引导 */
+function updateDetailOfflineBtn(){
+  var btn = document.getElementById('dtActOffline');
+  if (!btn) return;
+  var film = currentDetailFilm;
+  if (!film || !isAvFilm(film) || !sortDetailMagnets((film.data || {}).javbusMagnets).length){ btn.style.display = 'none'; return; }
+  ensure115Cookie().then(function(c){ btn.style.display = c ? '' : 'none'; }).catch(function(){ btn.style.display = 'none'; });
+}
 
 /* ===== 115 自动化：离线 → 建目录 → 移视频 → 改名 → 清理 =====
    纯逻辑（步骤表/命名规则/季集解析/冲突决策）单点真相在 src/auto115-core.js（Auto115Core），
@@ -2163,6 +2174,22 @@ function auto115Btih(magnet){ return Auto115Core.btih(magnet); }
 function auto115IsOfflineLink(s){ return Auto115Core.isOfflineLink(s); }   /* 磁力 + ed2k 都算（115 云下载均支持） */
 function auto115OfflineTitle(url){ return Auto115Core.offlineTitle(url); } /* 磁力取 btih；ed2k 取文件名 */
 function auto115NewSteps(type){ return Auto115Core.newSteps(type, auto115IsTvTask()); }
+/* v385：一键离线单任务链的步骤表（离线表 + 上传两步），与普通任务共用同一批步骤函数 */
+function auto115NewStepsChained(type){ return Auto115Core.newStepsChained(type, auto115IsTvTask()); }
+/* 一键离线链是否已进入「上传后段」：dir 之前的离线步骤全部跑完（ok/skip），且 upload 还没成功。
+   用于重试定位——上传失败后点重试直接从「准备文件夹」续跑，不再把离线整理重做一遍。 */
+function auto115ChainedUploadPhase(t){
+  if (!t || !t.autoUpload) return false;
+  var steps = t.steps || [], seenDir = false, okBefore = true;
+  for (var i = 0; i < steps.length; i++){
+    var s = steps[i];
+    if (s.key === 'dir'){ seenDir = true; break; }
+    if (s.state !== 'ok' && s.state !== 'skip') okBefore = false;
+  }
+  if (!seenDir || !okBefore) return false;
+  var up = Auto115Core.peekStep(t, 'upload');
+  return !(up && up.state === 'ok');
+}
 /* 存量任务步骤清洗（v338）：多磁力任务按自己的步骤表过滤 + 重排。
    背景：旧版 status() 用 getStep 高频读步骤，会把表里没有的 key 以 idle 幽灵形式
    append 进 t.steps（剧集多磁力任务被补出 mkdir2/move2 两个永远空转的节点）。
@@ -2362,7 +2389,26 @@ function auto115Set(t, key, state, msg){
   auto115TbmRefreshIfOpen(t);
   return s;
 }
-function auto115Finish(t){ t.updatedAt = auto115Now(); renderAuto115(); auto115Save(auto115DocOf(t) || auto115Doc); updateAutoBadge(); auto115AdvanceQueue(t); auto115TbmRefreshIfOpen(t); if (auto115ExecDocIdle()) auto115ExecDoc = null; }
+function auto115Finish(t){
+  t.updatedAt = auto115Now();
+  renderAuto115();
+  auto115Save(auto115DocOf(t) || auto115Doc);
+  updateAutoBadge();
+  /* v385：一键离线单任务链——离线段整条成功（ab-ok）后，**同一条任务**接着跑上传两步
+     （复用 auto115StepUploadDir/Files，不另建任务）。放在 AdvanceQueue 之前：此刻执行锁仍在
+     本任务手上，上传节点直接续跑，不会像另建任务那样需要重新抢锁/重绑文档。
+     失败/风控中止一律不续（半成品元数据别进 115），留给用户自己点「上传」。 */
+  if (t && t.autoUpload && !t.autoUploadRan && auto115TaskType(t) !== 'upload' && auto115Status(t).cls === 'ab-ok'){
+    var upS = Auto115Core.peekStep(t, 'upload');
+    if (upS && upS.state === 'idle'){
+      t.autoUploadRan = true;
+      auto115TbmRefreshIfOpen(t);
+      auto115DispatchStep(t, 'dir');
+      return;
+    }
+  }
+  auto115AdvanceQueue(t); auto115TbmRefreshIfOpen(t); if (auto115ExecDocIdle()) auto115ExecDoc = null;
+}
 /* 执行绑定文档里还有在跑/排队的任务吗？都没有就解除绑定，避免旧文档被后台续跑 */
 function auto115ExecDocIdle(){
   if (!auto115ExecDoc) return true;
@@ -2775,6 +2821,8 @@ function auto115DispatchStep(t, key){
    已提交过离线的任务=查进度（绝不再提交一次）；其余=步骤表第一步 */
 function auto115StartKey(t){
   if (t.tidy) return 'mkdir';
+  /* 一键离线链已进入上传后段（离线段早已跑完）→ 从「准备文件夹」续跑，不重做离线整理 */
+  if (auto115ChainedUploadPhase(t)) return 'dir';
   return auto115Submitted(t) ? 'wait' : auto115StepDefs(t)[0].key;
 }
 function auto115Run(t){
@@ -5606,6 +5654,41 @@ function auto115AddFromOp(){
       return openAuto115Page().then(function(){ return auto115Run(t); });
     });
   }).catch(function(e){ showToast((e && e.message) || '加入失败', 'error'); });
+}
+/* 详情页「一键离线」（v384/v385）：取详情页磁力列表**排序后的第一条**（①高清+字幕 ②字幕 ③高清 ④其余）
+   建一条离线整理任务并立即开跑。v385 起**离线与上传拼成同一条任务**：步骤表 = 现有离线表 + 现有上传两步
+   （dir/upload），离线段整条成功后由同一条任务接着跑上传（见 auto115Finish 的单任务续跑），
+   不再另建「上传元数据」任务。与「115 离线」+「上传元数据」两个入口跑的是同一批步骤函数。 */
+function oneClickOffline(){
+  var film = currentDetailFilm;
+  if (!film){ showToast('没有打开的影片', 'error'); return; }
+  if (!isAvFilm(film)){ showToast('只有番号影片支持一键离线', 'info'); return; }
+  var mags = sortDetailMagnets((film.data || {}).javbusMagnets);
+  if (!mags.length){ showToast('这部影片还没有磁力链接，先刷新一下', 'info'); return; }
+  ensure115Cookie().then(function(ck){
+    if (!ck){ showToast('还没登录 115，先去「我的 · 115」登录', 'info'); return; }
+    var magnet = mags[0].link;
+    return auto115EnsureDoc().then(function(doc){
+      /* 同一个磁力已在这部片子的列表里 → 不重复离线，直接带用户去看进度 */
+      if (auto115FindSameMagnet(magnet)){
+        showToast('这个磁力已经在自动化列表里了', 'info');
+        return openAuto115Page();
+      }
+      var t = {
+        id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
+        magnet: magnet, magnetTitle: mags[0].title || auto115OfflineTitle(magnet),
+        steps: auto115NewStepsChained(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
+        filmId: doc && doc.filmId,
+        autoUpload: true   /* 离线段跑完 → 同一条任务接着上传元数据 */
+      };
+      doc.tasks.unshift(t);
+      auto115Expanded[t.id] = true;
+      return auto115Save(doc).then(function(){
+        showToast('已开始一键离线', 'success');
+        return openAuto115Page().then(function(){ return auto115Run(t); });
+      });
+    });
+  }).catch(function(e){ showToast((e && e.message) || '一键离线失败', 'error'); });
 }
 /* 添加磁力 弹窗：手动粘贴磁力链做 115 离线——与「115 离线」入口等价，只是磁力来源是用户粘贴而非数据源；绑定当前影片，改名/整理按详情页标题·番号 */
 function openMagnetCombo(tab){
@@ -9096,6 +9179,7 @@ function renderFilmDetail(film){
   // 字幕按钮：需有激活码；有番号（JAV）不显示
   updateSubtitleBtn(d.dvdId);
   updateAutoEntryBtn();   // 未登录 115 时，顶栏「自动化」按钮不显示
+  updateDetailOfflineBtn();   // v384：「一键离线」按钮（有番号+有磁力+已登录 115 才显形）
   // 剧情：最前方增加 [番号 标题]；无番号则显示 [标题]
   var plotTitle = (d.title || film.id);
   var plotText = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
@@ -9133,13 +9217,7 @@ function renderFilmDetail(film){
   // 磁力（JavBus 抓取）：在演职人员下方展示
   var magEl = document.getElementById('detailMagnets');
   if (magEl){
-    detailMagnetItems = (d.javbusMagnets || []).filter(function(m){ return m && m.link; });
-    // 排序优先级：①高清+字幕 ②字幕 ③高清 ④其余（档内保持原始顺序）
-    detailMagnetItems.sort(function(a, b){
-      function tier(m){ var s = 0; if (m.hasSubtitle) s += 1; if (m.isHD) s += 2; return s; }   // 3=高清+字幕,1=字幕,2=高清,0=其余
-      var order = { 3: 0, 1: 1, 2: 2, 0: 3 };
-      return order[tier(a)] - order[tier(b)];
-    });
+    detailMagnetItems = sortDetailMagnets(d.javbusMagnets);
     if (detailMagnetItems.length){
       detailMagnetVisibleCount = Math.min(MAGNET_INITIAL, detailMagnetItems.length);
       var total = detailMagnetItems.length;
@@ -9214,6 +9292,15 @@ var detailMagnetItems = [];
 var detailMagnetVisibleCount = 0;
 var MAGNET_INITIAL = 3;
 var MAGNET_BATCH = 10;
+/* 详情页磁力排序：①高清+字幕 ②字幕 ③高清 ④其余（档内保持原始顺序）。
+   单点实现——详情页列表渲染与「一键离线」取第一条共用同一套优先级 */
+function sortDetailMagnets(items){
+  return (items || []).filter(function(m){ return m && m.link; }).sort(function(a, b){
+    function tier(m){ var s = 0; if (m.hasSubtitle) s += 1; if (m.isHD) s += 2; return s; }   // 3=高清+字幕,1=字幕,2=高清,0=其余
+    var order = { 3: 0, 1: 1, 2: 2, 0: 3 };
+    return order[tier(a)] - order[tier(b)];
+  });
+}
 function stripMagnetTitle(t){
   if (!t) return t;
   // 去除与 HD/字幕 标签重复的中文标记，避免标题出现 "RKI-481 高清 字幕"

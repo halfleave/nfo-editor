@@ -1432,6 +1432,67 @@ const lz4LiteralForTest = (bytes) => {
   assert(editsN.some(b => b.indexOf('file_name=单季剧.S01E01.mkv') >= 0), '剧集多磁力·不分季：视频命名 单季剧.S01E01.mkv（平铺，带扩展名）');
   ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
 
+  /* v384：详情页「一键离线」——磁力排序取第一条 + 整理成功后自动串接上传元数据 */
+  const magsRaw = [
+    { title: '普通源',  link: 'magnet:?xt=urn:btih:aaaa', hasSubtitle: false, isHD: false },
+    { title: '标清带字幕', link: 'magnet:?xt=urn:btih:bbbb', hasSubtitle: true,  isHD: false },
+    { title: '高清无字幕', link: 'magnet:?xt=urn:btih:cccc', hasSubtitle: false, isHD: true },
+    { title: '高清带字幕', link: 'magnet:?xt=urn:btih:dddd', hasSubtitle: true,  isHD: true }
+  ];
+  const sorted = ctx.sortDetailMagnets(magsRaw);
+  assert(sorted.length === 4 && sorted[0].title === '高清带字幕', '一键离线：排序第一条 = 高清+字幕（实际 ' + (sorted[0] || {}).title + '）');
+  assert(sorted[1].title === '标清带字幕' && sorted[2].title === '高清无字幕' && sorted[3].title === '普通源', '一键离线：优先级 字幕 > 高清 > 其余');
+  assert(ctx.sortDetailMagnets([{ title: '无链接', hasSubtitle: true }]).length === 0, '一键离线：无 link 的条目被过滤');
+
+  ctx.auto115Doc = null; ctx.auto115ExecDoc = null;
+  const chDoc = await ctx.auto115EnsureDoc();
+  /* v385：一键离线 = 单任务链（离线表 + 上传两步 dir/upload），不再另建上传任务 */
+  const chainSteps = ctx.auto115NewStepsChained();
+  assert(chainSteps.length === 8 && chainSteps[6].key === 'dir' && chainSteps[7].key === 'upload', '一键离线链：步骤表 = 离线 6 步 + 上传 2 步（实际 ' + chainSteps.map(s => s.key).join(',') + '）');
+  const stTask = { id: 'tst', type: 'offline', autoUpload: true, steps: ctx.auto115NewStepsChained(), fv: ctx.AUTO115_FLOW_VERSION };
+  ['submit', 'wait', 'mkdir', 'cleanup', 'move', 'rename'].forEach(k => { ctx.auto115GetStep(stTask, k).state = 'ok'; });
+  assert(ctx.auto115Status(stTask).cls === 'ab-ok', '一键离线链：离线段跑完 = ab-ok（上传段仍 idle 时不误入上传分支）');
+  ctx.auto115GetStep(stTask, 'dir').state = 'running';
+  assert(ctx.auto115Status(stTask).text === '准备中…' && ctx.auto115Status(stTask).cls === 'ab-run', '一键离线链：准备文件夹阶段 → 准备中…');
+  ctx.auto115GetStep(stTask, 'dir').state = 'ok';
+  ctx.auto115GetStep(stTask, 'upload').state = 'running';
+  assert(ctx.auto115Status(stTask).text === '上传中' && ctx.auto115Status(stTask).cls === 'ab-run', '一键离线链：上传阶段 → 上传中');
+  ctx.auto115GetStep(stTask, 'upload').state = 'ok';
+  assert(ctx.auto115Status(stTask).cls === 'ab-ok', '一键离线链：上传完成 = ab-ok');
+
+  const chTask = { id: 'tchain', magnet: 'magnet:?xt=urn:btih:eeee', magnetTitle: '一键离线磁力', steps: ctx.auto115NewStepsChained(), createdAt: Date.now(), fv: ctx.AUTO115_FLOW_VERSION, filmId: chDoc.filmId, autoUpload: true };
+  ['submit', 'wait', 'mkdir', 'cleanup', 'move', 'rename'].forEach(k => { ctx.auto115GetStep(chTask, k).state = 'ok'; });   // 离线段整条成功
+  chDoc.tasks.unshift(chTask);
+  ctx.auto115Finish(chTask);
+  await new Promise(r => setTimeout(r, 20));
+  assert(!(chDoc.tasks || []).some(x => ctx.auto115TaskType(x) === 'upload'), '一键离线链：不再另建「上传元数据」任务（仍是一条任务）');
+  assert(!!chTask.autoUploadRan, '一键离线链：离线段成功后同一条任务续跑上传（autoUploadRan 置位）');
+  assert(ctx.auto115GetStep(chTask, 'dir').state !== 'idle', '一键离线链：上传段已实际开跑（dir 离开 idle）');
+  assert(ctx.auto115StartKey(chTask) === 'dir', '一键离线链：重试定位 = 准备文件夹（不重做离线整理）');
+  assert(ctx.auto115ChainedUploadPhase(chTask) === true, '一键离线链：判定处于上传后段');
+
+  /* 失败不上传：离线段哪一步 fail → 同一条任务停在失败处，不跑上传 */
+  const failTask = { id: 'tchainfail', magnet: 'magnet:?xt=urn:btih:ffff', steps: ctx.auto115NewStepsChained(), createdAt: Date.now(), fv: ctx.AUTO115_FLOW_VERSION, filmId: chDoc.filmId, autoUpload: true };
+  ctx.auto115GetStep(failTask, 'rename').state = 'fail';
+  chDoc.tasks.unshift(failTask);
+  ctx.auto115Finish(failTask);
+  await new Promise(r => setTimeout(r, 10));
+  assert(!failTask.autoUploadRan && ctx.auto115GetStep(failTask, 'dir').state === 'idle', '一键离线链：整理失败不跑上传（半成品别进 115）');
+  ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
+
+  /* oneClickOffline 入口：有番号 + 有磁力 → 建的任务必须用「排序第一条」的链接，且步骤表含上传段 */
+  ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486', javbusMagnets: magsRaw } };
+  ctx.auto115Doc = null; ctx.auto115ExecDoc = null;
+  ctx.oneClickOffline();
+  await new Promise(r => setTimeout(r, 20));
+  const ocTask = ((ctx.auto115Doc && ctx.auto115Doc.tasks) || [])[0];
+  assert(!!ocTask && ocTask.magnet === 'magnet:?xt=urn:btih:dddd', '一键离线入口：任务磁力 = 排序第一条（高清+字幕）');
+  assert(!!ocTask && ocTask.autoUpload === true, '一键离线入口：任务带 autoUpload 旗标');
+  assert(!!ocTask && ocTask.steps.some(s => s.key === 'upload'), '一键离线入口：任务步骤表自带上传段（拼成一条）');
+  assert(!!ocTask && ocTask.filmId === 'film1', '一键离线入口：任务归属当前影片');
+  ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
+  ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
+
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');
   process.exit(process.exitCode || 0);

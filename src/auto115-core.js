@@ -101,6 +101,18 @@
     else table = isTv ? api.STEPS_TV_SINGLE : api.STEP_DEFS;
     return table.map(function (s) { return { key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }; });
   };
+  /* v385：一键离线单任务链——离线步骤表后面直接拼上「上传 NFO」两步（dir/upload），
+     复用同一套步骤定义与执行函数，整条任务一条到底，不再另建一条上传任务。
+     后端识别：任务带 autoUpload 旗标且步骤表里有 upload 键。 */
+  api.newStepsChained = function (type, isTv) {
+    var steps = api.newSteps(type, isTv);
+    api.STEPS_UPLOAD.forEach(function (s) { steps.push({ key: s.key, state: 'idle', msg: '', at: 0, probes: 0 }); });
+    return steps;
+  };
+  /* 这条任务是否带「上传」后段（一键离线链），以及上传后段是否还没跑完 */
+  api.hasUploadStep = function (t) {
+    return !!(t && api.peekStep(t, 'upload'));
+  };
   api.getStep = function (t, key) {
     var steps = t.steps || [];
     for (var i = 0; i < steps.length; i++) if (steps[i].key === key) return steps[i];
@@ -156,13 +168,14 @@
       if (steps[i].state === 'fail') return { text: '失败 · ' + api.stepLabel(steps[i].key), cls: 'ab-fail' };
     }
     if (t.aborted) return { text: '已中止', cls: 'ab-idle' };
-    if (taskType(t) === 'upload'){
+    /* 上传阶段（v385）：上传任务本体，或一键离线单任务链跑到上传后段（dir/upload 已非 idle）。
+       离线阶段这两个步骤还是 idle，不会误入此分支，照常走上方的离线/整理判定。 */
+    var _upS = api.peekStep(t, 'upload'), _dirS = api.peekStep(t, 'dir');
+    if (taskType(t) === 'upload' || (_upS && _upS.state !== 'idle') || (_dirS && _dirS.state !== 'idle')){
       /* 上传任务只有两步；具体进度（上传中 (2/3)：xxx.jpg）写在步骤 msg 里，大状态只给粗粒度 */
-      var up = api.peekStep(t, 'upload');
-      if (up && up.state === 'running') return { text: '上传中', cls: 'ab-run' };
-      var dirS = api.peekStep(t, 'dir');
-      if (dirS && dirS.state === 'running') return { text: '准备中…', cls: 'ab-run' };
-      if (up && up.state === 'ok') return { text: '已完成', cls: 'ab-ok' };
+      if (_upS && _upS.state === 'running') return { text: '上传中', cls: 'ab-run' };
+      if (_dirS && _dirS.state === 'running') return { text: '准备中…', cls: 'ab-run' };
+      if (_upS && _upS.state === 'ok') return { text: '已完成', cls: 'ab-ok' };
       return { text: '待上传', cls: 'ab-idle' };
     }
     var wait = api.peekStep(t, 'wait');
