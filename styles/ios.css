@@ -92,7 +92,8 @@
 /* 注意：不要在此用 position:fixed/overflow:hidden 锁死 html,body —— 那会让 iOS 认为页面不可滚动，
    导致 standalone 模式下底部浏览器栏常驻、无法隐藏。保留可滚动，底栏才能随滚动收起；
    输入框聚焦时冒底栏的问题改由 bootApp 的全局 focusin 监听缓解（window.scrollTo(0,0)）。 */
-html, body { margin: 0; padding: 0; }
+/* touch-action: manipulation —— 关掉「双击缩放」，双击不再把底部浏览器栏带回来（v388 自愈的另一半） */
+html, body { margin: 0; padding: 0; touch-action: manipulation; }
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -1937,18 +1938,32 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-name-input::placeholder { color: var(--label-4); }
 .tidy-name-input:focus { box-shadow: 0 0 0 2px var(--accent-fg); }
 .auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; text-align: center; }
-/* 上传入口：常驻在「目标」行上方，不依赖任何离线任务 */
-.auto-actions { display: flex; width: 60%; margin: 10px auto 12px; }
-.auto-action-btn { flex: 1; border: none; border-radius: 980px; background: var(--accent); color: var(--accent-text); font-size: 14px; font-weight: 600; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
-.auto-action-btn:active { opacity: .75; }
+/* 上传入口 v387 起并入右下角按钮组（见 .auto-fab-upload），此前的顶部胶囊按钮已移除 */
 /* 添加磁力：右下角圆形浮动按钮（线形磁铁图标） */
 .auto-fab { position: absolute; right: 26px; bottom: calc(44px + env(safe-area-inset-bottom)); width: 48px; height: 48px; border-radius: 50%; border: none; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,.18); z-index: 30; -webkit-tap-highlight-color: transparent; appearance: none; -webkit-appearance: none; }
 .auto-fab svg { width: 21px; height: 21px; }
 .auto-fab:active { opacity: .8; }
-/* 自动化页右下角三个浮动按钮，从上到下：文件整理 / 磁力搜索 / 字幕搜索 */
+/* v387：自动化页右下角「功能按钮组」——最下面是常驻的开合按钮，上面依次是各功能。
+   从上到下：上传元数据 / 文件整理 / 磁力搜索 / 字幕搜索 */
+.auto-fab-toggle{ bottom: calc(44px + env(safe-area-inset-bottom)); z-index: 31; }
+.auto-fab-upload{ bottom: calc(104px + env(safe-area-inset-bottom)); }
 .auto-fab-tidy  { bottom: calc(164px + env(safe-area-inset-bottom)); }
-.auto-fab-magnet{ bottom: calc(104px + env(safe-area-inset-bottom)); }
-.auto-fab-sub   { bottom: calc(44px + env(safe-area-inset-bottom)); }
+.auto-fab-magnet{ bottom: calc(224px + env(safe-area-inset-bottom)); }
+.auto-fab-sub   { bottom: calc(284px + env(safe-area-inset-bottom)); }
+/* 收起态：功能按钮隐去（淡出 + 下移缩小，弹出时反向回来）；开合按钮的箭头朝上=可展开 */
+#page-auto .auto-fab-fn { opacity: 0; transform: translateY(16px) scale(.82); pointer-events: none;
+  transition: opacity .16s ease, transform .22s cubic-bezier(.25,.8,.35,1); }
+#page-auto.fab-open .auto-fab-fn { opacity: 1; transform: none; pointer-events: auto; }
+/* 依次弹出的小错峰，收起时立即复位（延迟只在展开态声明） */
+#page-auto.fab-open .auto-fab-upload{ transition-delay: 0s; }
+#page-auto.fab-open .auto-fab-tidy  { transition-delay: .03s; }
+#page-auto.fab-open .auto-fab-magnet{ transition-delay: .06s; }
+#page-auto.fab-open .auto-fab-sub   { transition-delay: .09s; }
+#page-auto .auto-fab-toggle svg { transition: transform .22s cubic-bezier(.25,.8,.35,1); }
+#page-auto.fab-open .auto-fab-toggle svg { transform: rotate(180deg); }
+/* 列表底部留白跟着按钮组走：收起时让开开合按钮，展开时让开整列，最后一张卡都能滚出来 */
+#page-auto .auto-scroll { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+#page-auto.fab-open .auto-scroll { padding-bottom: calc(320px + env(safe-area-inset-bottom)); }
 /* 文件整理：候选文件夹列表 */
 .tidy-dir-tip { font-size: 12px; color: var(--label-2); text-align: center; margin: -6px 0 12px; line-height: 1.4; }
 .tidy-dir-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }

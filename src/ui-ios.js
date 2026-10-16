@@ -2081,8 +2081,9 @@ function updateAutoEntryBtn(){
     if (el) el.style.display = c ? '' : 'none';
   }).catch(function(){ var el = document.getElementById('dtActAuto'); if (el) el.style.display = 'none'; });
 }
-/* 详情页顶栏「一键离线」按钮（v384）：只对「有番号 + 已有磁力列表 + 已登录 115」的影片显形，
-   其余情况一律藏起来——按钮出现即代表可点即用，不做点了才报错的引导 */
+/* 详情页动作栏「一键离线」按钮（v384；v386 从顶栏挪到动作栏「删除」左侧，统一线性图标）：
+   只对「有番号 + 已有磁力列表 + 已登录 115」的影片显形，其余情况一律藏起来——
+   按钮出现即代表可点即用，不做点了才报错的引导 */
 function updateDetailOfflineBtn(){
   var btn = document.getElementById('dtActOffline');
   if (!btn) return;
@@ -2526,7 +2527,28 @@ function renderAuto115(){
   if (clearBtn) clearBtn.style.display = tasks.some(function(t){ return auto115Status(t).cls === 'ab-ok'; }) ? '' : 'none';
   var uploadBtn = document.getElementById('autoUploadBtn');
   if (uploadBtn) uploadBtn.style.display = tasks.some(function(t){ return auto115TaskType(t) === 'upload'; }) ? 'none' : '';
+  auto115SyncFabDefault(tasks.length > 0);   // v387：按钮组默认开合（没任务展开 / 有任务收起）
   updateAutoBadge();
+}
+/* —— 自动化页右下角功能按钮组（v387）——
+   默认只露一个开合图标；点开才展开「上传元数据 / 文件整理 / 磁力搜索 / 字幕搜索」。
+   默认开合：没有任何任务 → 展开（一进页面就看得到能做什么）；有任务 → 收起（别挡任务列表）。
+   用户手动点过一次后以手动为准，之后列表刷新（进度写回会频繁触发渲染）不再自动改开合。 */
+var autoFabUserToggled = false;
+function auto115SetFab(open){
+  var pg = document.getElementById('page-auto');
+  if (pg) pg.classList.toggle('fab-open', !!open);
+  var tg = document.getElementById('autoFabToggle');
+  if (tg) tg.setAttribute('aria-label', open ? '收起功能' : '展开功能');
+}
+function auto115SyncFabDefault(hasTasks){
+  if (autoFabUserToggled) return;
+  auto115SetFab(!hasTasks);
+}
+function auto115ToggleFab(){
+  autoFabUserToggled = true;
+  var pg = document.getElementById('page-auto');
+  auto115SetFab(!(pg && pg.classList.contains('fab-open')));
 }
 /* —— 115 接口封装 ——
    所有请求统一走 c115Call：串行 + 最小间隔（写 1.2s / 读 0.35s）+ 风控冷却。
@@ -12294,6 +12316,54 @@ function initRubberBand(){
   });
 }
 
+/* ===== iOS 底部浏览器栏自愈（v388）=====
+   症状：键盘收起后 iOS 有时不恢复布局视口高度，页面按「缩小后的高度」排版，
+   底部留下一条白条 / 底栏常驻不回。
+   标准做法（社区验证）：把全屏容器瞬间隐藏再恢复，逼系统重新测量画布高度。
+   整个过程一帧内完成；页面底色与缝隙同色（见 ios.css 的 html/body 底色说明），肉眼看不到修复过程。 */
+var iosHealTimer = 0;
+function iosViewportSelfHeal(){
+  if (iosHealTimer){ clearTimeout(iosHealTimer); iosHealTimer = 0; }
+  /* 焦点还在输入框里（键盘后收起、或从一个输入框切到另一个）→ 别动：
+     隐藏容器会把焦点顶掉，反而打断输入 */
+  var ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+  var app = document.querySelector('.ios-app');
+  if (!app) return;
+  var prev = app.style.display;
+  app.style.display = 'none';
+  void app.offsetHeight;              // 读一次布局属性 → 强制同步重排，系统重新测量画布高度
+  app.style.display = prev;
+}
+function iosScheduleHeal(delay){
+  if (iosHealTimer) return;           // 已排好一次，不重复排
+  iosHealTimer = setTimeout(iosViewportSelfHeal, delay == null ? 120 : delay);
+}
+function initIosBottomBarHeal(){
+  /* ① 键盘收起（拖动键盘收起时焦点不会丢，只有视觉视口会弹回）→ 视口恢复的瞬间自愈 */
+  var vv = window.visualViewport;
+  if (vv && vv.addEventListener){
+    vv.addEventListener('resize', function(){
+      var shrunk = (window.innerHeight - vv.height) > 80;   // 视口被键盘压缩
+      if (!shrunk) iosScheduleHeal(80);
+    });
+  }
+  /* ② 兜底：输入框失焦后补一次。iOS 上失焦先于键盘动画结束，等 ~320ms 再动手 */
+  document.addEventListener('focusout', function(e){
+    var t = e.target;
+    if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) return;
+    iosScheduleHeal(320);
+  });
+  /* ③ 防双击误触：连点两下会被 iOS 当成「双击」，触发页面缩放并把底部栏带回来（同一 Bug 的另一种触发方式）。
+     吃掉默认行为并顺手自愈一次；输入框内的双击（选词）是正常操作，放行。 */
+  document.addEventListener('dblclick', function(e){
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    e.preventDefault();
+    iosScheduleHeal(0);
+  });
+}
+
 function bootApp(){
   // ① 轻量 UI 装配（同步，先把界面骨架画出来）
   // iOS 聚焦 input/textarea 时会滚动 window 把底部浏览器栏带出来；即便已锁死 body，
@@ -12305,6 +12375,7 @@ function bootApp(){
       requestAnimationFrame(function(){ window.scrollTo(0, 0); });
     }
   });
+  initIosBottomBarHeal();   // 键盘收起 / 双击后自愈底部浏览器栏
   startSplashProgress();
   setupBigTitle();
   setWelcome();
