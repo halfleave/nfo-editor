@@ -823,8 +823,10 @@ function libSearchTMDB(q){
     var mt = (state.tmdbMediaType === 'tv') ? 'tv' : 'movie';
     var path = mt === 'tv' ? '/search/tv' : '/search/movie';
     var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
-    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
-      .then(function(data){ renderLibSearchDropdown(data && data.results ? data.results : [], q, 'tmdb'); })
+    /* v398 搜索增强：query 只带标题搜索，「标题对+年份对」的精准项排到最上方（不硬过滤） */
+    var py = NfoCore.parseTitleYear(q);
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: py.title }, opts)
+      .then(function(data){ renderLibSearchDropdown(NfoCore.rankTitleYearResults((data && data.results) || [], py), q, 'tmdb'); })
       .catch(function(err){
         var msg = ((err && err.message) || '请求失败');
         dd.innerHTML = '<div class="lib-search-empty">搜索失败：' + escapeHtml(msg) + '</div>';

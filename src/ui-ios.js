@@ -7799,9 +7799,13 @@ function searchTMDB(){
     var mt = state.tmdbMediaType;
     var path = mt === 'tv' ? '/search/tv' : (mt === 'person' ? '/search/person' : '/search/movie');
     var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
-    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
+    /* v398 搜索增强：「标题.年份」（教父.1972 / 教父 1972 / 教父（1972））拆出标题与年份，
+       query 只带标题去搜，拿到结果后把「标题对 + 年份也对」的精准项排到最上方（不再硬过滤，
+       完整结果仍在列表里）。片名本身像「请回答1988」不会被误拆（parseTitleYear 有分隔符要求）。 */
+    var py = NfoCore.parseTitleYear(q);
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: py.title }, opts)
       .then(function(data){
-        var list = data && data.results ? data.results : [];
+        var list = NfoCore.rankTitleYearResults((data && data.results) || [], py);
         if (state.tmdbMediaType === 'person') renderTMDBPersonResults(list);
         else renderTMDBResults(list);
       })
@@ -8585,11 +8589,13 @@ function searchTMDBIdByTitle(q, cb, mediaType){
     var type = mediaType || 'movie';
     var path = type === 'tv' ? '/search/tv' : '/search/movie';
     var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
-    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
+    /* v398：query 只带标题搜索；带年份时先按「标题对+年份对」排序，再沿用「标题完全一致优先」取 id */
+    var py = NfoCore.parseTitleYear(q);
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: py.title }, opts)
       .then(function(data){
-        var results = (data && data.results) || [];
-        if (!results.length) return cb(null);
-        var qNorm = q.trim().toLowerCase();
+        var results = NfoCore.rankTitleYearResults((data && data.results) || [], py);
+        if (!results.length){ cb(null); return; }
+        var qNorm = py.title.trim().toLowerCase();
         var exact = null;
         for (var i = 0; i < results.length; i++) {
           var r = results[i];

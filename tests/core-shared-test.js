@@ -80,4 +80,40 @@ assert(NfoCore.buildTvShowXml(null).indexOf('<tvshow>') >= 0, '剧集NFO：空�
 assert(NfoCore.buildTvShowXml({ title: 'A & B' }).indexOf('<title>A &amp; B</title>') >= 0, '剧集NFO：XML 特殊字符转义');
 assert(NfoCore.buildMovieXml({ title: 'X' }).indexOf('<movie>') >= 0, '回归：电影 NFO 仍为 <movie>（未受剧集生成器影响）');
 
+/* —— v398 搜索增强：「标题.年份」解析 —— */
+const pt = NfoCore.parseTitleYear;
+assert(pt('教父.1972').title === '教父' && pt('教父.1972').year === 1972, '解析：教父.1972 → 教父/1972');
+assert(pt('教父 1972').title === '教父' && pt('教父 1972').year === 1972, '解析：空格分隔同样拆');
+assert(pt('教父（1972）').title === '教父' && pt('教父（1972）').year === 1972, '解析：全角括号');
+assert(pt('教父(1972)').year === 1972, '解析：半角括号');
+assert(pt('The.Matrix.1999').title === 'The.Matrix' && pt('The.Matrix.1999').year === 1999, '解析：英文点号只切末尾年份');
+assert(pt('1917.2019').title === '1917' && pt('1917.2019').year === 2019, '解析：数字片名 + 年份');
+assert(pt('请回答1988').title === '请回答1988' && pt('请回答1988').year === 0, '解析：片名自带年份数字不误切');
+assert(pt('教父2').year === 0, '解析：续集数字不当年份');
+assert(pt('2019').year === 0 && pt('2019').title === '2019', '解析：纯年份不拆，按原词搜');
+assert(pt('阿凡达：水之道.2022').title === '阿凡达：水之道', '解析：中文冒号标题完整保留');
+assert(pt('').title === '' && pt('').year === 0, '解析：空串安全');
+assert(pt(null).year === 0, '解析：null 安全');
+
+/* —— v398 搜索结果排序：精准项置顶 —— */
+const rk = NfoCore.rankTitleYearResults;
+const pyGod = { title: '教父', year: 1972, raw: '教父.1972' };
+const godList = [
+  { id: 1, title: '教父', release_date: '1990-12-25' },
+  { id: 2, title: '教父', release_date: '1972-03-14' },
+  { id: 3, title: '别的片', release_date: '1972-01-01' },
+  { id: 4, title: '无关', release_date: '2001-01-01' }
+];
+assert(rk(godList, pyGod)[0].id === 2, '排序：标题+年份都对 → 第一');
+assert(rk(godList, pyGod)[1].id === 1, '排序：其次标题对');
+assert(rk(godList, pyGod)[2].id === 3, '排序：再次年份对');
+assert(rk(godList, pyGod)[3].id === 4, '排序：其余保持 TMDB 原顺序');
+assert(rk(godList, pyGod) !== godList, '排序：返回副本不改原数组');
+assert(rk([{ id: 1, title: '教父', release_date: '1972-01-01' }], pyGod).length === 1, '排序：单条结果原样返回');
+assert(rk([{ id: 1 }, { id: 2 }], null).length === 2, '排序：无解析结果不排序');
+assert(rk([{ id: 1 }, { id: 2 }], { title: 'x', year: 0 }).length === 2, '排序：year=0 不排序');
+const pyMat = { title: 'the matrix', year: 1999, raw: 'The.Matrix.1999' };
+const matList = [{ id: 9, name: '某剧', first_air_date: '1999-05-01' }, { id: 8, original_title: 'The Matrix', release_date: '1999-03-31' }];
+assert(rk(matList, pyMat)[0].id === 8, '排序：original_title 与 first_air_date（tv）兼容');
+
 console.log('core-shared 完成');

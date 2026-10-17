@@ -662,11 +662,13 @@ function searchTMDBIdByTitle(q, cb, mediaType){
     var type = mediaType || 'movie';
     var path = type === 'tv' ? '/search/tv' : '/search/movie';
     var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
-    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
+    /* v398：query 只带标题搜索；带年份时先按「标题对+年份对」排序，再沿用「标题完全一致优先」取 id */
+    var py = NfoCore.parseTitleYear(q);
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: py.title }, opts)
       .then(function(data){
-        var results = (data && data.results) || [];
+        var results = NfoCore.rankTitleYearResults((data && data.results) || [], py);
         if (!results.length) return cb(null);
-        var qNorm = q.trim().toLowerCase();
+        var qNorm = py.title.trim().toLowerCase();
         var exact = null;
         for (var i = 0; i < results.length; i++) {
           var r = results[i];
@@ -1405,8 +1407,11 @@ function searchTMDB(){
     var mt = state.tmdbMediaType;
     var path = mt === 'tv' ? '/search/tv' : '/search/movie';
     var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
-    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: q }, opts)
-      .then(function(data){ renderTMDBResults(data && data.results ? data.results : []); })
+    /* v398 搜索增强：「标题.年份」拆成 query + year（tv 用 first_air_date_year），命中更准；
+       带年份零结果时放宽重搜一次 */
+    var py = NfoCore.parseTitleYear(q);
+    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: py.title }, opts)
+      .then(function(data){ renderTMDBResults(NfoCore.rankTitleYearResults((data && data.results) || [], py)); })
       .catch(function(err){
         var msg = ((err && err.message) || '请求失败');
         box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(msg) + '</div>';

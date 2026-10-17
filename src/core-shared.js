@@ -167,6 +167,40 @@
       .trim();
   }
 
+  /* 「标题.年份」→ { title, year }（搜索增强，v398）。
+     只在年份前有明确分隔（空白 / . _ - / 括号）时拆，「请回答1988」「机动战士高达00」这类
+     片名本身带数字的不会被误切；纯年份（如「2019」）也不拆，按原词搜。
+     year 为 0 表示没识别到年份，调用方不要传 year 参数。 */
+  function parseTitleYear(q) {
+    var s = String(q == null ? '' : q).trim();
+    if (!s) return { title: '', year: 0 };
+    var m = /^(.+?)(?:[\s._-]+|[（(])((?:19|20)\d{2})[)）]?$/.exec(s);
+    if (!m) return { title: s, year: 0 };
+    var title = m[1].replace(/[\s._-]+$/, '').trim();
+    if (!title) return { title: s, year: 0 };
+    return { title: title, year: Number(m[2]), raw: s };
+  }
+
+  /* 搜索结果排序（v398）：把「标题对 + 年份也对」的精准项提到最上方，其次标题对，
+     再次年份对，其余保持 TMDB 原顺序（sort 稳定，同档不乱序）。py 来自 parseTitleYear。 */
+  function rankTitleYearResults(list, py) {
+    list = Array.isArray(list) ? list.slice() : [];
+    if (!py || !py.year || list.length < 2) return list;
+    var q = String(py.title || '').trim().toLowerCase();
+    function key(r) {
+      var tl = String(r.title || r.name || '').trim().toLowerCase();
+      var og = String(r.original_title || r.original_name || '').trim().toLowerCase();
+      var d = String(r.release_date || r.first_air_date || '');
+      var yHit = (Number(d.slice(0, 4)) || 0) === py.year;
+      var tHit = q && (tl === q || og === q);
+      if (tHit && yHit) return 0;
+      if (tHit) return 1;
+      if (yHit) return 2;
+      return 3;
+    }
+    return list.sort(function (a, b) { return key(a) - key(b); });
+  }
+
   // 调用 OpenAI 兼容接口，一次请求翻译 title + plot；返回 Promise<{title, summary}>（30s 超时）
   // cfg = { baseUrl, apiKey, model } 由调用方从配置/state 传入（不读全局，便于两端复用）
   function translateMeta(title, plot, cfg) {
@@ -750,6 +784,8 @@ function normalizeJavbusFilm(d, opts){
     translateMeta: translateMeta,
     cleanTranslatedText: cleanTranslatedText,
     stripTitleParens: stripTitleParens,
+    parseTitleYear: parseTitleYear,
+    rankTitleYearResults: rankTitleYearResults,
     javStr: javStr,
     javName: javName,
     mapGenreEnToZh: mapGenreEnToZh,
