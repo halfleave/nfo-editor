@@ -3074,6 +3074,55 @@ function auto115LooksDvd(s){ return Auto115Core.looksDvd(s); }
 function auto115CleanName(s){ return Auto115Core.cleanName(s); }
 function auto115ExternalBaseName(t){ return Auto115Core.externalBaseName(t); }
 function auto115VidSize(it){ return Auto115Core.vidSize(it); }
+/* v395：批量移动统一入口。115 的 files/move 对多个 fid 的参数格式不止一种（数组式 fid[0]/fid[1] 与
+   逗号式 fid=a,b），不同账号/版本只认其中一种；此前 v383 只发逗号式、且不看返回体——115 拒绝时
+   HTTP 仍是 200，返回体 {state:false} 被当成「移动成功」，于是文件实际没搬、任务却标 ok
+   （v394 真机踩中：7 集全部改名成功，却一个都没移出原夹、来源夹也就没被删掉）。
+   现在按「数组式 → 逗号式 → 逐条」依次尝试，每一段都校验 state/errno，全失败如实返回失败数。 */
+function auto115MoveFids(pid, fids){
+  var ids = (fids || []).map(function(f){ return String(f == null ? '' : f); }).filter(Boolean);
+  if (!pid || !ids.length) return Promise.resolve({ ok: 0, fail: 0, err: '' });
+  var enc = encodeURIComponent;
+  function send(body){
+    return auto115Post('https://webapi.115.com/files/move', body).catch(function(e){
+      return { ok: false, d: {}, _net: true, _e: e };
+    });
+  }
+  function okOf(res){
+    var d = (res && res.d) || {};
+    return !!(res && res.ok && (d.state === true || d.errno === 0));
+  }
+  function errOf(res){
+    if (res && res._net) return '移动失败（网络）：' + ((res._e && res._e.message) || '网络错误');
+    var t = auto115ErrText((res && res.d) || {}, res || {}, '');
+    return '移动失败' + (t ? ('：' + t) : '（115 未返回原因）');
+  }
+  if (ids.length === 1){
+    return send('fid=' + enc(ids[0]) + '&pid=' + enc(pid)).then(function(res){
+      return okOf(res) ? { ok: 1, fail: 0, err: '' } : { ok: 0, fail: 1, err: errOf(res) };
+    });
+  }
+  var arr = [];
+  for (var i = 0; i < ids.length; i++) arr.push('fid[' + i + ']=' + enc(ids[i]));
+  arr.push('pid=' + enc(pid));
+  return send(arr.join('&')).then(function(res1){
+    if (okOf(res1)) return { ok: ids.length, fail: 0, err: '' };
+    return send('fid=' + enc(ids.join(',')) + '&pid=' + enc(pid)).then(function(res2){
+      if (okOf(res2)) return { ok: ids.length, fail: 0, err: '' };
+      /* 两种批量格式都被拒 → 逐条兜底（慢但准），让部分成功也能落地 */
+      var ok = 0, fail = 0, last = errOf(res2) || errOf(res1);
+      var chain = Promise.resolve();
+      ids.forEach(function(id){
+        chain = chain.then(function(){
+          return send('fid=' + enc(id) + '&pid=' + enc(pid)).then(function(r3){
+            if (okOf(r3)) ok++; else { fail++; last = errOf(r3) || last; }
+          });
+        });
+      });
+      return chain.then(function(){ return { ok: ok, fail: fail, err: last }; });
+    });
+  });
+}
 function auto115ApplyRenames(t, jobs, targetCid, mode, opts){
   /* mode（v338）：null = 移动+改名合并执行（电影多磁力）；'rename' = 只改名（剧集多磁力改名节点）；
      'move' = 只移动（剧集多磁力移入节点——改名不改 fid，直接按 job.pid 移进季夹）
@@ -3093,24 +3142,25 @@ function auto115ApplyRenames(t, jobs, targetCid, mode, opts){
   function tick(msg){ prog++; if (total > 1) auto115Set(t, stepKey, 'running', msg + '…（' + prog + '/' + total + '）'); }
   var p = Promise.resolve();
   /* 一阶段：移动（mode!=='rename'）——按目标夹分组，一组一次批量 move */
-  var mvOk = 0, mvFail = 0;
+  var mvOk = 0, mvFail = 0, mvErr = '';
   if (mode !== 'rename'){
     var byPid = {};
     list.forEach(function(j){ var pid = j.pid || targetCid; if (pid) (byPid[pid] = byPid[pid] || []).push(j); });
     Object.keys(byPid).forEach(function(pid){
       p = p.then(function(){
         var g = byPid[pid];
-        return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(g.map(function(j){ return j.fid; }).join(',')) + '&pid=' + encodeURIComponent(pid)).then(function(){
-          mvOk += g.length; g.forEach(function(){ tick('正在移动'); });
-        }, function(){
-          /* 批量移动失败 → 逐条兜底 */
-          return g.reduce(function(cp, j){
-            return cp.then(function(){
-              return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(j.fid) + '&pid=' + encodeURIComponent(pid)).then(function(){ mvOk++; }, function(){ mvFail++; }).then(function(){ tick('正在移动'); });
-            });
-          }, Promise.resolve());
+        /* v395：走统一入口（数组式→逗号式→逐条，逐段校验 state），失败数如实累计 */
+        return auto115MoveFids(pid, g.map(function(j){ return j.fid; })).then(function(r){
+          mvOk += r.ok; mvFail += r.fail; if (r.err) mvErr = r.err;
+          g.forEach(function(){ tick('正在移动'); });
         });
       });
+    });
+    /* 一个都没搬动 → 立刻中止并报错（改名已在本节点前段完成，重试会整段重放：改名幂等、
+       移动重试），不再像 v383~v394 那样静默当成功——那会让文件改了名却留在原子夹，
+       来源夹因「不空」也删不掉。 */
+    p = p.then(function(){
+      if (mvFail && !mvOk) throw new Error(mvErr || ('移动失败：' + mvFail + ' 个文件没动，点「重试」再试一次'));
     });
   }
   /* 二阶段：改名（mode!=='move' 且名字有变化）——⌈N/100⌉ 次批量 batch_rename */
@@ -3371,9 +3421,18 @@ function auto115StepTvMkdirSeasons(t){
 function auto115MoveInto(t, jobs, targetCid, opts){
   var res = { moved: 0, skipped: 0 };
   return auto115ListDir(targetCid).then(function(list){
+    /* v395：先按 fid 认出「已经在目标夹里」的文件（例：文件本来就在剧集根、只是要改名）。
+       这类绝不发起移动——115 对「移到当前所在目录」可能返回 state:false，会被下面的校验
+       当成移动失败误报。already 记入 skipped（文案仍是「跳过 N 个已存在的相同文件」）。 */
+    var at = {};
+    (list || []).forEach(function(it){ if (it && it.fid) at[String(it.fid)] = 1; });
+    var restJobs = [], already = 0;
+    (jobs || []).forEach(function(j){
+      if (j && j.fid && at[String(j.fid)]) already++; else restJobs.push(j);
+    });
     /* 冲突决策（同名同大小跳过 / 不同加 .2）单点实现在 Auto115Core.planMoveJobs */
-    var plan = Auto115Core.planMoveJobs(jobs, list || []);
-    res.skipped = plan.skipped;
+    var plan = Auto115Core.planMoveJobs(restJobs, list || []);
+    res.skipped = plan.skipped + already;
     var todo = plan.todo;
     res.moved = todo.length;
     if (!todo.length) return res;
@@ -6366,25 +6425,11 @@ function auto115TidyCollectSources(t){
     return !!ok;
   });
 }
-/* 批量移入（fid 逗号拼，与 v383 批量移动同款）；批量被拒 → 逐条兜底，全部成功才算成功 */
+/* 批量移入：v395 起统一走 auto115MoveFids（数组式→逗号式→逐条，逐段校验 state）；全部成功才算成功 */
 function auto115MoveAllInto(ids, pid){
-  function one(id){
-    return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(id) + '&pid=' + encodeURIComponent(pid)).then(function(r){
-      var d = r.d || {};
-      return !!(r.ok && (d.state === true || d.errno === 0));
-    }).catch(function(){ return false; });
-  }
-  function sequential(){
-    var okAll = true;
-    return ids.reduce(function(p, id){
-      return p.then(function(){ return one(id).then(function(ok){ if (!ok) okAll = false; }); });
-    }, Promise.resolve()).then(function(){ return okAll; });
-  }
-  if (!ids.length) return Promise.resolve(true);
-  return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(ids.join(',')) + '&pid=' + encodeURIComponent(pid)).then(function(res){
-    var d = res.d || {};
-    return (res.ok && (d.state === true || d.errno === 0)) ? true : sequential();
-  }).catch(sequential);
+  var list = (ids || []).map(String).filter(Boolean);
+  if (!list.length) return Promise.resolve(true);
+  return auto115MoveFids(pid, list).then(function(r){ return r.fail === 0 && r.ok > 0; });
 }
 
 /* ============ 字幕搜索 / 下载 ============ */

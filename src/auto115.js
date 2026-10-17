@@ -1172,6 +1172,53 @@
   function auto115VidSize(it) { return Auto115Core.vidSize(it); }
   /* v356 期三收口：与 iOS 同构——补 mode 参数（null=移动+改名合并 / 'rename' 只改名 / 'move' 只移动）
      与逐条 job.pid（优先于 targetCid）。此前 PC 不认 pid，合集归夹靠 targetCid 兜底，现在语义一致。 */
+  /* v395（iOS 镜像）：批量移动统一入口。115 的 files/move 多 fid 参数格式有「数组式 fid[0]」和
+     「逗号式 fid=a,b」两种，不同账号只认其中一种；此前只发逗号式且不看返回体（115 拒绝时 HTTP 仍 200，
+     返回 {state:false} 被当成成功），导致「名字改了、文件没搬」。现按数组式→逗号式→逐条依次尝试，
+     每段校验 state/errno，全失败如实返回失败数。 */
+  function auto115MoveFids(pid, fids) {
+    var ids = (fids || []).map(function (f) { return String(f == null ? '' : f); }).filter(Boolean);
+    if (!pid || !ids.length) return Promise.resolve({ ok: 0, fail: 0, err: '' });
+    var enc = encodeURIComponent;
+    function send(body) {
+      return auto115Post('https://webapi.115.com/files/move', body).catch(function (e) {
+        return { ok: false, d: {}, _net: true, _e: e };
+      });
+    }
+    function okOf(res) {
+      var d = (res && res.d) || {};
+      return !!(res && res.ok && (d.state === true || d.errno === 0));
+    }
+    function errOf(res) {
+      if (res && res._net) return '移动失败（网络）：' + ((res._e && res._e.message) || '网络错误');
+      var t = auto115ErrText((res && res.d) || {}, res || {}, '');
+      return '移动失败' + (t ? ('：' + t) : '（115 未返回原因）');
+    }
+    if (ids.length === 1) {
+      return send('fid=' + enc(ids[0]) + '&pid=' + enc(pid)).then(function (res) {
+        return okOf(res) ? { ok: 1, fail: 0, err: '' } : { ok: 0, fail: 1, err: errOf(res) };
+      });
+    }
+    var arr = [];
+    for (var i = 0; i < ids.length; i++) arr.push('fid[' + i + ']=' + enc(ids[i]));
+    arr.push('pid=' + enc(pid));
+    return send(arr.join('&')).then(function (res1) {
+      if (okOf(res1)) return { ok: ids.length, fail: 0, err: '' };
+      return send('fid=' + enc(ids.join(',')) + '&pid=' + enc(pid)).then(function (res2) {
+        if (okOf(res2)) return { ok: ids.length, fail: 0, err: '' };
+        var ok = 0, fail = 0, last = errOf(res2) || errOf(res1);
+        var chain = Promise.resolve();
+        ids.forEach(function (id) {
+          chain = chain.then(function () {
+            return send('fid=' + enc(id) + '&pid=' + enc(pid)).then(function (r3) {
+              if (okOf(r3)) ok++; else { fail++; last = errOf(r3) || last; }
+            });
+          });
+        });
+        return chain.then(function () { return { ok: ok, fail: fail, err: last }; });
+      });
+    });
+  }
   function auto115ApplyRenames(t, jobs, targetCid, mode, opts) {
     /* mode（v338）：null = 移动+改名合并执行 / 'rename' = 只改名 / 'move' = 只移动
        v383 批量提速（iOS 镜像）：旧版逐条 files/edit + files/move，每个请求都吃写节流（1.2s/条），
@@ -1187,23 +1234,24 @@
     var total = list.length, prog = 0;
     function tick(msg) { prog++; if (total > 1) auto115Set(t, stepKey, 'running', msg + '…（' + prog + '/' + total + '）'); }
     var p = Promise.resolve();
-    var mvOk = 0, mvFail = 0;
+    var mvOk = 0, mvFail = 0, mvErr = '';
     if (mode !== 'rename') {
       var byPid = {};
       list.forEach(function (j) { var pid = j.pid || targetCid; if (pid) (byPid[pid] = byPid[pid] || []).push(j); });
       Object.keys(byPid).forEach(function (pid) {
         p = p.then(function () {
           var g = byPid[pid];
-          return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(g.map(function (j) { return j.fid; }).join(',')) + '&pid=' + encodeURIComponent(pid)).then(function () {
-            mvOk += g.length; g.forEach(function () { tick('正在移动'); });
-          }, function () {
-            return g.reduce(function (cp, j) {
-              return cp.then(function () {
-                return auto115Post('https://webapi.115.com/files/move', 'fid=' + encodeURIComponent(j.fid) + '&pid=' + encodeURIComponent(pid)).then(function () { mvOk++; }, function () { mvFail++; }).then(function () { tick('正在移动'); });
-              });
-            }, Promise.resolve());
+          /* v395：统一入口（数组式→逗号式→逐条，逐段校验 state），失败数如实累计 */
+          return auto115MoveFids(pid, g.map(function (j) { return j.fid; })).then(function (r) {
+            mvOk += r.ok; mvFail += r.fail; if (r.err) mvErr = r.err;
+            g.forEach(function () { tick('正在移动'); });
           });
         });
+      });
+      /* 一个都没搬动 → 中止并报错（改名已在本节点前段完成，重试整段重放：改名幂等、移动重试），
+         不再静默标成功——否则文件改了名却留在原子夹，来源夹也删不掉 */
+      p = p.then(function () {
+        if (mvFail && !mvOk) throw new Error(mvErr || ('移动失败：' + mvFail + ' 个文件没动，点「重试」再试一次'));
       });
     }
     if (mode !== 'move') {
@@ -1454,9 +1502,17 @@
   function auto115MoveInto(t, jobs, targetCid, opts){
     var res = { moved: 0, skipped: 0 };
     return auto115ListDir(targetCid).then(function (list) {
+      /* v395（iOS 镜像）：先按 fid 认出已经在目标夹里的文件（本来就在剧集根、只是要改名），
+         不发起移动——115 对「移到当前所在目录」可能返回 state:false，会被误报成移动失败 */
+      var at = {};
+      (list || []).forEach(function (it) { if (it && it.fid) at[String(it.fid)] = 1; });
+      var restJobs = [], already = 0;
+      (jobs || []).forEach(function (j) {
+        if (j && j.fid && at[String(j.fid)]) already++; else restJobs.push(j);
+      });
       /* 冲突决策（同名同大小跳过 / 不同加 .2）单点实现在 Auto115Core.planMoveJobs */
-      var plan = Auto115Core.planMoveJobs(jobs, list || []);
-      res.skipped = plan.skipped;
+      var plan = Auto115Core.planMoveJobs(restJobs, list || []);
+      res.skipped = plan.skipped + already;
       var todo = plan.todo;
       res.moved = todo.length;
       if (!todo.length) return res;

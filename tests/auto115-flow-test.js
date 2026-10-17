@@ -81,7 +81,19 @@ ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IP
 let script = {};
 let calls = [];
 ctx.c115ProxyFetch = async function (url, opts) {
-  calls.push({ url, body: opts && opts.body, opts });
+  let body = opts && opts.body;
+  /* v395：批量移动首段改用 fid[k]= 数组式（115 对多 fid 只认数组式/逗号式其中一种，
+     代码按「数组式 → 逗号式 → 逐条」兜底）。既有断言都按逗号式写，这里先把数组式
+     归一化成 fid=A,B 形状再入库，避免逐条改断言、也不影响「不该出现某 fid」的负断言。 */
+  if (body && url.indexOf('files/move') >= 0 && /(?:^|&)fid\[0\]=/.test(body)){
+    const ids = [], rest = [];
+    body.split('&').forEach(function(kv){
+      const m = kv.match(/^fid\[\d+\]=(.*)$/);
+      if (m) ids.push(decodeURIComponent(m[1])); else rest.push(kv);
+    });
+    body = 'fid=' + encodeURIComponent(ids.join(',')) + (rest.length ? '&' + rest.join('&') : '');
+  }
+  calls.push({ url, body, opts });
   /* v383：改名改走批量接口 files/batch_rename（body 形如 files_new_name[F1]=X&…）。
      这里把一条批量请求展开成 N 条旧版 files/edit 形状的记录（fid=F1&file_name=X），
      既有「改名断言查 files/edit body」的用例无需逐条改写；计数断言不受影响（仅追加记录） */
@@ -1430,6 +1442,23 @@ const lz4LiteralForTest = (bytes) => {
   assert(movesN.every(b => b.indexOf('pid=SHOWCID2') >= 0), '剧集多磁力·不分季：视频平铺移入剧集根 SHOWCID2');
   const editsN = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(editsN.some(b => b.indexOf('file_name=单季剧.S01E01.mkv') >= 0), '剧集多磁力·不分季：视频命名 单季剧.S01E01.mkv（平铺，带扩展名）');
+  /* v395 回归：批量移动被 115 拒（HTTP 200 但 state:false）→ 必须 fail 报错，不能静默标 ok。
+     这是「改名成功、文件却留在原夹、来源夹删不掉」的根因（v394 真机 ONE：高中英雄们）。 */
+  script = {
+    'files?cid=DFAIL': { state: true, data: [] },
+    'files/move': { state: false, error: 'no permission' },
+    'files/batch_rename': { state: true }
+  };
+  const tMvFail = {
+    id: 'tmvfail', type: 'tv', steps: ctx.auto115NewSteps('tv'), createdAt: Date.now(), fv: 999,
+    offlineDirCid: 'DFAIL', offlineDirName: '剧名', tvRootCid: 'DFAIL',
+    tvPlan: { renames: [{ fid: 'MF1', name: '剧名.S01E01.mkv', orig: 'EP01.mkv', size: 100 }], deleteFids: [], unrecognized: [] }
+  };
+  ctx.auto115Doc = { filmId: 'film1', filmTitle: '剧名', type: 'tv', tasks: [tMvFail] };
+  calls.length = 0;
+  await ctx.auto115StepTvRenameVideos(tMvFail);
+  assert(ctx.auto115GetStep(tMvFail, 'rename').state === 'fail', 'v395：批量移动被拒（state:false）→ rename 节点 fail，不静默标 ok（' + ctx.auto115GetStep(tMvFail, 'rename').msg + '）');
+  assert(calls.some(c => c.url.indexOf('files/move') >= 0), 'v395：确实发起过移动请求（数组式→逗号式→逐条都试过）');
   ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
 
   /* v384：详情页「一键离线」——磁力排序取第一条 + 整理成功后自动串接上传元数据 */
