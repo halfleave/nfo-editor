@@ -1944,21 +1944,21 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-fab svg { width: 21px; height: 21px; }
 .auto-fab:active { opacity: .8; }
 /* v387：自动化页右下角「功能按钮组」——最下面是常驻的开合按钮，上面依次是各功能。
-   从上到下：上传元数据 / 文件整理 / 磁力搜索 / 字幕搜索 */
+   从上到下：文件整理 / 磁力搜索 / 字幕搜索 / 上传元数据（上传贴在开合按钮上方） */
 .auto-fab-toggle{ bottom: calc(44px + env(safe-area-inset-bottom)); z-index: 31; }
-.auto-fab-upload{ bottom: calc(104px + env(safe-area-inset-bottom)); }
-.auto-fab-tidy  { bottom: calc(164px + env(safe-area-inset-bottom)); }
+.auto-fab-tidy  { bottom: calc(284px + env(safe-area-inset-bottom)); }
 .auto-fab-magnet{ bottom: calc(224px + env(safe-area-inset-bottom)); }
-.auto-fab-sub   { bottom: calc(284px + env(safe-area-inset-bottom)); }
+.auto-fab-sub   { bottom: calc(164px + env(safe-area-inset-bottom)); }
+.auto-fab-upload{ bottom: calc(104px + env(safe-area-inset-bottom)); }
 /* 收起态：功能按钮隐去（淡出 + 下移缩小，弹出时反向回来）；开合按钮的箭头朝上=可展开 */
 #page-auto .auto-fab-fn { opacity: 0; transform: translateY(16px) scale(.82); pointer-events: none;
   transition: opacity .16s ease, transform .22s cubic-bezier(.25,.8,.35,1); }
 #page-auto.fab-open .auto-fab-fn { opacity: 1; transform: none; pointer-events: auto; }
-/* 依次弹出的小错峰，收起时立即复位（延迟只在展开态声明） */
+/* 依次弹出的小错峰，收起时立即复位（延迟只在展开态声明）；从最贴近开合按钮的一枚开始往上依次弹出 */
 #page-auto.fab-open .auto-fab-upload{ transition-delay: 0s; }
-#page-auto.fab-open .auto-fab-tidy  { transition-delay: .03s; }
+#page-auto.fab-open .auto-fab-sub   { transition-delay: .03s; }
 #page-auto.fab-open .auto-fab-magnet{ transition-delay: .06s; }
-#page-auto.fab-open .auto-fab-sub   { transition-delay: .09s; }
+#page-auto.fab-open .auto-fab-tidy  { transition-delay: .09s; }
 #page-auto .auto-fab-toggle svg { transition: transform .22s cubic-bezier(.25,.8,.35,1); }
 #page-auto.fab-open .auto-fab-toggle svg { transform: rotate(180deg); }
 /* 列表底部留白跟着按钮组走：收起时让开开合按钮，展开时让开整列，最后一张卡都能滚出来 */
