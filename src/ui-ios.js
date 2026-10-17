@@ -2575,6 +2575,10 @@ function auto115ListDir(cid, sort){
     return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } });
   }).then(function(res){
     var d = res.d || {};
+    /* v403：风控/被限流时 115 回 HTTP 200 + {state:false}，此前被解析成空数组——
+       「空夹判定」路径（删空来源夹/清空壳子夹）会把它当成文件夹真空了，连内容一起删进回收站。
+       改为抛错：所有调用方的 catch 都按「列不到=未知=不删/失败重试」处理，绝不基于一次失败的列表删东西。 */
+    if (d.state === false) throw new Error('列目录失败：' + (d.error || d.errmsg || '被 115 拒绝（疑似风控）'));
     var list = d.data || d.files || [];
     return Array.isArray(list) ? list : [];
   });
@@ -2592,6 +2596,8 @@ function auto115ListDirAll(cid, maxItems){
       return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } });
     }).then(function(res){
       var d = (res && res.d) || {};
+      /* v403：state:false（风控/被拒）→ 抛错，不伪装成空列表（防「空夹误判→连内容删」） */
+      if (d.state === false) throw new Error('列目录失败：' + (d.error || d.errmsg || '被 115 拒绝（疑似风控）'));
       var list = d.data || d.files || [];
       if (!Array.isArray(list)) list = [];
       /* 页偏移没生效（服务端把同一页又发一次）时立刻收手，避免反复请求直到 cap */
@@ -3892,6 +3898,9 @@ function auto115StepMove(t){
           keptOthers.push({ fid: String(it.fid), name: nmz, size: sz || 0 });
           continue;   // 合集保护：保留
         }
+        /* v402 元数据伴随（标题.nfo / 标题-poster.jpg / 标题-fanart.jpg…）：不删，
+           记下来 rename 时跟随主视频一起搬进最终文件夹（临时夹随后整体删除，留下=丢） */
+        if (Auto115Core.isMetaCompanion(nmz)){ (t.metaCompanions = t.metaCompanions || []).push({ fid: String(it.fid), name: nmz }); continue; }
         delIds.push(String(it.fid));
       }
       else if (it.cid){ if (String(it.cid) !== C115_DEFAULT_DIR_CID && Auto115Core.TECH_JUNK_RE.test(nmz)) delIds.push(String(it.cid)); }
@@ -3919,6 +3928,7 @@ function auto115StepMove(t){
       var ids = keep.map(function(it){ return String(it.fid); })
         .concat((t.subInfos || []).map(function(s){ return String(s.fid); }));
       if (t.secondVersion && t.secondVersion.fid) ids.push(String(t.secondVersion.fid));
+      (t.metaCompanions || []).forEach(function(c){ ids.push(c.fid); });   /* v402 元数据伴随一并提到容器根 */
       ids = ids.filter(function(id, i){ return id && ids.indexOf(id) === i; });
       return auto115MoveAllInto(ids, t.offlineDirCid);
     };
@@ -4053,7 +4063,11 @@ function auto115StepRename(t){
   var collDirName = t._collDirName || null; t._collDirName = null;
   var othersJob = auto115OtherPartJobs(t);   /* v347：反查命中的合集其他视频（按部名改名→平铺云下载根目录） */
   var multi = keep.length > 1;
-  var prev = t.external ? null : (t.forcedMergeCid ? { cid: t.forcedMergeCid, name: t.finalDirName }
+  /* v403：多选整理影片夹容器 = 最终夹（同 cleanup 的保护），不找历史并入目标 */
+  var prev;
+  if (t.external) prev = null;
+  else if (t.tidy && t.multiBox === 'film') prev = { cid: t.offlineDirCid, name: t.offlineDirName };
+  else prev = (t.forcedMergeCid ? { cid: t.forcedMergeCid, name: t.finalDirName }
     : (collDirCid ? { cid: collDirCid, name: collDirName } : auto115FindMergeTarget(t)));
   if (prev){
     t.finalDirCid = prev.cid;
@@ -4074,8 +4088,13 @@ function auto115StepRename(t){
           var dupSv = dupSvJob ? auto115ExecPlan(t, auto115PlanMoves([dupSvJob]), { targetCid: prev.cid }) : Promise.resolve(null);
           return dupSv.then(function(){
             var afterDup = function(){
-              if (auto115HasKeptOthers(t)){ auto115Finish(t); return null; }
-              return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
+              /* v402：元数据伴随也并入目标夹再收尾（临时夹随后会被整体删除） */
+              var metaJobs = (t.metaCompanions || []).map(function(c){ return { fid: c.fid, name: c.name, size: 0 }; });
+              var metaP = metaJobs.length ? auto115ExecPlan(t, auto115PlanMoves(metaJobs), { targetCid: prev.cid }).catch(function(){ return null; }) : Promise.resolve(null);
+              return metaP.then(function(){
+                if (auto115HasKeptOthers(t)){ auto115Finish(t); return null; }
+                return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
+              });
             };
             /* v347：合集其他视频照搬（失败不阻塞，维持保护） */
             if (othersJob) return auto115ExecPlan(t, auto115PlanMoves(othersJob.jobs), { targetCid: C115_DEFAULT_DIR_CID }).then(function(){ auto115PruneKeptOthers(t, othersJob.moved); }).catch(function(){ return null; }).then(afterDup);
@@ -4100,7 +4119,9 @@ function auto115StepRename(t){
       if (jobs.indexOf(null) >= 0){ return null; }
       var subJobs = (t.subInfos || []).map(function(s){ return { fid: s.fid, name: Auto115Core.subNameForVideo(jobs[0].name, s.name), orig: s.name, size: 0 }; });
       var svJob = auto115SecondVersionJob(t);
-      var allJobs = jobs.concat(subJobs).concat(svJob ? [svJob] : []);
+      /* v402 元数据伴随跟随并入目标夹（名字已是最终形态；重名同大小会被 planMoveJobs 跳过） */
+      var metaJobs = (t.metaCompanions || []).map(function(c){ return { fid: c.fid, name: c.name, size: 0 }; });
+      var allJobs = jobs.concat(subJobs).concat(svJob ? [svJob] : []).concat(metaJobs);
       var conflictPlan = Auto115Core.planMoveJobs(allJobs, list || []);
       jobs = conflictPlan.todo;
       var subCount = (t.subInfos || []).length;
@@ -4141,7 +4162,9 @@ function auto115StepRename(t){
   // 字幕跟随主视频一起规范命名
   var subJobs = (t.subInfos || []).map(function(s){ return { fid: s.fid, name: Auto115Core.subNameForVideo(jobs[0].name, s.name), orig: s.name, size: 0 }; });
   var svJobPlain = auto115SecondVersionJob(t);
-  var allJobs = jobs.concat(subJobs).concat(svJobPlain ? [svJobPlain] : []);
+  /* v402：非并入场景元数据伴随已在最终夹内（cleanup 把临时夹改名成了影片夹），嵌套子夹里的提到根 */
+  var metaJobsPlain = (t.metaCompanions || []).map(function(c){ return { fid: c.fid, name: c.name, size: 0 }; });
+  var allJobs = jobs.concat(subJobs).concat(svJobPlain ? [svJobPlain] : []).concat(metaJobsPlain);
   var conflictPlan = Auto115Core.planMoveJobs(allJobs, []);
   jobs = conflictPlan.todo;
   var subCount = (t.subInfos || []).length;
@@ -4797,6 +4820,14 @@ function auto115StepCleanup(t){
     return auto115StepMove(t);
   }
   /* 并入任务：同影片已有目标文件夹，离线临时夹稍后整体删除，不改名 */
+  /* v403：多选整理的容器是用户的真实影片夹（multiBox='film'）→ 它本身就是最终归宿，
+     绝不并入别的历史夹——否则收尾 RemoveTmpDir 会把这个真夹当「临时夹」整体删掉
+     （MISM-403 实锤：夹里的元数据、来源子夹、视频全进回收站） */
+  if (t.tidy && t.multiBox === 'film'){
+    t.finalDirCid = t.offlineDirCid; t.finalDirName = t.offlineDirName;
+    auto115Set(t, 'cleanup', 'skip', '整理夹即影片夹「' + t.offlineDirName + '」');
+    return auto115StepMove(t);
+  }
   var prev = t.external ? null : auto115FindMergeTarget(t);
   if (prev){
     t.finalDirCid = prev.cid; t.finalDirName = prev.name;
@@ -4848,7 +4879,10 @@ function auto115RemoveTmpDir(t){
   var rel = (t && t._relatedCids) ? t._relatedCids : [];
   if (t) t._relatedCids = null;
   var main = Promise.resolve();
-  if (t.finalDirCid && !t.noFolder && t.offlineDirCid && t.offlineDirCid !== C115_DEFAULT_DIR_CID && t.offlineDirCid !== t.finalDirCid){
+  /* v403：多选整理的容器是用户真实夹（film=影片夹 / tv=剧集根夹）→ 永不当「临时夹」删除；
+     只有 tmp 临时容器和离线落地的临时夹才允许收尾删除 */
+  var boxPermanent = !!(t.tidy && t.multiBox && t.multiBox !== 'tmp');
+  if (!boxPermanent && t.finalDirCid && !t.noFolder && t.offlineDirCid && t.offlineDirCid !== C115_DEFAULT_DIR_CID && t.offlineDirCid !== t.finalDirCid){
     var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
     main = auto115Post('https://webapi.115.com/rb/delete', delBody).then(function(res){
       if (res.ok && ((res.d || {}).state === true || (res.d || {}).errno === 0)){
@@ -5706,26 +5740,48 @@ function auto115StepUploadFiles(t){
       bakeJobs.push(ufj.then(function(u){ var b = dataUrlToBytesSync(u); if (b) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: b }); }));
     }
     return Promise.all(bakeJobs).then(function(){
-      var total = files.length, idx = 0;
-      function next(){
-        if (idx >= total) return Promise.resolve();
-        var f = files[idx];
-        auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
-        renderAuto115();
-        return c115UploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function(){
-          idx++; return next();
-        });
-      }
-      return next().then(function(){
-        t.nfoUploaded = auto115Now();
-        /* 这部片原本平铺在云下载（普通影片默认形态）→ 现在有了文件夹，把视频也移进去 */
-        return auto115MoveFlatVideoInto(t).then(function(moved){
-          var msg = '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」' + (moved ? '，视频也移进去了' : '');
-          var _upDoc2 = auto115TaskDoc(t);
-          if (_upDoc2) _upDoc2.nfoUploaded = auto115Now();
-          auto115Set(t, 'upload', 'ok', msg);
-          auto115Finish(t);
-          showToast(msg, 'success');
+      /* v402 幂等上传：先列目标夹，同名文件跳过只传缺的（列目录失败就当没有，退回全传）。
+         元数据以名字为准——重跑任务/重复上传不再产生两份 nfo、两张海报。 */
+      return auto115ListDir(t.uploadDirCid).catch(function(){ return []; }).then(function(list){
+        var have = {};
+        (list || []).forEach(function(it){ if (it && it.fid) have[String(it.n || '').toLowerCase()] = 1; });
+        var skipped = files.filter(function(f){ return have[f.name.toLowerCase()]; }).length;
+        files = files.filter(function(f){ return !have[f.name.toLowerCase()]; });
+        var total = files.length, idx = 0;
+        if (!total){
+          /* 全部已存在：不重复上传，但平铺在云下载的视频仍要归位进夹 */
+          t.nfoUploaded = auto115Now();
+          return auto115MoveFlatVideoInto(t).then(function(){
+            var msg = skipped + ' 个元数据文件都已存在，无需重复上传';
+            var _upDoc2 = auto115TaskDoc(t);
+            if (_upDoc2) _upDoc2.nfoUploaded = auto115Now();
+            auto115Set(t, 'upload', 'ok', msg);
+            auto115Finish(t);
+            showToast(msg, 'success');
+            return null;
+          });
+        }
+        function next(){
+          if (idx >= total) return Promise.resolve();
+          var f = files[idx];
+          auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
+          renderAuto115();
+          return c115UploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function(){
+            idx++; return next();
+          });
+        }
+        return next().then(function(){
+          t.nfoUploaded = auto115Now();
+          /* 这部片原本平铺在云下载（普通影片默认形态）→ 现在有了文件夹，把视频也移进去 */
+          return auto115MoveFlatVideoInto(t).then(function(moved){
+            var msg = '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」'
+              + (skipped ? ('（' + skipped + ' 个已存在跳过）') : '') + (moved ? '，视频也移进去了' : '');
+            var _upDoc2 = auto115TaskDoc(t);
+            if (_upDoc2) _upDoc2.nfoUploaded = auto115Now();
+            auto115Set(t, 'upload', 'ok', msg);
+            auto115Finish(t);
+            showToast(msg, 'success');
+          });
         });
       });
     });
@@ -9388,7 +9444,9 @@ function toggleLock(id){
 var buildNFOMovieXml = NfoCore.buildMovieXml;
 var buildNFOTvXml = NfoCore.buildTvShowXml;
 /* 按影片类型选 NFO 生成器：剧集（tmdbMediaType==='tv'）→ <tvshow>；其余 → <movie> */
-function isTvFilmData(d){ return !!(d && d.tmdbMediaType === 'tv'); }
+/* v403：番号影片（有 dvdId/content_id）的数据可能带着脏的 tmdbMediaType:'tv'（识别/搜索期写入），
+   导致 AV 传成 tvshow.nfo + 剧集格式 XML（MISM-403 实锤）。番号绝不是剧集，dvdId 一票否决。 */
+function isTvFilmData(d){ return !!(d && d.tmdbMediaType === 'tv' && !(d.dvdId || d.content_id)); }
 function buildFilmXml(d){ return isTvFilmData(d) ? buildNFOTvXml(d) : buildNFOMovieXml(d); }
 /* Kodi 规范：剧集信息文件名固定 tvshow.nfo；电影沿用「影片名.nfo」 */
 function nfoEntryName(d, base){ return isTvFilmData(d) ? 'tvshow.nfo' : ((base || 'movie') + '.nfo'); }

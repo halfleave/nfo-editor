@@ -599,5 +599,13 @@ assert(tvJunk.deleteFids.indexOf('c') >= 0 && tvJunk.deleteFids.indexOf('d') >= 
 assert(api.TECH_JUNK_RE.test('sample') && !api.TECH_JUNK_RE.test('花絮'), '清洗：TECH_JUNK_RE 窄名单不含花絮/特典（v366 约定贯通）');
 assert(api.MOVIE_EXCLUDE_RE.test('花絮') && api.MOVIE_EXCLUDE_RE.test('sample'), '清洗：MOVIE_EXCLUDE_RE 宽名单仅用于主视频候选');
 
+/* v402 元数据伴随白名单：标题.nfo / 标题-poster.jpg / 标题-fanart.jpg 不清理（Kodi 配套元数据） */
+assert(api.isMetaCompanion('MIAB-500.nfo') && api.isMetaCompanion('MIAB-500-poster.jpg') && api.isMetaCompanion('MIAB-500-fanart.jpg'), '元数据伴随：nfo/-poster/-fanart 命中');
+assert(api.isMetaCompanion('赌神-banner.png') && api.isMetaCompanion('赌神-clearart.webp') && api.isMetaCompanion('Movie-disc.tbn') && api.isMetaCompanion('赌神-thumb.jpg'), '元数据伴随：banner/clearart/disc/thumb 同族命中');
+assert(!api.isMetaCompanion('海报.jpg') && !api.isMetaCompanion('photo-poster.txt') && !api.isMetaCompanion('a.jpeg') && !api.isMetaCompanion('说明.nfo.bak'), '元数据伴随：普通图片/非图扩展/双扩展不命中');
+const planMeta = api.tvPlan('剧', [{ fid: 'e', name: 'E01.mkv' }, { fid: 'f', name: '剧.nfo' }, { fid: 'g', name: '剧-poster.jpg' }, { fid: 'h', name: '剧-fanart.jpg' }], 0);
+assert(planMeta.deleteFids.length === 0, 'tvPlan：元数据伴随不进删除清单，实际=' + planMeta.deleteFids.join(','));
+assert(planMeta.renames.length === 1 && planMeta.renames[0].fid === 'e', 'tvPlan：元数据伴随不影响视频识别');
+
 console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ auto115-core 全部通过');
 process.exit(process.exitCode || 0);

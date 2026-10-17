@@ -967,6 +967,9 @@
     if (sort) url += '&o=' + sort + '&asc=0';
     return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } }).then(function (res) {
       var d = res.d || {};
+      /* v403：风控/被限流时 115 回 200 + {state:false}，此前被解析成空数组——「空夹判定」会把
+         有内容的夹当真空了连内容删。改为抛错：调用方 catch 一律按「列不到=未知=不删」处理。 */
+      if (d.state === false) throw new Error('列目录失败：' + (d.error || d.errmsg || '被 115 拒绝（疑似风控）'));
       var list = d.data || d.files || [];
       return Array.isArray(list) ? list : [];
     });
@@ -980,6 +983,8 @@
                 '&offset=' + offset + '&limit=' + limit + '&show_dir=1';
       return c115ProxyFetch(url, { headers: { 'X-115-Cookie': state.c115Cookie || '' } }).then(function (res) {
         var d = (res && res.d) || {}, list = d.data || d.files || [];
+        /* v403：state:false（风控）→ 抛错，不伪装成空列表 */
+        if (d.state === false) throw new Error('列目录失败：' + (d.error || d.errmsg || '被 115 拒绝（疑似风控）'));
         if (!Array.isArray(list)) list = [];
         /* 页偏移没生效（同一页又发一次）→ 立刻收手，避免反复请求直到 cap */
         var first = list.length ? String(list[0].cid || list[0].fid || list[0].n || '') : '';
@@ -1972,6 +1977,8 @@
             keptOthers.push({ fid: String(it.fid), name: nmz, size: sz || 0 });
             continue;
           }
+          /* v402 元数据伴随（标题.nfo / 标题-poster.jpg…）：不删，rename 时跟随搬进最终夹 */
+          if (Auto115Core.isMetaCompanion(nmz)) { (t.metaCompanions = t.metaCompanions || []).push({ fid: String(it.fid), name: nmz }); continue; }
           delIds.push(String(it.fid));
         } else if (it.cid) { if (String(it.cid) !== C115_DEFAULT_DIR_CID && Auto115Core.TECH_JUNK_RE.test(nmz)) delIds.push(String(it.cid)); }
       }
@@ -2088,8 +2095,13 @@
             var dupSv = dupSvJob ? auto115ExecPlan(t, auto115PlanMoves([dupSvJob]), { targetCid: prev.cid }) : Promise.resolve(null);
             return dupSv.then(function () {
               var afterDup = function () {
-                if (auto115HasKeptOthers(t)) { auto115Finish(t); return null; }
-                return auto115RemoveTmpDir(t).then(function () { auto115Finish(t); return null; });
+                /* v402：元数据伴随也并入目标夹再收尾（临时夹随后会被整体删除） */
+                var metaJobs = (t.metaCompanions || []).map(function (c) { return { fid: c.fid, name: c.name, size: 0 }; });
+                var metaP = metaJobs.length ? auto115ExecPlan(t, auto115PlanMoves(metaJobs), { targetCid: prev.cid }).catch(function () { return null; }) : Promise.resolve(null);
+                return metaP.then(function () {
+                  if (auto115HasKeptOthers(t)) { auto115Finish(t); return null; }
+                  return auto115RemoveTmpDir(t).then(function () { auto115Finish(t); return null; });
+                });
               };
               /* v347：合集其他视频照搬（v351 起带 pid 归入合集夹；失败不阻塞，维持保护） */
               if (othersJob) return auto115ExecPlan(t, auto115PlanMoves(othersJob.jobs), { targetCid: collDirCid || C115_DEFAULT_DIR_CID }).then(function () { auto115PruneKeptOthers(t, othersJob.moved); }).catch(function () { return null; }).then(afterDup);
@@ -2113,7 +2125,9 @@
         });
         if (jobs.indexOf(null) >= 0) return null;
         var svJob = auto115SecondVersionJob(t);
-        var allJobs = jobs.concat(subJobs).concat(svJob ? [svJob] : []);
+        /* v402 元数据伴随跟随并入目标夹（重名同大小会被 planMoveJobs 跳过） */
+        var metaJobs = (t.metaCompanions || []).map(function (c) { return { fid: c.fid, name: c.name, size: 0 }; });
+        var allJobs = jobs.concat(subJobs).concat(svJob ? [svJob] : []).concat(metaJobs);
         var conflictPlan = Auto115Core.planMoveJobs(allJobs, list || []);
         allJobs = conflictPlan.todo;
         return auto115ExecPlan(t, auto115PlanMoves(allJobs), { targetCid: prev.cid }).then(function () {
@@ -2410,19 +2424,35 @@
         bakeJobs.push(ufj.then(function (u) { var b = dataUrlToBytesSync(u); if (b) files.push({ name: base + '-fanart.jpg', mime: 'image/jpeg', bytes: b }); }));
       }
       return Promise.all(bakeJobs).then(function () {
-        var total = files.length, idx = 0;
-        function next() {
-          if (idx >= total) return Promise.resolve();
-          var f = files[idx];
-          auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
-          pc115RenderAuto();
-          return c115OpenUploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function () { idx++; return next(); });
-        }
-        return next().then(function () {
-          t.nfoUploaded = auto115Now();
-          auto115Set(t, 'upload', 'ok', '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」');
-          auto115Finish(t);
-          showToast('已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」', 'success');
+        /* v402 幂等上传：先列目标夹，同名跳过只传缺的（列目录失败退回全传） */
+        return auto115ListDir(t.uploadDirCid).catch(function () { return []; }).then(function (list) {
+          var have = {};
+          (list || []).forEach(function (it) { if (it && it.fid) have[String(it.n || '').toLowerCase()] = 1; });
+          var skipped = files.filter(function (f) { return have[f.name.toLowerCase()]; }).length;
+          files = files.filter(function (f) { return !have[f.name.toLowerCase()]; });
+          var total = files.length, idx = 0;
+          if (!total) {
+            t.nfoUploaded = auto115Now();
+            var allMsg = skipped + ' 个元数据文件都已存在，无需重复上传';
+            auto115Set(t, 'upload', 'ok', allMsg);
+            auto115Finish(t);
+            showToast(allMsg, 'success');
+            return null;
+          }
+          function next() {
+            if (idx >= total) return Promise.resolve();
+            var f = files[idx];
+            auto115Set(t, 'upload', 'running', '上传中 (' + (idx + 1) + '/' + total + ')：' + f.name);
+            pc115RenderAuto();
+            return c115OpenUploadFile(t.uploadDirCid, f.name, f.bytes, f.mime).then(function () { idx++; return next(); });
+          }
+          return next().then(function () {
+            t.nfoUploaded = auto115Now();
+            var okMsg = '已上传 ' + total + ' 个文件到「' + (t.uploadDirName || '') + '」' + (skipped ? ('（' + skipped + ' 个已存在跳过）') : '');
+            auto115Set(t, 'upload', 'ok', okMsg);
+            auto115Finish(t);
+            showToast(okMsg, 'success');
+          });
         });
       });
     }).catch(function (e) {

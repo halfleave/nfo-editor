@@ -307,6 +307,12 @@
      junk = 立即删除；other = 非内容文件，调用方按各自约定处理（当前两条链都删）。
      新增清洗规则三步走（同 EP_RULES）：①按环号插表 ②补正反用例 ③check.js 全绿。 */
   api.TECH_JUNK_RE = /sample|预告|trailer|preview|menu/i;   // 技术性杂物视频名（tvPlan/电影链/打平下钻三处共用）
+  /* 元数据伴随文件白名单（v402，用户拍板）：Kodi/媒体库惯例的配套元数据——标题.nfo / 标题-poster.jpg /
+     标题-fanart.jpg（含 banner/logo/disc/clearart/landscape/thumb 同族），是刮削器要读的，不是垃圾。
+     两条清洗链（剧集 tvPlan / 电影 move 步）在删「other」前先过这道白名单：命中 → 保留并跟随视频归位。
+     只认后缀模式不认具体标题：这类名字几乎只出现在元数据场景，误留成本 ≈ 0，误删成本是丢元数据。 */
+  api.META_COMPANION_RE = /\.nfo$|-(fanart|poster|banner|logo|disc|clearart|landscape|thumb)\.(jpe?g|png|webp|bmp|tbn)$/i;
+  api.isMetaCompanion = function (name) { return api.META_COMPANION_RE.test(String(name || '')); };
   /* 网站推广广告视频（v381，真机实锤：DDHDTV 种子附带的「【更多高清剧集下载请访问 www.xxx.com】…」宣传 mkv，
      622KB 纯广告）。命中「更多XX下载/下载请访问/打包下载」等推广话术的视频 → 直接删。
      体积双条件（用户拍板：不能只看名称）：正片一般不会小于 5MB，话术命中 + 体积 <5MB 才判广告——
@@ -625,6 +631,7 @@
         else vids.push(it);
       }
       else if (fc === 'sub') subs.push(it);
+      else if (api.isMetaCompanion(nm)) { /* v402 元数据伴随（标题.nfo/-poster/-fanart）：留在原夹跟随归位，绝不进删除清单 */ }
       else junk.push(it);
     });
     vids.sort(function (a, b) { return a.name > b.name ? 1 : (a.name < b.name ? -1 : 0); });
