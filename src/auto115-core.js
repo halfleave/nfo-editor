@@ -862,6 +862,10 @@
   api.TIDY_ACCEPT = 72;   // ≥ 该分且与次优拉开 TIDY_GAP，才自动采用（否则弹候选让用户选）
   api.TIDY_GAP = 8;       // 与次优候选的最小领先分
   api.TIDY_MIN = 30;      // 低于此分不进候选列表（视为无关文件夹）
+  /* v396：即使已有 100% 命中的项，也要把达到该分的其它相似项一并摆出来让用户确认。
+     取 80 的依据：剧集「剧名根夹 100 分 + 每集子夹 85 分」（夹名带集号后缀会因「多出数字」扣 15），
+     80 正好收进整季子夹；再低（<80）基本是模糊相似——同系列续集、同组别片，噪音大于价值。 */
+  api.TIDY_PEER = 80;
 
   /* 拼音首字母映射表（U+4E00–U+9FFF），由 src/pinyin-initial.js 注入；PC 不加载该文件 → 空串，首字母通道自动降级 */
   api.PINYIN_INIT = (typeof Auto115CorePINYIN !== 'undefined') ? Auto115CorePINYIN

@@ -267,6 +267,12 @@ assert(api.tidyScore('zjz6hamy', ['终结者6：黑暗命运'], '') === 90, '全
 assert(api.tidyScore('zjz6', ['终结者：黑暗命运'], '') < api.TIDY_ACCEPT, '片名本身没有 6 时 zjz6 是续集嫌疑 → 不自动档');
 assert(api.tidyScore('教父2', ['教父'], '') < api.TIDY_ACCEPT, '续集压分不受副标题改动影响');
 
+/* ---------- v396：高相似「同伴」阈值（即使有 100% 命中，也要把 ≥80 的其它候选摆出来） ---------- */
+assert(api.TIDY_PEER === 80, 'v396：同伴阈值 = 80');
+assert(api.tidyScore('ONE高中英雄们08', ['ONE：高中英雄们'], '') >= api.TIDY_PEER, 'v396：剧集子夹「剧名+集号」达到同伴阈值（实测 86）→ 整季能被一起列出来');
+assert(api.tidyScore('ONE高中英雄们04v2', ['ONE：高中英雄们'], '') >= api.TIDY_PEER, 'v396：04v2 这类集号后缀同样过线（实测 84）');
+assert(api.tidyScore('教父2', ['教父'], '') < api.TIDY_PEER, 'v396：续集「教父2」被挡在线外（实测 70），不会混进整季候选');
+
 /* ---------- v265：清晰度标识 / 真分碟标记 / 命名追加清晰度 ---------- */
 assert(api.qualityRank('赌神.2160p.mkv') === 4 && api.qualityRank('A.4K.mkv') === 4 && api.qualityRank('B.1080p.mkv') === 3 && api.qualityRank('C.720p.mkv') === 1 && api.qualityRank('D.mkv') === 0, 'qualityRank 清晰度分级');
 assert(api.qualityTag('赌神.1080p.mkv') === '1080p' && api.qualityTag('Movie.4K.mkv') === '4k' && api.qualityTag('x.mkv') === '', 'qualityTag 提取清晰度标识');

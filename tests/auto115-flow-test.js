@@ -576,7 +576,7 @@ const lz4LiteralForTest = (bytes) => {
   const mkUploadScript = (dirList) => {
     initCalls = []; putCalls = []; legacyCalls = []; mkdirCalls = []; listCalls = [];
     return {
-      'files?cid=': () => { listCalls.push(1); return { state: true, data: dirList }; },
+      'files?cid=': (n, url) => { listCalls.push(1); var dl = (typeof dirList === 'function') ? dirList(url, n) : dirList; return { state: true, data: dl }; },
       'files/add': () => { mkdirCalls.push(1); return { state: true, data: { cid: 'NEWDIR' } }; },
       'open/upload/init': (n, url, opts) => {
         initCalls.push({ url, body: opts && opts.body, xs: opts && opts.xs });
@@ -596,7 +596,7 @@ const lz4LiteralForTest = (bytes) => {
   const tu = mkUploadTask('tu1');
   doc.tasks.unshift(tu);
   await ctx.auto115StepUploadDir(tu);
-  assert(listCalls.length === 1, '先列一次云下载目录，实际=' + listCalls.length);
+  assert(listCalls.length >= 1 && listCalls.length <= 4, '目录只列了有限几次（找夹 + 上传后收视频），不再无脑翻页，实际=' + listCalls.length);
   assert(mkdirCalls.length === 1, '没找到同名文件夹 → 创建 1 次，实际=' + mkdirCalls.length);
   assert(tu.uploadDirCid === 'NEWDIR', '用新建文件夹的 cid，实际=' + tu.uploadDirCid);
   assert(ctx.auto115GetStep(tu, 'dir').state === 'ok', 'dir 步 = ok');
@@ -625,6 +625,28 @@ const lz4LiteralForTest = (bytes) => {
   assert(tu2.uploadDirCid === 'EXISTDIR', '复用已有文件夹 cid，实际=' + tu2.uploadDirCid);
   assert(initCalls.length === 3 && initCalls[0].body.indexOf('target=U_1_EXISTDIR') >= 0, '复用时上传到已有目录');
   assert(putCalls.length === 3, '复用时也上传 3 个文件');
+
+  /* C. v397：目标夹不在第一页（云下载条目多）→ 翻页找到就复用，绝不误建同名夹 */
+  script = mkUploadScript((url) => url.indexOf('offset=0&') >= 0
+    ? [{ cid: 'OTHER1', n: '别的文件夹' }]
+    : [{ cid: 'DEEP', n: '测试影片' }]);
+  const tu3 = mkUploadTask('tu3');
+  doc.tasks.unshift(tu3);
+  await ctx.auto115StepUploadDir(tu3);
+  assert(mkdirCalls.length === 0, 'v397：第一页没命中就翻页，翻到同名夹 → 不建夹，实际建 ' + mkdirCalls.length + ' 次');
+  assert(tu3.uploadDirCid === 'DEEP', 'v397：复用翻页找到的文件夹 cid，实际=' + tu3.uploadDirCid);
+  assert(ctx.auto115GetStep(tu3, 'dir').state === 'ok', 'v397：翻页命中 → dir 步 ok（不再报「文件夹没准备好」)');
+
+  /* D. v397：建夹被 115 拒（同名已存在回 state:false）→ 回头再查目录复用，而不是直接失败 */
+  let dirListHits = 0;
+  script = mkUploadScript(() => { dirListHits++; return dirListHits >= 4 ? [{ cid: 'SAME', n: '测试影片' }] : []; });
+  script['files/add'] = () => { mkdirCalls.push(1); return { state: false, data: {} }; };
+  const tu4 = mkUploadTask('tu4');
+  doc.tasks.unshift(tu4);
+  await ctx.auto115StepUploadDir(tu4);
+  assert(mkdirCalls.length === 1, 'v397：确实尝试建过夹，实际=' + mkdirCalls.length);
+  assert(tu4.uploadDirCid === 'SAME', 'v397：建夹被拒后回头找到已有同名夹并复用，实际=' + tu4.uploadDirCid);
+  assert(ctx.auto115GetStep(tu4, 'dir').state === 'ok', 'v397：建夹被拒但仍复用成功 → dir 步 ok');
 
   /* 7. 并入模式：同影片第二个磁力 → 移入已有标题文件夹，改名 番号.A.ext，删除临时文件夹 */
   script = {
@@ -1459,6 +1481,21 @@ const lz4LiteralForTest = (bytes) => {
   await ctx.auto115StepTvRenameVideos(tMvFail);
   assert(ctx.auto115GetStep(tMvFail, 'rename').state === 'fail', 'v395：批量移动被拒（state:false）→ rename 节点 fail，不静默标 ok（' + ctx.auto115GetStep(tMvFail, 'rename').msg + '）');
   assert(calls.some(c => c.url.indexOf('files/move') >= 0), 'v395：确实发起过移动请求（数组式→逗号式→逐条都试过）');
+  /* v396：已完成任务也支持重跑（场景：任务被误标成功——v394 移动静默失败就是「显示完成、文件没搬」） */
+  script = { 'files?cid=RDIR': { state: true, data: [] }, 'files/move': { state: true }, 'files/batch_rename': { state: true }, 'files/add': { state: true, data: { cid: 'RSUB' } } };
+  const tRedo = {
+    id: 'tredo', type: 'tidy', tidy: true, steps: ctx.auto115NewSteps('offline'), createdAt: Date.now(), fv: 999,
+    offlineDirCid: 'RDIR', offlineDirName: '剧名'
+  };
+  tRedo.steps.forEach(s => { s.state = 'ok'; s.msg = '完成'; });
+  ctx.auto115Set(tRedo, 'submit', 'skip', '已有文件，跳过离线下载');
+  ctx.auto115Set(tRedo, 'wait', 'skip', '已有文件，跳过离线下载');
+  ctx.auto115Doc = { filmId: 'film1', filmTitle: '剧名', type: 'tv', tasks: [tRedo] };
+  assert(ctx.auto115Status(tRedo).cls === 'ab-ok', 'v396 前置：任务已全部完成（ab-ok）');
+  const pRedo = ctx.auto115RetryTask('tredo');
+  assert(ctx.auto115GetStep(tRedo, 'mkdir').state === 'idle', 'v396：已完成任务点「重跑」→ 步骤重置回 idle（不再只提示「没有失败的步骤」）');
+  try { await pRedo; } catch (e) {}
+  assert(ctx.auto115GetStep(tRedo, 'submit').state === 'skip' && ctx.auto115GetStep(tRedo, 'wait').state === 'skip', 'v396：重跑不清整理任务的 submit/wait（本来就跳过下载段）');
   ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
 
   /* v384：详情页「一键离线」——磁力排序取第一条 + 整理成功后自动串接上传元数据 */

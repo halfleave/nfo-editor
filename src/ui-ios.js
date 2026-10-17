@@ -2507,7 +2507,7 @@ function auto115TaskHtml(t){
     html += '<div class="auto-steps">' + renderSteps.map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>'
       + '<div class="auto-task-ops">'
       + startOp
-      + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">重试</button>'
+      + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">' + (st.cls === 'ab-ok' ? '重跑' : '重试') + '</button>'
       + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除</button>'
       + '</div>';
   }
@@ -2582,7 +2582,7 @@ function auto115ListDir(cid, sort){
    这样即便 115 实际没给到 1000 条（按自己的上限截断）也不会漏取，只是多花一次请求。 */
 function auto115ListDirAll(cid, maxItems){
   var LIMIT = 1000, out = [], cap = maxItems || 3000;
-  function page(offset, limit){
+  function page(offset, limit, prevFirst){
     var url = 'https://webapi.115.com/files?cid=' + encodeURIComponent(cid) +
               '&offset=' + offset + '&limit=' + limit + '&show_dir=1';
     return c115Call('read', function (){
@@ -2591,15 +2591,18 @@ function auto115ListDirAll(cid, maxItems){
       var d = (res && res.d) || {};
       var list = d.data || d.files || [];
       if (!Array.isArray(list)) list = [];
+      /* 页偏移没生效（服务端把同一页又发一次）时立刻收手，避免反复请求直到 cap */
+      var first = list.length ? String(list[0].cid || list[0].fid || list[0].n || '') : '';
+      if (first && prevFirst && first === prevFirst) return out;
       out = out.concat(list);
-      if (!out.length && limit !== 200) return page(0, 200); // 大页被拒/不支持 → 退回 200 重试一次
+      if (!out.length && limit !== 200) return page(0, 200, '');
       var count = Number(d.count || 0);
       var more = list.length > 0 && out.length < cap && (!count || out.length < count) && out.length < 20000;
-      if (more) return page(offset + list.length, limit);
+      if (more) return page(offset + list.length, limit, first);
       return out;
     });
   }
-  return page(0, LIMIT);
+  return page(0, LIMIT, '');
 }
 /* 条目时间（秒时间戳/毫秒/日期字符串均兼容）→ 毫秒 */
 function auto115ItemTime(it){
@@ -5538,15 +5541,47 @@ function auto115UploadDirName(doc){
   var D = doc || auto115Doc;
   return sanitizeName((D && D.filmTitle) || '') || '';
 }
-/* 在云下载目录下建文件夹，返回新目录 cid */
+/* 在云下载目录里按名找文件夹（只认文件夹条目）：先第一页 200 条，没命中再翻页补齐。
+   云下载条目一多，目标夹常落在后面几页；此前只看第一页，把「有」当「没有」，
+   接着去建同名夹被 115 拒，最后就报「文件夹没准备好 / 找不到文件夹」。 */
+function auto115FindUploadDir(name){
+  function pick(list){
+    for (var i = 0; i < (list || []).length; i++){
+      var it = list[i];
+      if (!it || it.fid || !it.cid) continue;              /* 只要文件夹条目 */
+      var fn = it.n || it.name || '';
+      if (fn === name || sanitizeName(fn) === name) return { cid: String(it.cid), name: fn };
+    }
+    return null;
+  }
+  return auto115ListDir(C115_DEFAULT_DIR_CID).then(function(list){
+    var hit = pick(list);
+    if (hit) return hit;
+    return auto115ListDirAll(C115_DEFAULT_DIR_CID, 5000).then(pick);
+  });
+}
+/* 在云下载目录下建文件夹，返回新目录 cid。
+   v397：不再只认 cid —— 115 对「同名已存在」会回 state:false 且不带 cid，旧代码直接抛
+   「建文件夹没成功」；现在先把目录再找一遍（夹可能刚好没在第一页），找到就复用，
+   确实建不出来才把 115 的原话抛给上层显示 */
 function auto115Mkdir(name){
   return auto115Post('https://webapi.115.com/files/add',
     'pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID) + '&cname=' + encodeURIComponent(name)
   ).then(function(res){
     var d = res.d || {}, dd = d.data || d;
-    var cid = String((dd && (dd.cid || dd.file_id || dd.id)) || '');
-    if (!cid) throw new Error('建文件夹没成功');
-    return cid;
+    var cid = String((dd && (dd.cid || dd.file_id || dd.id)) || d.cid || '');
+    var ok = res.ok && (d.state === true || d.errno === 0);
+    if (ok && cid) return cid;
+    return auto115ListDirAll(C115_DEFAULT_DIR_CID, 5000).then(function(list){
+      var hit = null;
+      (list || []).forEach(function(it){
+        if (hit || !it || it.fid || !it.cid) return;
+        var fn = it.n || it.name || '';
+        if (fn === name || sanitizeName(fn) === name) hit = String(it.cid);
+      });
+      if (hit) return hit;
+      throw new Error(auto115ErrText(dd, res, '建文件夹「' + name + '」失败'));
+    });
   });
 }
 /* 确保某父目录下的子文件夹存在（先找后建），返回其 cid */
@@ -5609,32 +5644,30 @@ function auto115StepUploadDir(t){
   }
   auto115Set(t, 'dir', 'running', '正在 115 里找「' + name + '」…');
   renderAuto115();
-  return auto115ListDir(C115_DEFAULT_DIR_CID).then(function(list){
-    var folders = list.filter(function(it){ return it && it.cid && !it.fid; });
-    for (var i = 0; i < folders.length; i++){
-      var fn = folders[i].n || '';
-      /* 精确匹配 + 净化后匹配：旧版整理用原始标题改过夹名（带 / 等），净化后比对才能对上，
-         找到后顺手把夹名改成规范名（失败不影响上传），避免每次上传都对不上号 */
-      if (fn === name || sanitizeName(fn) === name){
-        t.uploadDirCid = String(folders[i].cid); t.uploadDirName = fn;
-        auto115Set(t, 'dir', 'ok', '已找到「' + fn + '」');
-        if (fn !== name){
-          auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(folders[i].cid) + '&file_name=' + encodeURIComponent(name))
-            .then(function(){ t.uploadDirName = name; }).catch(function(){});
-        }
+  return auto115FindUploadDir(name).then(function(hit){
+    if (!hit){
+      auto115Set(t, 'dir', 'running', '没找到，正在创建「' + name + '」…');
+      renderAuto115();
+      return auto115Mkdir(name).then(function(cid){
+        t.uploadDirCid = cid; t.uploadDirName = name;
+        auto115Set(t, 'dir', 'ok', '已创建「' + name + '」');
         return auto115StepUploadFiles(t);
-      }
+      });
     }
-    auto115Set(t, 'dir', 'running', '没找到，正在创建「' + name + '」…');
-    renderAuto115();
-    return auto115Mkdir(name).then(function(cid){
-      t.uploadDirCid = cid; t.uploadDirName = name;
-      auto115Set(t, 'dir', 'ok', '已创建「' + name + '」');
-      return auto115StepUploadFiles(t);
-    });
+    t.uploadDirCid = hit.cid; t.uploadDirName = hit.name;
+    auto115Set(t, 'dir', 'ok', '已找到「' + hit.name + '」');
+    /* 旧版整理用原始标题改过夹名（带 / 等），净化后比对才对得上，
+       找到后顺手把夹名改成规范名（失败不影响上传），避免每次上传都对不上号 */
+    if (hit.name !== name){
+      auto115Post('https://webapi.115.com/files/edit', 'fid=' + encodeURIComponent(hit.cid) + '&file_name=' + encodeURIComponent(name))
+        .then(function(){ t.uploadDirName = name; }).catch(function(){});
+    }
+    return auto115StepUploadFiles(t);
   }).catch(function(e){
     console.warn('[115上传]', e);
-    auto115Set(t, 'dir', 'fail', '文件夹没准备好，点「重试」再来一次');
+    /* 把真实原因带出来：此前统一显示「文件夹没准备好」，等于把 115 的拒绝理由吞掉了 */
+    var why = (e && e.message) ? String(e.message).slice(0, 90) : '';
+    auto115Set(t, 'dir', 'fail', '文件夹没准备好' + (why ? '：' + why : '，点「重试」再来一次'));
     auto115Finish(t); return null;
   });
 }
@@ -5694,7 +5727,8 @@ function auto115StepUploadFiles(t){
     });
   }).catch(function(e){
     console.warn('[115上传]', e);
-    auto115Set(t, 'upload', 'fail', '没传成功，点「重试」再来一次');
+    var why2 = (e && e.message) ? String(e.message).slice(0, 90) : '';
+    auto115Set(t, 'upload', 'fail', (why2 ? '没传成功：' + why2 : '没传成功，点「重试」再来一次'));
     auto115Finish(t);
   });
 }
@@ -6065,10 +6099,37 @@ function auto115RetryTask(tid){
   for (var i = 0; i < steps.length; i++){
     if (steps[i].state === 'fail') return auto115RetryStep(tid, steps[i].key);
   }
-  /* 没有失败步骤：待提交/排队/已中止/卡在「进行中」→ 直接从头强启，不再干等队列（v334：覆盖 ab-run/ab-wait 卡死场景） */
   var st = auto115Status(t);
-  if (st.cls !== 'ab-ok' && st.cls !== 'ab-fail') return auto115ForceStart(tid);
+  /* v396：已完成的任务也支持重试——整条重置后从起始步骤重跑。
+     场景：任务被误判成功（v394「移动静默失败」就是改名成功、文件没搬），
+     用户需要再跑一遍才能收尾；整理/离线链本身幂等（收拢、识别、改名、移动重复执行无害）。 */
+  if (st.cls === 'ab-ok') return auto115RetryWhole(tid);
+  /* 没有失败步骤：待提交/排队/已中止/卡在「进行中」→ 直接从头强启，不再干等队列（v334：覆盖 ab-run/ab-wait 卡死场景） */
+  if (st.cls !== 'ab-fail') return auto115ForceStart(tid);
   showToast('没有失败的步骤', 'info');
+}
+/* 整条重跑（v396）：所有步骤清回 idle，再从 auto115StartKey 起步。
+   - 整理任务：submit/wait 本来就 skip，保持不动；从「定位文件夹」重来。
+   - 离线任务：已提交过则 startKey=wait（不会重复提交磁力），否则从 submit 开始。 */
+function auto115RetryWhole(tid){
+  var t = auto115Task(tid);
+  if (!t) return Promise.resolve(null);
+  var defs = auto115StepDefs(t);
+  for (var i = 0; i < defs.length; i++){
+    var key = defs[i].key;
+    if (t.tidy && (key === 'submit' || key === 'wait')) continue;   // 整理任务没有下载段
+    var s = auto115GetStep(t, key);
+    if (!s) continue;
+    s.state = 'idle'; s.msg = ''; s.probes = 0; s.at = 0;
+  }
+  t.aborted = false;
+  t._collectErr = '';
+  /* 清派生缓存（上次跑留下的整理计划/季夹映射/平铺标记）：重跑要按当前磁盘真实状态重新识别，
+     否则 rename 会拿旧 plan 里的旧文件名去改（上次已改过名 → 撞名或回退）。 */
+  delete t.tvPlan; delete t.tvSeasonMap; delete t.tvFlat;
+  auto115Save();
+  showToast('重新执行整条任务…', 'info');
+  return auto115RetryStep(tid, auto115StartKey(t), true);
 }
 function auto115ContinueProbe(tid){
   var t = auto115Task(tid);
@@ -6134,9 +6195,15 @@ function auto115OpenTidy(){
       /* V5 修复：文件夹与散装视频同场竞技，分高者赢（原来文件夹优先，散装视频哪怕 100 分也不看） */
       var bestF = (m.ok && m.best) ? m.best : null;
       var bestV = (mv.ok && mv.best) ? mv.best : null;
+      /* v396：先把 ≥TIDY_PEER(80) 的相似项全部摘出来。即便命中一条满分也不再直接开跑——
+         电视剧常是「剧名根夹 100 分 + 每集子夹 85 分」，只挑最高分那条会把整季漏在外面。
+         只有「≥80 的仅一条」时才维持原来的一键直接整理，不打扰单夹影片。 */
+      var cands = m.candidates.concat(mv.candidates);
+      cands.forEach(function(c, i){ if (c._i == null) c._i = i; });
+      var peers = cands.filter(function(c){ return Number(c.score) >= Auto115Core.TIDY_PEER; });
+      if (peers.length > 1) return auto115ShowTidyCandidates(peers, true);
       if (bestF && (!bestV || bestF.score >= bestV.score)) return auto115StartTidy(bestF);
       if (bestV) return auto115StartTidy(bestV);
-      var cands = m.candidates.concat(mv.candidates);
       /* v390：一个相似的都没有 → 不再直接报错，改为列出云下载目录下的**全部文件夹**让用户自己挑；
          名字不规范的散装视频也一并附在列表里（带「视频」标记），否则
          「片子散在云下载根目录、名字又认不出」这种情况就完全没路可走。
@@ -6148,19 +6215,26 @@ function auto115OpenTidy(){
   }).catch(function(e){ showToast((e && e.message) || '查找失败', 'error'); });
 }
 /* 相似候选弹窗（v391）：与兜底列表统一成**多选**——电视剧常常一集一个文件夹，
-   相邻几集分数几乎一样（拉开不到 TIDY_GAP）必然走到这条路，得能一次勾多个一起整理 */
-function auto115ShowTidyCandidates(list){
+   相邻几集分数几乎一样（拉开不到 TIDY_GAP）必然走到这条路，得能一次勾多个一起整理。
+   v396：preselect=true 时默认勾上最像的那条（≥80 分的「高分多候选」场景）。
+   ⚠️ 必须在排序之后取首项，否则勾到的是未排序前的第一条 */
+function auto115ShowTidyCandidates(list, preselect){
   var items = (list || []).map(function(it, i){
     return { cid: String(it.cid), fid: it.fid ? String(it.fid) : '', n: it.n || '',
-             size: Number(it.size) || 0, kind: it.fid ? '视频' : '', score: Number(it.score) || 0, _i: i };
+             size: Number(it.size) || 0, kind: it.fid ? '视频' : '', score: Number(it.score) || 0, _i: (it._i == null ? i : it._i) };
   }).filter(function(it){ return it.cid || it.fid; });
   if (!items.length){ showToast('没有可整理的候选', 'error'); return null; }
   items.sort(function(a, b){ return (b.score - a.score) || (a._i - b._i); });
-  return auto115OpenTidyPick(items, '没自动认出来，勾选要整理的（可多选，百分比是相似程度）：');
+  var tip = preselect
+    ? ('找到 ' + items.length + ' 个高度相似的项，已勾选最像的，可再勾其它一起整理：')
+    : '没自动认出来，勾选要整理的（可多选，百分比是相似程度）：';
+  return auto115OpenTidyPick(items, tip, preselect ? items[0] : null);
 }
 /* 两个入口（相似候选 / 全部文件夹）共用的开窗：列表 + 勾选 + 「开始整理」确认 */
-function auto115OpenTidyPick(list, tip){
+function auto115OpenTidyPick(list, tip, preselect){
   tidyDirPicked = {}; tidyDirPending = list || [];
+  /* v396：可选预勾选（高分多候选场景默认勾最像的一条，用户只需补勾其它） */
+  if (preselect && preselect.cid) tidyDirPicked[String(preselect.cid)] = true;
   var mask = document.getElementById('tidyDirMask');
   var sheet = document.getElementById('tidyDirSheet');
   var tipEl = document.getElementById('tidyDirTip');
