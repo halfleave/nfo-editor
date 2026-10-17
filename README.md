@@ -33,21 +33,23 @@
 ```
 nfo-editor/
 ├── index.html            # GitHub Pages 入口，按设备自动跳转
-├── src/                  # 共享核心 core-shared.js（纯逻辑，window.NfoCore）+ 桌面版 core.js/ui.js
-├── nfo-editor-ios.html   # 移动版（iOS）源文件（引用 src/core-shared.js 共享核心）
+├── nfo-editor-ios.html   # 移动版（iOS）源文件（引用 src/ 下的共享核心与 UI）
 ├── nfo-editor.html       # 桌面版源文件（File System Access API 直写目录）
 ├── sw.js                 # 移动版 Service Worker（离线缓存）
-├── dist/                 # 部署副本（含上述四件套）
-├── verify_nfo.py         # 修改后做 JS 语法校验
-├── make_icon.py          # 生成应用图标（icon_app.png）
-└── icon_app.png          # 应用图标源图
+├── manifest.json         # PWA 清单
+├── icon-192.png          # 应用图标（192）
+├── icon-512.png          # 应用图标（512）
+├── CNAME                 # 自定义域名
+├── src/                  # core-shared.js 共享核心 + iOS/PC 各自的 UI 与 115 自动化逻辑
+├── styles/               # ios.css / pc.css
+└── tests/                # 纯逻辑与流程测试（node 直接运行，不依赖第三方库）
 ```
 
 ---
 
 ## 部署到 GitHub Pages
 
-1. 在仓库根目录上传以下文件：**`index.html`**、**`nfo-editor-ios.html`**、**`nfo-editor.html`**、**`sw.js`**（`dist/` 内的副本即为这一套完整文件）。
+1. 仓库根目录的 **`index.html`**、**`nfo-editor-ios.html`**、**`nfo-editor.html`**、**`sw.js`**，以及它们引用的 `src/`、`styles/`、图标与 `manifest.json`，即为一套完整可部署文件。
 2. 在仓库 **Settings → Pages** 中，将 Source 设为 `main` 分支（或你的默认分支）的 `/ (root)`。
 3. 访问分配的 `https://<用户名>.github.io/<仓库名>/`，移动设备会自动打开 `nfo-editor-ios.html`。
 
@@ -70,13 +72,15 @@ nfo-editor/
 
 ## 校验与构建
 
-修改 `nfo-editor-ios.html` 后，建议先跑语法校验：
+修改源码后，建议先跑测试：
 
 ```bash
-python verify_nfo.py nfo-editor-ios.html
+node tests/auto115-core-test.js     # 纯逻辑（命名/清洗/整理规则）
+node tests/auto115-flow-test.js     # 115 自动化端到端流程
 ```
 
-校验通过再同步到 `dist/` 或上传部署，避免把带语法错误的版本发布出去。
+两个脚本都用 `PASS` / `FAIL` 逐条输出，出现 FAIL 就说明改动破坏了既有行为。
+本机开发另有一键校验 `node tools/check.js`（语法 + 全部测试汇总，该脚本仅供本地使用、不入库）。
 
 ---
 
