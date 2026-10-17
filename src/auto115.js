@@ -1327,7 +1327,9 @@
       });
     }).then(function (list) {
       /* 体积字段两个名字都给：tvPlan 读 it.s */
-      return list.map(function (it) { return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: it.s || 0, size: it.s || 0, _season: it._season || 0 }; }).filter(function (it) { return (it.fid || it.cid) && it.name; });
+      /* 只保留**文件**条目（fid）：穿透后父层「名字带 .mp4 的文件夹」会残留，若当视频参与识别
+         会先占集号，把真正的视频挤成「未识别」（v393 与 iOS 同修） */
+      return list.map(function (it) { return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: it.s || 0, size: it.s || 0, _season: it._season || 0 }; }).filter(function (it) { return it.fid && it.name; });
     });
   }
   function auto115StepTvCleanupFiles(t){

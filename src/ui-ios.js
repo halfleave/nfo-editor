@@ -3243,7 +3243,9 @@ function auto115StepTvGetItems(t){
       })).then(function(gs){ return list.concat.apply(list, gs); });
     });
   }).then(function(list){
-    return list.map(function(it){ var sz = it.s || 0; return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: sz, size: sz, _season: it._season || 0 }; }).filter(function(it){ return (it.fid || it.cid) && it.name; });
+    /* 只保留**文件**条目（fid）。穿透后父层那些「名字带 .mp4 的文件夹」也会留在列表里，
+       若一并当视频参与识别，会先占掉集号，把真正的视频挤成「未识别」（v393 真机踩中）。 */
+    return list.map(function(it){ var sz = it.s || 0; return { fid: it.fid ? String(it.fid) : null, name: it.n || it.name || '', cid: (it.cid || '').toString(), s: sz, size: sz, _season: it._season || 0 }; }).filter(function(it){ return it.fid && it.name; });
   });
 }
 function auto115StepTvCleanupFiles(t){
@@ -3412,6 +3414,23 @@ function auto115RemoveEmptySubDirs(t, dirCid){
         return auto115DeleteBatch(dirCid, [String(s.cid)]).catch(function(){ return null; });
       }).catch(function(){ return null; });
     })).then(function(){ return null; });
+  }).catch(function(){ return null; });
+}
+/* v393：多选整理收尾——只删「这次收拢进来的来源夹」里已经搬空的，其它夹一律不碰。
+   与 auto115RemoveEmptySubDirs 的区别：不做全目录扫描，避免误删根夹里用户自己的空文件夹。 */
+function auto115DeleteEmptySrcDirs(t, box){
+  var src = (t.srcCids || []).map(String).filter(Boolean);
+  if (!src.length) return Promise.resolve(null);
+  return auto115ListDir(box).then(function(list){
+    var alive = {};
+    (list || []).forEach(function(it){ if (it && it.cid) alive[String(it.cid)] = 1; });
+    var todo = src.filter(function(cid){ return alive[cid]; });   /* 已不在根里的（重试/已删）跳过 */
+    return Promise.all(todo.map(function(cid){
+      return auto115ListDir(cid).then(function(inner){
+        if (inner && inner.length) return null;                    // 还有遗留（认不出的素材）→ 保留
+        return auto115DeleteBatch(box, [cid]).catch(function(){ return null; });
+      }).catch(function(){ return null; });
+    }));
   }).catch(function(){ return null; });
 }
 function auto115StepTvMoveVideos(t){
@@ -4781,7 +4800,10 @@ function auto115RemoveTmpDir(t){
       if (!t || !t.srcCids || !t.srcCids.length) return null;
       var box = t.offlineDirCid;
       if (!box || box === C115_DEFAULT_DIR_CID) return null;
-      if (!t.multiBox || t.multiBox === 'tv') return null;
+      if (!t.multiBox) return null;
+      /* 剧集根夹是最终归宿、永远保留，但多选收拢进来的**来源子夹**搬空后要删掉，
+         否则根夹里会留一堆空文件夹（v393 真机：名字还带 .mp4，看着像重复视频） */
+      if (t.multiBox === 'tv') return auto115DeleteEmptySrcDirs(t, box);
       return auto115RemoveEmptySubDirs(t, box).then(function(){
         if (t.multiBox !== 'tmp') return null;
         if (t.finalDirCid && t.finalDirCid === box) return null;
@@ -6497,13 +6519,15 @@ function searchSubtitles(){
     .finally(function(){ clearTimeout(to); stopLoadingRotator(); });
 }
 function renderSubtitleResults(items, warnings){
-  subResultsCache = items || [];
   // 优先展示伪射手（同语言下伪射手排在 OpenSubtitles 之前）；Array.sort 在现代引擎稳定
   if (items && items.length){
     items = items.slice().sort(function(a, b){
       return (a.source === 'assrt' ? 0 : 1) - (b.source === 'assrt' ? 0 : 1);
     });
   }
+  /* 缓存必须与**显示顺序**一致：downloadSubtitle(i) 用行号索引这份数组。
+     以前在排序前赋值，点第 N 行会取到排序前的第 N 项（常常是上一行）→ 下载错字幕。 */
+  subResultsCache = items || [];
   var box = document.getElementById('subResults');
   if (!items || !items.length){
     // 若某源报错（如 token 无效/配额用尽），把真实原因显式展示出来，而不是笼统显示「未找到字幕」

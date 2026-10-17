@@ -2512,12 +2512,13 @@ function selectSubTitleMode(mode, btn){
 function onSubLangSelect(sel){ subCurrentLang = sel.value; }
 function renderSubtitleResults(items, warnings){
   stopLoadingRotator();
-  subResultsCache = items || [];
   var box = document.getElementById('subResults');
   if (!box) return;
-  var list = subResultsCache.slice().sort(function(a, b){
+  var list = (items || []).slice().sort(function(a, b){
     return (a.source === 'assrt' ? 0 : 1) - (b.source === 'assrt' ? 0 : 1);
   });
+  /* 缓存必须与**显示顺序**一致：downloadSubtitle(i) 用行号索引这份数组（v393 修点击错位） */
+  subResultsCache = list;
   if (!list.length){
     box.innerHTML = '<div class="empty"><div class="empty-title">未找到字幕</div>'
       + (warnings && warnings.length ? '<div class="empty-desc">' + escapeHtml(warnings.join('；')) + '</div>' : '')

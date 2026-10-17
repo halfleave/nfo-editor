@@ -61,6 +61,12 @@ assert(api.episodeOf('第三季 第十二集.mp4').season === 3 && api.episodeOf
 assert(api.episodeOf('第二部 03.mkv').season === 2, '「部」也算季（03 无集标记 → episode null）');
 assert(api.episodeOf('第二季 预告.mp4').episode === null, '只有季 → episode null');
 assert(api.episodeOf('随便什么.mp4') === null, '认不出 → null');
+/* v393：中文紧贴集号（用户真机 ONE高中英雄们08.mp4 踩中，此前 7 集全被判「认不出集号」） */
+assert((api.episodeOf('ONE高中英雄们08.mp4') || {}).episode === 8, '中文紧贴集号：…08 → 第 8 集');
+assert((api.episodeOf('ONE高中英雄们04v2.mp4') || {}).episode === 4, '中文紧贴集号：…04v2 → 第 4 集（v2 是版本号）');
+assert((api.episodeOf('ONE高中英雄们08.1080p.WEB-DL.mkv') || {}).episode === 8, '中文紧贴集号 + 分辨率尾巴');
+assert(api.episodeOf('战狼2.1080p.mkv') === null && api.episodeOf('斗罗大陆2.1080p.mkv') === null, '中文紧贴单数字不中（续集/季号不是集号）');
+assert(api.episodeOf('请回答1988.1080p.mkv') === null && api.episodeOf('赛博朋克2077.1080p.mkv') === null, '中文紧贴 4 位年份/标题数字不中');
 assert(api.cnNum('十二') === 12 && api.cnNum('两') === 2 && api.cnNum('零七') === 7, '中文数字转换');
 assert(api.pad2(3) === '03' && api.pad2(12) === '12', 'pad2 补零');
 assert(api.isVideoName('a.mkv') && !api.isVideoName('a.jpg'), '视频扩展名判定');

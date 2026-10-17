@@ -509,6 +509,13 @@
       fn: function (c) { var m = c.name.match(/第\s*(\d{1,3})\s*[-~～]\s*\d{1,3}\s*[集话話]/); return m ? { season: c.season, episode: +m[1] } : null; } },
     { ring: 2, note: 'EP05 / E05（编号词前缀；v367 起排在括号规则前——显式编号比方括号更标准）',
       fn: function (c) { var m = c.low.match(/\b(?:ep|e)(\d{1,3})/); return m ? { season: c.season, episode: +m[1] } : null; } },
+    { ring: 3, note: '中文紧贴集号（ONE高中英雄们08 / 某剧12v2）——汉字后直接 2 位数字，数字后是结尾/分隔符/v2；单数字（战狼2）与 4 位年份（请回答1988）不中',
+      fn: function (c) {
+        var m = c.base.match(/[\u4e00-\u9fff](\d{2})(?=$|[.\-_\s]|v\d)/i);
+        if (!m) return null;
+        var e = +m[1];
+        return e > 0 ? { season: c.season, episode: e } : null;
+      } },
     { ring: 3, note: '[05] / (05)（括号内纯数字整包；年份 4 位不中）',
       fn: function (c) { var m = c.low.match(/[\[\(](\d{1,3})[\]\)]/); return m ? { season: c.season, episode: +m[1] } : null; } },
     { ring: 3, note: 'Show - 05 [1080p]（数字紧跟括号限定尾巴；含柯南式 3 位绝对集数，4 位年份不中）',
