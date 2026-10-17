@@ -1493,6 +1493,114 @@ const lz4LiteralForTest = (bytes) => {
   ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
 
+  /* 10b. 文件整理兜底（v390）：一个相似项都没有 → 列出云下载全部文件夹（+ 散装视频），支持单选/多选 */
+  {
+    script['files?cid=AAA'] = { state: true, data: [ { fid: 'A1', n: 'AAA.1080p.mkv', s: 900 } ] };
+    script['files?cid=CCC'] = { state: true, data: [ { fid: 'C1', n: 'CCC.1080p.mkv', s: 900 } ] };
+    ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
+    const docAll = await ctx.auto115EnsureDoc();
+    docAll.tasks.length = 0;
+    docAll.dvdId = ''; docAll.filmTitle = '整理测试片'; docAll.originalTitle = ''; docAll.year = '2020'; docAll.type = 'movie'; docAll.nfoUploaded = false;
+
+    ctx.auto115ShowTidyAllDirs(
+      [ { cid: 'AAA', n: '别的片子.2019.1080p', t: 1 },
+        { cid: 'BBB', n: '整理测试片.2020.1080p.BluRay', t: 2 },
+        { cid: 'CCC', n: '随便一个夹子', t: 3 } ],
+      [ { fid: 'VV1', n: '不规范名字.mkv', s: 800 }, { fid: 'VV2', n: '另一个散装.mkv', s: 700 } ]
+    );
+    assert(ctx.tidyDirPending.length === 5, '兜底列表：全部文件夹 + 散装视频都在（实际 ' + ctx.tidyDirPending.length + '）');
+    assert(ctx.tidyDirPending[0].cid === 'BBB', '兜底列表：相似度最高的排第一（实际 ' + ctx.tidyDirPending[0].cid + '）');
+    assert(ctx.tidyDirPending.some(x => x.fid === 'VV1' && x.kind === '视频'), '兜底列表：散装视频带「视频」标记且 fid 原样带上');
+    assert(Object.keys(ctx.tidyDirPicked).length === 0, '兜底列表：进入多选模式且默认不预选');
+    const dirHtml = elCache.tidyDirList.innerHTML;
+    assert(dirHtml.indexOf('整理测试片.2020.1080p.BluRay') >= 0 && dirHtml.indexOf('随便一个夹子') >= 0 && dirHtml.indexOf('不规范名字.mkv') >= 0, '兜底列表：所有项都渲染出来');
+    assert(dirHtml.indexOf('auto115ToggleTidyDir') >= 0, '兜底列表：多选模式点按 = 切换勾选');
+    assert(elCache.tidyDirOk.disabled === true, '兜底列表：确认按钮未选时禁用');
+
+    /* 多选：勾选/取消、计数、按列表顺序取 */
+    ctx.auto115ToggleTidyDir('CCC');
+    ctx.auto115ToggleTidyDir('AAA');
+    assert(ctx.tidyDirPickedList().map(x => x.cid).join(',') === 'AAA,CCC', '多选：按列表顺序取出勾选项（不受点按顺序影响）');
+    assert(elCache.tidyDirOk.textContent === '开始整理 2 个', '多选：确认按钮显示数量（实际 ' + elCache.tidyDirOk.textContent + '）');
+    ctx.auto115ToggleTidyDir('AAA');
+    assert(ctx.tidyDirPickedList().length === 1 && elCache.tidyDirOk.textContent === '开始整理', '多选：再点一次可取消勾选');
+
+    /* 确认 → **一条**整理任务（v392：选中的几个夹 = 同一个父夹下的多个子夹） */
+    ctx.auto115ToggleTidyDir('AAA');
+    const realRun = ctx.auto115Run;
+    const runOrder = [];
+    ctx.auto115Run = (t) => { runOrder.push(t.id); return Promise.resolve(null); };
+    ctx.auto115ConfirmTidyDirs();
+    await new Promise(r => setTimeout(r, 20));
+    ctx.auto115Run = realRun;
+    const mkTasks = (docAll.tasks || []).filter(x => x && x.srcCids && x.srcCids.join(',') === 'AAA,CCC');
+    assert(mkTasks.length === 1, '多选确认：只建 1 条整理任务（实际 ' + mkTasks.length + '）');
+    assert((mkTasks[0].srcCids || []).join(',') === 'AAA,CCC', '多选确认：来源列表 = 列表（相似度）顺序（实际 ' + ((mkTasks[0].srcCids || []).join(',')) + '）');
+    assert(mkTasks[0].queued !== true, '多选确认：单条任务不需要排队');
+    assert(runOrder.length === 1 && runOrder[0] === mkTasks[0].id, '多选确认：任务立即开跑');
+    assert(ctx.auto115TaskTitle(mkTasks[0]).indexOf('2 个文件夹') >= 0, '多选确认：任务卡标题显示「2 个文件夹」（实际 ' + ctx.auto115TaskTitle(mkTasks[0]) + '）');
+    assert(!!mkTasks[0].filmId && mkTasks[0].filmId === docAll.filmId, '多选确认：任务归属当前影片');
+    assert(Object.keys(ctx.tidyDirPicked).length === 0, '多选确认：弹窗关闭后清空勾选');
+
+    /* v392 多选执行：先把几个来源夹收进同一个容器（AV 影片 → 影片夹），之后走单夹流水线 */
+    docAll.dvdId = 'IPX-486'; docAll.filmTitle = '整理测试片';
+    const tMulti = { id: 'tmulti', tidy: true, type: 'tidy', filmId: docAll.filmId, steps: ctx.auto115NewSteps('offline'), srcCids: ['AAA', 'CCC'] };
+    ctx.auto115Doc = docAll; ctx.auto115ExecDoc = docAll; ctx.auto115RunningId = '';
+    script['files?cid=3311283881428122938'] = { state: true, data: [ { cid: 'BOX1', n: '整理测试片' } ] };
+    script['files?cid=BOX1'] = { state: true, data: [] };
+    calls.length = 0;
+    ctx.auto115StepTidyMkdir(tMulti);
+    await new Promise(r => setTimeout(r, 30));
+    const mvBodies = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+    assert(tMulti.offlineDirCid === 'BOX1', '多选执行：容器 = 影片夹（实际 ' + tMulti.offlineDirCid + '）');
+    assert(tMulti.multiBox === 'film', '多选执行：容器类型 = 影片夹（实际 ' + tMulti.multiBox + '）');
+    assert(mvBodies.some(b => b.indexOf('fid=AAA,CCC') >= 0 && b.indexOf('pid=BOX1') >= 0), '多选执行：一次批量把两个来源夹移进容器（实际 ' + mvBodies.join(' | ') + '）');
+    ctx.auto115RunningId = ''; ctx.auto115ExecDoc = null;
+
+    /* v391：相似候选也走多选——电视剧常一集一个文件夹，相邻集分数接近（拉开不到 TIDY_GAP）
+       必然走这条路，需要能一次勾好几集一起整理 */
+    ctx.auto115Doc = docAll; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
+    ctx.auto115ShowTidyCandidates([
+      { cid: 'E3', n: '某剧 S01E03.1080p', score: 78 },
+      { cid: 'E1', n: '某剧 S01E01.1080p', score: 84 },
+      { cid: 'E2', n: '某剧 S01E02.1080p', score: 81 }
+    ]);
+    assert(ctx.tidyDirPending.map(x => x.cid).join(',') === 'E1,E2,E3', '相似候选：按相似度排序（实际 ' + ctx.tidyDirPending.map(x => x.cid).join(',') + '）');
+    const candHtml = elCache.tidyDirList.innerHTML;
+    assert(candHtml.indexOf('auto115ToggleTidyDir') >= 0 && candHtml.indexOf('auto115PickTidyDir') < 0, '相似候选：也是勾选模式（不再点一条直接开始）');
+    assert(candHtml.indexOf('84%') >= 0 && candHtml.indexOf('81%') >= 0, '相似候选：保留相似度百分比');
+    assert(elCache.tidyDirOk.disabled === true && Object.keys(ctx.tidyDirPicked).length === 0, '相似候选：默认不预选、确认按钮禁用');
+    ctx.auto115ToggleTidyDir('E1'); ctx.auto115ToggleTidyDir('E2'); ctx.auto115ToggleTidyDir('E3');
+    assert(elCache.tidyDirOk.textContent === '开始整理 3 个', '相似候选：确认按钮显示已勾选数量（实际 ' + elCache.tidyDirOk.textContent + '）');
+    const realRun2 = ctx.auto115Run;
+    const runOrder2 = [];
+    ctx.auto115Run = (t) => { runOrder2.push(t.id); return Promise.resolve(null); };
+    const tvBefore = (docAll.tasks || []).length;
+    ctx.auto115ConfirmTidyDirs();
+    await new Promise(r => setTimeout(r, 20));
+    ctx.auto115Run = realRun2;
+    const tvTasks = (docAll.tasks || []).slice(0, (docAll.tasks || []).length - tvBefore);
+    assert(tvTasks.length === 1, '相似候选多选：三集合成 1 条任务（实际 ' + tvTasks.length + '）');
+    assert((tvTasks[0].srcCids || []).join(',') === 'E1,E2,E3', '相似候选多选：来源列表 = 相似度顺序（实际 ' + ((tvTasks[0].srcCids || []).join(',')) + '）');
+    assert(runOrder2.length === 1 && runOrder2[0] === tvTasks[0].id, '相似候选多选：单条任务立即开跑');
+
+    /* v392 多选执行（剧集）：容器 = 剧集根夹；没有同名根夹时新建一个 */
+    docAll.type = 'tv'; docAll.filmTitle = '整理测试剧'; docAll.dvdId = '';
+    script['files?cid=3311283881428122938'] = { state: true, data: [] };
+    script['files/add'] = { state: true, cid: 'TVROOT', data: { cid: 'TVROOT' } };
+    script['files?cid=TVROOT'] = { state: true, data: [] };
+    const tTvMulti = { id: 'ttvmulti', tidy: true, type: 'tidy', filmId: docAll.filmId, steps: ctx.auto115NewSteps('offline'), srcCids: ['E1', 'E2'] };
+    ctx.auto115Doc = docAll; ctx.auto115ExecDoc = docAll; ctx.auto115RunningId = '';
+    calls.length = 0;
+    ctx.auto115StepTidyMkdir(tTvMulti);
+    await new Promise(r => setTimeout(r, 30));
+    const tvMv = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
+    assert(tTvMulti.offlineDirCid === 'TVROOT' && tTvMulti.multiBox === 'tv', '多选执行（剧集）：容器 = 剧集根夹（实际 ' + tTvMulti.offlineDirCid + ' / ' + tTvMulti.multiBox + '）');
+    assert(tTvMulti.tvRootCid === 'TVROOT', '多选执行（剧集）：tvRootCid 指向容器（后续建季夹/移入都在这下面）');
+    assert(tvMv.some(b => b.indexOf('fid=E1,E2') >= 0 && b.indexOf('pid=TVROOT') >= 0), '多选执行（剧集）：来源夹批量移进剧集根夹（实际 ' + tvMv.join(' | ') + '）');
+    ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
+  }
+
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');
   process.exit(process.exitCode || 0);

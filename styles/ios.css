@@ -1971,8 +1971,15 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-dir-item:active { opacity: .75; }
 .tidy-dir-name { flex: 1; min-width: 0; word-break: break-all; }
 .tidy-dir-kind { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 5px; background: rgba(120,120,128,.14); font-size: 10px; font-weight: 600; color: var(--label-2); vertical-align: 1px; }
-.tidy-dir-score { flex: 0 0 auto; font-size: 11px; font-weight: 600; color: var(--label-2); }
+.tidy-dir-right { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.tidy-dir-score { font-size: 11px; font-weight: 600; color: var(--label-2); }
 .tidy-dir-item.best .tidy-dir-score { color: var(--accent); }
+/* v390/v391：勾选模式（相似候选与全部文件夹统一多选）——点按切换勾选，右侧淡圈表示可选 */
+.tidy-dir-item .tidy-dir-check { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1.5px var(--sep); color: transparent; }
+.tidy-dir-item .tidy-dir-check svg { width: 13px; height: 13px; }
+.tidy-dir-item.on { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tidy-dir-item.on .tidy-dir-check { background: var(--accent); color: var(--accent-text); box-shadow: none; }
+.tidy-dir-item.on .tidy-dir-name { font-weight: 600; }
 .auto-list { display: flex; flex-direction: column; gap: 12px; }
 /* 添加磁力 弹窗 */
 .magnet-sheet-head { font-size: 16px; font-weight: 600; text-align: center; color: var(--label); margin: 4px 0 14px; }

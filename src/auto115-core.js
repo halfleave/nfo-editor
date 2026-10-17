@@ -1015,7 +1015,8 @@
     return Math.max(0, Math.min(100, Math.round(best)));
   };
   /* 在目录条目里挑出最像的文件夹：返回 { ok, best, candidates }
-     ok=true 表示可以直接自动采用；否则交给 UI 弹候选让用户确认。 */
+     ok=true 表示可以直接自动采用；否则交给 UI 弹候选让用户确认。
+     candidates 上限 30（v391 由 8 抬高）：电视剧常一集一个文件夹，上限太小会勾不全整季 */
   api.matchTidyDir = function (list, titles, year) {
     var items = [];
     for (var i = 0; i < (list || []).length; i++){
@@ -1036,7 +1037,7 @@
       var second = items[1];
       if (!second || best.score - second.score >= api.TIDY_GAP) ok = true;
     }
-    return { ok: ok, best: best, candidates: items.slice(0, 8) };
+    return { ok: ok, best: best, candidates: items.slice(0, 30) };
   };
 
   /* ===== 统一定位级联（v354 期一，纯函数）：offline / tidy 两条定位链共用一套找法 =====
