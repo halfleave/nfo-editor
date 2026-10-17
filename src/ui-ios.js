@@ -2231,12 +2231,15 @@ function auto115EnsureDoc(){
   var d = film.data || {};
   // 剧集判定：影片自身持久数据优先；state.tmdbMediaType 是搜索框全局状态（残留上一次浏览的值），
   // 只在影片数据完全没标类型时兜底——否则电影/番号影片会被「上次看过的剧集」残留误判成 TV（v344）
+  // v401：番号影片（有 dvdId）强制按影片处理——番号绝不是剧集；否则 AV 详情页提交的整理任务
+  // 会在「影片数据没标类型 + 搜索框残留 tv」时被误判成剧集，整条走进剧集流水线（MIAB-500C 实锤踩中）
+  var dvdId = (d.dvdId || d.content_id || '').toString().trim();
   var isTv;
-  if (d.tmdbMediaType === 'tv' || d.media_type === 'tv') isTv = true;
+  if (dvdId) isTv = false;
+  else if (d.tmdbMediaType === 'tv' || d.media_type === 'tv') isTv = true;
   else if (d.tmdbMediaType === 'movie' || d.media_type === 'movie') isTv = false;
   else isTv = (state.tmdbMediaType === 'tv');
   // 番号只认显式字段；不再用 originaltitle 做兜底：否则像 "Madrid, 1987" 这种带年份的英文名会被误判为番号，导致普通影片被收进文件夹。
-  var dvdId = (d.dvdId || d.content_id || '').toString().trim();
   var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
   /* v348：合集 ID——新数据存 data.collectionId；旧数据/直连 TMDB 响应兜底 belongs_to_collection */
   var collId = d.collectionId || ((d.belongs_to_collection && d.belongs_to_collection.id) ? String(d.belongs_to_collection.id) : '');
@@ -3331,13 +3334,14 @@ function auto115StepTvRenameVideos(t){
   var seasons = {};
   plan.renames.forEach(function(r){ var m = r.name.match(/S(\d{2})E/); if (m) seasons[m[1]] = true; });
   var seasonNums = Object.keys(seasons).sort();
-  if (!seasonNums.length){ auto115Set(t, 'rename', 'fail', '未能识别季号'); auto115Finish(t); return Promise.resolve(null); }
+  /* v401：番号包（plan.av）没有 SxxExx，不算失败——平铺改名归位即可 */
+  if (!seasonNums.length && !plan.av){ auto115Set(t, 'rename', 'fail', '未能识别季号'); auto115Finish(t); return Promise.resolve(null); }
   var need = auto115TvNeedSeasonSplit(plan);
   if (!need.split){ t.tvFlat = true; t.tvSeasonMap = null; }
   else t.tvFlat = false;
   var execRenames = function(){
     var needRename = plan.renames.filter(function(r){ return r.orig !== r.name; }).length;
-    auto115Set(t, 'rename', 'running', (t.tvFlat ? need.reason + '，' : '') + '正在按 SxxExx 规则重命名视频/字幕…');
+    auto115Set(t, 'rename', 'running', plan.av ? '正在按番号重命名视频…' : (t.tvFlat ? need.reason + '，' : '') + '正在按 SxxExx 规则重命名视频/字幕…');
     /* v354 期二：改名统一走 ExecPlan（tvPlan 条目补 op:'rename'） */
     return auto115ExecPlan(t, plan.renames.map(function(r){ r.op = 'rename'; return r; }), { mode: 'rename' }).then(function(){
       if (!needRename) auto115Set(t, 'rename', 'running', '文件名已符合规则，正在归位…');

@@ -119,6 +119,41 @@ assert(p3names.indexOf('Y.S01E02.mkv') >= 0 && p3names.length === 1, 'tvPlan：e
 assert(plan3.unrecognized.some(u => u.name === 'ep.mkv'), 'tvPlan：认不出集号的 ep.mkv 进未识别（不编出 E01）');
 const plan4 = api.tvPlan('Z', [{ fid: 'd1', name: 'D.第二部 第1集.mkv' }, { fid: 'd2', name: 'D.第1集.mkv' }]);
 assert(plan4.renames.some(r => r.name === 'Z.S02E01.mkv'), 'tvPlan：第二部 → S02');
+/* v401 番号识别（用户拍板：MIAB-500C 是番号，C=中文字幕、类似还有 ch；番号绝不能编 SxxExx） */
+assert(api.dvdIdFromName('MIAB-500C.mp4') === 'MIAB-500C', '番号：MIAB-500C → MIAB-500C');
+assert(api.dvdIdFromName('MIAB-500ch.mp4') === 'MIAB-500ch', '番号：ch 后缀原样保留');
+assert(api.dvdIdFromName('MIAB500C.mp4') === 'MIAB-500C', '番号：无分隔符也认');
+assert(api.dvdIdFromName('ipx-718.mp4') === 'IPX-718', '番号：前缀小写归一为大写');
+assert(api.dvdIdFromName('SSIS-632-C.mp4') === 'SSIS-632C', '番号：分隔符 + C 后缀');
+assert(api.dvdIdFromName('Show 08.mkv') === '', '番号：空格分隔不认（集名 Show 08 不误伤）');
+assert(api.dvdIdFromName('Show08.mkv') === '', '番号：无分隔且 2 位数字不认');
+assert(api.dvdIdFromName('Matrix1999.mkv') === '', '番号：1900-2099 无后缀当年份拒绝');
+assert(api.dvdIdFromName('FC2-PPV-1234567.mp4') === '', '番号：含段内字母数字混杂不认（保守）');
+assert(api.dvdIdFromName('ONE高中英雄们08.mp4') === '', '番号：中文集名不误伤');
+assert(api.dvdIdFromName('AB-12x9.mp4') === '', '番号：后缀含数字不认');
+/* v401 番号包：整包都是番号 → 按影片平铺（av 计划），不编 SxxExx、不进未识别 */
+const planMiab = api.tvPlan('MIAB-500', [{ fid: 'm1', name: 'MIAB-500C.mp4', s: 6100 * 1024 * 1024 }], 0);
+assert(planMiab.av === true, 'tvPlan：番号单视频 → av 计划');
+assert(planMiab.renames.length === 1 && planMiab.renames[0].name === 'MIAB-500C.mp4', 'tvPlan：番号包改名成番号本体，实际=' + planMiab.renames.map(r => r.name).join(','));
+assert(planMiab.unrecognized.length === 0, 'tvPlan：番号包不进未识别');
+assert(planMiab.deleteFids.length === 0, 'tvPlan：番号包不误删视频');
+/* 来源季号对番号包无效：季夹「02」里的番号视频也保持番号名（不是 S02E01） */
+const planMiabS2 = api.tvPlan('MIAB-500', [{ fid: 'm2', name: 'MIAB-500C.mp4' }], 2);
+assert(planMiabS2.av === true && planMiabS2.renames[0].name === 'MIAB-500C.mp4', 'tvPlan：番号包不吃来源季号');
+/* 两个番号变体（C / ch 字幕版）→ 都保留，各改名成自己的番号 */
+const planMiab2 = api.tvPlan('MIAB-500', [{ fid: 'm3', name: 'MIAB-500C.mp4' }, { fid: 'm4', name: 'MIAB-500ch.mp4' }], 0);
+assert(planMiab2.av === true && planMiab2.renames.length === 2, 'tvPlan：番号变体整包 av');
+assert(planMiab2.renames.some(r => r.name === 'MIAB-500C.mp4') && planMiab2.renames.some(r => r.name === 'MIAB-500ch.mp4'), 'tvPlan：番号变体各自保留');
+/* 包里混有真剧集（有集号）→ 不走 av，番号文件保持原名进未识别 */
+const planMixed = api.tvPlan('Show', [{ fid: 'x1', name: 'MIAB-500C.mp4' }, { fid: 'x2', name: 'Show.EP02.mkv' }], 0);
+assert(!planMixed.av && planMixed.renames.some(r => /S01E02/.test(r.name)) && planMixed.unrecognized.some(u => u.name === 'MIAB-500C.mp4'), 'tvPlan：混包不 av，番号文件进未识别不误改');
+/* v400 兜底（非番号）：唯一无集号视频仍当 S01E01 */
+const planSolo = api.tvPlan('Show', [{ fid: 's1', name: 'random-movie.mkv' }], 0);
+assert(!planSolo.av && planSolo.renames.length === 1 && planSolo.renames[0].name === 'Show.S01E01.mkv', 'tvPlan：非番号唯一视频仍兜底 S01E01');
+/* 多视频都没集号 → 仍走未识别（不臆造 E01 互相挤占），且绝不删视频 */
+const planMulti = api.tvPlan('W', [{ fid: 'w1', name: 'aaa.mkv' }, { fid: 'w2', name: 'bbb.mkv' }]);
+assert(planMulti.renames.length === 0 && planMulti.unrecognized.length === 2, 'tvPlan：多视频无集号仍全进未识别（不兜底）');
+assert(planMulti.deleteFids.length === 0, 'tvPlan：未识别视频绝不进删除清单');
 /* 无集号字幕不兜底：不改名、不删除，保持原名 */
 const plan5 = api.tvPlan('竞女', [
   { fid: 'v10', name: '竞女.S01E10.mkv' },

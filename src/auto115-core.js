@@ -587,6 +587,24 @@
   api.tvSubName = function (showTitle, season, ep, lang, ext) {
     return api.tvDirName(showTitle) + '.S' + api.pad2(season) + 'E' + api.pad2(ep) + '.' + lang + (ext || '');
   };
+  /* ---------- 番号识别（v401，用户拍板 MIAB-500C 是番号：C=中文字幕，类似还有 ch）----------
+     从文件名提取番号本体，识别不出返回 ''。规则保守（宁漏勿误，番号识别错比不识别更糟）：
+     - 去扩展名后整串匹配：前缀（2-8 位字母数字、至少含 2 个字母）+ 分隔符（- 或 _，可无）
+       + 数字 2-5 位 + 可选字幕/无码后缀（C / ch / U / UC，1-3 字母，大小写原样保留）；
+     - 无分隔符时数字须 ≥3 位（「Show08」这类集名不中）；1900-2099 且无后缀的数字当年份拒绝（Matrix1999）。 */
+  api.dvdIdFromName = function (name) {
+    var base = String(name || '').replace(/\.[a-z0-9]{1,5}$/i, '').trim();
+    /* 前缀必须字母开头（字母+可选字母数字，非贪婪让数字让给中间段），编号与后缀间允许再带一个分隔符（SSIS-632-C） */
+    var m = /^([A-Za-z]+[A-Za-z0-9]*?)([-_]?)(\d{2,5})([-_ ]?)([A-Za-z]{0,3})$/.exec(base);
+    if (!m) return '';
+    var prefix = m[1], sep = m[2], numStr = m[3], suf = m[5] || '';
+    if (((prefix.match(/[A-Za-z]/g) || []).length) < 2) return '';
+    if (!sep && numStr.length < 3) return '';
+    var num = parseInt(numStr, 10);
+    if (num >= 1900 && num <= 2099 && !suf) return '';
+    if (suf && !/^(c|ch|u|uc)$/i.test(suf)) return '';
+    return prefix.toUpperCase() + '-' + numStr + suf;   // 保留原始数字串（MIDV-083 的前导零不能丢）
+  };
   /* 纯函数：把扫描到的条目规划成「重命名（含移入季文件夹）+ 待删」列表。
      items: [{fid, name}]（仅文件）。dirSeason: 源文件夹名解析出的季号（seasonOfDir，0=无）——
      文件名没显式写季号时用它覆盖默认的 S01（如「02」夹里的 01.mkv → S02E01）。返回 {renames:[{fid,name}], deleteFids:[fid]} */
@@ -653,6 +671,29 @@
       // 认不出集号 → 不改
     });
     var renames = [];
+    /* v401 番号包（用户拍板）：包里所有视频都是番号命名（如 MIAB-500C——番号本体 MIAB-500 + C=中文字幕，
+       类似还有 ch；v400 曾把它兜底成 S01E01 是错的，番号不是剧集）→ 整包按影片方式平铺：
+       视频改名成番号本体，不编 SxxExx、不进「未识别」、不建季夹，垃圾照删。
+       只要包里有任何一个视频认出了集号（真剧集）就不走这条路，番号文件保持原名进未识别。 */
+    if (!vidPlan.length && !specials.length && unrecognized.length &&
+        unrecognized.every(function (it) { return api.dvdIdFromName(it.name); })){
+      return {
+        av: true,
+        renames: unrecognized.map(function (it) {
+          return { fid: it.fid, name: api.dvdIdFromName(it.name) + api.ext(it.name), orig: it.name, size: it.size || 0 };
+        }),
+        deleteFids: junk.map(function (it) { return it.fid; }).filter(Boolean),
+        unrecognized: []
+      };
+    }
+    /* v400 兜底：整个包只有一个视频、却认不出集号且**不是番号**（番号已在上面分流）→ 当 S01E01 处理
+       （来源夹带季号用季号），不再整包扔进「未识别」导致任务报「没有可识别的视频文件」。
+       绝不误伤：视频始终保留，只是改名归位。
+       多视频不兜底：多个视频都没集号时臆造 E01 会互相挤占，仍走「未识别」文件夹由用户自己处理。 */
+    if (!vidPlan.length && !specials.length && vids.length === 1 && unrecognized.length === 1){
+      vidPlan.push({ fid: unrecognized[0].fid, season: dirSeason || 1, ep: 1, orig: unrecognized[0].name, size: unrecognized[0].size || 0 });
+      unrecognized = [];
+    }
     vidPlan.forEach(function (p) { renames.push({ fid: p.fid, name: api.tvVideoName(showTitle, p.season, p.ep, api.ext(p.orig)), orig: p.orig, size: p.size }); });
     subPlan.forEach(function (p) { renames.push({ fid: p.fid, name: api.tvSubName(showTitle, p.season, p.ep, p.lang, api.ext(p.orig)), orig: p.orig, size: p.size }); });
     var deleteFids = junk.map(function (it) { return it.fid; }).filter(Boolean);
