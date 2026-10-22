@@ -80,6 +80,32 @@ assert(NfoCore.buildTvShowXml(null).indexOf('<tvshow>') >= 0, '剧集NFO：空�
 assert(NfoCore.buildTvShowXml({ title: 'A & B' }).indexOf('<title>A &amp; B</title>') >= 0, '剧集NFO：XML 特殊字符转义');
 assert(NfoCore.buildMovieXml({ title: 'X' }).indexOf('<movie>') >= 0, '回归：电影 NFO 仍为 <movie>（未受剧集生成器影响）');
 
+/* —— v404 剧集选集：tvshow.nfo 内嵌 <episodedetails> 每集简介 —— */
+const tvEps = NfoCore.buildTvShowXml({
+  title: '某剧',
+  tvSeasons: {
+    '2': { n: 2, episodes: [
+      { ep: 2, name: '第二集', overview: '简介 2', air: '2024-01-02', runtime: 45, vote: 7.5 },
+      { ep: 1, name: '', overview: '', air: '', runtime: 0, vote: 0 }
+    ] },
+    '1': { n: 1, episodes: [ { ep: 3, name: '第三集', overview: '含 <tag> & 符号', air: '2023-03-03', runtime: 42, vote: 8.1 } ] }
+  }
+});
+assert(tvEps.indexOf('<episodedetails>') >= 0 && tvEps.indexOf('</episodedetails>') >= 0, '选集NFO：内嵌 episodedetails 块');
+assert(tvEps.indexOf('<season>1</season>') < tvEps.indexOf('<season>2</season>'), '选集NFO：按季排序（S1 在 S2 前）');
+assert(tvEps.indexOf('<episode>1</episode>') < tvEps.indexOf('<episode>2</episode>'), '选集NFO：同季内按集排序');
+assert(tvEps.indexOf('<title>第二集</title>') >= 0, '选集NFO：集名写入 title');
+assert(tvEps.indexOf('<plot>简介 2</plot>') >= 0, '选集NFO：简介写入 plot');
+assert(tvEps.indexOf('<plot>含 &lt;tag&gt; &amp; 符号</plot>') >= 0, '选集NFO：简介 XML 特殊字符转义');
+assert(tvEps.indexOf('<aired>2023-03-03</aired>') >= 0, '选集NFO：播出日期');
+assert(tvEps.indexOf('<runtime>42</runtime>') >= 0, '选集NFO：单集时长');
+assert(tvEps.indexOf('<rating>7.5</rating>') >= 0, '选集NFO：单集评分');
+assert(tvEps.match(/<episodedetails>/g).length === 3, '选集NFO：空简介集仍输出块（共 3 集）');
+assert(tvEps.lastIndexOf('<episodedetails>') < tvEps.lastIndexOf('</tvshow>'), '选集NFO：episodedetails 在 </tvshow> 闭合前');
+const tvNoEps = NfoCore.buildTvShowXml({ title: '无缓存剧' });
+assert(tvNoEps.indexOf('<episodedetails>') < 0, '选集NFO：无 tvSeasons 缓存不输出 episodedetails');
+assert(NfoCore.buildMovieXml({ title: 'X', tvSeasons: { '1': { episodes: [ { ep: 1 } ] } } }).indexOf('<episodedetails>') < 0, '选集NFO：电影 NFO 不受影响');
+
 /* —— v398 搜索增强：「标题.年份」解析 —— */
 const pt = NfoCore.parseTitleYear;
 assert(pt('教父.1972').title === '教父' && pt('教父.1972').year === 1972, '解析：教父.1972 → 教父/1972');

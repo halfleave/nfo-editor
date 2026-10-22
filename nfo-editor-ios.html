@@ -1008,6 +1008,7 @@
             <span>重新翻译</span>
           </button>
         </div>
+        <div class="detail-seasons" id="detailSeasons" style="display:none;"></div>
         <div class="detail-cast" id="detailCast" data-page-node-id="KjVqnsWOeXfaWl4hC9lpGU"></div>
         <div class="detail-magnets" id="detailMagnets" style="display:none;" data-page-node-id="MEw8x7Rxd5GSIHVUbcE3ZJ"></div>
         <div class="detail-shots" id="detailShots" data-page-node-id="UeQszoOFWEhcBRBUV3x60f"></div>
@@ -1386,6 +1387,28 @@
         <span class="nfo-type-text"><b>剧集</b><small>整剧：季号、集数、连载状态、主创</small></span>
       </button>
     </div>
+  </div>
+
+  <!-- 剧集选集（v404）：① 季切换（多季/含特别篇时才出现）② 单集简介弹层 -->
+  <div class="sheet" id="seasonPickSheet">
+    <div class="sheet-bar">
+      <span class="sb-spacer"></span>
+      <span class="sb-title">选择季</span>
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="seasonPickBody"></div>
+  </div>
+  <div class="sheet" id="epSheet">
+    <div class="sheet-bar">
+      <span class="sb-spacer"></span>
+      <span class="sb-title">单集简介</span>
+      <button class="sb-icon" onclick="closeAllSheets()" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="epSheetBody"></div>
   </div>
 
   <!-- 文件整理：云下载里自动认不出唯一文件夹时，让用户挑。两种来源共用同一套多选列表：

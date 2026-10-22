@@ -255,6 +255,47 @@ img { display: block; }
 .tr-retry-btn:active { background: rgba(255,255,255,.18); color: #fff; }
 .tr-retry-btn svg { width: 14px; height: 14px; }
 /* 详情页底部「演职人员」 */
+/* 详情页「选集」（剧集专属，v404）：季切换胶囊 + 每集缩略图/集名/两行简介 */
+.detail-seasons { margin-top: 22px; padding-top: 16px; }
+.ds-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.ds-title { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); }
+.ds-count { font-size: 13px; font-weight: 400; color: rgba(255,255,255,0.5); }
+.ds-pill {
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px 6px 12px;
+  border-radius: 999px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.9); font-size: 12.5px; line-height: 1; -webkit-tap-highlight-color: transparent;
+}
+.ds-pill:active { background: rgba(255,255,255,0.22); }
+.ds-pill svg { width: 14px; height: 14px; opacity: .6; }
+.ds-list { display: flex; flex-direction: column; }
+.ds-ep {
+  padding: 11px 0; border-bottom: 0.5px solid rgba(255,255,255,0.08);
+  -webkit-tap-highlight-color: transparent;
+}
+.ds-ep:last-child { border-bottom: none; }
+.ds-ep:active { opacity: .62; }
+.ds-name { font-size: 13.5px; line-height: 1.35; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-code { margin-right: 6px; font-size: 12px; color: rgba(255,255,255,0.5); font-variant-numeric: tabular-nums; }
+.ds-plot {
+  margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: rgba(255,255,255,0.6);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ds-lang {
+  display: inline-block; margin-right: 4px; padding: 0 4px; border-radius: 3px;
+  background: rgba(255,255,255,0.14); font-size: 10.5px; color: rgba(255,255,255,0.65); vertical-align: 1px;
+}
+.ds-more {
+  display: block; margin: 6px auto 0; padding: 8px 14px; background: none; border: none;
+  color: rgba(255,255,255,0.62); font-size: 13px; -webkit-tap-highlight-color: transparent;
+}
+.ds-more:active { color: #fff; }
+.ds-retry {
+  display: block; width: 100%; margin: 2px 0; padding: 10px 0; background: none; border: none;
+  text-align: left; color: rgba(255,255,255,0.6); font-size: 13px; -webkit-tap-highlight-color: transparent;
+}
+.ds-skel { height: 10px; border-radius: 4px; background: rgba(255,255,255,0.08); margin-bottom: 6px; }
+.ds-skel.w60 { width: 60%; }
+.ds-skel.w90 { width: 90%; }
 .detail-cast { margin-top: 22px; padding-top: 16px; }
 .detail-cast:empty { display: none; }
 .detail-cast-title { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 12px; }
@@ -1152,6 +1193,38 @@ html.stills-open, html.stills-open body { background: #000; }
 .sheet-bar .sb-cancel { color: var(--label-2); font-size: 17px; }
 .sheet-bar .sb-icon { width: 44px; height: 34px; display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; color: var(--label); }
 .sheet-bar .sb-icon svg { width: 22px; height: 22px; }
+
+/* 单集简介弹层（v404）：剧照 + 集名 + 元信息 + 简介全文 + 两个复制胶囊 */
+#epSheet { padding-bottom: calc(var(--sab) + 28px); min-height: 0; }
+#seasonPickSheet { min-height: 0; }
+.ep-title { font-size: 17px; font-weight: 600; line-height: 1.4; color: var(--label); }
+.ep-meta { margin-top: 6px; font-size: 12.5px; color: var(--label-2); }
+.ep-plot { margin-top: 12px; font-size: 15px; line-height: 1.6; color: var(--label); white-space: pre-line; }
+.ep-plot:empty { display: none; }
+.ep-empty { margin-top: 12px; font-size: 13.5px; color: var(--label-3); }
+.ep-lang {
+  display: inline-block; margin-right: 5px; padding: 1px 5px; border-radius: 4px;
+  background: var(--gray-fill); font-size: 11px; color: var(--label-2); vertical-align: 1px;
+}
+.ep-acts { display: flex; gap: 10px; margin-top: 18px; }
+.ep-btn {
+  flex: 1; height: 44px; border-radius: 999px; border: none;
+  font-size: 15px; font-weight: 500; -webkit-tap-highlight-color: transparent;
+}
+.ep-btn.primary { background: var(--accent-fg); color: #fff; }
+.ep-btn:active { opacity: .82; }
+.ep-btn.ghost { background: var(--gray-fill); color: var(--label); }
+
+/* 季选择弹层：每行「季名 + 集数 + 勾」 */
+.ds-season-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 4px;
+  background: none; border: none; border-bottom: 0.5px solid var(--sep);
+  font-size: 15px; color: var(--label); text-align: left; -webkit-tap-highlight-color: transparent;
+}
+.ds-season-row:last-child { border-bottom: none; }
+.ds-season-row.on { color: var(--accent-fg); font-weight: 600; }
+.ds-season-count { margin-left: auto; font-size: 12.5px; font-weight: 400; color: var(--label-3); }
+.ds-check { width: 18px; height: 18px; flex: 0 0 auto; color: var(--accent-fg); }
 
 /* 列表 / 多选 / 管理 */
 .sheet-list { max-height: 50vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }

@@ -93,6 +93,30 @@
       xml += '    </actor>\n';
     });
     if (d.hasSubtitle) xml += '    <subtitles>字幕</subtitles>\n';
+    // v404 每集简介（详情页选集功能的缓存 d.tvSeasons）：Kodi 规范允许 tvshow.nfo 内嵌
+    // <episodedetails> 块，上传/导出 zip 共用此生成器，两条链路自动带上。
+    // 只写已加载过的季（没打开过的季没有缓存，不阻塞上传）；空简介集只输出序号/标题。
+    var dsPacks = d.tvSeasons || {};
+    var dsEps = [];
+    Object.keys(dsPacks).forEach(function (k) {
+      var pack = dsPacks[k] || {};
+      var n = (pack.n != null) ? pack.n : Number(k);
+      (pack.episodes || []).forEach(function (e) {
+        if (e && e.ep) dsEps.push({ n: n, ep: e.ep, name: e.name || '', plot: e.overview || '', air: e.air || '', runtime: Number(e.runtime) || 0, vote: Number(e.vote) || 0 });
+      });
+    });
+    dsEps.sort(function (a, b) { return (a.n - b.n) || (a.ep - b.ep); });
+    dsEps.forEach(function (e) {
+      xml += '    <episodedetails>\n';
+      xml += '        <season>' + escapeXml(String(e.n)) + '</season>\n';
+      xml += '        <episode>' + escapeXml(String(e.ep)) + '</episode>\n';
+      xml += '        <title>' + escapeXml(e.name || ('第 ' + e.ep + ' 集')) + '</title>\n';
+      if (e.plot) xml += '        <plot>' + escapeXml(e.plot) + '</plot>\n';
+      if (e.air) xml += '        <aired>' + escapeXml(e.air) + '</aired>\n';
+      if (e.runtime > 0) xml += '        <runtime>' + e.runtime + '</runtime>\n';
+      if (e.vote > 0) xml += '        <rating>' + e.vote + '</rating>\n';
+      xml += '    </episodedetails>\n';
+    });
     xml += '</tvshow>\n';
     return xml;
   }

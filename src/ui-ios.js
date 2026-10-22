@@ -9535,6 +9535,252 @@ function retryTranslate(){
   updateTranslateRetryBtn();
   startFilmTranslation(currentDetailFilmId);
 }
+/* ===== 剧集「选集」：每季每集简介（v404） =====
+   数据源 TMDB：首次 /tv/{id} 取季列表，之后 /tv/{id}/season/{n} 取该季每集简介。
+   结果写回影片数据（d.tvSeasonMeta / d.tvSeasons），下次打开秒出、断网也能看。
+   请求策略：进详情页只拉「当前季」一次，不预拉全部季；切季再拉一次。
+   中文简介大面积缺失（TMDB 中文条目常见）时才补一次英文，逐集只补空的那几条并标「原文」。 */
+var DS_EP_INITIAL = 6;      // 选集区块默认露出集数
+var dsSelSeason = {};       // { filmId: season } 记住每部剧上次看到第几季
+var dsExpanded = {};        // { 'filmId:season': true } 用户点过「查看全部」
+var dsRenderSeq = 0;        // 请求串台防护（切影片/切季/重试都会 +1）
+var dsCurEp = null;         // 当前打开的单集（供复制按钮取文本）
+
+function dsPad2(n){ n = Number(n) || 0; return (n < 10 ? '0' : '') + n; }
+function dsCode(n, ep){ return 'S' + dsPad2(n) + 'E' + dsPad2(ep); }
+function dsHasSeasons(d){ return isTvFilmData(d) && !!d.tmdbId; }
+function dsOpts(){
+  return Promise.all([getTMDBKey(), getActivationCode()]).then(function(r){
+    return { ownKey: r[0] || '', workerBase: state.magnetWorker || DEFAULT_WORKER, code: r[1] || '' };
+  });
+}
+function dsNormEps(raw){
+  return ((raw && raw.episodes) || []).filter(function(e){ return e && e.episode_number; }).map(function(e){
+    return {
+      ep: e.episode_number,
+      name: (e.name || '').trim(),
+      overview: (e.overview || '').trim(),
+      still: e.still_path || '',
+      air: e.air_date || '',
+      runtime: Number(e.runtime) || 0,
+      vote: Number(e.vote_average) || 0,
+      en: false
+    };
+  }).sort(function(a, b){ return a.ep - b.ep; });
+}
+function dsPack(raw, eps, hasEn){
+  return { n: (raw && raw.season_number), name: (raw && raw.name) || '', episodes: eps, en: !!hasEn, at: Date.now() };
+}
+/* 季列表：只请求一次，之后靠影片数据里的缓存 */
+function dsEnsureMeta(film){
+  var d = (film && film.data) || {};
+  if (d.tvSeasonMeta && d.tvSeasonMeta.length) return Promise.resolve(d.tvSeasonMeta);
+  return dsOpts().then(function(opts){
+    return NfoCore.tmdbRequest('/tv/' + d.tmdbId, { language: 'zh-CN' }, opts);
+  }).then(function(tv){
+    var arr = ((tv && tv.seasons) || []).filter(function(s){ return s && typeof s.season_number === 'number'; })
+      .map(function(s){
+        return {
+          n: s.season_number,
+          name: (s.name || '').trim() || (s.season_number ? ('第 ' + s.season_number + ' 季') : '特别篇'),
+          count: Number(s.episode_count) || 0
+        };
+      }).sort(function(a, b){ return a.n - b.n; });
+    if (!arr.length) throw new Error('没有季信息');
+    d.tvSeasonMeta = arr;
+    return saveFilm(film).then(function(){ return arr; }, function(){ return arr; });
+  });
+}
+/* 某一季的每集简介：缓存优先，缺了才请求 */
+function dsLoadSeason(film, n){
+  var d = (film && film.data) || {};
+  d.tvSeasons = d.tvSeasons || {};
+  var hit = d.tvSeasons[String(n)];
+  if (hit && hit.episodes && hit.episodes.length) return Promise.resolve(hit);
+  return dsOpts().then(function(opts){
+    function get(lang){
+      return NfoCore.tmdbRequest('/tv/' + d.tmdbId + '/season/' + n, { language: lang }, opts);
+    }
+    return get('zh-CN').then(function(zh){
+      var eps = dsNormEps(zh);
+      var empty = eps.filter(function(e){ return !e.overview; }).length;
+      /* 一半以上没简介才补英文：正常中文条目不该白花这一次请求 */
+      if (!eps.length || empty < Math.ceil(eps.length / 2)) return dsPack(zh, eps, false);
+      return get('en-US').then(function(en){
+        var byEp = {};
+        dsNormEps(en).forEach(function(e){ byEp[e.ep] = e; });
+        eps.forEach(function(e){
+          var enEp = byEp[e.ep];
+          if (!e.overview && enEp && enEp.overview){ e.overview = enEp.overview; e.en = true; }
+        });
+        return dsPack(zh, eps, true);
+      }).catch(function(){ return dsPack(zh, eps, false); });
+    });
+  }).then(function(pack){
+    d.tvSeasons[String(n)] = pack;
+    return saveFilm(film).then(function(){ return pack; }, function(){ return pack; });
+  });
+}
+/* 默认季：记住的选择 → 影片记录里的季号 → 第一个非特别篇的季 */
+function dsStartSeason(film){
+  var d = (film && film.data) || {}, meta = d.tvSeasonMeta || [];
+  var mem = dsSelSeason[film.id];
+  var want = (mem != null) ? mem : (Number(d.season) || 0);
+  for (var i = 0; i < meta.length; i++) if (meta[i].n === want) return want;
+  for (var j = 0; j < meta.length; j++) if (meta[j].n !== 0) return meta[j].n;
+  return meta.length ? meta[0].n : 1;
+}
+function dsSkeletonRowsHtml(){
+  var r = '';
+  for (var i = 0; i < 3; i++){
+    r += '<div class="ds-ep"><div class="ds-skel w60"></div><div class="ds-skel w90"></div></div>';
+  }
+  return '<div class="ds-list">' + r + '</div>';
+}
+function dsEpRowHtml(n, e){
+  var plot = e.overview
+    ? '<div class="ds-plot">' + (e.en ? '<span class="ds-lang">原文</span>' : '') + escapeHtml(e.overview) + '</div>'
+    : '';
+  return '<div class="ds-ep" onclick="openEpSheet(' + n + ',' + e.ep + ')">'
+    + '<div class="ds-name"><span class="ds-code">' + dsCode(n, e.ep) + '</span>'
+    + escapeHtml(e.name || ('第 ' + e.ep + ' 集')) + '</div>' + plot + '</div>';
+}
+function dsPaintEps(box, film, head, n, pack){
+  var eps = (pack && pack.episodes) || [];
+  var key = film.id + ':' + n;
+  var shown = dsExpanded[key] ? eps.length : Math.min(DS_EP_INITIAL, eps.length);
+  var html = head + '<div class="ds-list">';
+  for (var i = 0; i < shown; i++) html += dsEpRowHtml(n, eps[i]);
+  html += '</div>';
+  if (shown < eps.length){
+    html += '<button type="button" class="ds-more" onclick="dsExpand(' + n + ')">查看全部 ' + eps.length + ' 集</button>';
+  }
+  box.innerHTML = html;
+}
+function dsPaintSeason(box, film, n, seq){
+  if (!box) return;
+  var d = film.data || {};
+  var meta = d.tvSeasonMeta || [];
+  var info = null;
+  meta.forEach(function(m){ if (m.n === n) info = m; });
+  dsSelSeason[film.id] = n;
+  var multi = meta.length > 1;
+  var head = '<div class="ds-head"><div class="ds-title">选集'
+    + (multi ? '' : ((info && info.count) ? '<span class="ds-count"> · ' + info.count + ' 集</span>' : ''))
+    + '</div>'
+    + (multi ? '<button type="button" class="ds-pill" onclick="openSeasonPicker()">'
+        + escapeHtml(info ? info.name : ('第 ' + n + ' 季'))
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' : '')
+    + '</div>';
+  var cache = (d.tvSeasons || {})[String(n)];
+  if (!cache || !cache.episodes || !cache.episodes.length){
+    box.innerHTML = head + dsSkeletonRowsHtml();
+    dsLoadSeason(film, n).then(function(pack){
+      if (seq !== dsRenderSeq || dsSelSeason[film.id] !== n) return;
+      dsPaintEps(box, film, head, n, pack);
+    }).catch(function(){
+      if (seq !== dsRenderSeq || dsSelSeason[film.id] !== n) return;
+      box.innerHTML = head + '<button type="button" class="ds-retry" onclick="dsRetrySeason(' + n + ')">本季简介加载失败，点击重试</button>';
+    });
+    return;
+  }
+  dsPaintEps(box, film, head, n, cache);
+}
+function renderDetailSeasons(film){
+  var box = document.getElementById('detailSeasons');
+  if (!box) return;
+  var d = (film && film.data) || {};
+  if (!dsHasSeasons(d)){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+  var seq = ++dsRenderSeq;
+  if (d.tvSeasonMeta && d.tvSeasonMeta.length){
+    dsPaintSeason(box, film, dsStartSeason(film), seq);
+    return;
+  }
+  box.innerHTML = '<div class="ds-head"><div class="ds-title">选集</div></div>' + dsSkeletonRowsHtml();
+  dsEnsureMeta(film).then(function(){
+    if (seq !== dsRenderSeq) return;
+    dsPaintSeason(box, film, dsStartSeason(film), seq);
+  }).catch(function(){
+    if (seq !== dsRenderSeq) return;
+    box.innerHTML = '<div class="ds-head"><div class="ds-title">选集</div></div>'
+      + '<button type="button" class="ds-retry" onclick="renderDetailSeasons(currentDetailFilm)">选集加载失败，点击重试</button>';
+  });
+}
+function dsExpand(n){
+  var film = currentDetailFilm; if (!film) return;
+  dsExpanded[film.id + ':' + n] = true;
+  dsRenderSeq++;
+  dsPaintSeason(document.getElementById('detailSeasons'), film, n, dsRenderSeq);
+}
+function dsRetrySeason(n){
+  var film = currentDetailFilm; if (!film) return;
+  var d = film.data || {};
+  if (d.tvSeasons) delete d.tvSeasons[String(n)];
+  dsRenderSeq++;
+  dsPaintSeason(document.getElementById('detailSeasons'), film, n, dsRenderSeq);
+}
+/* 季选择：多季或含特别篇时才出现（iOS 列表弹层，勾选当前季） */
+function openSeasonPicker(){
+  var film = currentDetailFilm; if (!film) return;
+  var meta = (film.data || {}).tvSeasonMeta || [];
+  if (meta.length <= 1) return;
+  var cur = dsSelSeason[film.id];
+  var html = '';
+  meta.forEach(function(m){
+    var on = (m.n === cur);
+    html += '<button type="button" class="ds-season-row' + (on ? ' on' : '') + '" onclick="dsPickSeason(' + m.n + ')">'
+      + '<span class="ds-season-name">' + escapeHtml(m.name) + '</span>'
+      + '<span class="ds-season-count">' + (m.count ? (m.count + ' 集') : '') + '</span>'
+      + (on ? '<svg class="ds-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' : '')
+      + '</button>';
+  });
+  document.getElementById('seasonPickBody').innerHTML = html;
+  openSheet('seasonPickSheet');
+}
+function dsPickSeason(n){
+  closeAllSheets();
+  var film = currentDetailFilm; if (!film) return;
+  dsSelSeason[film.id] = n;
+  dsRenderSeq++;
+  dsPaintSeason(document.getElementById('detailSeasons'), film, n, dsRenderSeq);
+}
+/* 单集简介弹层：剧照 + 集名 + 日期/时长/评分 + 全文 + 复制 */
+function openEpSheet(n, ep){
+  var film = currentDetailFilm; if (!film) return;
+  var pack = ((film.data || {}).tvSeasons || {})[String(n)];
+  if (!pack) return;
+  var e = null;
+  (pack.episodes || []).forEach(function(x){ if (x.ep === ep) e = x; });
+  if (!e) return;
+  var title = dsCode(n, ep) + ' · ' + (e.name || ('第 ' + ep + ' 集'));
+  var meta = [];
+  if (e.air) meta.push(e.air);
+  if (e.runtime > 0) meta.push(e.runtime + ' 分钟');
+  if (e.vote > 0) meta.push((Math.round(e.vote * 10) / 10) + ' 分');
+  dsCurEp = { title: title, plot: e.overview || '' };
+  var html = '';
+  html += '<div class="ep-title">' + escapeHtml(title) + '</div>';
+  if (meta.length) html += '<div class="ep-meta">' + escapeHtml(meta.join(' ｜ ')) + '</div>';
+  if (e.overview){
+    html += '<div class="ep-plot">' + (e.en ? '<span class="ep-lang">原文</span>' : '') + escapeHtml(e.overview) + '</div>';
+  } else {
+    html += '<div class="ep-empty">本集暂无简介</div>';
+  }
+  html += '<div class="ep-acts">'
+    + (e.overview ? '<button type="button" class="ep-btn primary" onclick="dsCopyEp(\'plot\')">复制简介</button>' : '')
+    + '<button type="button" class="ep-btn ghost" onclick="dsCopyEp(\'title\')">复制集标题</button>'
+    + '</div>';
+  document.getElementById('epSheetBody').innerHTML = html;
+  openSheet('epSheet');
+}
+function dsCopyEp(which){
+  if (!dsCurEp) return;
+  var txt = (which === 'title') ? dsCurEp.title : dsCurEp.plot;
+  if (!txt) return;
+  copyText(txt, (which === 'title') ? '集标题' : '简介');
+}
+
 function renderFilmDetail(film){
   currentDetailFilm = film || null;
   // 切换影片时重置自动化文档缓存（跨影片残留防护），并刷新角标
@@ -9649,6 +9895,7 @@ function renderFilmDetail(film){
   document.getElementById('detailPlot').textContent = plotText;
   document.getElementById('detailPlot').onclick = function(){ copyText(plotText, '简介'); };
   updateTranslateRetryBtn();
+  renderDetailSeasons(film);
   // 演职人员：演员在前，导演统一放最后；所有影片统一标题「演职人员」
   var people = [];
   (d.actors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.role || '', photo: p.photo }); });
