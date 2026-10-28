@@ -193,7 +193,8 @@ img { display: block; }
   padding-top: 40vh;
   padding-bottom: max(20px, var(--sab));
   display: flex; flex-direction: column;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overflow-y: auto; overflow-x: hidden;   /* v412：选集卡片带负边距通栏后，横向溢出把整页拖出 ~40px 可滑，锁死 */
+  -webkit-overflow-scrolling: touch;
 }
 .detail-content {
   padding: 8px 20px 30px;

@@ -9620,13 +9620,18 @@ function dsLoadSeason(film, n){
     return saveFilm(film).then(function(){ return pack; }, function(){ return pack; });
   });
 }
-/* 默认季：记住的选择 → 影片记录里的季号 → 第一个非特别篇的季 */
+/* 默认季：记住的选择 → 最新一季（季号最大的非特别篇）；兜底第一个非特别篇 */
 function dsStartSeason(film){
   var d = (film && film.data) || {}, meta = d.tvSeasonMeta || [];
   var mem = dsSelSeason[film.id];
-  var want = (mem != null) ? mem : (Number(d.season) || 0);
-  for (var i = 0; i < meta.length; i++) if (meta[i].n === want) return want;
-  for (var j = 0; j < meta.length; j++) if (meta[j].n !== 0) return meta[j].n;
+  if (mem != null){
+    for (var i = 0; i < meta.length; i++) if (meta[i].n === mem) return mem;
+  }
+  var latest = null;
+  for (var j = 0; j < meta.length; j++){
+    if (meta[j].n !== 0 && (latest === null || meta[j].n > latest)) latest = meta[j].n;
+  }
+  if (latest !== null) return latest;
   return meta.length ? meta[0].n : 1;
 }
 function dsSkeletonRowsHtml(){
