@@ -9535,16 +9535,15 @@ function retryTranslate(){
   updateTranslateRetryBtn();
   startFilmTranslation(currentDetailFilmId);
 }
-/* ===== 剧集「选集」：每季每集简介（v404） =====
+/* ===== 剧集「选集」：每季每集简介（v404；v405 改横向滑动卡片） =====
    数据源 TMDB：首次 /tv/{id} 取季列表，之后 /tv/{id}/season/{n} 取该季每集简介。
    结果写回影片数据（d.tvSeasonMeta / d.tvSeasons），下次打开秒出、断网也能看。
    请求策略：进详情页只拉「当前季」一次，不预拉全部季；切季再拉一次。
-   中文简介大面积缺失（TMDB 中文条目常见）时才补一次英文，逐集只补空的那几条并标「原文」。 */
-var DS_EP_INITIAL = 6;      // 选集区块默认露出集数
+   中文简介大面积缺失（TMDB 中文条目常见）时才补一次英文，逐集只补空的那几条并标「原文」。
+   v405 交互：卡片横向左右滑动（每张 75% 屏宽、固定高：标题 1 行 + 简介 4 行），
+   点卡片居中弹窗看全文；超 10 集在卡片下方出快速定位组（1～10 / 11～20…），点击滚到该组首集。 */
 var dsSelSeason = {};       // { filmId: season } 记住每部剧上次看到第几季
-var dsExpanded = {};        // { 'filmId:season': true } 用户点过「查看全部」
 var dsRenderSeq = 0;        // 请求串台防护（切影片/切季/重试都会 +1）
-var dsCurEp = null;         // 当前打开的单集（供复制按钮取文本）
 
 function dsPad2(n){ n = Number(n) || 0; return (n < 10 ? '0' : '') + n; }
 function dsCode(n, ep){ return 'S' + dsPad2(n) + 'E' + dsPad2(ep); }
@@ -9632,29 +9631,36 @@ function dsStartSeason(film){
 }
 function dsSkeletonRowsHtml(){
   var r = '';
-  for (var i = 0; i < 3; i++){
-    r += '<div class="ds-ep"><div class="ds-skel w60"></div><div class="ds-skel w90"></div></div>';
+  for (var i = 0; i < 2; i++){
+    r += '<div class="ds-skel-card"><div class="ds-skel w60" style="height:14px;"></div>'
+      + '<div class="ds-skel w90"></div><div class="ds-skel w90"></div><div class="ds-skel w60"></div><div class="ds-skel w60" style="width:40%;margin-bottom:0;"></div></div>';
   }
   return '<div class="ds-list">' + r + '</div>';
 }
 function dsEpRowHtml(n, e){
   var plot = e.overview
     ? '<div class="ds-plot">' + (e.en ? '<span class="ds-lang">原文</span>' : '') + escapeHtml(e.overview) + '</div>'
-    : '';
-  return '<div class="ds-ep" onclick="openEpSheet(' + n + ',' + e.ep + ')">'
+    : '<div class="ds-plot"></div>';   /* 空简介也占位 4 行，卡片等高 */
+  return '<div class="ds-ep" data-ep="' + e.ep + '" onclick="openEpSheet(' + n + ',' + e.ep + ')">'
     + '<div class="ds-name"><span class="ds-code">' + dsCode(n, e.ep) + '</span>'
     + escapeHtml(e.name || ('第 ' + e.ep + ' 集')) + '</div>' + plot + '</div>';
 }
+/* 快速定位组：每 10 集一组「1～10 / 11～20…」，末组不满 10 按实际集数（12 集 → 1～10 / 11～12） */
+function dsJumpGroupsHtml(n, total){
+  if (total <= 10) return '';
+  var html = '<div class="ds-jumps">';
+  for (var s = 1; s <= total; s += 10){
+    var end = Math.min(s + 9, total);
+    html += '<button type="button" class="ds-jump" data-jump="' + s + '" onclick="dsJumpTo(' + n + ',' + s + ')">'
+      + s + '～' + end + '</button>';
+  }
+  return html + '</div>';
+}
 function dsPaintEps(box, film, head, n, pack){
   var eps = (pack && pack.episodes) || [];
-  var key = film.id + ':' + n;
-  var shown = dsExpanded[key] ? eps.length : Math.min(DS_EP_INITIAL, eps.length);
   var html = head + '<div class="ds-list">';
-  for (var i = 0; i < shown; i++) html += dsEpRowHtml(n, eps[i]);
-  html += '</div>';
-  if (shown < eps.length){
-    html += '<button type="button" class="ds-more" onclick="dsExpand(' + n + ')">查看全部 ' + eps.length + ' 集</button>';
-  }
+  for (var i = 0; i < eps.length; i++) html += dsEpRowHtml(n, eps[i]);
+  html += '</div>' + dsJumpGroupsHtml(n, eps.length);
   box.innerHTML = html;
 }
 function dsPaintSeason(box, film, n, seq){
@@ -9707,11 +9713,17 @@ function renderDetailSeasons(film){
       + '<button type="button" class="ds-retry" onclick="renderDetailSeasons(currentDetailFilm)">选集加载失败，点击重试</button>';
   });
 }
-function dsExpand(n){
-  var film = currentDetailFilm; if (!film) return;
-  dsExpanded[film.id + ':' + n] = true;
-  dsRenderSeq++;
-  dsPaintSeason(document.getElementById('detailSeasons'), film, n, dsRenderSeq);
+/* 快速定位：把卡片带滚到目标组首集并居中，同时高亮该组按钮（block:'nearest' 避免页面跟着竖滚） */
+function dsJumpTo(n, ep){
+  var box = document.getElementById('detailSeasons');
+  if (!box) return;
+  var card = box.querySelector('.ds-list .ds-ep[data-ep="' + ep + '"]');
+  if (card) card.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  var jumps = box.querySelectorAll('.ds-jump');
+  for (var i = 0; i < jumps.length; i++){
+    var on = jumps[i].getAttribute('data-jump') === String(ep);
+    jumps[i].classList[on ? 'add' : 'remove']('on');
+  }
 }
 function dsRetrySeason(n){
   var film = currentDetailFilm; if (!film) return;
@@ -9758,7 +9770,6 @@ function openEpSheet(n, ep){
   if (e.air) meta.push(e.air);
   if (e.runtime > 0) meta.push(e.runtime + ' 分钟');
   if (e.vote > 0) meta.push((Math.round(e.vote * 10) / 10) + ' 分');
-  dsCurEp = { title: title, plot: e.overview || '' };
   var html = '';
   html += '<div class="ep-title">' + escapeHtml(title) + '</div>';
   if (meta.length) html += '<div class="ep-meta">' + escapeHtml(meta.join(' ｜ ')) + '</div>';
@@ -9768,17 +9779,18 @@ function openEpSheet(n, ep){
     html += '<div class="ep-empty">本集暂无简介</div>';
   }
   html += '<div class="ep-acts">'
-    + (e.overview ? '<button type="button" class="ep-btn primary" onclick="dsCopyEp(\'plot\')">复制简介</button>' : '')
-    + '<button type="button" class="ep-btn ghost" onclick="dsCopyEp(\'title\')">复制集标题</button>'
+    + '<button type="button" class="ep-btn ghost" onclick="dsCloseEp()">关闭</button>'
     + '</div>';
   document.getElementById('epSheetBody').innerHTML = html;
-  openSheet('epSheet');
+  /* v405：居中弹窗（不再是底部 sheet） */
+  var mask = document.getElementById('epMask'), modal = document.getElementById('epModal');
+  if (mask) mask.classList.add('on');
+  if (modal) modal.classList.add('on');
 }
-function dsCopyEp(which){
-  if (!dsCurEp) return;
-  var txt = (which === 'title') ? dsCurEp.title : dsCurEp.plot;
-  if (!txt) return;
-  copyText(txt, (which === 'title') ? '集标题' : '简介');
+function dsCloseEp(){
+  var mask = document.getElementById('epMask'), modal = document.getElementById('epModal');
+  if (mask) mask.classList.remove('on');
+  if (modal) modal.classList.remove('on');
 }
 
 function renderFilmDetail(film){
