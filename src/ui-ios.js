@@ -9670,6 +9670,7 @@ function dsPaintEps(box, film, head, n, pack){
   html += '</div>' + dsJumpGroupsHtml(n, eps.length);
   box.innerHTML = html;
   dsBindScroll(box);
+  dsScrollTick(box);   /* v412：一进来默认高亮第一组（当前可见卡=首卡） */
 }
 function dsPaintSeason(box, film, n, seq){
   if (!box) return;
@@ -9719,12 +9720,17 @@ function renderDetailSeasons(film){
       + '<button type="button" class="ds-retry" onclick="renderDetailSeasons(currentDetailFilm)">选集加载失败，点击重试</button>';
   });
 }
-/* 快速定位：把卡片带滚到目标组首集（左侧对齐，与首卡停留位置一致）并高亮该组 */
+/* 快速定位：只滚卡片带本身（不用 scrollIntoView——它会把祖先容器一起滚，导致整页内容左移），
+   对齐到与首卡相同的左侧位置（scroll-padding-left 20px）并高亮该组 */
 function dsJumpTo(n, ep){
   var box = document.getElementById('detailSeasons');
   if (!box) return;
-  var card = box.querySelector('.ds-list .ds-ep[data-ep="' + ep + '"]');
-  if (card) card.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+  var list = box.querySelector('.ds-list');
+  var card = list && list.querySelector('.ds-ep[data-ep="' + ep + '"]');
+  if (list && card){
+    var delta = card.getBoundingClientRect().left - list.getBoundingClientRect().left;
+    list.scrollTo({ left: list.scrollLeft + delta - 20, behavior: 'smooth' });   /* 20 = .ds-list padding-left/scroll-padding-left */
+  }
   dsMarkJump(box, ep);
 }
 /* 高亮「集数落在哪一组」的定位按钮 */
