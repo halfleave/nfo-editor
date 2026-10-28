@@ -1789,6 +1789,18 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* ============ 文件整理（M4） ============ */
 /* 顶栏右上角「整理任务」入口（标题是 absolute 居中，故按钮靠 margin-left:auto 顶到右侧） */
 .auto-topbar .tidy-task-entry { margin-left: auto; position: relative; z-index: 1; }
+/* v417 自动化页右上角「绑定文件夹」：已绑定时链环图标高亮 */
+.auto-topbar .auto-bind-btn.on { color: var(--accent-fg); }
+/* 绑定文件夹选择器：逐层进入的目录行 */
+.bind-dir-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 4px;
+  background: none; border: none; border-bottom: 0.5px solid var(--sep);
+  font-size: 15px; color: var(--label); text-align: left; -webkit-tap-highlight-color: transparent;
+}
+.bind-dir-row:last-child { border-bottom: none; }
+.bind-dir-row:active { background: var(--gray-fill); }
+.bind-dir-row svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--label-2); }
+.bind-dir-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 对话页右上角「获取目录树」（胶囊文字按钮，与 .auto-topbar button 的 34×34 方块区分） */
 .auto-topbar .tidy-tree-btn { margin-left: auto; position: relative; z-index: 1; width: auto; height: 30px; padding: 0 13px; border-radius: 999px; background: var(--gray-fill); color: var(--accent); font-size: 13px; font-weight: 500; white-space: nowrap; }
 .auto-topbar .tidy-tree-btn:active { opacity: .6; }

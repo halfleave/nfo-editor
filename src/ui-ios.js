@@ -2396,7 +2396,179 @@ function auto115Set(t, key, state, msg){
   auto115TbmRefreshIfOpen(t);
   return s;
 }
+/* ===== v417 绑定文件夹：自动化页右上角链环 → 逐层选 115 目录 → 绑定存影片数据（bindCid/bindName），
+   整理流水线全部成功后（auto115Finish 收口）自动把成果投递到绑定夹；解绑即回到云下载老逻辑 ===== */
+var bindPick = { stack: [], items: [] };   // stack: [{cid,name}]，从 115 根（cid 0）逐层进入
+function bindDirOpen(){
+  if (!auto115Doc || !auto115Doc.filmId || auto115Doc.filmId === 'tbm-library'){ showToast('当前没有绑定中的影片', 'error'); return; }
+  bindPick.stack = [];
+  openSheet('bindDirSheet');
+  bindDirLoad(0);
+}
+function bindDirCurCid(){ return bindPick.stack.length ? bindPick.stack[bindPick.stack.length - 1].cid : 0; }
+function bindDirLoad(cid){
+  var listEl = document.getElementById('bindDirList');
+  document.getElementById('bindDirPath').textContent = bindPick.stack.length
+    ? bindPick.stack.map(function(s){ return s.name; }).join(' / ') : '选择文件夹';
+  if (listEl) listEl.innerHTML = '<div class="tmdb-msg">正在读取文件夹…</div>';
+  bindPick.items = [];
+  auto115ListDir(cid).then(function(list){
+    var dirs = (list || []).filter(function(it){ return it && !it.fid && (it.n || it.name); });
+    bindPick.items = dirs;
+    if (!dirs.length) listEl.innerHTML = '<div class="tmdb-msg">这个文件夹里没有子文件夹</div>';
+    else {
+      var html = '';
+      dirs.forEach(function(it){
+        html += '<button type="button" class="bind-dir-row" data-cid="' + escapeAttr(String(it.cid || '')) + '" data-name="' + escapeAttr(it.n || it.name || '') + '" onclick="bindDirInto(this.dataset.cid, this.dataset.name)">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/></svg>'
+          + '<span>' + escapeHtml(it.n || it.name || '') + '</span></button>';
+      });
+      listEl.innerHTML = html;
+    }
+    bindDirSyncBtns(cid);
+  }).catch(function(e){
+    listEl.innerHTML = '<div class="tmdb-msg">' + escapeHtml((e && e.message) || '读取失败') + '</div>';
+  });
+}
+function bindDirSyncBtns(cid){
+  loadFilm(auto115Doc.filmId).then(function(film){
+    var d = (film && film.data) || {};
+    var ub = document.getElementById('bindUnbindBtn');
+    var cb = document.getElementById('bindConfirmBtn');
+    if (ub) ub.style.display = d.bindCid ? '' : 'none';
+    if (cb){
+      var atBound = d.bindCid && String(d.bindCid) === String(cid);
+      var curName = bindPick.stack.length ? bindPick.stack[bindPick.stack.length - 1].name : '';
+      cb.textContent = (cid === 0) ? '请先进入要绑定的文件夹' : (atBound ? '当前已是绑定文件夹' : ('绑定「' + curName + '」'));
+      cb.disabled = (cid === 0) || !!atBound;
+      cb.style.opacity = cb.disabled ? '.45' : '';
+    }
+  }).catch(function(){});
+}
+function bindDirInto(cid, name){
+  if (!cid) return;
+  bindPick.stack.push({ cid: String(cid), name: name });
+  bindDirLoad(cid);
+}
+function bindDirUp(){
+  if (!bindPick.stack.length) return;
+  bindPick.stack.pop();
+  bindDirLoad(bindDirCurCid());
+}
+function bindDirConfirm(){
+  var cid = bindDirCurCid();
+  if (!cid){ showToast('请先进入要绑定的文件夹', 'error'); return; }
+  var name = bindPick.stack.length ? bindPick.stack[bindPick.stack.length - 1].name : '';
+  loadFilm(auto115Doc.filmId).then(function(film){
+    if (!film) return showToast('未找到影片', 'error');
+    film.data = film.data || {};
+    film.data.bindCid = String(cid);
+    film.data.bindName = name;
+    return saveFilm(film).then(function(){
+      closeAllSheets();
+      auto115RefreshBindBtn();
+      showToast('已绑定，整理完成后移入「' + name + '」', 'success');
+    });
+  }).catch(function(e){ showToast((e && e.message) || '绑定失败', 'error'); });
+}
+function bindDirUnbind(){
+  loadFilm(auto115Doc.filmId).then(function(film){
+    if (!film) return;
+    film.data = film.data || {};
+    delete film.data.bindCid;
+    delete film.data.bindName;
+    return saveFilm(film).then(function(){
+      auto115RefreshBindBtn();
+      showToast('已解绑，整理结果仍放云下载', 'success');
+      bindDirLoad(bindDirCurCid());
+    });
+  }).catch(function(e){ showToast((e && e.message) || '解绑失败', 'error'); });
+}
+/* topbar 链环图标态：已绑定 → 高亮 */
+function auto115RefreshBindBtn(){
+  var btn = document.getElementById('autoBindBtn');
+  if (!btn){ return; }
+  if (!auto115Doc || !auto115Doc.filmId || auto115Doc.filmId === 'tbm-library'){ btn.classList.remove('on'); return; }
+  loadFilm(auto115Doc.filmId).then(function(film){
+    var d = (film && film.data) || {};
+    btn.classList[d.bindCid ? 'add' : 'remove']('on');
+  }).catch(function(){});
+}
+/* ===== v417 绑定投递：任务全部成功（ab-ok）后，把成果搬到该影片绑定的 115 文件夹 =====
+   电影：整个影片夹移入绑定夹；剧集：绑定夹下有与剧集名完全相同的子夹 → 只把根夹里的内容
+   （文件+季子夹）并进去并删空根夹（不套娃），没有 → 整夹移入；平铺视频（无夹）→ 文件直接移入。
+   搬完更新 t.finalDirCid 指向绑定夹内的最终位置，「上传元数据」自动跟进。失败不阻塞完成。 */
+function auto115BindDeliver(t){
+  var doc = auto115DocOf(t) || auto115Doc;
+  if (!doc || !doc.filmId || doc.filmId === 'tbm-library') return Promise.resolve();
+  return loadFilm(doc.filmId).then(function(film){
+    var d = (film && film.data) || {};
+    var bindCid = d.bindCid;
+    if (!bindCid || !auto115TaskDoc) return;
+    var rootCid = t.finalDirCid ? String(t.finalDirCid) : '';
+    /* 平铺（视频在云下载根，没有夹）→ 文件直接移入绑定夹 */
+    if (!rootCid || rootCid === String(C115_DEFAULT_DIR_CID)){
+      var fids = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [String(t.videoFid)] : []);
+      if (!fids.length) return;
+      return auto115MoveFids(bindCid, fids).then(function(r){
+        if (r.ok) showToast('已移入绑定文件夹「' + (d.bindName || '') + '」', 'success');
+      });
+    }
+    if (String(rootCid) === String(bindCid)) return;   /* 已在绑定夹（如重跑），不重复搬 */
+    if (auto115TaskIsTv(t)){
+      var rootName = t.finalDirName || '';
+      return auto115ListDir(bindCid).then(function(list){
+        var sameCid = '';
+        for (var i = 0; i < (list || []).length; i++){
+          var it = list[i];
+          if (it && !it.fid && (it.n || it.name) === rootName){ sameCid = String(it.cid || ''); break; }
+        }
+        if (sameCid){
+          /* 同名夹已存在 → 只搬根夹里的内容，不搬根夹本身（避免 剧名/剧名 套娃） */
+          return auto115ListDir(rootCid).then(function(items){
+            var fids = (items || []).filter(function(x){ return x && (x.fid || x.cid); })
+              .map(function(x){ return String(x.fid || x.cid); });
+            if (!fids.length) return bindDelRootDel(rootCid, bindCid);
+            return auto115MoveFids(sameCid, fids).then(function(r){
+              if (!r.ok) throw new Error(r.err || '移动失败');
+              return bindDelRootDel(rootCid, bindCid);
+            });
+          }).then(function(){
+            t.finalDirCid = sameCid;
+            showToast('剧集已并入绑定文件夹「' + rootName + '」', 'success');
+          });
+        }
+        return auto115MoveFids(bindCid, [rootCid]).then(function(r){
+          if (!r.ok) throw new Error(r.err || '移动失败');
+          showToast('剧集已移入绑定文件夹「' + (d.bindName || '') + '」', 'success');
+        });
+      });
+    }
+    /* 电影：整个影片夹移入绑定夹 */
+    return auto115MoveFids(bindCid, [rootCid]).then(function(r){
+      if (!r.ok) throw new Error(r.err || '移动失败');
+      showToast('影片已移入绑定文件夹「' + (d.bindName || '') + '」', 'success');
+    });
+  }).catch(function(e){
+    showToast('投递到绑定文件夹失败：' + ((e && e.message) || '网络错误') + '，成果留在云下载', 'info');
+  });
+}
+function bindDelRootDel(cid, pid){
+  return auto115Post('https://webapi.115.com/rb/delete', 'fid=' + encodeURIComponent(cid) + '&pid=' + encodeURIComponent(pid))
+    .catch(function(){});
+}
+
 function auto115Finish(t){
+  /* v417 绑定投递：全部步骤成功且不是上传任务 → 先搬成果到绑定夹（更新 finalDirCid），再走原收口
+     （autoUpload 续跑在投递之后，元数据跟着进绑定夹）。失败/中止/重跑已投递过 → 直接收口。 */
+  if (t && !t.bindDelivered && !t.aborted && auto115TaskType(t) !== 'upload' && auto115Status(t).cls === 'ab-ok'){
+    t.bindDelivered = true;
+    auto115BindDeliver(t).then(function(){ auto115FinishAfter(t); }, function(){ auto115FinishAfter(t); });
+    return;
+  }
+  auto115FinishAfter(t);
+}
+function auto115FinishAfter(t){
   t.updatedAt = auto115Now();
   renderAuto115();
   auto115Save(auto115DocOf(t) || auto115Doc);
@@ -2534,6 +2706,7 @@ function renderAuto115(){
   var uploadBtn = document.getElementById('autoUploadBtn');
   if (uploadBtn) uploadBtn.style.display = tasks.some(function(t){ return auto115TaskType(t) === 'upload'; }) ? 'none' : '';
   auto115SyncFabDefault(tasks.length > 0);   // v387：按钮组默认开合（没任务展开 / 有任务收起）
+  auto115RefreshBindBtn();                   // v417：右上角链环图标绑定态
   updateAutoBadge();
 }
 /* —— 自动化页右下角功能按钮组（v387）——
@@ -5680,6 +5853,32 @@ function auto115StepUploadDir(t){
     auto115Set(t, 'dir', 'fail', '这部影片没有标题，不知道传到哪儿');
     auto115Finish(t); return Promise.resolve(null);
   }
+  /* v417：影片绑定了 115 文件夹 → 元数据直接进绑定夹：
+     平铺视频（无夹）→ 绑定夹根（与视频同层）；有夹 → 绑定夹下的「标题」夹（先找后建）。
+     未绑定 → 走云下载原逻辑。 */
+  var _upTaskDoc = auto115TaskDoc(t) || {};
+  return loadFilm(_upTaskDoc.filmId).then(function(film){
+    var bd = (film && film.data && film.data.bindCid)
+      ? { cid: String(film.data.bindCid), name: film.data.bindName || '' } : null;
+    if (!bd) return auto115UploadDirCloud(t, name);
+    var flat = !auto115MovieLayout(_upTaskDoc).folder;
+    auto115Set(t, 'dir', 'running', '目标绑定文件夹「' + (flat ? bd.name : name) + '」…');
+    renderAuto115();
+    var target = flat ? Promise.resolve(bd.cid) : auto115EnsureDir(bd.cid, name);
+    return target.then(function(cid){
+      t.uploadDirCid = cid; t.uploadDirName = flat ? bd.name : name;
+      auto115Set(t, 'dir', 'ok', flat ? '已定位绑定文件夹「' + bd.name + '」' : '已准备绑定文件夹「' + name + '」');
+      return auto115StepUploadFiles(t);
+    });
+  }).catch(function(e){
+    console.warn('[115上传]', e);
+    var why = (e && e.message) ? String(e.message).slice(0, 90) : '';
+    auto115Set(t, 'dir', 'fail', '文件夹没准备好' + (why ? '：' + why : '，点「重试」再来一次'));
+    auto115Finish(t); return null;
+  });
+}
+/* 云下载原逻辑（未绑定时）：按标题找夹 → 没有则建 */
+function auto115UploadDirCloud(t, name){
   auto115Set(t, 'dir', 'running', '正在 115 里找「' + name + '」…');
   renderAuto115();
   return auto115FindUploadDir(name).then(function(hit){
@@ -6186,6 +6385,7 @@ function auto115RetryWhole(tid){
   /* 清派生缓存（上次跑留下的整理计划/季夹映射/平铺标记）：重跑要按当前磁盘真实状态重新识别，
      否则 rename 会拿旧 plan 里的旧文件名去改（上次已改过名 → 撞名或回退）。 */
   delete t.tvPlan; delete t.tvSeasonMap; delete t.tvFlat;
+  delete t.bindDelivered;   /* v417：重跑后要重新投递到绑定文件夹 */
   auto115Save();
   showToast('重新执行整条任务…', 'info');
   return auto115RetryStep(tid, auto115StartKey(t), true);
