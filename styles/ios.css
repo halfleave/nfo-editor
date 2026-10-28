@@ -2107,15 +2107,15 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-composer .mc-text { flex: 1; font-size: 13px; line-height: 1.35; color: var(--label); word-break: break-all; max-height: 54px; overflow: hidden; }
 .magnet-composer .mc-x { flex: none; width: 24px; height: 24px; border: none; border-radius: 50%; background: var(--card-fill); color: var(--label-2); font-size: 16px; line-height: 24px; text-align: center; padding: 0; }
 .magnet-composer .mc-x:active { opacity: .7; }
-.magnet-composer .mc-input-row { display: flex; align-items: flex-end; gap: 8px; }
+.magnet-composer .mc-input-row { display: flex; align-items: flex-end; }
 .magnet-composer .mc-input { flex: 1; box-sizing: border-box; min-height: 44px; max-height: 120px; border: 1px solid var(--sep); border-radius: 12px; background: var(--gray-fill); color: var(--label); font-size: 14px; line-height: 1.4; padding: 10px 12px; resize: none; -webkit-user-select: text; }
 .magnet-composer .mc-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .magnet-composer .mc-input::placeholder { color: var(--label-2); }
-.magnet-composer .mc-add { flex: none; width: 44px; height: 44px; border: none; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 400; line-height: 1; font-family: inherit; background: var(--accent); color: var(--accent-text); -webkit-tap-highlight-color: transparent; }
-.magnet-composer .mc-add:active { opacity: .8; }
 .magnet-sheet-ops { display: flex; align-items: stretch; gap: 10px; margin-top: 18px; }
 .sheet-btn { flex: 1; display: flex; align-items: center; justify-content: center; appearance: none; -webkit-appearance: none; font-family: inherit; font-size: 15px; font-weight: 600; border: none; border-radius: 12px; padding: 12px 0; min-height: 48px; line-height: 1.2; -webkit-tap-highlight-color: transparent; background-clip: padding-box; }
-.magnet-confirm-btn { background: var(--accent); color: var(--accent-text); }
+/* v416：确定左侧 + 按钮（收起输入框为 chip），与确定宽度比 1:3 */
+.magnet-add-btn { flex: 1; font-size: 24px; font-weight: 400; background: var(--accent); color: var(--accent-text); }
+.magnet-confirm-btn { flex: 3; background: var(--accent); color: var(--accent-text); }
 .magnet-confirm-btn:active { opacity: .8; }
 .sheet-btn:active { opacity: .8; }
 .auto-task { background: var(--card-fill); border-radius: 14px; overflow: hidden; }

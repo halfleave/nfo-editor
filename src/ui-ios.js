@@ -6019,9 +6019,8 @@ function renderMagnetComposer(containerId){
       if (/^(magnet:\?|ed2k:\/\/)/i.test(txt)) ta.value = txt;
     }).catch(function(){});
   };
-  var addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'mc-add'; addBtn.textContent = '+'; addBtn.setAttribute('aria-label', '添加');
-  addBtn.onclick = function(){ auto115ComposerAdd(containerId); };
-  inputRow.appendChild(ta); inputRow.appendChild(addBtn);
+  /* v416：输入框占满一整行（去掉行内圆加号）；添加入口移到「确定」左侧的 + 按钮（宽 1:3） */
+  inputRow.appendChild(ta);
   box.appendChild(rows); box.appendChild(inputRow);
 }
 function auto115ComposerAdd(containerId){
@@ -9542,7 +9541,7 @@ function retryTranslate(){
    中文简介大面积缺失（TMDB 中文条目常见）时才补一次英文，逐集只补空的那几条并标「原文」。
    v405 交互：卡片横向左右滑动（每张 75% 屏宽、固定高：标题 1 行 + 简介 4 行），
    点卡片居中弹窗看全文；超 10 集在卡片下方出快速定位组（1～10 / 11～20…），点击滚到该组首集。 */
-var dsSelSeason = {};       // { filmId: season } 记住每部剧上次看到第几季
+var dsSelSeason = {};       // { filmId: season } 当前正在看的季（进详情页即重置，不跨会话记忆）
 var dsRenderSeq = 0;        // 请求串台防护（切影片/切季/重试都会 +1）
 
 function dsPad2(n){ n = Number(n) || 0; return (n < 10 ? '0' : '') + n; }
@@ -9620,13 +9619,9 @@ function dsLoadSeason(film, n){
     return saveFilm(film).then(function(){ return pack; }, function(){ return pack; });
   });
 }
-/* 默认季：记住的选择 → 最新一季（季号最大的非特别篇）；兜底第一个非特别篇 */
+/* 默认季：v414 起每次进详情页都刷新定位——直接取最新一季（季号最大的非特别篇），不记忆上次选择；兜底第一个非特别篇 */
 function dsStartSeason(film){
-  var d = (film && film.data) || {}, meta = d.tvSeasonMeta || [];
-  var mem = dsSelSeason[film.id];
-  if (mem != null){
-    for (var i = 0; i < meta.length; i++) if (meta[i].n === mem) return mem;
-  }
+  var meta = ((film && film.data) || {}).tvSeasonMeta || [];
   var latest = null;
   for (var j = 0; j < meta.length; j++){
     if (meta[j].n !== 0 && (latest === null || meta[j].n > latest)) latest = meta[j].n;
@@ -9705,6 +9700,7 @@ function renderDetailSeasons(film){
   var d = (film && film.data) || {};
   if (!dsHasSeasons(d)){ box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = '';
+  delete dsSelSeason[film.id];   /* v414：每次进详情页刷新定位记录，默认回到最新一季 */
   var seq = ++dsRenderSeq;
   if (d.tvSeasonMeta && d.tvSeasonMeta.length){
     dsPaintSeason(box, film, dsStartSeason(film), seq);
