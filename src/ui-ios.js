@@ -9677,9 +9677,7 @@ function dsPaintSeason(box, film, n, seq){
   var head = '<div class="ds-head"><div class="ds-title">选集'
     + (multi ? '' : ((info && info.count) ? '<span class="ds-count"> · ' + info.count + ' 集</span>' : ''))
     + '</div>'
-    + (multi ? '<button type="button" class="ds-pill" onclick="openSeasonPicker()">'
-        + escapeHtml(info ? info.name : ('第 ' + n + ' 季'))
-        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' : '')
+    + (multi ? dsSeasonPillHtml(meta, n) : '')
     + '</div>';
   var cache = (d.tvSeasons || {})[String(n)];
   if (!cache || !cache.episodes || !cache.episodes.length){
@@ -9763,26 +9761,27 @@ function dsRetrySeason(n){
   dsRenderSeq++;
   dsPaintSeason(document.getElementById('detailSeasons'), film, n, dsRenderSeq);
 }
-/* 季选择：多季或含特别篇时才出现（iOS 列表弹层，勾选当前季） */
-function openSeasonPicker(){
-  var film = currentDetailFilm; if (!film) return;
-  var meta = (film.data || {}).tvSeasonMeta || [];
-  if (meta.length <= 1) return;
-  var cur = dsSelSeason[film.id];
-  var html = '';
+/* 季切换（v409 改 iOS 原生滚轮）：透明 select 覆盖在胶囊上，点胶囊弹系统选择器。
+   与设置页 select-row 同一模式（真·iOS 滚轮，无需自绘弹层）；单季或不含特别篇时不显示。 */
+function dsSeasonPillHtml(meta, n){
+  var info = null;
+  meta.forEach(function(m){ if (m.n === n) info = m; });
+  var opts = '';
   meta.forEach(function(m){
-    var on = (m.n === cur);
-    html += '<button type="button" class="ds-season-row' + (on ? ' on' : '') + '" onclick="dsPickSeason(' + m.n + ')">'
-      + '<span class="ds-season-name">' + escapeHtml(m.name) + '</span>'
-      + '<span class="ds-season-count">' + (m.count ? (m.count + ' 集') : '') + '</span>'
-      + (on ? '<svg class="ds-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' : '')
-      + '</button>';
+    opts += '<option value="' + m.n + '"' + (m.n === n ? ' selected' : '') + '>'
+      + escapeHtml(m.name + (m.count ? ('（' + m.count + ' 集）') : '')) + '</option>';
   });
-  document.getElementById('seasonPickBody').innerHTML = html;
-  openSheet('seasonPickSheet');
+  return '<span class="ds-pill-wrap"><span class="ds-pill">'
+    + escapeHtml(info ? info.name : ('第 ' + n + ' 季'))
+    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>'
+    + '<select class="ds-season-overlay" onchange="dsSeasonChanged(this)">' + opts + '</select></span>';
+}
+function dsSeasonChanged(sel){
+  var n = Number(sel.value);
+  if (typeof n !== 'number' || isNaN(n)) return;
+  dsPickSeason(n);
 }
 function dsPickSeason(n){
-  closeAllSheets();
   var film = currentDetailFilm; if (!film) return;
   dsSelSeason[film.id] = n;
   dsRenderSeq++;
@@ -9939,6 +9938,7 @@ function renderFilmDetail(film){
   document.getElementById('detailPlot').onclick = function(){ copyText(plotText, '简介'); };
   updateTranslateRetryBtn();
   renderDetailSeasons(film);
+  ensurePosterFromShots(film);   // v408：无海报兜底——读第一张剧照设为海报，首页灰框变图
   // 演职人员：演员在前，导演统一放最后；所有影片统一标题「演职人员」
   var people = [];
   (d.actors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.role || '', photo: p.photo }); });
@@ -10040,6 +10040,30 @@ function renderFilmDetail(film){
     if (sc) sc.scrollTop = 0;
   });
 }
+/* v408：无海报兜底——有的影片没有海报（首页灰框），读第一张剧照设为海报并写回影片数据。
+   顺序：gallery 已缓存 dataURL（≥25KB 非缩略图）→ galleryLinks 首张远程（AV 图走 /img 代理）下载转本地 → fanart。
+   只把本地 dataURL 写入 d.poster（离线可用/可导出/可上传）；下载失败静默，不阻塞详情页；
+   写回后刷新首页，灰框变图。触发点在详情页打开时，一次补齐永久生效。 */
+function ensurePosterFromShots(film){
+  var d = (film && film.data) || {};
+  if (d.poster) return;
+  var g = Array.isArray(d.gallery) ? d.gallery : (d.gallery ? [d.gallery] : []);
+  var cand = '';
+  for (var i = 0; i < g.length; i++){
+    if (g[i] && String(g[i]).indexOf('data:') === 0 && dataUrlBytes(g[i]) >= SHOT_MIN_BYTES){ cand = g[i]; break; }
+  }
+  if (!cand && Array.isArray(d.galleryLinks) && d.galleryLinks[0]) cand = d.galleryLinks[0];
+  if (!cand && d.fanart) cand = d.fanart;
+  if (!cand) return;
+  function done(url){
+    if (!url || String(url).indexOf('data:') !== 0 || d.poster) return;
+    d.poster = url;
+    saveFilm(film).then(function(){ renderOverview(); }).catch(function(){});
+  }
+  if (String(cand).indexOf('data:') === 0) return done(cand);
+  NfoCore.fetchImageToDataURL(NfoCore.stillDisplayUrl(cand)).then(done).catch(function(){});
+}
+
 // 磁力展开/收起：详情页级全局，renderFilmDetail 每次重设
 var detailMagnetItems = [];
 var detailMagnetVisibleCount = 0;

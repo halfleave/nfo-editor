@@ -1257,17 +1257,14 @@ html.stills-open, html.stills-open body { background: #000; }
 .ep-btn:active { opacity: .82; }
 .ep-btn.ghost { background: var(--gray-fill); color: var(--label); }
 
-/* 季选择弹层：每行「季名 + 集数 + 勾」 */
-#seasonPickSheet { min-height: 0; }
-.ds-season-row {
-  display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 4px;
-  background: none; border: none; border-bottom: 0.5px solid var(--sep);
-  font-size: 15px; color: var(--label); text-align: left; -webkit-tap-highlight-color: transparent;
+/* 季切换（v409 改 iOS 原生滚轮）：透明 select 盖在胶囊上，点胶囊弹系统选择器（同设置页 select-row 模式） */
+.ds-pill-wrap { position: relative; display: inline-flex; }
+.ds-season-overlay {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: none; background: transparent;
+  -webkit-appearance: none; appearance: none; color: transparent;
+  font-size: 16px; cursor: pointer; z-index: 2;
 }
-.ds-season-row:last-child { border-bottom: none; }
-.ds-season-row.on { color: var(--accent-fg); font-weight: 600; }
-.ds-season-count { margin-left: auto; font-size: 12.5px; font-weight: 400; color: var(--label-3); }
-.ds-check { width: 18px; height: 18px; flex: 0 0 auto; color: var(--accent-fg); }
 
 /* 列表 / 多选 / 管理 */
 .sheet-list { max-height: 50vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
