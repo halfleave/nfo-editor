@@ -9637,11 +9637,11 @@ function dsSkeletonRowsHtml(){
   }
   return '<div class="ds-list">' + r + '</div>';
 }
-function dsEpRowHtml(n, e){
+function dsEpRowHtml(n, e, isLast){
   var plot = e.overview
     ? '<div class="ds-plot">' + (e.en ? '<span class="ds-lang">原文</span>' : '') + escapeHtml(e.overview) + '</div>'
     : '<div class="ds-plot"></div>';   /* 空简介也占位 4 行，卡片等高 */
-  return '<div class="ds-ep" data-ep="' + e.ep + '" onclick="openEpSheet(' + n + ',' + e.ep + ')">'
+  return '<div class="ds-ep' + (isLast ? ' ds-ep-last' : '') + '" data-ep="' + e.ep + '" onclick="openEpSheet(' + n + ',' + e.ep + ')">'
     + '<div class="ds-name"><span class="ds-code">' + dsCode(n, e.ep) + '</span>'
     + escapeHtml(e.name || ('第 ' + e.ep + ' 集')) + '</div>' + plot + '</div>';
 }
@@ -9659,9 +9659,12 @@ function dsJumpGroupsHtml(n, total){
 function dsPaintEps(box, film, head, n, pack){
   var eps = (pack && pack.episodes) || [];
   var html = head + '<div class="ds-list">';
-  for (var i = 0; i < eps.length; i++) html += dsEpRowHtml(n, eps[i]);
+  for (var i = 0; i < eps.length; i++){
+    html += dsEpRowHtml(n, eps[i], i === eps.length - 1);
+  }
   html += '</div>' + dsJumpGroupsHtml(n, eps.length);
   box.innerHTML = html;
+  dsBindScroll(box);
 }
 function dsPaintSeason(box, film, n, seq){
   if (!box) return;
@@ -9713,17 +9716,45 @@ function renderDetailSeasons(film){
       + '<button type="button" class="ds-retry" onclick="renderDetailSeasons(currentDetailFilm)">选集加载失败，点击重试</button>';
   });
 }
-/* 快速定位：把卡片带滚到目标组首集并居中，同时高亮该组按钮（block:'nearest' 避免页面跟着竖滚） */
+/* 快速定位：把卡片带滚到目标组首集（左侧对齐，与首卡停留位置一致）并高亮该组 */
 function dsJumpTo(n, ep){
   var box = document.getElementById('detailSeasons');
   if (!box) return;
   var card = box.querySelector('.ds-list .ds-ep[data-ep="' + ep + '"]');
-  if (card) card.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  if (card) card.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+  dsMarkJump(box, ep);
+}
+/* 高亮「集数落在哪一组」的定位按钮 */
+function dsMarkJump(box, ep){
   var jumps = box.querySelectorAll('.ds-jump');
-  for (var i = 0; i < jumps.length; i++){
-    var on = jumps[i].getAttribute('data-jump') === String(ep);
-    jumps[i].classList[on ? 'add' : 'remove']('on');
+  for (var j = 0; j < jumps.length; j++){
+    var s = Number(jumps[j].getAttribute('data-jump'));
+    var on = ep >= s && ep < s + 10;
+    jumps[j].classList[on ? 'add' : 'remove']('on');
   }
+}
+/* v406 滚动跟随：卡片带滚停后，按当前可见卡（滚动位置压住的那张）所属组切换高亮 */
+function dsScrollTick(box){
+  var list = box.querySelector('.ds-list');
+  if (!list) return;
+  var cards = list.querySelectorAll('.ds-ep[data-ep]');
+  if (!cards.length) return;
+  var target = cards[0];
+  for (var i = 0; i < cards.length; i++){
+    /* offsetLeft 基准取首卡差值（offsetParent 不一定是 list，相对比较才可靠） */
+    if (cards[i].offsetLeft - cards[0].offsetLeft <= list.scrollLeft + 8) target = cards[i];
+    else break;
+  }
+  dsMarkJump(box, Number(target.getAttribute('data-ep')));
+}
+function dsBindScroll(box){
+  var list = box.querySelector('.ds-list');
+  if (!list) return;
+  var tid = 0;
+  list.onscroll = function(){
+    if (tid) clearTimeout(tid);
+    tid = setTimeout(function(){ tid = 0; dsScrollTick(box); }, 120);
+  };
 }
 function dsRetrySeason(n){
   var film = currentDetailFilm; if (!film) return;
