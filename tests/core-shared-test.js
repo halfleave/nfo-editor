@@ -142,4 +142,20 @@ const pyMat = { title: 'the matrix', year: 1999, raw: 'The.Matrix.1999' };
 const matList = [{ id: 9, name: '某剧', first_air_date: '1999-05-01' }, { id: 8, original_title: 'The Matrix', release_date: '1999-03-31' }];
 assert(rk(matList, pyMat)[0].id === 8, '排序：original_title 与 first_air_date（tv）兼容');
 
+/* —— v418 磁力搜索三层过滤 —— */
+assert(NfoCore.magnetNormText('MIAB.500C') === 'miab500c', '过滤：归一化去分隔符');
+assert(NfoCore.magnetNormText('IPX-011') === 'ipx011', '过滤：横杠归一化');
+assert(NfoCore.magnetRelevant('某电影 1080p 高清', '某电影') === true, '相关性：标题含全部 token → 命中');
+assert(NfoCore.magnetRelevant('完全无关的片', '某电影') === false, '相关性：缺 token → 沉底');
+assert(NfoCore.magnetRelevant('短a', 'a') === true, '相关性：token<2 字符不算有效，不过滤');
+assert(NfoCore.magnetRelevant('随便什么', '') === true, '相关性：空查询不过滤');
+assert(NfoCore.magnetSpam('免费下载 某片 完整版', []) === true, '屏蔽词：命中内置「免费下载」');
+assert(NfoCore.magnetSpam('正常片名 1080p', []) === false, '屏蔽词：正常标题不命中');
+assert(NfoCore.magnetSpam('带自定义词xxx的片', ['xxx']) === true, '屏蔽词：命中自定义词');
+assert(NfoCore.filterMagnetResults([{ title: '某电影 1080p' }, { title: '无关垃圾' }], '某电影', [], false).keep.length === 1, '三层：正常项进 keep');
+assert(NfoCore.filterMagnetResults([{ title: '某电影' }, { title: '随便什么' }], '某电影', [], false).demoted.length === 1, '三层：不相关进 demoted');
+assert(NfoCore.filterMagnetResults([{ title: '免费下载 某片' }, { title: '某电影' }], '某电影', [], false).blocked.length === 1, '三层：命中屏蔽词进 blocked');
+assert(NfoCore.filterMagnetResults([{ title: '免费下载 某片' }, { title: '某电影' }], '免费下载', [], true).blocked.length === 0, '三层：番号搜索(isDvd)放宽词库层，blocked 为空');
+assert(NfoCore.filterMagnetResults(null, 'x', [], false).keep.length === 0, '三层：空数组安全');
+
 console.log('core-shared 完成');

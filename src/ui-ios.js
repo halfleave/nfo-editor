@@ -1859,6 +1859,7 @@ function closeApiHelp(){
 var magnetCurrentFilm = null;
 function openMagnetSheet(){
   document.getElementById('magnetResults').innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
+  toggleMagnetFilterEntry(true);
   openMagnetCombo('search');
   var input = document.getElementById('magnetQueryInput');
   if (currentDetailFilmId){
@@ -1926,6 +1927,7 @@ function clearMagnetQuery(){
   if (inp) inp.focus();
   var box = document.getElementById('magnetResults');
   if (box) box.innerHTML = '';
+  toggleMagnetFilterEntry(true);
 }
 function searchMagnet(){
   magnetSearchTo((document.getElementById('magnetQueryInput').value || '').trim(), document.getElementById('magnetResults'));
@@ -1954,7 +1956,7 @@ function magnetSearchTo(q, box){
       var data = res.data;
       if (data && data.error){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml(data.error) + '</div>'; return; }
       if (!res.ok){ box.innerHTML = '<div class="tmdb-msg">搜索失败：服务返回 HTTP ' + res.status + '，请检查服务配置或稍后重试。</div>'; return; }
-      renderMagnetResults(data && data.items ? data.items : []);
+      renderMagnetResults(data && data.items ? data.items : [], box, q);
     })
     .catch(function(err){
       if (err && err.name === 'AbortError'){ box.innerHTML = '<div class="tmdb-msg">搜索超时（&gt;35s）：服务无响应，请稍后重试或检查服务地址。</div>'; }
@@ -1962,10 +1964,31 @@ function magnetSearchTo(q, box){
     })
     .finally(function(){ clearTimeout(to); stopLoadingRotator(); });
 }
-function renderMagnetResults(items, box){
+function renderMagnetResults(items, box, q){
   box = box || document.getElementById('magnetResults');
   if (!box) return;
+  toggleMagnetFilterEntry(false);
   if (!items || !items.length){ box.innerHTML = '<div class="tmdb-msg">未找到磁力链接</div>'; return; }
+  q = q || '';
+  loadFilterWords().then(function(words){
+    var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
+    var r = NfoCore.filterMagnetResults(items, q, words, isDvd);
+    var html = magnetRowsHtml(r.keep);
+    if (!html) html = '<div class="tmdb-msg">未找到磁力链接</div>';
+    if (r.demoted.length){
+      html += '<div class="magnet-demote-sep">以下 ' + r.demoted.length + ' 条与关键词相关性较低</div>'
+        + magnetRowsHtml(r.demoted);
+    }
+    if (r.blocked.length){
+      html += '<button type="button" class="magnet-filtered-toggle" onclick="toggleMagnetBlocked(this)">已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击查看）</button>'
+        + '<div class="magnet-blocked" style="display:none;">' + magnetRowsHtml(r.blocked) + '</div>';
+    }
+    box.innerHTML = html;
+  }).catch(function(){
+    box.innerHTML = magnetRowsHtml(items);
+  });
+}
+function magnetRowsHtml(items){
   var html = '';
   for (var i = 0; i < items.length; i++){
     var it = items[i];
@@ -1977,7 +2000,6 @@ function renderMagnetResults(items, box){
     if (it.seeders) meta.push('做种 ' + it.seeders);
     if (it.leechers) meta.push('下载 ' + it.leechers);
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
-    var rawMagnet = decodeXmlEntities(it.magnet || '');
     html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="openMagnetOp(this)">'
       + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
       + '<div class="mr-info">'
@@ -1987,7 +2009,54 @@ function renderMagnetResults(items, box){
       + '</div>'
       + '</div>';
   }
-  box.innerHTML = html;
+  return html;
+}
+function toggleMagnetBlocked(btn){
+  var box = btn.nextElementSibling;
+  if (!box) return;
+  var open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : '';
+  btn.textContent = open
+    ? btn.textContent.replace('点击查看', '点击收起')
+    : btn.textContent.replace('点击收起', '点击查看');
+}
+function toggleMagnetFilterEntry(show){
+  var el = document.getElementById('magnetFilterEntry');
+  if (el) el.style.display = show ? '' : 'none';
+}
+/* ===== v418 自定义过滤词：磁力搜索页未搜索时底部「过滤词」小字进入 =====
+   词库存 IndexedDB kv / magnetFilterWords（数组）；内置广告词在 core-shared.MAGNET_SPAM_WORDS，
+   自定义词与内置词合并生效；番号搜索自动停用词库层（core-shared.filterMagnetResults 内）。 */
+var MAGNET_FILTER_WORDS_KEY = 'magnetFilterWords';
+function loadFilterWords(){
+  return idbGet('kv', MAGNET_FILTER_WORDS_KEY).then(function(v){
+    return Array.isArray(v) ? v : [];
+  }).catch(function(){ return []; });
+}
+function openFilterWords(){
+  loadFilterWords().then(function(words){
+    var ta = document.getElementById('filterWordsInput');
+    if (ta) ta.value = (words || []).join('\n');
+    openSheet('filterWordsSheet');
+  }).catch(function(){ openSheet('filterWordsSheet'); });
+}
+function filterWordsSave(){
+  var ta = document.getElementById('filterWordsInput');
+  if (!ta) return;
+  var words = (ta.value || '').split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
+  idbPut('kv', MAGNET_FILTER_WORDS_KEY, words).then(function(){
+    closeAllSheets();
+    showToast(words.length ? ('已保存 ' + words.length + ' 个过滤词') : '已清空自定义过滤词', 'success');
+  }).catch(function(e){
+    showToast((e && e.message) || '保存失败', 'error');
+  });
+}
+function filterWordsReset(){
+  var ta = document.getElementById('filterWordsInput');
+  if (ta) ta.value = '';
+  idbPut('kv', MAGNET_FILTER_WORDS_KEY, []).then(function(){
+    showToast('已清空，仅内置广告词生效', 'success');
+  }).catch(function(){});
 }
 function toggleMagnetActions(el){
   // 保留兼容：改为在该条上浮操作层

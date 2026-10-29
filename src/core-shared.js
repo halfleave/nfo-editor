@@ -796,9 +796,62 @@ function normalizeJavbusFilm(d, opts){
     return out;
   }
 
+  // ===== v418 磁力搜索垃圾过滤（纯逻辑，三层方案）=====
+  // 内置屏蔽词：垃圾广告/诈骗特征词（普通片名搜索时生效；番号搜索自动放宽跳过词库层）
+  var MAGNET_SPAM_WORDS = [
+    '破解', '注册码', '免费下载', '在线观看', '手机在线', '高清完整版', '全集网',
+    '约炮', '援交', '楼凤', '外围', '上门服务', '一夜情', '妓院',
+    '成人直播', '福利姬', '杏吧', '资源群', '扫码', '二维码', '彩票', '博彩'
+  ];
+  // 归一化：小写 + 去掉字母数字汉字以外的分隔符（点/空格/横杠等），标题「MIAB.500C」与查询「miab-500c」可比
+  function magnetNormText(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '');
+  }
+  /* 第一层·相关性：查询按空格拆 token，标题须包含全部有效 token（归一化后 ≥2 字符的才算有效）。
+     无有效 token（太短/空）不过滤。demote 而非删除——中文查英文资源等场景仍可往下滚看到。 */
+  function magnetRelevant(title, q) {
+    var nt = magnetNormText(title);
+    var tokens = String(q || '').split(/\s+/).map(magnetNormText).filter(function (t) { return t.length >= 2; });
+    if (!tokens.length || !nt) return true;
+    for (var i = 0; i < tokens.length; i++) {
+      if (nt.indexOf(tokens[i]) < 0) return false;
+    }
+    return true;
+  }
+  /* 第二层·屏蔽词：命中内置或自定义词（归一化包含）即视为垃圾 */
+  function magnetSpam(title, words) {
+    var nt = magnetNormText(title);
+    if (!nt) return false;
+    var list = MAGNET_SPAM_WORDS.concat(words || []);
+    for (var i = 0; i < list.length; i++) {
+      var w = magnetNormText(list[i]);
+      if (w && nt.indexOf(w) >= 0) return true;
+    }
+    return false;
+  }
+  /* 三层过滤：blocked=命中词库（折叠，可展开看）；demoted=与查询不相关（沉底）；keep=正常。
+     isDvd（番号搜索）→ 放宽：跳过词库层（怕屏蔽掉想要的），只留相关性层。 */
+  function filterMagnetResults(items, q, words, isDvd) {
+    items = items || [];
+    var keep = [], demoted = [], blocked = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it) continue;
+      if (!isDvd && magnetSpam(it.title, words)) { blocked.push(it); continue; }
+      if (!magnetRelevant(it.title, q)) { demoted.push(it); continue; }
+      keep.push(it);
+    }
+    return { keep: keep, demoted: demoted, blocked: blocked };
+  }
+
   global.NfoCore = {
     escapeXml: escapeXml,
     sanitizeName: sanitizeName,
+    MAGNET_SPAM_WORDS: MAGNET_SPAM_WORDS,
+    magnetNormText: magnetNormText,
+    magnetRelevant: magnetRelevant,
+    magnetSpam: magnetSpam,
+    filterMagnetResults: filterMagnetResults,
     buildMovieXml: buildMovieXml,
     buildTvShowXml: buildTvShowXml,
     TRANSLATE_SYSTEM_PROMPT: TRANSLATE_SYSTEM_PROMPT,
