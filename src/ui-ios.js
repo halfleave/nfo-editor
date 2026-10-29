@@ -12741,7 +12741,6 @@ function openTbmTaskDetail(id){
   if (!t){ showToast('任务不存在', 'error'); return; }
   auto115TbmDetailOpen = true;
   auto115TbmDetailId = id;
-  tbmStepsOpen = false;   // 每次进任务详情都从「一行当前节点」开始，不沿用上次展开态
   switchPage('toolbox-tbm-task');
   renderTbmTaskDetail(id);
 }
@@ -12751,53 +12750,46 @@ function tbmCloseDetail(){
   switchPage('toolbox-magnet');
   switchTbmTab('tasks');
 }
-/* —— 任务详情：步骤链折叠成一行（v422） ——
-   原来把 6~8 个节点整排铺开，一屏全是「✓ + 时间 + 说明」，真正要看的「现在卡在哪」要自己找。
-   现在默认只显示「当前节点」一行：状态点 + 节点名 + 该节点的详细说明 + 进度 n/m，
-   节点一变这一行就跟着变；要复盘完整流程再点开。 */
-var tbmStepsOpen = false;
-function tbmToggleSteps(){
-  tbmStepsOpen = !tbmStepsOpen;
-  renderTbmTaskDetail(auto115TbmDetailId);
-}
-function tbmStepLineHtml(t){
-  var all = t.steps || [];
-  // 当前节点 = 最后一个「已发生」的步骤（正在跑的排在后面，天然被选中）
+/* —— 任务详情：节点流程横排（v423） ——
+   一排圆点把整条流程走完（✓ 已完成 / ! 失败 / – 跳过 / 数字 待跑 / 蓝色脉冲 进行中），
+   连接线走完一段绿一段；圆点下方只显示「当前节点」的时间和说明，节点一变就跟着变。
+   不再纵向堆 6~8 行「✓ + 时间 + 说明」——那是日志，不是状态。 */
+function tbmFlowHtml(t){
+  var steps = Auto115Core.visibleSteps(t);
+  if (!steps.length) return '<div class="tmdb-msg">暂无步骤</div>';
   var cur = auto115CurStep(t);
-  if (!cur) return '<div class="tmdb-msg">暂无步骤</div>';
-  var done = 0;
-  for (var j = 0; j < all.length; j++){ if (all[j].state === 'ok' || all[j].state === 'skip') done++; }
-  var st = cur.state || 'idle';
-  var dot = st === 'ok' ? '✓' : st === 'fail' ? '!' : st === 'skip' ? '–' : '';
-  var label = auto115StepLabel(cur.key) + (st === 'running' ? '…' : '');
-  var msg = (cur.msg || '').replace(/\s+/g, ' ').trim();
-  return '<div class="tbm-step-line" onclick="tbmToggleSteps()">'
-    + '<span class="tsl-dot ' + st + '">' + dot + '</span>'
-    + '<span class="tsl-body">'
-    + '<span class="tsl-label">' + escapeHtml(label) + '</span>'
-    + (msg ? '<span class="tsl-msg">' + escapeHtml(msg) + '</span>' : '')
-    + '</span>'
-    + '<span class="tsl-count">' + done + '/' + all.length + '</span>'
-    + '<svg class="tsl-arrow' + (tbmStepsOpen ? ' on' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
+  var track = '';
+  for (var i = 0; i < steps.length; i++){
+    var s = steps[i], st = s.state || 'idle';
+    var glyph = st === 'ok' ? '✓' : st === 'fail' ? '!' : st === 'skip' ? '–' : String(i + 1);
+    track += '<div class="tf-node ' + st + '"><span class="tf-dot">' + glyph + '</span></div>';
+    if (i < steps.length - 1){
+      track += '<div class="tf-line ' + ((st === 'ok' || st === 'skip') ? 'done' : '') + '"></div>';
+    }
+  }
+  var stc = cur ? (cur.state || 'idle') : 'idle';
+  var label = cur ? (auto115StepLabel(cur.key) + (stc === 'running' ? '…' : '')) : '';
+  var time = (cur && cur.at) ? auto115Time(cur.at) : '';
+  var msg = cur ? String(cur.msg || '').replace(/\s+/g, ' ').trim() : '';
+  return '<div class="tbm-flow">'
+    + '<div class="tf-track">' + track + '</div>'
+    + '<div class="tf-now">'
+    + '<div class="tf-now-head">'
+    + '<span class="tf-now-label ' + stc + '">' + escapeHtml(label) + '</span>'
+    + (time ? '<span class="tf-now-time">' + escapeHtml(time) + '</span>' : '')
+    + '</div>'
+    + (msg ? '<div class="tf-now-msg ' + (stc === 'fail' ? 'err' : '') + '">' + escapeHtml(msg) + '</div>' : '')
+    + '</div>'
     + '</div>';
 }
-/* 渲染任务详情：步骤进度 + 整理表单（仅在「下载完成 · 待整理」时显示） */
+/* 渲染任务详情：节点流程 + 重试/删除 + 整理表单（仅在「下载完成 · 待整理」时显示） */
 function renderTbmTaskDetail(id){
   var t = auto115Task(id);
   if (!t) return;
   var titleEl = document.getElementById('tbmTaskTitle');
   if (titleEl) titleEl.textContent = auto115TaskTitle(t);
   var stepsEl = document.getElementById('tbmTaskSteps');
-  if (stepsEl){
-    // 复用影片自动化步骤渲染（auto115StepHtml 已全面任务级化，tbm 任务可直接用）
-    var line = tbmStepLineHtml(t);
-    if (!tbmStepsOpen){
-      stepsEl.innerHTML = line;
-    } else {
-      var full = (t.steps || []).map(function(s){ return auto115StepHtml(t, s); }).join('');
-      stepsEl.innerHTML = line + '<div class="tbm-step-full">' + (full || '<div class="tmdb-msg">暂无步骤</div>') + '</div>';
-    }
-  }
+  if (stepsEl) stepsEl.innerHTML = tbmFlowHtml(t);
   /* 整理表单：仅当「下载完成且尚未整理」（wait=ok && 无 tbmType）时显示 */
   var orgBox = document.getElementById('tbmOrganizeBox');
   if (orgBox){
@@ -12807,8 +12799,16 @@ function renderTbmTaskDetail(id){
       var input = document.getElementById('tbmTargetName');
       if (input) input.value = t.targetName || '';
       tbmSetType(t.tbmType || 'movie');
+      tbmSyncConfirm();   // 有预填标题就直接可点，空标题则按钮置灰
     }
   }
+}
+/* 整理按钮：标题为空时置灰不可点，避免点下去弹「请输入标题」 */
+function tbmSyncConfirm(){
+  var input = document.getElementById('tbmTargetName');
+  var btn = document.getElementById('tbmConfirmBtn');
+  if (!input || !btn) return;
+  btn.disabled = !String(input.value || '').trim();
 }
 /* 整理表单：切换影片/剧集 */
 function tbmSetType(type){

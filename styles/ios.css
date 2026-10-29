@@ -1811,41 +1811,47 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tbm-task-row-title { font-size: 15px; font-weight: 600; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tbm-task-row-sub { font-size: 12px; color: var(--label-3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tbm-task-row .auto-task-arrow { flex: 0 0 auto; color: var(--label-3); width: 18px; height: 18px; }
-/* 任务详情页：步骤复用自动化卡片样式，但去掉卡片外框（已在外层容器） */
+/* ===== v423 任务详情：节点流程横排 =====
+   一排圆点走完整条流程（✓ 完成 / ! 失败 / – 跳过 / 数字 待跑 / 蓝点脉冲 进行中），
+   连接线跑完一段绿一段；圆点下方只放「当前节点」的时间与说明，随节点推进自动变。 */
 #page-toolbox-tbm-task .tbm-task-steps { margin-top: 12px; }
-#page-toolbox-tbm-task .tbm-task-steps .auto-step { display: flex; align-items: center; justify-content: space-between; padding: 11px 12px; background: var(--card-fill); border-radius: var(--radius); margin-bottom: 8px; }
-/* ===== v422 任务详情：默认只显示「当前节点」一行，点开才铺完整流程 ===== */
-#page-toolbox-tbm-task .tbm-step-line { display: flex; align-items: center; gap: 10px; padding: 13px 14px; background: var(--card-fill); border-radius: var(--radius-lg); -webkit-tap-highlight-color: transparent; }
-#page-toolbox-tbm-task .tbm-step-line:active { background: var(--gray-fill); }
-.tsl-dot { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; border: 1.5px solid var(--label-3); color: var(--label-3); }
-.tsl-dot.ok { background: #34c759; border-color: #34c759; color: #fff; }
-.tsl-dot.fail { background: #ff3b30; border-color: #ff3b30; color: #fff; }
-.tsl-dot.running { border-color: #007aff; color: #007aff; animation: tslPulse 1.3s ease-in-out infinite; }
-.tsl-dot.skip { background: rgba(142,142,147,0.5); border-color: transparent; color: #fff; }
-@keyframes tslPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-.tsl-body { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; }
-.tsl-label { flex: 0 0 auto; font-size: 14px; font-weight: 600; color: var(--label); white-space: nowrap; }
-.tsl-msg { flex: 1; min-width: 0; font-size: 12px; color: var(--label-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tsl-count { flex: 0 0 auto; font-size: 11px; color: var(--label-3); font-variant-numeric: tabular-nums; }
-.tsl-arrow { flex: 0 0 auto; width: 14px; height: 14px; color: var(--label-3); transition: transform .2s; }
-.tsl-arrow.on { transform: rotate(90deg); }
-#page-toolbox-tbm-task .tbm-step-full { margin-top: 10px; }
-#page-toolbox-tbm-task .tbm-step-full .auto-step { display: flex; align-items: flex-start; justify-content: flex-start; gap: 10px; padding: 10px 2px; background: transparent; border-radius: 0; margin-bottom: 0; border-bottom: 0.5px solid var(--sep); }
-#page-toolbox-tbm-task .tbm-step-full .as-body { flex: 1; min-width: 0; }
-#page-toolbox-tbm-task .tbm-task-steps .as-op-retry,
-#page-toolbox-tbm-task .tbm-task-steps .as-op-ghost { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--accent-fg); background: transparent; color: var(--accent); margin-left: 8px; }
-/* 整理表单 */
-.tbm-organize { margin-top: 18px; padding: 16px; background: var(--card-fill); border-radius: var(--radius-lg); }
-.tbm-organize-hint { font-size: 14px; font-weight: 600; color: var(--label); margin-bottom: 12px; }
-.tbm-organize-tabs { display: flex; margin-bottom: 12px; }
+.tbm-flow { background: var(--card-fill); border-radius: var(--radius-lg); padding: 18px 16px 14px; }
+.tf-track { display: flex; align-items: center; }
+.tf-node { flex: 0 0 auto; }
+.tf-dot { display: flex; align-items: center; justify-content: center; width: 23px; height: 23px; border-radius: 50%; border: 1.5px solid var(--label-3); background: var(--bg); color: var(--label-3); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tf-node.ok .tf-dot { background: #34c759; border-color: #34c759; color: #fff; }
+.tf-node.fail .tf-dot { background: #ff3b30; border-color: #ff3b30; color: #fff; }
+.tf-node.skip .tf-dot { background: rgba(142,142,147,0.45); border-color: transparent; color: #fff; }
+.tf-node.running .tf-dot { border-color: #007aff; color: #007aff; box-shadow: 0 0 0 4px rgba(0,122,255,0.14); animation: tfPulse 1.4s ease-in-out infinite; }
+@keyframes tfPulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+.tf-line { flex: 1 1 auto; height: 2px; min-width: 4px; border-radius: 1px; background: var(--sep); }
+.tf-line.done { background: #34c759; }
+.tf-now { margin-top: 16px; padding-top: 12px; border-top: 0.5px solid var(--sep); }
+.tf-now-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tf-now-label { font-size: 14px; font-weight: 600; color: var(--label); }
+.tf-now-label.fail { color: #ff3b30; }
+.tf-now-label.running { color: #007aff; }
+.tf-now-time { flex: 0 0 auto; font-size: 11.5px; color: var(--label-3); font-variant-numeric: tabular-nums; }
+.tf-now-msg { margin-top: 5px; font-size: 12.5px; line-height: 1.55; color: var(--label-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tf-now-msg.err { color: #ff3b30; }
+/* 重试 / 删除：紧贴节点流程下方（流程说「到哪了」，操作说「接下来怎么办」，连在一起才顺） */
+.tbm-detail-ops { display: flex; gap: 10px; margin-top: 12px; }
+.tbm-detail-ops .op-start,
+.tbm-detail-ops .tbm-remove { flex: 1; border: none; border-radius: 14px; padding: 12px 0; font-size: 14px; font-weight: 600; background: var(--card-fill); -webkit-tap-highlight-color: transparent; }
+.tbm-detail-ops .op-start { color: var(--accent-fg); }
+.tbm-detail-ops .tbm-remove { color: #e0506a; }
+.tbm-detail-ops button:active { opacity: .6; }
+/* 整理卡片：说明 → 类型 → 标题 → 主按钮 → 备注 */
+.tbm-organize { margin-top: 16px; padding: 18px 16px; background: var(--card-fill); border-radius: var(--radius-lg); }
+.tbm-organize-hint { font-size: 16px; font-weight: 700; color: var(--label); margin-bottom: 14px; letter-spacing: .2px; }
+.tbm-organize-tabs { display: flex; margin-bottom: 10px; }
 .tbm-organize-tabs .mc-tab { flex: 1; }
-.tbm-target-input { width: 100%; border: none; background: var(--gray-fill); border-radius: var(--radius); padding: 11px 12px; font-size: 14px; color: var(--label); -webkit-user-select: text; }
+.tbm-target-input { width: 100%; border: none; background: var(--gray-fill); border-radius: 12px; padding: 13px 14px; font-size: 15px; color: var(--label); -webkit-user-select: text; }
 .tbm-target-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
-.tbm-organize .tbm-offline { width: 100%; margin: 12px 0 0; }
-.tbm-organize-note { font-size: 12px; color: var(--label-3); margin-top: 10px; line-height: 1.5; }
-.tbm-detail-ops { display: flex; gap: 12px; margin-top: 18px; }
-.tbm-detail-ops .op-start { flex: 1; border: 1px solid var(--accent-fg); background: transparent; color: var(--accent); border-radius: 20px; padding: 10px 0; font-size: 14px; font-weight: 600; }
-.tbm-detail-ops .tbm-remove { flex: 1; border: 1px solid var(--danger, #e0506a); background: transparent; color: var(--danger, #e0506a); border-radius: 20px; padding: 10px 0; font-size: 14px; font-weight: 600; }
+.tbm-organize .tbm-confirm { display: block; width: 100%; height: 48px; margin-top: 14px; border: none; border-radius: 14px; background: var(--accent); color: var(--accent-text); font-size: 15px; font-weight: 600; letter-spacing: .5px; -webkit-tap-highlight-color: transparent; box-shadow: 0 6px 18px rgba(61,140,240,0.24); transition: transform .12s ease, opacity .12s ease; }
+.tbm-organize .tbm-confirm:active { transform: scale(.98); opacity: .88; }
+.tbm-organize .tbm-confirm:disabled { background: var(--gray-fill); color: var(--label-3); box-shadow: none; }
+.tbm-organize-note { font-size: 12px; color: var(--label-3); margin-top: 12px; line-height: 1.5; }
 #nfoTypeSheet .nfo-type-icon { flex: none; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
 #nfoTypeSheet .nfo-type-icon svg { width: 21px; height: 21px; }
 #nfoTypeSheet .nfo-type-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
