@@ -158,4 +158,18 @@ assert(NfoCore.filterMagnetResults([{ title: '免费下载 某片' }, { title: '
 assert(NfoCore.filterMagnetResults([{ title: '免费下载 某片' }, { title: '某电影' }], '免费下载', [], true).blocked.length === 0, '三层：番号搜索(isDvd)放宽词库层，blocked 为空');
 assert(NfoCore.filterMagnetResults(null, 'x', [], false).keep.length === 0, '三层：空数组安全');
 
+/* —— v420 磁力搜索优化：去重 + 做种优先排序 —— */
+const dupItems = [
+  { title: '某电影 A', magnet: 'magnet:?xt=urn:btih:ABC123', seeders: 5 },
+  { title: '某电影 B', magnet: 'magnet:?xt=urn:btih:abc123', seeders: 99 }
+];
+assert(NfoCore.filterMagnetResults(dupItems, '某电影', [], false).keep.length === 1, '优化：同 btih 去重只留一条');
+const sortItems = [
+  { title: '某电影 低', seeders: 2 },
+  { title: '某电影 高', seeders: 100 },
+  { title: '某电影 中', seeders: 40 }
+];
+assert(NfoCore.filterMagnetResults(sortItems, '某电影', [], false).keep[0].seeders === 100, '优化：做种数高的排前');
+assert(NfoCore.filterMagnetResults([{ title: '某电影1' }, { title: '某电影2' }], '某电影', [], false).keep.length === 2, '优化：无磁力链接项不参与去重');
+
 console.log('core-shared 完成');

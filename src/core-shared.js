@@ -822,7 +822,8 @@ function normalizeJavbusFilm(d, opts){
   function magnetSpam(title, words) {
     var nt = magnetNormText(title);
     if (!nt) return false;
-    var list = MAGNET_SPAM_WORDS.concat(words || []);
+    // 自定义词非空时以它为准（用户在设置页可增删内置词）；为空则用内置默认词
+    var list = (words && words.length) ? words : MAGNET_SPAM_WORDS;
     for (var i = 0; i < list.length; i++) {
       var w = magnetNormText(list[i]);
       if (w && nt.indexOf(w) >= 0) return true;
@@ -831,16 +832,31 @@ function normalizeJavbusFilm(d, opts){
   }
   /* 三层过滤：blocked=命中词库（折叠，可展开看）；demoted=与查询不相关（沉底）；keep=正常。
      isDvd（番号搜索）→ 放宽：跳过词库层（怕屏蔽掉想要的），只留相关性层。 */
+  /* 去重键：优先 btih（同一资源不同标题），无则用整条磁力；无磁力链接的项不参与去重 */
+  function magnetDedupeKey(it) {
+    var m = (it && it.magnet) ? String(it.magnet) : '';
+    if (!m) return '';
+    var h = m.match(/btih:([a-z0-9]+)/i);
+    return h ? 'h:' + h[1].toLowerCase() : 'm:' + m.toLowerCase();
+  }
+  function magnetBySeeders(a, b) {
+    return (Number(b && b.seeders) || 0) - (Number(a && a.seeders) || 0);
+  }
   function filterMagnetResults(items, q, words, isDvd) {
     items = items || [];
     var keep = [], demoted = [], blocked = [];
+    var seen = {};
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
       if (!it) continue;
+      var key = magnetDedupeKey(it);
+      if (key) { if (seen[key]) continue; seen[key] = 1; }   // 同一资源只留第一条
       if (!isDvd && magnetSpam(it.title, words)) { blocked.push(it); continue; }
       if (!magnetRelevant(it.title, q)) { demoted.push(it); continue; }
       keep.push(it);
     }
+    // 做种数高的排前面（没有 seeders 字段的维持原顺序）
+    keep.sort(magnetBySeeders); demoted.sort(magnetBySeeders); blocked.sort(magnetBySeeders);
     return { keep: keep, demoted: demoted, blocked: blocked };
   }
 

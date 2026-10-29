@@ -19,8 +19,7 @@
     { id: 'newNfo',   name: '新增 NFO',  icon: 'doc',    tier: 'free', page: 'newNfo' },
     { id: 'subtitle', name: '字幕下载',  icon: 'sub',    tier: 'full', page: 'subtitle' },
     { id: 'magnet',   name: '磁力管理',  icon: 'magnet', tier: 'full', page: 'magnet' },
-    { id: 'tidy115',  name: '文件整理',  icon: 'folder', tier: 'free', page: 'tidy115', quota: 'tidy115' },
-    { id: 'poster',   name: '海报生成',  icon: 'image',  tier: 'free', page: 'poster', soon: true }
+    { id: 'tidy115',  name: '文件整理',  icon: 'folder', tier: 'free', page: 'tidy115', quota: 'tidy115' }
   ];
 
   /* 档位排名：'' = 免费(0) / 'medium'(1) / 'full'(2) */

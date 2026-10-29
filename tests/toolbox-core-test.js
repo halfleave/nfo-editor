@@ -7,7 +7,7 @@ function assert(cond, msg){ console.log((cond ? 'PASS' : 'FAIL') + ' ' + msg); i
 
 /* —— 注册表完整性（字段结构 = 骨架，坏了后面全歪） —— */
 assert(Array.isArray(ToolboxCore.TOOLS), '注册表：TOOLS 是数组');
-assert(ToolboxCore.TOOLS.length === 5, '注册表：共 5 个工具');
+assert(ToolboxCore.TOOLS.length === 4, '注册表：共 4 个工具（已去掉海报生成）');
 
 const ids = ToolboxCore.TOOLS.map(t => t.id);
 assert(new Set(ids).size === ids.length, '注册表：id 无重复');
@@ -29,7 +29,7 @@ assert(ToolboxCore.canUse('newNfo', '').ok, '权限：免费可用「新增 NFO�
 assert(!ToolboxCore.canUse('subtitle', '').ok && ToolboxCore.canUse('subtitle', '').reason === '即将上线', '权限：免费不可用「字幕下载」→ 即将上线');
 assert(!ToolboxCore.canUse('magnet', '').ok && ToolboxCore.canUse('magnet', '').reason === '即将上线', '权限：免费不可用「磁力管理」→ 即将上线');
 assert(ToolboxCore.canUse('tidy115', '').ok, '权限：免费可用「文件整理」（额度未用完）');
-assert(!ToolboxCore.canUse('poster', '').ok && ToolboxCore.canUse('poster', '').reason === '即将上线', '权限：未实现的工具 → 即将上线');
+assert(ToolboxCore.findTool('poster') === null, '注册表：海报生成已移除');
 
 /* —— canUse：中级档 —— */
 assert(!ToolboxCore.canUse('subtitle', 'medium').ok && ToolboxCore.canUse('subtitle', 'medium').reason === '即将上线', '权限：中级仍不可用「字幕下载」（仅高级）→ 即将上线');
@@ -41,7 +41,7 @@ assert(ToolboxCore.canUse('subtitle', 'full').ok, '权限：高级可用「字�
 assert(ToolboxCore.canUse('magnet', 'full').ok, '权限：高级可用「磁力管理」');
 assert(ToolboxCore.findTool('magnet').name === '磁力管理', '注册表：磁力工具名称为「磁力管理」（M3.1 改名）');
 assert(ToolboxCore.canUse('tidy115', 'full').ok, '权限：高级可用「文件整理」');
-assert(!ToolboxCore.canUse('poster', 'full').ok, '权限：高级也进不去未实现的工具');
+assert(!ToolboxCore.canUse('poster', 'full').ok && ToolboxCore.canUse('poster', 'full').reason === '未知工具', '权限：海报生成已移除 → 未知工具');
 
 /* —— 配额拦截 —— */
 const usedUp = [{ field: 'tidy115', remaining: 0, limit: 15 }];
@@ -56,7 +56,7 @@ assert(ToolboxCore.findTool('notExist') === null && ToolboxCore.findTool('magnet
 
 /* —— visibleTools —— */
 const list = ToolboxCore.visibleTools('');
-assert(list.length === 5, 'visibleTools：全量返回 5 项（不隐藏）');
+assert(list.length === 4, 'visibleTools：全量返回 4 项（不隐藏）');
 assert(list.every(x => x.tool && typeof x.ok === 'boolean' && typeof x.reason === 'string'), 'visibleTools：每项含 tool / ok / reason');
 assert(list.filter(x => x.ok).length === 2, 'visibleTools：免费档可用项 = 2（newNfo / tidy115）');
 

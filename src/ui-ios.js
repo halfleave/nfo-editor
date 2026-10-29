@@ -14,7 +14,7 @@ function switchPage(page) {
   // 离开剧集编辑页（或从未进入）时复位元素前缀，避免残留 tv_ 让公共逻辑取错元素
   if (page !== 'edit-tv') editPrefix = '';
   // 三级页（隐藏底部 tab 栏）：自动化 / 工具箱及其工具页 / 文件整理及其子页
-  var THIRD_LEVEL = ['auto', 'toolbox', 'toolbox-magnet', 'tidy', 'tidy-tasks', 'tidy-chat', 'tidy-rules'];
+  var THIRD_LEVEL = ['auto', 'toolbox', 'toolbox-magnet', 'subtitle', 'tidy', 'tidy-tasks', 'tidy-chat', 'tidy-rules'];
   if (tb) tb.style.display = (THIRD_LEVEL.indexOf(page) >= 0) ? 'none' : '';
   if (page === 'search'){
     // 普通模式（themeHidden=false）强制只能用 TMDB，里模式保留上次源
@@ -28,6 +28,7 @@ function switchPage(page) {
   }
   if (page === 'settings'){
     syncThemeHiddenSwitch(); // 进入设置页同步里模式开关状态
+    renderSettingsTools();   // 顶部工具图标横排按当前档位重绘
   }
 }
 /* —— Tab 切换滑动动画（所有 tab 通用） ——
@@ -1859,7 +1860,6 @@ function closeApiHelp(){
 var magnetCurrentFilm = null;
 function openMagnetSheet(){
   document.getElementById('magnetResults').innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
-  toggleMagnetFilterEntry(true);
   openMagnetCombo('search');
   var input = document.getElementById('magnetQueryInput');
   if (currentDetailFilmId){
@@ -1927,7 +1927,6 @@ function clearMagnetQuery(){
   if (inp) inp.focus();
   var box = document.getElementById('magnetResults');
   if (box) box.innerHTML = '';
-  toggleMagnetFilterEntry(true);
 }
 function searchMagnet(){
   magnetSearchTo((document.getElementById('magnetQueryInput').value || '').trim(), document.getElementById('magnetResults'));
@@ -1938,7 +1937,8 @@ function magnetSearchTo(q, box){
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
   if (!w){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → 应用配置」填写代理服务地址。</div>'; return; }
-  box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
+  box.innerHTML = magnetSkeletonHtml();
+  startLoadingRotator(box, magnetSkeletonHtml);
   // 番号（如 IPX-011）不限制 category（bt4g 的 cat 过滤对番号不可靠，常返回 0 结果）；
   // 普通关键词用 cat=movie 更精准。
   var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
@@ -1967,26 +1967,51 @@ function magnetSearchTo(q, box){
 function renderMagnetResults(items, box, q){
   box = box || document.getElementById('magnetResults');
   if (!box) return;
-  toggleMagnetFilterEntry(false);
-  if (!items || !items.length){ box.innerHTML = '<div class="tmdb-msg">未找到磁力链接</div>'; return; }
   q = q || '';
+  if (!items || !items.length){
+    box.innerHTML = '<div class="tmdb-msg">没有找到「' + escapeHtml(q) + '」的结果<br>换个关键词，或去掉字幕/季集等后缀再试</div>';
+    return;
+  }
   loadFilterWords().then(function(words){
     var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
     var r = NfoCore.filterMagnetResults(items, q, words, isDvd);
-    var html = magnetRowsHtml(r.keep);
-    if (!html) html = '<div class="tmdb-msg">未找到磁力链接</div>';
+    var html;
+    if (r.keep.length){
+      html = '<div class="magnet-count">共找到 ' + r.keep.length + ' 条结果</div>' + magnetRowsHtml(r.keep);
+    } else if (r.demoted.length || r.blocked.length){
+      html = '<div class="tmdb-msg">没有直接匹配的结果，相关度较低或已屏蔽的见下方</div>';
+    } else {
+      html = '<div class="tmdb-msg">未找到磁力链接</div>';
+    }
     if (r.demoted.length){
-      html += '<div class="magnet-demote-sep">以下 ' + r.demoted.length + ' 条与关键词相关性较低</div>'
-        + magnetRowsHtml(r.demoted);
+      html += '<button type="button" class="magnet-filtered-toggle" onclick="toggleMagnetBlocked(this)"'
+        + ' data-label-hidden="相关度较低已折叠 ' + r.demoted.length + ' 条（点击展开）"'
+        + ' data-label-shown="相关度较低 ' + r.demoted.length + ' 条（点击收起）">相关度较低已折叠 ' + r.demoted.length + ' 条（点击展开）</button>'
+        + '<div class="magnet-blocked" style="display:none;">' + magnetRowsHtml(r.demoted) + '</div>';
     }
     if (r.blocked.length){
-      html += '<button type="button" class="magnet-filtered-toggle" onclick="toggleMagnetBlocked(this)">已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击查看）</button>'
+      html += '<button type="button" class="magnet-filtered-toggle" onclick="toggleMagnetBlocked(this)"'
+        + ' data-label-hidden="已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击查看）"'
+        + ' data-label-shown="已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击收起）">已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击查看）</button>'
         + '<div class="magnet-blocked" style="display:none;">' + magnetRowsHtml(r.blocked) + '</div>';
     }
     box.innerHTML = html;
   }).catch(function(){
     box.innerHTML = magnetRowsHtml(items);
   });
+}
+/* 骨架屏：6 行占位，行高与真实结果一致，搜索完成时不会跳版 */
+function magnetSkeletonHtml(){
+  var rows = '';
+  for (var i = 0; i < 6; i++){
+    rows += '<div class="magnet-result sk">'
+      + '<span class="mr-icon sk-block"></span>'
+      + '<div class="mr-info">'
+      + '<div class="sk-line" style="width:' + (62 + (i % 3) * 10) + '%;"></div>'
+      + '<div class="sk-line sm" style="width:' + (30 + (i % 2) * 12) + '%;"></div>'
+      + '</div></div>';
+  }
+  return '<div class="magnet-skeleton">' + rows + '</div>';
 }
 function magnetRowsHtml(items){
   var html = '';
@@ -1995,18 +2020,20 @@ function magnetRowsHtml(items){
     var title = escapeHtml(it.title || '无标题');
     var size = escapeHtml(it.size || '');
     var src = escapeHtml(it.source || 'bt4g');
+    // 元信息拆成独立标签，做种数单独上色（原先把大小/做种/下载挤在一个 span 里，一长就换行）
     var meta = [];
-    if (size) meta.push(size);
-    if (it.seeders) meta.push('做种 ' + it.seeders);
-    if (it.leechers) meta.push('下载 ' + it.leechers);
+    if (size) meta.push('<span>' + size + '</span>');
+    if (it.seeders) meta.push('<span class="mr-seed">做种 ' + escapeHtml(String(it.seeders)) + '</span>');
+    if (it.leechers) meta.push('<span>下载 ' + escapeHtml(String(it.leechers)) + '</span>');
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
+    // 不再渲染整条磁力串（一串 base64 噪音，占一行且看不懂）；要链接点行内「复制」即可
     html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="openMagnetOp(this)">'
       + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
-      + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + (meta.length ? '<span>' + meta.join(' · ') + '</span>' : '') + '</div>'
-      + (magnet ? '<div class="mr-magnet">' + magnet + '</div>' : '')
+      + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + meta.join('') + '</div>'
       + '</div>'
+      + '<span class="mr-go"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span>'
       + '</div>';
   }
   return html;
@@ -2016,13 +2043,9 @@ function toggleMagnetBlocked(btn){
   if (!box) return;
   var open = box.style.display !== 'none';
   box.style.display = open ? 'none' : '';
-  btn.textContent = open
-    ? btn.textContent.replace('点击查看', '点击收起')
-    : btn.textContent.replace('点击收起', '点击查看');
-}
-function toggleMagnetFilterEntry(show){
-  var el = document.getElementById('magnetFilterEntry');
-  if (el) el.style.display = show ? '' : 'none';
+  var hid = btn.getAttribute('data-label-hidden');
+  var shown = btn.getAttribute('data-label-shown');
+  if (hid && shown) btn.textContent = open ? hid : shown;
 }
 /* ===== v418 自定义过滤词：磁力搜索页未搜索时底部「过滤词」小字进入 =====
    词库存 IndexedDB kv / magnetFilterWords（数组）；内置广告词在 core-shared.MAGNET_SPAM_WORDS，
@@ -2036,9 +2059,21 @@ function loadFilterWords(){
 function openFilterWords(){
   loadFilterWords().then(function(words){
     var ta = document.getElementById('filterWordsInput');
-    if (ta) ta.value = (words || []).join('\n');
-    openSheet('filterWordsSheet');
-  }).catch(function(){ openSheet('filterWordsSheet'); });
+    // 未自定义过 → 预填内置词，让默认词也能在这里看到/编辑
+    var list = (words && words.length) ? words : (NfoCore.MAGNET_SPAM_WORDS || []);
+    if (ta) ta.value = list.join('\n');
+    openFilterSheet();
+  }).catch(function(){
+    var ta = document.getElementById('filterWordsInput');
+    if (ta && NfoCore.MAGNET_SPAM_WORDS) ta.value = NfoCore.MAGNET_SPAM_WORDS.join('\n');
+    openFilterSheet();
+  });
+}
+function openFilterSheet(){
+  // 从磁力搜索 tab 打开，先收起磁力弹窗，避免两层弹窗叠在一起
+  var combo = document.getElementById('magnetComboSheet');
+  if (combo) combo.classList.remove('show');
+  openSheet('filterWordsSheet');
 }
 function filterWordsSave(){
   var ta = document.getElementById('filterWordsInput');
@@ -2046,17 +2081,10 @@ function filterWordsSave(){
   var words = (ta.value || '').split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
   idbPut('kv', MAGNET_FILTER_WORDS_KEY, words).then(function(){
     closeAllSheets();
-    showToast(words.length ? ('已保存 ' + words.length + ' 个过滤词') : '已清空自定义过滤词', 'success');
+    showToast(words.length ? ('已保存 ' + words.length + ' 个过滤词') : '已保存，使用内置词', 'success');
   }).catch(function(e){
     showToast((e && e.message) || '保存失败', 'error');
   });
-}
-function filterWordsReset(){
-  var ta = document.getElementById('filterWordsInput');
-  if (ta) ta.value = '';
-  idbPut('kv', MAGNET_FILTER_WORDS_KEY, []).then(function(){
-    showToast('已清空，仅内置广告词生效', 'success');
-  }).catch(function(){});
 }
 function toggleMagnetActions(el){
   // 保留兼容：改为在该条上浮操作层
@@ -6230,6 +6258,8 @@ function switchMagnetComboTab(tab){
   for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
   if (add) add.style.display = (tab === 'add') ? '' : 'none';
   if (search) search.style.display = (tab === 'search') ? '' : 'none';
+  var fEntry = document.getElementById('magnetFilterEntry');
+  if (fEntry) fEntry.style.display = (tab === 'search') ? '' : 'none';
   tabSlideSwap(tab === 'add' ? add : search, ['add','search'], tab);
   // 每次进入搜索页：一律重新读取当前影片的番号（无则标题）填入（不触发搜索），
   // 并清掉上一次的搜索结果，避免残留别的片子搜过的内容
@@ -6844,33 +6874,46 @@ var subTitleVal = '';
 var subOrigVal = '';
 var subYear = '';
 var subUserEdited = false;
+var subtitleReturnPage = 'settings';
+/* 从详情页进入：带入当前影片 */
 function openSubtitleSheet(){
+  subtitleReturnPage = 'detail';
+  openSubtitlePage(true);
+}
+/* 独立字幕下载页：fromDetail=true 时带入当前影片，否则留空可手输 */
+function openSubtitlePage(fromDetail){
   var w = state.magnetWorker || DEFAULT_WORKER;
   // 字幕搜索仅满级可用（免费 / 中等不显示按钮、不可搜）；未满足时统一提示暂不可用，不暴露档位
   if (!state.activationCode || (state.tier || '') !== 'full'){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
   if (!w){ showToast('字幕功能暂不可用，请稍后再试。', 'error'); return; }
-  openSheet('subtitleSheet');
-  document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">输入后点击「搜索」</div>';
+  if (!fromDetail) subtitleReturnPage = 'settings';
+  switchPage('subtitle');
+  document.getElementById('subResults').innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
   subCurrentLang = 'all'; syncSubLangSelect();
   subCurrentSrc = 'assrt'; syncSubSrcBtn();
   subTitleMode = 'title'; syncSubTitleSeg();
-  var fillAndSearch = function(t, orig, year){
+  var fill = function(t, orig){
     subTitleVal = t || ''; subOrigVal = orig || ''; subYear = '';
     subUserEdited = false;
     var init = (subTitleMode === 'original') ? (subOrigVal || subTitleVal) : (subTitleVal || subOrigVal);
-    document.getElementById('subQueryInput').value = init + (subYear ? ('.' + subYear) : '');
+    document.getElementById('subQueryInput').value = init;
     onSubQueryChange();
     subUserEdited = false;
     // 仅填充输入框，不自动搜索（由「搜索」按钮触发）
   };
-  if (currentDetailFilmId){
+  if (fromDetail && currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
       var f = (film && film.data) || {};
-      fillAndSearch(f.title || currentDetailTitle || '', f.originaltitle || '', (f.premiered || '').slice(0,4));
-    }).catch(function(){ fillAndSearch(currentDetailTitle || '', '', ''); });
+      fill(f.title || currentDetailTitle || '', f.originaltitle || '');
+    }).catch(function(){ fill(currentDetailTitle || '', ''); });
+  } else if (fromDetail){
+    fill(currentDetailTitle || '', '');
   } else {
-    fillAndSearch(currentDetailTitle || '', '', '');
+    fill('', '');
   }
+}
+function closeSubtitlePage(){
+  switchPage(subtitleReturnPage || 'settings');
 }
 function selectSubTitleMode(mode){
   subTitleMode = mode; syncSubTitleSeg();
@@ -10790,6 +10833,20 @@ function openToolbox(){
   renderToolbox();
   switchPage('toolbox');
 }
+/* 设置页顶部工具图标横排：直接进入各工具（取代原「工具箱」列表行入口） */
+function renderSettingsTools(){
+  var row = document.getElementById('settingsToolRow');
+  if (!row || typeof ToolboxCore === 'undefined') return;
+  var list = ToolboxCore.visibleTools(state.tier || '', toolboxUsage());
+  row.innerHTML = list.map(function(item){
+    var t = item.tool;
+    var badge = item.ok ? '' : '<span class="tc-soon">' + escapeHtml(item.reason || '即将上线') + '</span>';
+    return '<button class="settings-tool' + (item.ok ? '' : ' locked') + '" onclick="toolboxOpen(\'' + t.id + '\')">' +
+      badge + toolboxIconHtml(t.icon) +
+      '<span class="st-name">' + escapeHtml(t.name) + '</span>' +
+      '</button>';
+  }).join('');
+}
 function toolboxOpen(id){
   if (typeof ToolboxCore === 'undefined') return;
   var hit = null;
@@ -10798,9 +10855,10 @@ function toolboxOpen(id){
   if (!hit.ok){ showToast(hit.reason || '暂不可用', 'success'); return; }
   switch (hit.tool.page){
     case 'newNfo': openCustomEdit(); return;           // T1 新增 NFO：复用「自定义添加」动线（清空 → 编辑页）
+    case 'subtitle': openSubtitlePage(); return;        // T2 字幕下载：独立页（关键词搜索 + 下载到本地）
     case 'magnet': openToolboxMagnet(); return;         // T3 磁力搜索 · 通用版（M3）：不绑影片的关键词搜索页
     case 'tidy115': openTidy(); return;                 // T4 文件整理（M4）：选文件夹 → AI 整理 / 规则整理
-    default: showToast('即将上线', 'success'); return;  // T2 / T5 在 M5-M6 接入
+    default: showToast('即将上线', 'success'); return;  // 其余在后续接入
   }
 }
 /* ============================================================
@@ -12514,6 +12572,8 @@ function switchTbmTab(tab){
   for (var i = 0; i < tabs.length; i++){
     tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tbm') === tab);
   }
+  var fEntry = document.getElementById('tbmFilterEntry');
+  if (fEntry) fEntry.style.display = (tab === 'search') ? '' : 'none';
   if (tab === 'tasks') renderTbmTasks();
   if (tab === 'add') renderMagnetComposer('tbmMagnetComposer');
 }
