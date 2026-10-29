@@ -1756,7 +1756,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-topbar { position: relative; display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; flex: 0 0 auto; }
 .auto-topbar button { width: 34px; height: 34px; border: none; background: transparent; color: var(--label); display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
 .auto-topbar button svg { width: 22px; height: 22px; }
-.auto-topbar-title { position: absolute; left: 0; right: 0; pointer-events: none; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); }
+/* 居中标题绝对定位横跨整条顶栏 → 长标题（磁力名/哈希）会直接压在返回键上。
+   两侧留出按钮宽度，自身单行省略：标题再长也只在自己的中间区域里收尾。 */
+.auto-topbar-title { position: absolute; left: 58px; right: 58px; pointer-events: none; text-align: center; font-size: 17px; font-weight: 600; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .auto-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
 /* 工具箱（M2）：二级页卡片网格（复用 .auto-topbar / .auto-scroll 作外壳） */
 .tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 6px 0 8px; }
@@ -1812,8 +1814,24 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* 任务详情页：步骤复用自动化卡片样式，但去掉卡片外框（已在外层容器） */
 #page-toolbox-tbm-task .tbm-task-steps { margin-top: 12px; }
 #page-toolbox-tbm-task .tbm-task-steps .auto-step { display: flex; align-items: center; justify-content: space-between; padding: 11px 12px; background: var(--card-fill); border-radius: var(--radius); margin-bottom: 8px; }
-#page-toolbox-tbm-task .tbm-task-steps .auto-step-label { font-size: 14px; color: var(--label); }
-#page-toolbox-tbm-task .tbm-task-steps .auto-step-msg { font-size: 12px; color: var(--label-3); margin-top: 2px; }
+/* ===== v422 任务详情：默认只显示「当前节点」一行，点开才铺完整流程 ===== */
+#page-toolbox-tbm-task .tbm-step-line { display: flex; align-items: center; gap: 10px; padding: 13px 14px; background: var(--card-fill); border-radius: var(--radius-lg); -webkit-tap-highlight-color: transparent; }
+#page-toolbox-tbm-task .tbm-step-line:active { background: var(--gray-fill); }
+.tsl-dot { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; border: 1.5px solid var(--label-3); color: var(--label-3); }
+.tsl-dot.ok { background: #34c759; border-color: #34c759; color: #fff; }
+.tsl-dot.fail { background: #ff3b30; border-color: #ff3b30; color: #fff; }
+.tsl-dot.running { border-color: #007aff; color: #007aff; animation: tslPulse 1.3s ease-in-out infinite; }
+.tsl-dot.skip { background: rgba(142,142,147,0.5); border-color: transparent; color: #fff; }
+@keyframes tslPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.tsl-body { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; }
+.tsl-label { flex: 0 0 auto; font-size: 14px; font-weight: 600; color: var(--label); white-space: nowrap; }
+.tsl-msg { flex: 1; min-width: 0; font-size: 12px; color: var(--label-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tsl-count { flex: 0 0 auto; font-size: 11px; color: var(--label-3); font-variant-numeric: tabular-nums; }
+.tsl-arrow { flex: 0 0 auto; width: 14px; height: 14px; color: var(--label-3); transition: transform .2s; }
+.tsl-arrow.on { transform: rotate(90deg); }
+#page-toolbox-tbm-task .tbm-step-full { margin-top: 10px; }
+#page-toolbox-tbm-task .tbm-step-full .auto-step { display: flex; align-items: flex-start; justify-content: flex-start; gap: 10px; padding: 10px 2px; background: transparent; border-radius: 0; margin-bottom: 0; border-bottom: 0.5px solid var(--sep); }
+#page-toolbox-tbm-task .tbm-step-full .as-body { flex: 1; min-width: 0; }
 #page-toolbox-tbm-task .tbm-task-steps .as-op-retry,
 #page-toolbox-tbm-task .tbm-task-steps .as-op-ghost { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--accent-fg); background: transparent; color: var(--accent); margin-left: 8px; }
 /* 整理表单 */
@@ -2111,7 +2129,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tidy-name-input { width: 100%; box-sizing: border-box; border: none; outline: none; background: var(--card-fill); color: var(--label); border-radius: var(--radius-sm); font-size: 16px; padding: 12px 14px; -webkit-appearance: none; }
 .tidy-name-input::placeholder { color: var(--label-4); }
 .tidy-name-input:focus { box-shadow: 0 0 0 2px var(--accent-fg); }
-.auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; text-align: center; }
+/* 目标行：dvdId 有时是 40 位磁力哈希（未识别出番号），居中排会向两边溢出到屏幕外 */
+.auto-film { font-size: 12px; color: var(--label-2); padding: 4px 2px 8px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 上传入口 v387 起并入右下角按钮组（见 .auto-fab-upload），此前的顶部胶囊按钮已移除 */
 /* 添加磁力：右下角圆形浮动按钮（线形磁铁图标） */
 .auto-fab { position: absolute; right: 26px; bottom: calc(44px + env(safe-area-inset-bottom)); width: 48px; height: 48px; border-radius: 50%; border: none; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,.18); z-index: 30; -webkit-tap-highlight-color: transparent; appearance: none; -webkit-appearance: none; }
@@ -2185,6 +2204,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .auto-task-arrow { flex: 0 0 auto; width: 14px; height: 14px; color: var(--label-3); transition: transform .2s; }
 .auto-task-start { flex: 0 0 auto; border: none; border-radius: 999px; font-size: 11.5px; font-weight: 600; padding: 4px 12px; background: var(--accent, #0a84ff); color: var(--accent-text, #fff); -webkit-tap-highlight-color: transparent; }
 .auto-task.expanded .auto-task-arrow { transform: rotate(90deg); }
+/* 折叠态：当前节点说明，一行省略 */
+.auto-task-line { padding: 0 16px 12px; font-size: 12px; line-height: 1.4; color: var(--label-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ab-idle { background: rgba(142,142,147,0.18); color: var(--label-2); }
 .ab-run { background: rgba(0,122,255,0.16); color: #007aff; }
 .ab-wait { background: rgba(255,149,0,0.18); color: #ff9500; }

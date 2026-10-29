@@ -13,9 +13,10 @@ function switchPage(page) {
   var tb = document.getElementById('tabBar');
   // 离开剧集编辑页（或从未进入）时复位元素前缀，避免残留 tv_ 让公共逻辑取错元素
   if (page !== 'edit-tv') editPrefix = '';
-  // 三级页（隐藏底部 tab 栏）：自动化 / 工具箱及其工具页 / 文件整理及其子页
-  var THIRD_LEVEL = ['auto', 'toolbox', 'toolbox-magnet', 'subtitle', 'tidy', 'tidy-tasks', 'tidy-chat', 'tidy-rules'];
-  if (tb) tb.style.display = (THIRD_LEVEL.indexOf(page) >= 0) ? 'none' : '';
+  // 底部 tab 栏只属于三个一级页（首页 / 搜索 / 设置），其它任何二级、三级页一律隐藏。
+  // 之前用「黑名单」枚举三级页，每新增一个页面就漏一次（任务详情页就这样把 tab 栏串到了二级页上）。
+  var TOP_LEVEL = ['home', 'search', 'settings'];
+  if (tb) tb.style.display = (TOP_LEVEL.indexOf(page) >= 0) ? '' : 'none';
   if (page === 'search'){
     // 普通模式（themeHidden=false）强制只能用 TMDB，里模式保留上次源
     if (!state.themeHidden){
@@ -2235,7 +2236,11 @@ function auto115TaskTitle(t){
     var n = t.magnets.length;
     return (t.tbm ? '磁力库·多磁力' : '多磁力任务') + '（' + n + ' 条）';
   }
-  return (t && (t.magnetTitle || auto115OfflineTitle(t && t.magnet))) || '磁力任务';
+  var name = (t && (t.magnetTitle || auto115OfflineTitle(t && t.magnet))) || '';
+  /* 没识别出番号/片名时，magnet 的 dn 可能就是一串 32~40 位哈希：
+     直接当标题会顶满顶栏、压在返回键上，这里压成「磁力任务 · 前 6 位」 */
+  if (name && /^[0-9A-Za-z]{32,40}$/.test(name)) name = '磁力任务 · ' + name.slice(0, 6).toUpperCase();
+  return name || '磁力任务';
 }
 var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
 var auto115LibraryDoc = null;   /* tbm 磁力库文档（方案 A，v332）：filmId='tbm-library'，存工具箱磁力管理任务。
@@ -2736,6 +2741,14 @@ function updateAutoBadge(){
   el.className = cls ? ('auto-badge ' + cls) : 'auto-badge';
   el.style.display = cls ? '' : 'none';
 }
+/* 当前节点：最后一个「已发生」的步骤（正在跑的排在后面，天然被选中）；未开跑返回第一步 */
+function auto115CurStep(t){
+  var steps = Auto115Core.visibleSteps(t);
+  if (!steps.length) return null;
+  var cur = steps[0];
+  for (var i = 0; i < steps.length; i++){ if (steps[i].state && steps[i].state !== 'idle') cur = steps[i]; }
+  return cur;
+}
 function auto115StepHtml(t, s){
   var label = auto115StepLabel(s.key);
   if (s.state === 'running') label += '…';
@@ -2771,6 +2784,12 @@ function auto115TaskHtml(t){
         : '')
     + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
     + '</div>';
+  /* 折叠态补一行「当前节点说明」：不用展开就能看到进度细节，文案随节点推进自动变 */
+  if (!expanded){
+    var curStep = auto115CurStep(t);
+    var curMsg = curStep ? String(curStep.msg || '').replace(/\s+/g, ' ').trim() : '';
+    if (curMsg) html += '<div class="auto-task-line">' + escapeHtml(curMsg) + '</div>';
+  }
   if (expanded){
     /* 动态步骤（期三第 1 刀）：按实际进度裁剪 + tidy/upload 过滤，全部收口到 core.visibleSteps */
     var renderSteps = Auto115Core.visibleSteps(t);
@@ -12722,6 +12741,7 @@ function openTbmTaskDetail(id){
   if (!t){ showToast('任务不存在', 'error'); return; }
   auto115TbmDetailOpen = true;
   auto115TbmDetailId = id;
+  tbmStepsOpen = false;   // 每次进任务详情都从「一行当前节点」开始，不沿用上次展开态
   switchPage('toolbox-tbm-task');
   renderTbmTaskDetail(id);
 }
@@ -12731,6 +12751,36 @@ function tbmCloseDetail(){
   switchPage('toolbox-magnet');
   switchTbmTab('tasks');
 }
+/* —— 任务详情：步骤链折叠成一行（v422） ——
+   原来把 6~8 个节点整排铺开，一屏全是「✓ + 时间 + 说明」，真正要看的「现在卡在哪」要自己找。
+   现在默认只显示「当前节点」一行：状态点 + 节点名 + 该节点的详细说明 + 进度 n/m，
+   节点一变这一行就跟着变；要复盘完整流程再点开。 */
+var tbmStepsOpen = false;
+function tbmToggleSteps(){
+  tbmStepsOpen = !tbmStepsOpen;
+  renderTbmTaskDetail(auto115TbmDetailId);
+}
+function tbmStepLineHtml(t){
+  var all = t.steps || [];
+  // 当前节点 = 最后一个「已发生」的步骤（正在跑的排在后面，天然被选中）
+  var cur = auto115CurStep(t);
+  if (!cur) return '<div class="tmdb-msg">暂无步骤</div>';
+  var done = 0;
+  for (var j = 0; j < all.length; j++){ if (all[j].state === 'ok' || all[j].state === 'skip') done++; }
+  var st = cur.state || 'idle';
+  var dot = st === 'ok' ? '✓' : st === 'fail' ? '!' : st === 'skip' ? '–' : '';
+  var label = auto115StepLabel(cur.key) + (st === 'running' ? '…' : '');
+  var msg = (cur.msg || '').replace(/\s+/g, ' ').trim();
+  return '<div class="tbm-step-line" onclick="tbmToggleSteps()">'
+    + '<span class="tsl-dot ' + st + '">' + dot + '</span>'
+    + '<span class="tsl-body">'
+    + '<span class="tsl-label">' + escapeHtml(label) + '</span>'
+    + (msg ? '<span class="tsl-msg">' + escapeHtml(msg) + '</span>' : '')
+    + '</span>'
+    + '<span class="tsl-count">' + done + '/' + all.length + '</span>'
+    + '<svg class="tsl-arrow' + (tbmStepsOpen ? ' on' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
+    + '</div>';
+}
 /* 渲染任务详情：步骤进度 + 整理表单（仅在「下载完成 · 待整理」时显示） */
 function renderTbmTaskDetail(id){
   var t = auto115Task(id);
@@ -12739,10 +12789,14 @@ function renderTbmTaskDetail(id){
   if (titleEl) titleEl.textContent = auto115TaskTitle(t);
   var stepsEl = document.getElementById('tbmTaskSteps');
   if (stepsEl){
-    /* 复用影片自动化步骤渲染（auto115StepHtml 已全面任务级化，tbm 任务可直接用） */
-    var html = (t.steps || []).map(function(s){ return auto115StepHtml(t, s); }).join('');
-    if (!html) html = '<div class="tmdb-msg">暂无步骤</div>';
-    stepsEl.innerHTML = html;
+    // 复用影片自动化步骤渲染（auto115StepHtml 已全面任务级化，tbm 任务可直接用）
+    var line = tbmStepLineHtml(t);
+    if (!tbmStepsOpen){
+      stepsEl.innerHTML = line;
+    } else {
+      var full = (t.steps || []).map(function(s){ return auto115StepHtml(t, s); }).join('');
+      stepsEl.innerHTML = line + '<div class="tbm-step-full">' + (full || '<div class="tmdb-msg">暂无步骤</div>') + '</div>';
+    }
   }
   /* 整理表单：仅当「下载完成且尚未整理」（wait=ok && 无 tbmType）时显示 */
   var orgBox = document.getElementById('tbmOrganizeBox');
