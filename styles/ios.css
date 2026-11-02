@@ -221,22 +221,22 @@ img { display: block; }
   color: rgba(255,255,255,0.96);
   text-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
-.detail-ratings .dr-item i { font-style: normal; font-size: 12px; line-height: 1; }
+.detail-ratings .dr-item i { font-style: normal; font-size: 10px; line-height: 1; }
 .detail-ratings .dr-item b { font-weight: 400; font-variant-numeric: tabular-nums; }
 /* IMDb 图标：黄底黑字，模仿官方 logo 的比例（小、方角、字重拉满） */
 .detail-ratings .dr-imdb-ico {
   display: inline-flex; align-items: center; justify-content: center;
-  height: 15px; padding: 0 3px; border-radius: 2.5px;
+  height: 12px; padding: 0 2px; border-radius: 2px;
   background: #f5c518; color: #000;
-  font-size: 9.5px; font-weight: 900; letter-spacing: -0.3px;
+  font-size: 7.5px; font-weight: 900; letter-spacing: -0.3px;
   text-shadow: none;
 }
 /* Metacritic 图标：同样的处理，绿底深字 */
 .detail-ratings .dr-mc-ico {
   display: inline-flex; align-items: center; justify-content: center;
-  height: 15px; padding: 0 3px; border-radius: 2.5px;
+  height: 12px; padding: 0 2px; border-radius: 2px;
   background: #66cc33; color: #0d2408;
-  font-size: 9px; font-weight: 900; letter-spacing: -0.2px;
+  font-size: 7.5px; font-weight: 900; letter-spacing: -0.2px;
   text-shadow: none;
 }
 .edit-type-seg { display: flex; margin: 0 0 6px; }
@@ -1616,11 +1616,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .mf-more { flex: 0 0 auto; align-self: center; font-size: 12px; color: var(--label-3); }
 /* 字幕组不在行内显示（标题已带，按组看用上方筛选条） */
 /* ===== v430 多选 → 批量离线：底部浮条（勾第一个复选框后出现） =====
-   v436：改 fixed 贴屏幕底部 —— sticky 只在滚到列表末尾时可见，用户以为按钮没了 */
+   v436：改 fixed 贴屏幕底部 —— sticky 只在滚到列表末尾时可见，用户以为按钮没了
+   v442：浮条挂在 body 上，必须高于弹窗层（.sheet-mask 500 / .sheet 501），
+         否则在磁力弹窗里会被弹窗和遮罩盖住，115 离线按钮看不见也点不到 */
 .magnet-selbar {
   position: fixed; left: 12px; right: 12px;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
-  z-index: 320;
+  z-index: 560;
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px;
   background: var(--card); border: 0.5px solid var(--sep);
@@ -1632,6 +1634,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-selbar .msb-go { background: var(--accent); color: var(--accent-text); }
 .magnet-selbar button:active { opacity: .75; }
 .magnet-selbar button:disabled { opacity: .4; }
+/* v442：浮条浮在弹窗上方后，最后几行结果会被它压住，多选时给列表留出底部空间 */
+body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .sheet-pad { padding: 16px var(--pad); }
 .ios-textarea { width: 100%; box-sizing: border-box; border: none; border-radius: 12px; background: var(--card-fill); color: var(--text); font-size: 16px; line-height: 1.6; padding: 10px 12px; resize: none; -webkit-appearance: none; }
 .ios-textarea::placeholder { font-size: 16px; color: var(--label-3); }
