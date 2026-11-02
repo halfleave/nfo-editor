@@ -124,22 +124,40 @@
   // ===== 翻译模块（纯逻辑，不碰 DOM/state）=====
   // 提示语：成人影视元数据 → 简体中文；含 8 条硬性规则（番号原样、含假名才翻、JSON 输出）
   var TRANSLATE_SYSTEM_PROMPT = [
-    '你是将成人影视元数据译为简体中文的翻译专家。请把下方日文的影片标题与简介翻译为简体中文。',
+    '你是将影视元数据译为简体中文的翻译专家。请把下方「标题」与「简介」翻译为简体中文。',
+    '源语言不确定：可能是日文、英文、韩文、法文、德文、西班牙文、俄文、泰文等任意语言，请先自动判断再翻译，不要假设一定是日文。',
     '硬性规则：',
     '1. 仅做等值翻译，不增删、不概括、不改写语气。',
-    '2. 专有名词保留原文并附中文：演员名、片商、系列名。',
+    '2. 专有名词保留原文并附中文：人名、片商、系列名。',
     '3. 番号/型号代码（如 SONE-456、ABC-123）一律原样输出，绝不翻译或改写。',
-    '4. 日文汉字按简体中文习惯转写（例：妻→人妻按需），但语义必须准确。',
+    '4. 语种差异要照顾：日文汉字按简体中文习惯转写；韩文/泰文等先音译再意译；英文标题优先用通行中文译名，没有则直译。',
     '5. 不雅化也不净化原文本措辞，保持原营销/直述风格。',
-    '6. 已知源语言：日文，请勿误判。',
-    '7. 若某字段已是简体中文、英文或纯番号代码，则原样输出，不要改写或翻译。',
-    '8. 严格输出 JSON，不要任何多余文字、不要 markdown 代码块包裹。格式：{"title":"简体中文标题","summary":"简体中文简介"}'
+    '6. 已是简体中文的内容原样输出，不要改写或翻译。',
+    '7. 严格输出 JSON，不要任何多余文字、不要 markdown 代码块包裹。格式：{"title":"简体中文标题","summary":"简体中文简介"}'
   ].join('\n');
 
   // 是否需要翻译：仅当含日文假名（平/片假名）判定为日文；纯汉字/英文/番号不翻（避免误翻中文）
   function needsTranslation(text) {
     if (!text || !String(text).trim()) return false;
     return /[ぁ-んァ-ヶ]/.test(String(text));
+  }
+
+  /* 是否「已经是中文」（v439：详情页简介弹窗的「翻译」按钮据此显隐）。
+     与 needsTranslation 的分工：这个是「判定语言种类」，供用户手动选择翻译；
+     那个是自动链路「要不要偷偷帮你翻」（只认日文假名，尽量不打扰中文/英文用户）。
+     判定顺序：假名/谚文 → 直接外语；西里尔/阿拉伯/泰文占比不低 → 外语；
+     一个汉字都没有 → 外语；汉字数 ≥ 拉丁字母数 → 中文（中英夹杂的技术描述仍算中文）。 */
+  function isChineseText(text) {
+    var s = String(text == null ? '' : text).trim();
+    if (!s) return true;
+    if (/[ぁ-んァ-ヶ]/.test(s)) return false;
+    if (/[가-힣]/.test(s)) return false;
+    var cjk = (s.match(/[\u4e00-\u9fff]/g) || []).length;
+    var latin = (s.match(/[A-Za-z]/g) || []).length;
+    var other = (s.match(/[\u0400-\u04ff\u0600-\u06ff\u0e00-\u0e7f]/g) || []).length;
+    if (other > 0 && other * 4 >= (cjk + latin)) return false;
+    if (cjk === 0) return false;
+    return cjk >= latin;
   }
 
   // 从模型返回解析 JSON：兼容 ```json 包裹 / 首尾空白 / 噪音文字；失败抛错由调用方保留原文
@@ -1012,6 +1030,7 @@ function normalizeJavbusFilm(d, opts){
     buildTvShowXml: buildTvShowXml,
     TRANSLATE_SYSTEM_PROMPT: TRANSLATE_SYSTEM_PROMPT,
     needsTranslation: needsTranslation,
+    isChineseText: isChineseText,
     extractJsonObject: extractJsonObject,
     computeTranslateNeed: computeTranslateNeed,
     translateMeta: translateMeta,

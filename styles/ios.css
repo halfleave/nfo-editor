@@ -209,6 +209,21 @@ img { display: block; }
 .detail-info-av { text-align: center; font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.6; margin: 0 0 4px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
 .detail-info2 { text-align: center; font-size: 13px; color: rgba(255,255,255,0.72); line-height: 1.6; margin-bottom: 16px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
 .detail-info1:empty, .detail-info2:empty, .detail-info-av:empty { display: none; }
+/* v438：类型下面那行多平台评分（IMDb / 🍅 / 🍿 / MC）；缺源不画，全缺整行隐藏（由 JS 控制） */
+.detail-ratings { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; margin: -6px 0 16px; }
+.detail-ratings .dr-item {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 22px; padding: 0 8px; border-radius: 11px;
+  background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.96);
+  font-size: 12px; font-weight: 700; line-height: 1;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.detail-ratings .dr-item em { font-style: normal; font-size: 9.5px; font-weight: 800; letter-spacing: 0.02em; }
+.detail-ratings .dr-item i { font-style: normal; font-size: 11px; line-height: 1; }
+.detail-ratings .dr-item b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.detail-ratings .dr-imdb { background: #f5c518; color: #111; text-shadow: none; }
+.detail-ratings .dr-mc { background: #66cc33; color: #10240a; text-shadow: none; }
 .edit-type-seg { display: flex; margin: 0 0 6px; }
 .meta-type-tag { display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: var(--label-2); background: var(--card); border-radius: 10px; }
 /* 胶囊主按钮：占屏宽约 80%，水平居中 */
@@ -242,7 +257,8 @@ img { display: block; }
 .detail-act#dtActMagnet .da-ic svg { width: 24px; height: 24px; fill: currentColor; stroke: none; }
 .detail-act .da-lb { display: none; }
 .detail-act:active .da-ic { background: rgba(255,255,255,0.3); transform: scale(0.94); }
-.detail-plot { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,0.9); cursor: pointer; -webkit-tap-highlight-color: transparent; white-space: pre-line; }
+/* v439：简介默认压到 3 行（字号/行距都收了一档），点一下弹居中卡片看全文 */
+.detail-plot { font-size: 13.5px; line-height: 1.5; color: rgba(255,255,255,0.86); cursor: pointer; -webkit-tap-highlight-color: transparent; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .detail-plot:empty { display: none; }
 /* 翻译失败：简介下方「重新翻译」小按钮 */
 .detail-translate-retry { margin-top: 12px; }
@@ -1234,13 +1250,14 @@ html.stills-open, html.stills-open body { background: #000; }
 .sheet-bar .sb-icon { width: 44px; height: 34px; display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; color: var(--label); }
 .sheet-bar .sb-icon svg { width: 22px; height: 22px; }
 
-/* 单集简介居中弹窗（v405）：点卡片弹出，iOS 模态卡片风，点遮罩或「关闭」按钮收回 */
-#epMask {
+/* 单集简介居中弹窗（v405）：点卡片弹出，iOS 模态卡片风，点遮罩或「关闭」按钮收回
+   v439：同一套样式复用给「剧情全文」弹窗（#plotModal），避免两套居中弹窗各写一遍 */
+#epMask, #plotMask {
   position: fixed; inset: 0; z-index: 190; background: rgba(0,0,0,0.48);
   opacity: 0; pointer-events: none; transition: opacity .22s ease;
 }
-#epMask.on { opacity: 1; pointer-events: auto; }
-#epModal {
+#epMask.on, #plotMask.on { opacity: 1; pointer-events: auto; }
+#epModal, #plotModal {
   position: fixed; left: 50%; top: 50%; z-index: 191;
   width: min(86vw, 340px); max-height: 72vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
   box-sizing: border-box; padding: 22px 20px 18px;
@@ -1250,8 +1267,9 @@ html.stills-open, html.stills-open body { background: #000; }
   transform: translate(-50%, -50%) scale(.92);
   transition: opacity .22s ease, transform .22s cubic-bezier(0.22, 1, 0.36, 1);
 }
-[data-theme="dark"] #epModal { background: var(--card); }
-#epModal.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+#plotModal { width: min(90vw, 400px); max-height: 76vh; }
+[data-theme="dark"] #epModal, [data-theme="dark"] #plotModal { background: var(--card); }
+#epModal.on, #plotModal.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
 .ep-title { font-size: 17px; font-weight: 600; line-height: 1.4; color: var(--label); }
 .ep-meta { margin-top: 6px; font-size: 12.5px; color: var(--label-2); }
 .ep-plot { margin-top: 12px; font-size: 15px; line-height: 1.6; color: var(--label); white-space: pre-line; }

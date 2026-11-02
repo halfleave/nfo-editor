@@ -10363,7 +10363,7 @@ function refreshDetailPlot(){
     var plotEl = document.getElementById('detailPlot');
     if (plotEl){
       plotEl.textContent = plotText;
-      plotEl.onclick = function(){ copyText(plotText, '简介'); };
+      plotEl.onclick = openPlotSheet;
     }
     updateTranslateRetryBtn();
   }).catch(function(){});
@@ -10373,6 +10373,98 @@ function retryTranslate(){
   if (state.translateFailedIds) state.translateFailedIds.delete(currentDetailFilmId);
   updateTranslateRetryBtn();
   startFilmTranslation(currentDetailFilmId);
+}
+/* ===== v439 剧情全文弹窗 =====
+   详情页简介默认压到 3 行（CSS line-clamp），点一下弹居中卡片看全文。
+   卡片里三个动作：复制 / 翻译 / 关闭 —— 外部不再「点一下就复制」，原来的交互太容易误触。
+   翻译按钮只在简介「不是中文」时出现（NfoCore.isChineseText 判定，日/英/韩/俄等都会出现）；
+   调用与自动翻译同一条链路：自填 AI 配置直连，否则高级档走 Worker /translate。
+   译文只缓存在本会话（plotTrCache），不改写影片数据 —— 弹窗里看是「阅读辅助」，不该悄悄改库。 */
+var plotSheetSrc = '';        // 当前弹窗的原文（复制/翻译都以它为准，防止拿译文再翻一次）
+var plotTrCache = {};         // { filmId: 译文 }
+var plotTrBusy = false;
+
+function openPlotSheet(){
+  if (!currentDetailFilmId) return;
+  loadFilm(currentDetailFilmId).then(function(film){
+    if (!film) return;
+    var d = film.data || {};
+    var plot = String(d.plot || '').trim();
+    var head = (d.title || film.id || '');
+    var yr = String(d.premiered || d.year || '').slice(0, 4);
+    if (yr) head += '（' + yr + '）';
+    plotSheetSrc = plot;
+    var html = '<div class="ep-title">' + escapeHtml(head) + '</div>';
+    if (plot){
+      html += '<div class="ep-plot" id="plotSheetText">' + escapeHtml(plot) + '</div>';
+    } else {
+      html += '<div class="ep-empty">暂无简介</div>';
+    }
+    // 非中文且有正文才给翻译按钮（中文片翻成中文没意义）
+    var canTr = !!plot && !NfoCore.isChineseText(plot);
+    html += '<div class="ep-acts">'
+      + '<button type="button" class="ep-btn ghost" onclick="copyPlotSheet()"' + (plot ? '' : ' disabled') + '>复制</button>'
+      + (canTr ? '<button type="button" class="ep-btn primary" id="plotTrBtn" onclick="translatePlotSheet()">翻译</button>' : '')
+      + '<button type="button" class="ep-btn ghost" onclick="closePlotSheet()">关闭</button>'
+      + '</div>';
+    var body = document.getElementById('plotSheetBody');
+    if (body) body.innerHTML = html;
+    var hit = film.id ? plotTrCache[film.id] : '';
+    if (hit) paintPlotTranslated(hit);
+    var mask = document.getElementById('plotMask'), modal = document.getElementById('plotModal');
+    if (mask) mask.classList.add('on');
+    if (modal) modal.classList.add('on');
+  }).catch(function(){});
+}
+function closePlotSheet(){
+  var mask = document.getElementById('plotMask'), modal = document.getElementById('plotModal');
+  if (mask) mask.classList.remove('on');
+  if (modal) modal.classList.remove('on');
+}
+function copyPlotSheet(){
+  var el = document.getElementById('plotSheetText');
+  var text = (el ? el.textContent : plotSheetSrc) || '';
+  if (!String(text).trim()){ showToast('没有可复制的简介', 'info'); return; }
+  copyText(text, '简介');
+}
+function paintPlotTranslated(tr){
+  var el = document.getElementById('plotSheetText');
+  if (el) el.textContent = tr;
+  var btn = document.getElementById('plotTrBtn');
+  if (btn){
+    btn.disabled = true;
+    btn.textContent = '已翻译';
+    btn.classList.remove('primary');
+    btn.classList.add('ghost');
+  }
+}
+function translatePlotSheet(){
+  if (plotTrBusy) return;
+  if (!String(plotSheetSrc || '').trim()) return;
+  var btn = document.getElementById('plotTrBtn');
+  var ownCfg = { baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel };
+  if (!translateConfigReady() && (state.tier || '') !== 'full'){
+    showToast('翻译需高级档，或在「设置 → 应用配置」填 AI 接口', 'error');
+    return;
+  }
+  var uid = currentDetailFilmId;
+  plotTrBusy = true;
+  if (btn){ btn.disabled = true; btn.textContent = '翻译中…'; }
+  function fail(e){
+    plotTrBusy = false;
+    if (btn){ btn.disabled = false; btn.textContent = '翻译'; }
+    showToast('翻译失败：' + ((e && e.message) || '请求失败'), 'error');
+  }
+  getActivationCode().then(function(code){
+    var reqOpts = { ownCfg: ownCfg, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code || '' };
+    NfoCore.translateRequest('', plotSheetSrc, reqOpts).then(function(res){
+      var out = (res && typeof res.summary === 'string') ? res.summary : '';
+      if (!String(out).trim()) throw new Error('返回为空');
+      plotTrBusy = false;
+      if (uid) plotTrCache[uid] = out;
+      if (document.getElementById('plotSheetText')) paintPlotTranslated(out);
+    }).catch(fail);
+  }).catch(fail);
 }
 /* ===== 剧集「选集」：每季每集简介（v404；v405 改横向滑动卡片） =====
    数据源 TMDB：首次 /tv/{id} 取季列表，之后 /tv/{id}/season/{n} 取该季每集简介。
@@ -10670,6 +10762,91 @@ function dsCloseEp(){
   if (modal) modal.classList.remove('on');
 }
 
+/* ===== v438 多平台评分行（仅高级档）=====
+   位置：详情页「类型」那一行下面。数据来自自建 Worker /scores：
+   IMDb（Cinemeta）+ 烂番茄番茄度 + 爆米花 + Metacritic。
+   番号影片 / 无 tmdbId / 非高级档 → 整行不出现（不占位、不显示空行）。
+   客户端按 tmdbId 缓存 30 天：评分一个月内几乎不变，没必要每次进详情都打网络。 */
+var DETAIL_RATINGS_TTL = 30 * 24 * 3600 * 1000;
+var _detailRatingsSeq = 0;
+// 剧集判定：与自动化建档同一套规则（番号一票否决 → 影片自身标类型 → 搜索框状态兜底）
+function detailIsTv(d){
+  d = d || {};
+  var dvdId = (d.dvdId || d.content_id || '').toString().trim();
+  if (dvdId) return false;
+  if (d.tmdbMediaType === 'tv' || d.media_type === 'tv') return true;
+  if (d.tmdbMediaType === 'movie' || d.media_type === 'movie') return false;
+  return state.tmdbMediaType === 'tv';
+}
+function detailRatingsHtml(data){
+  data = data || {};
+  var items = [];
+  if (data.imdb && data.imdb.rating != null){
+    items.push('<span class="dr-item dr-imdb"><em>IMDb</em><b>' + Number(data.imdb.rating).toFixed(1) + '</b></span>');
+  }
+  var rt = data.rottenTomatoes || {};
+  if (rt.critics && rt.critics.score != null){
+    items.push('<span class="dr-item"><i>🍅</i><b>' + rt.critics.score + '%</b></span>');
+  }
+  if (rt.audience && rt.audience.score != null){
+    items.push('<span class="dr-item"><i>🍿</i><b>' + rt.audience.score + '%</b></span>');
+  }
+  if (data.metacritic && data.metacritic.critics && data.metacritic.critics.score != null){
+    items.push('<span class="dr-item dr-mc"><em>MC</em><b>' + data.metacritic.critics.score + '</b></span>');
+  }
+  return items.join('');
+}
+function renderDetailRatings(d){
+  var box = document.getElementById('detailRatings');
+  if (!box) return;
+  box.innerHTML = '';
+  box.style.display = 'none';
+  if ((state.tier || '') !== 'full') return;
+  d = d || {};
+  if ((d.dvdId || d.content_id || '').toString().trim()) return;   // 番号片没有 IMDb，直接不占行
+  var tmdbId = (d.tmdbId || '').toString().trim();
+  if (!/^\d+$/.test(tmdbId)) tmdbId = '';
+  var type = detailIsTv(d) ? 'tv' : 'movie';
+  var rawTitle = (d.originaltitle || d.title || '').toString().trim();
+  var year = (d.year || (d.premiered || '').slice(0, 4) || '').toString().trim();
+  // 老影片常常没存 tmdbId：只要还有片名，就照样去补一次（Worker 会用片名反查 TMDB）
+  if (!tmdbId && !rawTitle) return;
+  // 缓存键带上影片 id + 识别目标，换识别目标后不会拿旧片的分
+  var key = 'detailRatings:' + (currentDetailFilmId || '-') + ':' + (tmdbId || (rawTitle + '|' + year));
+  var seq = ++_detailRatingsSeq;
+  function paint(data){
+    if (seq !== _detailRatingsSeq) return;   // 期间换片/关页 → 丢弃过期结果
+    var html = detailRatingsHtml(data);
+    box.innerHTML = html;
+    box.style.display = html ? '' : 'none';
+  }
+  idbGet('kv', key).then(function(v){
+    if (v && v.data && (Date.now() - (v.ts || 0)) < DETAIL_RATINGS_TTL){ paint(v.data); return true; }
+    return false;
+  }).catch(function(){ return false; }).then(function(hit){
+    if (hit) return;
+    var w = state.magnetWorker || DEFAULT_WORKER;
+    if (!w) return;
+    var url = w.replace(/\/$/, '') + '/scores?type=' + type
+      + (tmdbId ? '&tmdb=' + encodeURIComponent(tmdbId) : '')
+      + '&title=' + encodeURIComponent(rawTitle)
+      + '&year=' + encodeURIComponent(year)
+      + (state.activationCode ? '&code=' + encodeURIComponent(state.activationCode) : '');
+    var ctrl = new AbortController();
+    var to = setTimeout(function(){ ctrl.abort(); }, 20000);
+    fetch(url, { signal: ctrl.signal, cache: 'no-store' })
+      .then(function(r){ return r.json().catch(function(){ return null; }); })
+      .then(function(data){
+        clearTimeout(to);
+        if (!data || !data.ok) return;      // 拿不到就保持不显示，不打扰用户
+        paint(data);
+        // 三家全空就别写缓存 —— 下次进详情页再试一次（源站抖动是常事）
+        var s = data.sources || {};
+        if (s.imdb || s.rottenTomatoes || s.metacritic) idbPut('kv', key, { ts: Date.now(), data: data }).catch(function(){});
+      })
+      .catch(function(){ clearTimeout(to); });
+  });
+}
 function renderFilmDetail(film){
   currentDetailFilm = film || null;
   // 切换影片时重置自动化文档缓存（跨影片残留防护），并刷新角标
@@ -10748,6 +10925,7 @@ function renderFilmDetail(film){
   var el2 = document.getElementById('detailInfo2');
   el2.textContent = tags.length ? tags.join(', ') : '';
   el2.style.display = tags.length ? '' : 'none';
+  renderDetailRatings(d);   // v438：类型下面那行多平台评分（IMDb / 番茄 / 爆米花 / MC）
   // 播放预告按钮：后端 /meta 已带回真实 DMM 预览 mp4（d.trailer）则应用内播放；没有则禁用，绝不回退外跳 missav
   currentDetailTrailer = (typeof d.trailer === 'string' && d.trailer) ? d.trailer : '';   // 仅接受字符串；后端若误回非字符串（如 {}）一律当无预告片处理，杜绝 YouTube 误弹窗
   // 预告片改走 Worker 流式代理：DMM/R18 CDN 手机直连会被墙或 TLS 失败（2026-10-10 实测 awspv3001.r18.com
@@ -10781,8 +10959,9 @@ function renderFilmDetail(film){
   // 剧情：最前方增加 [番号 标题]；无番号则显示 [标题]
   var plotTitle = (d.title || film.id);
   var plotText = '[' + plotTitle + ']' + (d.plot ? ' ' + d.plot : '');
-  document.getElementById('detailPlot').textContent = plotText;
-  document.getElementById('detailPlot').onclick = function(){ copyText(plotText, '简介'); };
+  var plotEl0 = document.getElementById('detailPlot');
+  plotEl0.textContent = plotText;
+  plotEl0.onclick = openPlotSheet;   // v439：点简介弹全文弹窗（复制移到弹窗里，避免误触）
   updateTranslateRetryBtn();
   renderDetailSeasons(film);
   ensurePosterFromShots(film);   // v408：无海报兜底——读第一张剧照设为海报，首页灰框变图

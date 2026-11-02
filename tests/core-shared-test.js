@@ -215,4 +215,18 @@ assert(NfoCore.magnetEpLabel('权力的游戏 共10集') === '', '季集标签�
 assert(NfoCore.magnetEpLabel('[人人影视]黑袍纠察队.The.Boys.S02E05.中英字幕.HDTVrip.mp4') === 'S02E05', '季集标签：bt4g 剧集发布名（前缀+扩展名）');
 assert(NfoCore.magnetEpLabel('') === '', '季集标签：空标题返回空');
 
+/* —— v439 语言判定（详情页简介弹窗「翻译」按钮据此显隐） —— */
+assert(NfoCore.isChineseText('一个黑客发现自己生活在一套模拟系统里。') === true, '中文判定：简体中文');
+assert(NfoCore.isChineseText('這是一部關於復仇與救贖的電影') === true, '中文判定：繁体中文也算中文');
+assert(NfoCore.isChineseText('彼は信じていた。この世界が本物だと。') === false, '中文判定：含假名 → 日文');
+assert(NfoCore.isChineseText('ネオは、世界が偽りだと気づく。') === false, '中文判定：日文汉字+假名 → 日文');
+assert(NfoCore.isChineseText('A computer hacker learns the truth about his reality.') === false, '中文判定：纯英文 → 外语');
+assert(NfoCore.isChineseText('매트릭스의 네오는 진실을 깨닫는다') === false, '中文判定：韩文 → 外语');
+assert(NfoCore.isChineseText('Хакер узнаёт правду о реальности') === false, '中文判定：俄文（西里尔）→ 外语');
+assert(NfoCore.isChineseText('由 Keanu Reeves 主演，讲黑客帝国里的虚拟世界') === true, '中文判定：中英混排但汉字占多数 → 中文');
+assert(NfoCore.isChineseText('') === true, '中文判定：空文本当中文（不显示翻译按钮）');
+assert(NfoCore.isChineseText(null) === true, '中文判定：null 当中文');
+assert(NfoCore.needsTranslation('彼は信じていた') === true, '自动翻译判定：日文仍触发');
+assert(NfoCore.needsTranslation('A hacker learns the truth') === false, '自动翻译判定：英文不自动翻（只给手动按钮）');
+
 console.log('core-shared 完成');
