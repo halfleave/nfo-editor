@@ -501,7 +501,7 @@
        第1环 国际标准写法（SxxEyy / 1x05）；第2环 编号词标准写法（第N集/话、EP、中文范围）；
        第3环 结构化弱标记（方括号纯数字、数字跟尾巴、纯数字）；第4环 仅季号契约；
        兜底 = 全不中返回 null（保护：不臆造集号，调用方送未识别夹）。
-     新增规则三步走（写进 AI-COLLAB）：①在表里按环号插一行（ring+note+fn，fn 只依赖 ctx 不看外面）；
+     新增规则三步走（写进本段注释与 nfo-plan-naming-rules.md）：①在表里按环号插一行（ring+note+fn，fn 只依赖 ctx 不看外面）；
      ②在 tests/auto115-core-test.js「识别漏斗」块补正反用例；③跑 node tools/check.js 全绿才算完。
      禁止绕过表直接往 episodeOf 里加 if——表本身就是文档，顺序即优先级。 */
   api.EP_RULES = [
