@@ -1860,6 +1860,46 @@ function closeApiHelp(){
 }
 
 /* —— 磁力搜索结果 —— */
+/* ===== v425 动漫磁力源：判定「动画剧集」=====
+   规则（用户拍板）：只看题材、不看地区 —— TMDB genres 含 16（Animation）且本身是剧集，才走动漫源；
+   动画电影、真人剧集、番号影片一律 bt4g。判定结果按 tmdbId 记在内存里，同一部片一次会话只探一次。
+   优先用搜索结果里现成的 genre_ids（零请求），没有才回落到 /tv/{id} 详情。 */
+var _animeProbe = {};              // 'tv:123' -> true / false
+var magnetCurrentAnime = false;    // 详情页磁力搜索：本次是否走动漫源
+var ANIME_GENRE_ID = 16;           // TMDB Animation 题材 id
+
+function animeProbeKey(id){ return 'tv:' + id; }
+function animeFromGenres(genreIds){
+  if (!genreIds || !genreIds.length) return false;
+  for (var i = 0; i < genreIds.length; i++){ if (Number(genreIds[i]) === ANIME_GENRE_ID) return true; }
+  return false;
+}
+/* 判定某个 tv 条目是否动画：返回 Promise<boolean>，命中过缓存就不发请求 */
+function animeOfTmdbTv(tid){
+  tid = String(tid == null ? '' : tid).trim();
+  if (!tid) return Promise.resolve(false);
+  var cacheKey = animeProbeKey(tid);
+  if (_animeProbe[cacheKey] !== undefined) return Promise.resolve(_animeProbe[cacheKey]);
+  return Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    return NfoCore.tmdbRequest('/tv/' + tid, { language: 'zh-CN' }, {
+      ownKey: res[0] || '',
+      workerBase: state.magnetWorker || DEFAULT_WORKER,
+      code: res[1] || '',
+      timeout: 8000
+    });
+  }).then(function(d){
+    var g = (d && d.genres) || [];
+    var isAnime = animeFromGenres(g.map(function(x){ return x.id; }));
+    _animeProbe[cacheKey] = isAnime;
+    return isAnime;
+  }).catch(function(){ return false; });   // 探测失败就当不是动画，安全回落 bt4g
+}
+/* 判定某部影片是否「动画剧集」：不是剧集直接 false，不浪费请求 */
+function animeOfFilm(film){
+  var f = (film && film.data) || {};
+  if (!f.tmdbId || !isTvFilmData(f)) return Promise.resolve(false);
+  return animeOfTmdbTv(f.tmdbId);
+}
 var magnetCurrentFilm = null;
 function openMagnetSheet(){
   document.getElementById('magnetResults').innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
@@ -1868,6 +1908,12 @@ function openMagnetSheet(){
   if (currentDetailFilmId){
     loadFilm(currentDetailFilmId).then(function(film){
       magnetCurrentFilm = film;
+      // 进面板即开始判定是否动画剧集（通常本地就能判 / 一次详情请求），用户点搜索时已有结论
+      magnetCurrentAnime = false;
+      animeOfFilm(film).then(function(isAnime){
+        if (magnetCurrentFilm !== film) return;   // 期间换了片子，丢弃过期结果
+        magnetCurrentAnime = isAnime;
+      });
       var f = (film && film.data) || {};
       var dvdId = f.dvdId || '';
       var title = f.title || '';
@@ -1883,9 +1929,10 @@ function openMagnetSheet(){
       if (def){ input.value = def.val; setMagnetQuickActive(def.key); }
       else { input.value = ''; setMagnetQuickActive(null); }
       toggleMagnetClear();
-    }).catch(function(){ magnetCurrentFilm = null; input.value = ''; renderMagnetQuick([]); setMagnetQuickActive(null); toggleMagnetClear(); });
+    }).catch(function(){ magnetCurrentFilm = null; magnetCurrentAnime = false; input.value = ''; renderMagnetQuick([]); setMagnetQuickActive(null); toggleMagnetClear(); });
   } else {
     magnetCurrentFilm = null;
+    magnetCurrentAnime = false;
     input.value = '';
     renderMagnetQuick([]);
     setMagnetQuickActive(null);
@@ -1932,22 +1979,26 @@ function clearMagnetQuery(){
   if (box) box.innerHTML = '';
 }
 function searchMagnet(){
-  magnetSearchTo((document.getElementById('magnetQueryInput').value || '').trim(), document.getElementById('magnetResults'));
+  magnetSearchTo((document.getElementById('magnetQueryInput').value || '').trim(), document.getElementById('magnetResults'), magnetCurrentAnime);
 }
-/* 磁力搜索主流程：q = 关键词，box = 结果容器（上下文版弹窗 / 工具箱通用页共用同一套逻辑） */
-function magnetSearchTo(q, box){
+/* 磁力搜索主流程：q = 关键词，box = 结果容器（上下文版弹窗 / 工具箱通用页共用同一套逻辑）
+   anime = 是否动画剧集：true 时让服务端先走动漫源（动漫花园/蜜柑聚合），搜不到自动回落 bt4g */
+function magnetSearchTo(q, box, anime){
   if (!box) return;
   if (!q){ box.innerHTML = '<div class="tmdb-msg">请输入关键词</div>'; return; }
   var w = state.magnetWorker || DEFAULT_WORKER;
   if (!w){ box.innerHTML = '<div class="tmdb-msg">未配置服务地址，请先到「设置 → 应用配置」填写代理服务地址。</div>'; return; }
+  box._mItems = null; box._mFansub = '';
   box.innerHTML = magnetSkeletonHtml();
   startLoadingRotator(box, magnetSkeletonHtml);
   // 番号（如 IPX-011）不限制 category（bt4g 的 cat 过滤对番号不可靠，常返回 0 结果）；
-  // 普通关键词用 cat=movie 更精准。
+  // 普通关键词用 cat=movie 更精准。动画剧集走动漫源、且回落 bt4g 时同样不能带 cat（会挡掉 tv 分类）。
   var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
+  var wantAnime = !!anime && !isDvd;
   var url = w.replace(/\/$/, '') + '/?q=' + encodeURIComponent(q)
-    + (isDvd ? '' : '&cat=movie')
-    + '&source=bt4g&order=seeders'
+    + ((isDvd || wantAnime) ? '' : '&cat=movie')
+    + '&source=' + (wantAnime ? 'anime' : 'bt4g')
+    + '&order=seeders'
     + (state.activationCode ? '&code=' + encodeURIComponent(state.activationCode) : '');
   var ctrl = new AbortController();
   var to = setTimeout(function(){ ctrl.abort(); }, 35000);
@@ -1977,10 +2028,16 @@ function renderMagnetResults(items, box, q){
   }
   loadFilterWords().then(function(words){
     var isDvd = /^[A-Za-z]+-?\d+/i.test(q);
-    var r = NfoCore.filterMagnetResults(items, q, words, isDvd);
+    // 动漫源结果已在站内按标题检索过，跳过相关性层（否则中日英混排标题会被误降权）
+    var fromAnime = items.length > 0 && items[0].source === 'anime';
+    var r = NfoCore.filterMagnetResults(items, q, words, isDvd, fromAnime);
+    box._mItems = r.keep;        // 供字幕组筛选重新渲染（不重新请求）
+    box._mFansub = '';
     var html;
     if (r.keep.length){
-      html = '<div class="magnet-count">共找到 ' + r.keep.length + ' 条结果</div>' + magnetRowsHtml(r.keep);
+      html = '<div class="magnet-count">共找到 ' + r.keep.length + ' 条结果</div>'
+        + magnetFansubBar(r.keep)
+        + '<div class="magnet-list">' + magnetRowsHtml(r.keep) + '</div>';
     } else if (r.demoted.length || r.blocked.length){
       html = '<div class="tmdb-msg">没有直接匹配的结果，相关度较低或已屏蔽的见下方</div>';
     } else {
@@ -2000,8 +2057,47 @@ function renderMagnetResults(items, box, q){
     }
     box.innerHTML = html;
   }).catch(function(){
-    box.innerHTML = magnetRowsHtml(items);
+    box._mItems = items;
+    box.innerHTML = '<div class="magnet-list">' + magnetRowsHtml(items) + '</div>';
   });
+}
+/* ===== v425 字幕组筛选（仅在动漫源结果里出现）=====
+   字幕组从本次结果里聚合，不额外请求；只有 ≥2 个组时才出筛选条（1 个组筛了也没意义）。
+   点击只重渲染列表，不重新搜。 */
+function magnetFansubBar(items){
+  var map = {}, order = [];
+  for (var i = 0; i < items.length; i++){
+    var g = String(items[i].fansub || '').trim();
+    if (!g) continue;
+    if (!map[g]){ map[g] = 0; order.push(g); }
+    map[g]++;
+  }
+  if (order.length < 2) return '';
+  order.sort(function(a, b){ return map[b] - map[a]; });
+  var cap = order.slice(0, 12);
+  var html = '<div class="magnet-fansub-bar">';
+  html += '<button type="button" class="mf-chip active" data-fansub="" onclick="magnetPickFansub(this)">全部 ' + items.length + '</button>';
+  for (var j = 0; j < cap.length; j++){
+    var name = cap[j];
+    html += '<button type="button" class="mf-chip" data-fansub="' + escapeAttr(name) + '" onclick="magnetPickFansub(this)">'
+      + escapeHtml(name) + ' <em>' + map[name] + '</em></button>';
+  }
+  if (order.length > cap.length) html += '<span class="mf-more">+' + (order.length - cap.length) + '</span>';
+  return html + '</div>';
+}
+function magnetPickFansub(btn){
+  var bar = btn && btn.parentNode;
+  if (!bar) return;
+  var box = bar.parentNode;
+  var list = box ? box.querySelector('.magnet-list') : null;
+  if (!list) return;
+  var name = btn.getAttribute('data-fansub') || '';
+  box._mFansub = name;
+  var chips = bar.querySelectorAll('.mf-chip');
+  for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('active', chips[i] === btn);
+  var all = box._mItems || [];
+  var shown = name ? all.filter(function(x){ return String(x.fansub || '') === name; }) : all;
+  list.innerHTML = magnetRowsHtml(shown);
 }
 /* 骨架屏：6 行占位，行高与真实结果一致，搜索完成时不会跳版 */
 function magnetSkeletonHtml(){
@@ -2022,15 +2118,20 @@ function magnetRowsHtml(items){
     var it = items[i];
     var title = escapeHtml(it.title || '无标题');
     var size = escapeHtml(it.size || '');
-    var src = escapeHtml(it.source || 'bt4g');
+    var srcRaw = it.source || 'bt4g';
+    var src = escapeHtml(srcRaw === 'anime' ? '动漫' : srcRaw);   // anime 是内部标识，界面上叫「动漫」
+    var fansub = String(it.fansub || '').trim();
     // 元信息拆成独立标签，做种数单独上色（原先把大小/做种/下载挤在一个 span 里，一长就换行）
+    // 动漫源没有做种数，改用「字幕组 + 体积 + 发布日」，信息量对等
     var meta = [];
+    if (fansub) meta.push('<span class="mr-fansub">' + escapeHtml(fansub) + '</span>');
     if (size) meta.push('<span>' + size + '</span>');
     if (it.seeders) meta.push('<span class="mr-seed">做种 ' + escapeHtml(String(it.seeders)) + '</span>');
     if (it.leechers) meta.push('<span>下载 ' + escapeHtml(String(it.leechers)) + '</span>');
+    if (!it.seeders && it.date) meta.push('<span>' + escapeHtml(String(it.date)) + '</span>');
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
     // 不再渲染整条磁力串（一串 base64 噪音，占一行且看不懂）；要链接点行内「复制」即可
-    html += '<div class="magnet-result" data-magnet="' + magnet + '" onclick="openMagnetOp(this)">'
+    html += '<div class="magnet-result' + (srcRaw === 'anime' ? ' is-anime' : '') + '" data-magnet="' + magnet + '" onclick="openMagnetOp(this)">'
       + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
@@ -6292,6 +6393,17 @@ function switchMagnetComboTab(tab){
     }
     var resBox = document.getElementById('magnetResults');
     if (resBox) resBox.innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
+    /* v425：进搜索页先判定当前影片是不是「动画剧集」—— 决定这次走动漫源还是 bt4g。
+       只看题材不看地区；不是剧集 / 探测失败一律当普通影片走 bt4g。不提供手动切换。 */
+    magnetCurrentAnime = false;
+    var animeTid = (auto115Doc && auto115Doc.type === 'tv') ? auto115Doc.tmdbId : '';
+    if (animeTid){
+      animeOfTmdbTv(animeTid).then(function(isAnime){
+        // 期间换了片子或关掉了面板，丢弃过期结论
+        if (!auto115Doc || String(auto115Doc.tmdbId || '') !== String(animeTid)) return;
+        magnetCurrentAnime = isAnime;
+      });
+    }
   }
 }
 function auto115OpenMagnetModal(){
@@ -8917,6 +9029,8 @@ function renderTMDBResults(results){
     var meta = metaParts.join(' · ');
     /* 类型以结果自己携带的 media_type 为准（多类型混排时不会串）；没有则用当前搜索类型兜底 */
     var itemType = (item.media_type === 'tv' || item.media_type === 'movie') ? item.media_type : (mt || 'movie');
+    /* v425：搜索结果自带 genre_ids，顺手记下「是不是动画剧集」（零请求），详情页磁力搜索直接查表 */
+    if (itemType === 'tv' && item.genre_ids) _animeProbe[animeProbeKey(item.id)] = animeFromGenres(item.genre_ids);
     html += '<div class="tmdb-result" data-tmdb-id="' + item.id + '" data-tmdb-type="' + itemType + '" data-poster-path="' + escapeAttr(item.poster_path || '') + '" onclick="selectTMDB(' + item.id + ')">';
     html += poster ? '<img src="' + poster + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
     html += '<div class="tr-info">';

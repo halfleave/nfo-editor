@@ -1565,6 +1565,17 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-filtered-toggle { display: block; width: 100%; border: none; background: var(--card-fill); color: var(--label-2); font-size: 13px; text-align: center; padding: 10px 0; margin-top: 10px; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .magnet-filtered-toggle:active { background: var(--gray-fill); }
 .magnet-blocked { margin-top: 8px; }
+/* ===== v425 动漫磁力源：字幕组筛选 =====
+   只有识别为动画剧集时才会出现；筛选条从本次结果聚合，点一下只重渲染列表。 */
+.magnet-fansub-bar { display: flex; gap: 8px; padding: 4px 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.magnet-fansub-bar::-webkit-scrollbar { display: none; }
+.mf-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 11px; border: none; border-radius: 14px; background: var(--card-fill); color: var(--label-2); font-size: 12.5px; -webkit-tap-highlight-color: transparent; }
+.mf-chip em { font-style: normal; font-size: 11px; color: var(--label-3); font-variant-numeric: tabular-nums; }
+.mf-chip.active { background: var(--accent); color: var(--accent-text); }
+.mf-chip.active em { color: var(--accent-text); opacity: .75; }
+.mf-chip:active { opacity: .75; }
+.mf-more { flex: 0 0 auto; align-self: center; font-size: 12px; color: var(--label-3); }
+.magnet-result .mr-meta > .mr-fansub { flex: 0 1 auto; max-width: 42%; overflow: hidden; text-overflow: ellipsis; color: var(--accent-fg); font-weight: 600; }
 .sheet-pad { padding: 16px var(--pad); }
 .ios-textarea { width: 100%; box-sizing: border-box; border: none; border-radius: 12px; background: var(--card-fill); color: var(--text); font-size: 16px; line-height: 1.6; padding: 10px 12px; resize: none; -webkit-appearance: none; }
 .ios-textarea::placeholder { font-size: 16px; color: var(--label-3); }

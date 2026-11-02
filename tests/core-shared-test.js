@@ -172,6 +172,16 @@ const sortItems = [
 assert(NfoCore.filterMagnetResults(sortItems, '某电影', [], false).keep[0].seeders === 100, '优化：做种数高的排前');
 assert(NfoCore.filterMagnetResults([{ title: '某电影1' }, { title: '某电影2' }], '某电影', [], false).keep.length === 2, '优化：无磁力链接项不参与去重');
 
+/* —— v425 动漫源结果：跳过相关性层（站内已检索，中日英混排标题不该被降权）—— */
+const animeItems = [
+  { title: '[LoliHouse] 葬送的芙莉莲 / Sousou no Frieren - 01', source: 'anime' },
+  { title: '[ANi] 完全不同的日文名 第01话', source: 'anime' }
+];
+assert(NfoCore.filterMagnetResults(animeItems, '葬送的芙莉莲', [], false, true).keep.length === 2, '动漫源：skipRelevance 时混排标题全部进 keep');
+assert(NfoCore.filterMagnetResults(animeItems, '葬送的芙莉莲', [], false, false).keep.length === 1, '动漫源：不跳过相关性时另一条会被降权（对照）');
+assert(NfoCore.filterMagnetResults([{ title: '免费下载 番剧', source: 'anime' }], '番剧', [], false, true).blocked.length === 1, '动漫源：跳过相关性但仍保留屏蔽词层');
+assert(NfoCore.filterMagnetResults(animeItems, '葬送的芙莉莲', [], false).keep.length === 1, '动漫源：skipRelevance 默认关闭，老调用行为不变');
+
 /* —— v424 智能搜索：识别命中的是电影还是剧集 —— */
 assert(NfoCore.classifyTmdbResults([{ title: '教父' }], [{ name: '教父剧版' }], '教父').primary === 'movie', '识别：电影标题全等 → 电影');
 assert(NfoCore.classifyTmdbResults([{ title: '教父' }], [{ name: '教父' }], '教父').primary === 'movie', '识别：两类都全等 → 电影优先');
