@@ -2106,7 +2106,8 @@ function magnetSkeletonHtml(){
     rows += '<div class="magnet-result sk">'
       + '<span class="mr-icon sk-block"></span>'
       + '<div class="mr-info">'
-      + '<div class="sk-line" style="width:' + (62 + (i % 3) * 10) + '%;"></div>'
+      + '<div class="sk-line" style="width:' + (88 - (i % 3) * 6) + '%;"></div>'
+      + '<div class="sk-line" style="width:' + (56 + (i % 2) * 10) + '%;"></div>'
       + '<div class="sk-line sm" style="width:' + (30 + (i % 2) * 12) + '%;"></div>'
       + '</div></div>';
   }
@@ -2130,12 +2131,17 @@ function magnetRowsHtml(items){
     if (it.leechers) meta.push('<span>下载 ' + escapeHtml(String(it.leechers)) + '</span>');
     if (!it.seeders && it.date) meta.push('<span>' + escapeHtml(String(it.date)) + '</span>');
     var magnet = escapeAttr(decodeXmlEntities(it.magnet || ''));
+    // 季集标签：标题两行也未必看得出是第几季第几集，从标题里认出来单独做个 pill
+    var epTag = '';
+    try { epTag = NfoCore.magnetEpLabel(it.title || ''); } catch (e) { epTag = ''; }
     // 不再渲染整条磁力串（一串 base64 噪音，占一行且看不懂）；要链接点行内「复制」即可
     html += '<div class="magnet-result' + (srcRaw === 'anime' ? ' is-anime' : '') + '" data-magnet="' + magnet + '" onclick="openMagnetOp(this)">'
       + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
-      + '<div class="mr-meta"><span class="magnet-source-badge">' + src + '</span>' + meta.join('') + '</div>'
+      + '<div class="mr-meta">'
+      + (epTag ? '<span class="mr-ep">' + escapeHtml(epTag) + '</span>' : '')
+      + '<span class="magnet-source-badge">' + src + '</span>' + meta.join('') + '</div>'
       + '</div>'
       + '<span class="mr-go"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span>'
       + '</div>';

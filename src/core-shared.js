@@ -879,6 +879,78 @@ function normalizeJavbusFilm(d, opts){
     }
     return false;
   }
+  /* 磁力结果行的「季集标签」：从发布标题里认出第几季第几集，只为界面看一眼就知道是哪一集，
+     不参与命名、不参与过滤。认不出返回空串——宁可不显示，也不臆造。 */
+  function cnSmallNum(s) {
+    s = String(s || '').trim();
+    if (/^\d+$/.test(s)) return +s;
+    var d = { '零': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+    var m = s.match(/^([一二两三四五六七八九])?十([一二三四五六七八九])?$/);
+    if (m) return (m[1] ? d[m[1]] : 1) * 10 + (m[2] ? d[m[2]] : 0);
+    if (s.length === 1 && d[s] !== undefined) return d[s];
+    return 0;
+  }
+  function magnetEpLabel(title) {
+    var raw = String(title || '');
+    if (!raw || raw.length > 400) return '';
+    var s = 0, ep = 0, m;
+    // ① S02E08（含 S02.E08 / S02-E08 / S02 E08）
+    m = raw.match(/\bs(\d{1,2})[.\-_\s]?e(\d{1,3})(?!\d)/i);
+    if (m) { s = +m[1]; ep = +m[2]; }
+    // ② 1x05（x 前是 1~2 位数字、x 后是集号；x264 这类编码不会命中）
+    if (!ep) {
+      m = raw.match(/(?:^|[^0-9a-z])(\d{1,2})\s?[x×]\s?(\d{1,3})(?!\d)/i);
+      if (m && +m[1] > 0 && +m[1] <= 30) { s = +m[1]; ep = +m[2]; }
+    }
+    // 季号：Season 2 / 第2季 / 第二季 / 单独 S02
+    if (!s) {
+      m = raw.match(/season\s*(\d{1,2})(?!\d)/i) || raw.match(/第\s*([零一二两三四五六七八九十\d]{1,3})\s*[季部]/);
+      if (m) s = cnSmallNum(m[1]);
+    }
+    if (!s) {
+      m = raw.match(/(?:^|[^a-z0-9])s(\d{1,2})(?![0-9a-z])/i);
+      if (m && +m[1] > 0 && +m[1] <= 30) s = +m[1];
+    }
+    // 集号：第8集/话 / EP08、E08 / [08]、- 08 [1080p]、08v2 / 结尾 08
+    if (!ep) {
+      m = raw.match(/第\s*([零一二两三四五六七八九十百\d]{1,3})\s*[集话話]/);
+      if (m) ep = cnSmallNum(m[1]);
+    }
+    if (!ep) {
+      m = raw.match(/(?:^|[^a-z0-9])(?:ep|e)\s?(\d{1,3})(?![0-9a-z])/i);
+      if (m) ep = +m[1];
+    }
+    // 这几个数字不是集号：年份、分辨率（长番如海贼王 1085 集要能认，但 1080p/2160 不能）
+    var badNum = function (n) {
+      if (n <= 0) return true;
+      if (n >= 1900 && n <= 2100) return true;
+      return [480, 576, 720, 1080, 1440, 2160, 4320].indexOf(n) >= 0;
+    };
+    // 合集：01-28 / 01~28（多集打包，显示范围比单集号有用）
+    var range = '';
+    if (!ep && !s) {
+      m = raw.match(/(?:^|[\s\-_.\[【（(])(\d{1,4})\s*[-~～]\s*(\d{1,4})(?=$|[\s\]】）).,])/);
+      if (m && !badNum(+m[1]) && !badNum(+m[2]) && +m[2] > +m[1]) range = m[1] + '-' + m[2];
+    }
+    if (!ep && !range) {
+      m = raw.match(/[\[\(（【]\s*(\d{1,4})\s*(?:v\d)?\s*[\]\)）】]/);
+      if (m && !badNum(+m[1])) ep = +m[1];
+    }
+    if (!ep && !range) {
+      m = raw.match(/(?:^|[\s\-_.])(\d{1,4})\s*(?:v\d+)?\s*(?=[\[\(（【])/);
+      if (m && !badNum(+m[1])) ep = +m[1];
+    }
+    if (!ep && !range) {
+      m = raw.match(/(?:^|[\s\-_.])(\d{1,4})\s*(?:v\d+)?\s*$/);
+      if (m && !badNum(+m[1])) ep = +m[1];
+    }
+    var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+    if (range) return (s ? 'S' + p2(s) + ' · ' : '') + range;
+    if (!s && !ep) return '';
+    if (s && ep) return 'S' + p2(s) + 'E' + p2(ep);
+    if (ep) return 'E' + p2(ep);
+    return 'S' + p2(s);
+  }
   /* 三层过滤：blocked=命中词库（折叠，可展开看）；demoted=与查询不相关（沉底）；keep=正常。
      isDvd（番号搜索）→ 放宽：跳过词库层（怕屏蔽掉想要的），只留相关性层。
      skipRelevance（v425 动漫源结果）→ 跳过相关性层：站内已按标题检索过，
@@ -919,6 +991,7 @@ function normalizeJavbusFilm(d, opts){
     magnetRelevant: magnetRelevant,
     magnetSpam: magnetSpam,
     filterMagnetResults: filterMagnetResults,
+    magnetEpLabel: magnetEpLabel,
     tmdbNormTitle: tmdbNormTitle,
     tmdbMatchLevel: tmdbMatchLevel,
     classifyTmdbResults: classifyTmdbResults,

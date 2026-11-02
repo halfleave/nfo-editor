@@ -1518,8 +1518,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-result .mr-icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-fill); color: var(--accent-fg); display: flex; align-items: center; justify-content: center; }
 .magnet-result .mr-icon svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
 .magnet-result .mr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
-/* 标题固定一行，超长末尾省略；省略交给 CSS，DOM 里保留完整标题供自动化建档命名 */
-.magnet-result .mr-title { font-size: 15px; font-weight: 600; color: var(--label); line-height: 1.35; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 标题两行（一行看不出是哪一季哪一集）；省略交给 CSS，DOM 里保留完整标题供自动化建档命名 */
+.magnet-result .mr-title { font-size: 15px; font-weight: 600; color: var(--label); line-height: 1.35; max-width: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; word-break: break-word; }
+.magnet-result .mr-ep { flex: 0 0 auto; display: inline-flex; align-items: center; height: 17px; padding: 0 6px; border-radius: 5px; background: var(--accent-fill); color: var(--accent-fg); font-size: 11px; font-weight: 700; letter-spacing: .3px; font-variant-numeric: tabular-nums; }
 .magnet-result .mr-meta { font-size: 12px; color: var(--label-2); display: flex; gap: 8px; align-items: center; min-width: 0; white-space: nowrap; overflow: hidden; }
 .magnet-result .mr-meta > span { flex: 0 0 auto; }
 .magnet-result .mr-seed { color: #2ea44f; font-weight: 600; }

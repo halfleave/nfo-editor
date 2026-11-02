@@ -196,4 +196,17 @@ assert(NfoCore.tmdbMatchLevel({ original_title: '教父' }, NfoCore.tmdbNormTitl
 assert(NfoCore.tmdbMatchLevel({ title: '教父2' }, NfoCore.tmdbNormTitle('教父')) === 1, '识别：前缀算弱匹配');
 assert(NfoCore.tmdbMatchLevel({ title: '完全无关' }, NfoCore.tmdbNormTitle('教父')) === 0, '识别：不相关为 0');
 
+/* —— v427 磁力结果的季集标签 —— */
+assert(NfoCore.magnetEpLabel('Show.Name.S02E05.1080p.WEB-DL') === 'S02E05', '季集标签：SxxEyy 标准写法');
+assert(NfoCore.magnetEpLabel('Show.Name.1x05.HDTV') === 'S01E05', '季集标签：1x05 点叉写法');
+assert(NfoCore.magnetEpLabel('[幻樱字幕组][间谍过家家 第二季][01][BIG5_MP4]') === 'S02E01', '季集标签：中文季号 + 方括号集号');
+assert(NfoCore.magnetEpLabel('[LoliHouse] 葬送的芙莉莲 - 08 [WebRip 1080p HEVC-10bit]') === 'E08', '季集标签：横杠集号（标题无季号时只给集）');
+assert(NfoCore.magnetEpLabel('[喵萌奶茶屋] 某番 - 12v2 [1080p]') === 'E12', '季集标签：12v2 版本号忽略');
+assert(NfoCore.magnetEpLabel('[SweetSub] 药屋少女的呢喃 第24话') === 'E24', '季集标签：中文「第N话」');
+assert(NfoCore.magnetEpLabel('[诸神字幕组][海贼王][1085][1080P]') === 'E1085', '季集标签：长番四位集号');
+assert(NfoCore.magnetEpLabel('葬送的芙莉莲 01-28 合集 1080p') === '01-28', '季集标签：合集范围');
+assert(NfoCore.magnetEpLabel('某电影.2023.2160p.WEB-DL.H265') === '', '季集标签：年份/分辨率不当集号');
+assert(NfoCore.magnetEpLabel('SSIS-123-C') === '', '季集标签：番号不误判');
+assert(NfoCore.magnetEpLabel('') === '', '季集标签：空标题返回空');
+
 console.log('core-shared 完成');
