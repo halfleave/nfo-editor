@@ -1558,13 +1558,14 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #magnetComboSheet .sheet-list { max-height: 62vh; max-height: 62dvh; }
 #magnetComboSheet .magnet-sheet-head { display: flex; align-items: center; gap: 8px; padding: 4px 0 12px; }
 #magnetComboSheet .magnet-search-wrap { position: relative; flex: 1; min-width: 0; }
-#magnetComboSheet .magnet-search-wrap input { width: 100%; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 36px 10px 16px; font-size: 15px; color: var(--label); }
+#magnetComboSheet .magnet-search-wrap input { width: 100%; border: none; background: var(--card-fill); border-radius: 22px; padding: 10px 96px 10px 16px; font-size: 15px; color: var(--label); }
+/* v436：搜索框内右侧的取词切换（番号 / 影片名 / 原名），点一下换一种并填入 */
+#magnetComboSheet .magnet-sheet-head .magnet-mode-btn { position: absolute; right: 32px; top: 50%; transform: translateY(-50%); height: 22px; padding: 0 9px; border: none; border-radius: 11px; background: var(--accent-fill); color: var(--accent-fg); font-size: 11.5px; font-weight: 600; line-height: 22px; -webkit-tap-highlight-color: transparent; }
+#magnetComboSheet .magnet-sheet-head .magnet-mode-btn:active { opacity: .7; }
+#magnetComboSheet .magnet-sheet-head .magnet-mode-btn.flip { animation: modeFlip .26s ease; }
+@keyframes modeFlip { 0% { transform: translateY(-50%) scale(.85); opacity: .35; } 100% { transform: translateY(-50%) scale(1); opacity: 1; } }
 #magnetComboSheet .magnet-sheet-head input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 #magnetComboSheet .magnet-sheet-head button { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 8px 18px; font-size: 14px; font-weight: 600; }
-#magnetComboSheet .magnet-quick-chips { display: flex; align-items: center; gap: 8px; padding: 0 0 12px; flex-wrap: wrap; }
-#magnetComboSheet .mqc-chip { border: 1px solid var(--sep); background: var(--card-fill); color: var(--label-2); border-radius: 980px; padding: 5px 14px; font-size: 13px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-#magnetComboSheet .mqc-chip:active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-#magnetComboSheet .mqc-chip:disabled { opacity: 0.4; cursor: not-allowed; }
 #magnetComboSheet .magnet-sheet-head .magnet-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border: none; background: transparent; color: var(--label-3); font-size: 18px; line-height: 1; }
 #magnetComboSheet .magnet-sheet-head .magnet-clear.show { display: flex; }
 .magnet-filtered-toggle { display: block; width: 100%; border: none; background: var(--card-fill); color: var(--label-2); font-size: 13px; text-align: center; padding: 10px 0; margin-top: 10px; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -1581,13 +1582,16 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .mf-chip:active { opacity: .75; }
 .mf-more { flex: 0 0 auto; align-self: center; font-size: 12px; color: var(--label-3); }
 /* 字幕组不在行内显示（标题已带，按组看用上方筛选条） */
-/* ===== v430 多选 → 批量离线：底部浮条（勾第一个复选框后出现） ===== */
+/* ===== v430 多选 → 批量离线：底部浮条（勾第一个复选框后出现） =====
+   v436：改 fixed 贴屏幕底部 —— sticky 只在滚到列表末尾时可见，用户以为按钮没了 */
 .magnet-selbar {
-  position: sticky; bottom: 0; z-index: 3;
+  position: fixed; left: 12px; right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  z-index: 320;
   display: flex; align-items: center; gap: 8px;
-  margin-top: 10px; padding: 10px 12px;
-  background: var(--card); border-top: 0.5px solid var(--sep);
-  border-radius: 14px; box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+  padding: 10px 12px;
+  background: var(--card); border: 0.5px solid var(--sep);
+  border-radius: 16px; box-shadow: 0 6px 24px rgba(0,0,0,0.18);
 }
 .magnet-selbar .msb-count { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .magnet-selbar button { flex: 0 0 auto; height: 32px; padding: 0 14px; border: none; border-radius: 16px; font-size: 13.5px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
@@ -1604,9 +1608,10 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #filterWordsSheet .sheet-pad { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 #filterWordsSheet .ios-textarea { flex: 1; height: auto; min-height: 0; }
 #magnetComboSheet .magnet-sheet-head .magnet-clear:active { opacity: 0.5; }
-/* 磁力：添加/搜索 胶囊 tab（v432：tab 居中，过滤词绝对定位贴右，不再把 tab 挤到左边） */
-.magnet-combo-bar { position: relative; display: flex; align-items: center; justify-content: center; padding: 6px 2px 10px; }
-.magnet-combo-bar .magnet-filter-tab { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); }
+/* 磁力：添加/搜索 胶囊 tab（v436：tab 直接占标题位，关闭左、过滤词右，其余全绝对定位保证 tab 严格居中） */
+.sheet-bar.magnet-bar { position: relative; justify-content: center; }
+.sheet-bar.magnet-bar .sb-icon { position: absolute; left: 0; top: 50%; transform: translateY(-50%); }
+.sheet-bar.magnet-bar .magnet-filter-tab { position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
 .magnet-filter-tab { appearance: none; -webkit-appearance: none; border: none; background: transparent; color: var(--label-2); font-family: inherit; font-size: 14px; padding: 6px 4px; -webkit-tap-highlight-color: transparent; }
 .magnet-filter-tab:active { opacity: .6; }
 .magnet-combo-tabs { display: inline-flex; background: var(--gray-fill); border-radius: 999px; padding: 3px; gap: 2px; }
@@ -2229,6 +2234,8 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-composer .mc-x { flex: none; width: 24px; height: 24px; border: none; border-radius: 50%; background: var(--card-fill); color: var(--label-2); font-size: 16px; line-height: 24px; text-align: center; padding: 0; }
 .magnet-composer .mc-x:active { opacity: .7; }
 .magnet-composer .mc-input-row { display: flex; align-items: flex-end; }
+.magnet-composer .mc-del { flex: 0 0 auto; width: 34px; height: 44px; margin-left: 6px; border: none; background: transparent; color: var(--label-3); font-size: 20px; line-height: 1; -webkit-tap-highlight-color: transparent; }
+.magnet-composer .mc-del:active { opacity: .6; }
 .magnet-composer .mc-input { flex: 1; box-sizing: border-box; min-height: 44px; max-height: 120px; border: 1px solid var(--sep); border-radius: 12px; background: var(--gray-fill); color: var(--label); font-size: 14px; line-height: 1.4; padding: 10px 12px; resize: none; -webkit-user-select: text; }
 .magnet-composer .mc-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .magnet-composer .mc-input::placeholder { color: var(--label-2); }

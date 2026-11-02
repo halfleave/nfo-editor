@@ -285,6 +285,10 @@ function closeAllSheets() {
   document.removeEventListener('mousedown', ctxOutsideClose, true);
   var sheets = document.querySelectorAll('.sheet');
   for (var i = 0; i < sheets.length; i++) sheets[i].classList.remove('show');
+  // 磁力多选浮条挂在 body 上（fixed），关弹窗时要一起收走
+  var selBar = document.querySelector('.magnet-selbar');
+  if (selBar && selBar.parentNode) selBar.parentNode.removeChild(selBar);
+  magnetSelBox = null;
 }
 function showAboutSheet(){
   var aboutMask = document.getElementById('aboutMask');
@@ -2035,6 +2039,8 @@ function renderMagnetResults(items, box, q){
     box._mFansub = '';
     box._mSel = {};              // 新一次搜索：清空上轮勾选
     box._mSelOn = false;
+    var staleBar = document.querySelector('.magnet-selbar');
+    if (staleBar && staleBar.parentNode) staleBar.parentNode.removeChild(staleBar);
     var html;
     if (r.keep.length){
       html = '<div class="magnet-count">共找到 ' + r.keep.length + ' 条结果</div>'
@@ -2057,12 +2063,20 @@ function renderMagnetResults(items, box, q){
         + ' data-label-shown="已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击收起）">已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击查看）</button>'
         + '<div class="magnet-blocked" style="display:none;">' + magnetRowsHtml(r.blocked, box._mSel) + '</div>';
     }
+    /* 键 → 磁力串索引：三桶（keep / 相关度较低 / 已屏蔽）都要查得到，
+       否则勾了折叠区里的条目点「115 离线」会提示没勾选 */
+    box._mMap = {};
+    r.keep.concat(r.demoted, r.blocked).forEach(function(x){
+      box._mMap[magnetRowKey(x)] = decodeXmlEntities(String(x.magnet || '').trim());
+    });
     box.innerHTML = html;
   }).catch(function(){
     // 过滤词读失败也要把动漫源的筛选条画出来（否则「一定显示」在异常路径上会漏）
     box._mItems = items;
     box._mSel = {};
     box._mSelOn = false;
+    box._mMap = {};
+    items.forEach(function(x){ box._mMap[magnetRowKey(x)] = decodeXmlEntities(String(x.magnet || '').trim()); });
     var fAnime = items.length > 0 && items[0].source === 'anime';
     box.innerHTML = magnetFansubBar(items, fAnime) + '<div class="magnet-list">' + magnetRowsHtml(items, box._mSel) + '</div>';
   });
@@ -2132,6 +2146,7 @@ function magnetBoxOf(el){
   }
   return null;
 }
+var magnetSelBox = null;   // 当前处于多选状态的结果容器（浮动条挂在 body 上，靠它回指）
 function magnetSelCount(box){
   var sel = box._mSel || {}, n = 0;
   for (var k in sel) if (sel[k]) n++;
@@ -2139,8 +2154,9 @@ function magnetSelCount(box){
 }
 function magnetSelSync(box){
   if (!box) return;
+  magnetSelBox = box;
   var n = magnetSelCount(box);
-  var bar = box.querySelector ? box.querySelector('.magnet-selbar') : null;
+  var bar = document.querySelector ? document.querySelector('.magnet-selbar') : null;
   if (!n){
     box._mSelOn = false;
     if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
@@ -2153,7 +2169,7 @@ function magnetSelSync(box){
     bar.innerHTML = '<span class="msb-count"></span>'
       + '<button type="button" class="msb-cancel" onclick="magnetSelClear(this)">取消</button>'
       + '<button type="button" class="msb-go" onclick="magnetSelGo(this)">115 离线</button>';
-    box.appendChild(bar);
+    document.body.appendChild(bar);   // fixed 贴屏幕底部；挂在 body 上才不会被弹窗的 transform 影响定位
   }
   var c = bar.querySelector('.msb-count');
   if (c) c.textContent = '已选 ' + n + ' 条';
@@ -2173,11 +2189,16 @@ function magnetSelTap(ev, el){
   magnetSelSync(box);
 }
 function magnetSelClear(from){
-  var box = (from && from._mItems) ? from : magnetBoxOf(from);
-  if (!box) return;
+  var box = (from && from._mItems) ? from : (magnetBoxOf(from) || magnetSelBox);
+  // from 可能是浮动条上的按钮（已挂在 body 上，向上找不到结果盒）——兜底直接全局清掉浮条
+  if (!box){
+    var stray = document.querySelector('.magnet-selbar');
+    if (stray && stray.parentNode) stray.parentNode.removeChild(stray);
+    return;
+  }
   box._mSel = {};
   box._mSelOn = false;
-  var bar = box.querySelector('.magnet-selbar');
+  var bar = document.querySelector('.magnet-selbar');
   if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
   var on = box.querySelectorAll('.mr-check.on');
   for (var i = 0; i < on.length; i++){
@@ -2186,23 +2207,35 @@ function magnetSelClear(from){
   }
 }
 function magnetSelGo(from){
-  var box = magnetBoxOf(from);
+  var box = magnetBoxOf(from) || magnetSelBox;
   if (!box) return;
   var sel = box._mSel || {};
+  var map = box._mMap || {};
   var mags = [], seen = {};
-  var items = box._mItems || [];
-  for (var i = 0; i < items.length; i++){
-    var it = items[i];
-    var k = magnetRowKey(it);
-    if (!sel[k] || seen[k]) continue;
-    var m = String(it.magnet || '').trim();
+  for (var key in sel){
+    if (!sel[key] || seen[key]) continue;
+    /* 优先查渲染时建的索引（含相关度较低 / 已屏蔽两个折叠区），没有再用 _mItems 兜底 */
+    var m = String(map[key] || '').trim();
+    if (!m){
+      var items = box._mItems || [];
+      for (var i = 0; i < items.length; i++){
+        if (magnetRowKey(items[i]) === key){ m = decodeXmlEntities(String(items[i].magnet || '').trim()); break; }
+      }
+    }
     if (!m) continue;
-    seen[k] = 1;
+    seen[key] = 1;
     mags.push(m);
   }
   if (!mags.length){ showToast('请先勾选要离线的磁力', 'error'); return; }
   magnetSelClear(box);
-  toolboxMagnetOffline(mags);   // 多条一次提交（115 支持一次传多条）
+  // v436：有影片上下文（自动化页 / 详情页）→ 加入当前影片的自动化任务，可继续整理；
+  // 磁力库那种纯离线只在没有影片上下文时才走
+  if (auto115Doc){
+    closeAllSheets();
+    auto115AddMagnets(mags);
+  } else {
+    toolboxMagnetOffline(mags);   // 多条一次提交（115 支持一次传多条）
+  }
 }
 /* 骨架屏：6 行占位，行高与真实结果一致，搜索完成时不会跳版 */
 function magnetSkeletonHtml(){
@@ -6531,7 +6564,7 @@ function openMagnetCombo(tab){
   switchMagnetComboTab(want);
   // 添加磁力：每次进入都用全新的 composer（清空上次残留），不残留上次粘贴的内容
   if (want !== 'search') auto115ComposerReset('magnetComposer');
-  renderMagnetQuickChips();
+  syncMagnetModeBtn();
   openSheet('magnetComboSheet');
 }
 function fillMagnetQuery(type){
@@ -6544,18 +6577,47 @@ function fillMagnetQuery(type){
   qInp.value = q;
   toggleMagnetClear();
 }
-function renderMagnetQuickChips(){
-  var wrap = document.getElementById('magnetQuickChips');
-  if (!wrap) return;
-  var chips = wrap.querySelectorAll('.mqc-chip');
-  for (var i = 0; i < chips.length; i++){
-    var t = chips[i].getAttribute('data-type');
-    var has = false;
-    if (!auto115Doc) has = false;
-    else if (t === 'dvdId') has = !!auto115Doc.dvdId;
-    else if (t === 'title') has = !!auto115Doc.filmTitle;
-    else if (t === 'original') has = !!auto115Doc.originalTitle;
-    chips[i].style.display = has ? '' : 'none';
+/* v436：把原来「番号 / 影片名 / 原始标题」三个 chip 收成搜索框内的一个切换按钮（类似片名/原名切换），
+   点一下换一种取词来源并直接填进输入框；只有一种可取的值时不显示按钮（切了也没变化）。 */
+var MAGNET_QUERY_MODES = [
+  { key: 'dvdId', label: '番号' },
+  { key: 'title', label: '影片名' },
+  { key: 'original', label: '原名' }
+];
+function magnetQueryModeHas(key){
+  if (!auto115Doc) return false;
+  if (key === 'dvdId') return !!auto115Doc.dvdId;
+  if (key === 'title') return !!auto115Doc.filmTitle;
+  if (key === 'original') return !!auto115Doc.originalTitle;
+  return false;
+}
+function syncMagnetModeBtn(){
+  var btn = document.getElementById('magnetModeBtn');
+  if (!btn) return;
+  var avail = MAGNET_QUERY_MODES.filter(function(m){ return magnetQueryModeHas(m.key); });
+  if (avail.length < 2){ btn.style.display = 'none'; return; }
+  var cur = state.magnetQueryMode || avail[0].key;
+  var hit = avail.filter(function(m){ return m.key === cur; })[0] || avail[0];
+  btn.style.display = '';
+  btn.textContent = hit.label;
+  btn.setAttribute('data-mode', hit.key);
+}
+function cycleMagnetQueryMode(){
+  var btn = document.getElementById('magnetModeBtn');
+  var avail = MAGNET_QUERY_MODES.filter(function(m){ return magnetQueryModeHas(m.key); });
+  if (avail.length < 2) return;
+  var cur = btn ? btn.getAttribute('data-mode') : '';
+  var idx = -1;
+  for (var i = 0; i < avail.length; i++){ if (avail[i].key === cur) idx = i; }
+  var next = avail[(idx + 1) % avail.length];
+  state.magnetQueryMode = next.key;
+  fillMagnetQuery(next.key);
+  if (btn){
+    btn.textContent = next.label;
+    btn.setAttribute('data-mode', next.key);
+    btn.classList.remove('flip');
+    void btn.offsetWidth;
+    btn.classList.add('flip');
   }
 }
 function switchMagnetComboTab(tab){
@@ -6572,10 +6634,13 @@ function switchMagnetComboTab(tab){
   // 并清掉上一次的搜索结果，避免残留别的片子搜过的内容
   if (tab === 'search'){
     var qInp = document.getElementById('magnetQueryInput');
+    // v436：默认取番号（有的话），没有就影片名；搜索框右侧按钮显示当前取词来源
+    state.magnetQueryMode = (auto115Doc && auto115Doc.dvdId) ? 'dvdId' : 'title';
     if (qInp){
       qInp.value = auto115Doc ? (auto115Doc.dvdId || auto115Doc.filmTitle || '') : '';
       toggleMagnetClear();
     }
+    syncMagnetModeBtn();
     var resBox = document.getElementById('magnetResults');
     if (resBox) resBox.innerHTML = '<div class="tmdb-msg">输入关键词后点击「搜索」</div>';
     /* v425：进搜索页先判定当前影片是不是「动画剧集」—— 决定这次走动漫源还是 bt4g。
@@ -6631,6 +6696,16 @@ function auto115ComposerNewRow(box){
     }).catch(function(){});
   };
   inputRow.appendChild(ta);
+  // v436：多行输入时每行可单独删掉；只剩一行时点 × 只清空内容，不删框
+  var del = document.createElement('button');
+  del.type = 'button'; del.className = 'mc-del'; del.textContent = '×';
+  del.setAttribute('aria-label', '删除这一行');
+  del.onclick = function(){
+    var rows = box.querySelectorAll('.mc-input-row');
+    if (rows.length <= 1){ ta.value = ''; return; }
+    if (inputRow.parentNode) inputRow.parentNode.removeChild(inputRow);
+  };
+  inputRow.appendChild(del);
   box.appendChild(inputRow);
   return inputRow;
 }
@@ -6685,6 +6760,13 @@ function auto115AddMagnetTask(){
   if (!mags.length){ showToast('请先添加磁力链接', 'error'); return; }
   if (mags.some(function(m){ return !auto115IsOfflineLink(m); })){ showToast('存在无效链接，请检查', 'error'); return; }
   auto115CloseMagnetModal();
+  auto115AddMagnets(mags);
+}
+/* v436：加入自动化的统一入口——弹窗「确定」与磁力结果多选都走这里，
+   都挂到当前影片的任务列表（不是磁力库），单条走经典单磁力任务、多条走 multi。 */
+function auto115AddMagnets(mags){
+  mags = (mags || []).filter(Boolean);
+  if (!mags.length){ showToast('请先添加磁力链接', 'error'); return; }
   auto115EnsureDoc().then(function(doc){
     /* 去重：批内重复 / 已在该影片列表里 → 跳过 */
     var seen = {}, kept = [], dupExist = false;
@@ -6718,7 +6800,7 @@ function auto115AddMagnetTask(){
     }
     doc.tasks.unshift(t);
     auto115Expanded[t.id] = true;
-    return auto115Save().then(function(){
+    return auto115Save(doc).then(function(){
       showToast('已加入自动化' + (kept.length > 1 ? '（' + kept.length + ' 条磁力）' : ''), 'success');
       auto115ComposerReset('magnetComposer');
       return openAuto115Page().then(function(){ return auto115Run(t); });
