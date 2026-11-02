@@ -727,8 +727,20 @@ function normalizeJavbusFilm(d, opts){
     Object.keys(params || {}).forEach(function (k) { if (params[k] != null) wu.searchParams.set(k, params[k]); });
     var code = (opts.code || '').trim();
     if (code) wu.searchParams.set('code', code);
+    /* v424：qid = 一次用户动作（一次点击）的批次号。
+       智能搜索在一次点击里可能并发 movie / tv / person 三个请求，额度必须按「点击次数」算而不是请求数：
+       同一个 qid 只记第一次；qid 同时透传给服务端（checkQuota 幂等），保证 /quota 回填的数字也一致。 */
+    var qid = (opts.qid || '').trim();
+    if (qid) wu.searchParams.set('qid', qid);
     // 配额计数：仅服务端代理路径消耗共享配额（自填 key 直连不计数）。search/save 区分；/videos、/images、/person 为读取不计；详情按 id 去重避免语言兜底重复计数
-    if (path.indexOf('/search') >= 0) quotaInc('tmdbSearch');
+    if (path.indexOf('/search') >= 0) {
+      if (!qid) quotaInc('tmdbSearch');
+      else if (_searchQidSeen.indexOf(qid) < 0) {
+        quotaInc('tmdbSearch');
+        _searchQidSeen.push(qid);
+        if (_searchQidSeen.length > 20) _searchQidSeen.shift();   // 只留最近 20 个批次，防无限增长
+      }
+    }
     else if (path.indexOf('/videos') < 0 && path.indexOf('/images') < 0 && path.indexOf('/person/') < 0 && path.indexOf('/collection/') < 0) {
       var _m = path.match(/\/(movie|tv)\/(\d+)/); var _id = _m ? _m[2] : null; var _day = quotaDayKey();
       if (!_id || !(quotaSaveSeen[_day] && quotaSaveSeen[_day][_id])) {
@@ -775,6 +787,7 @@ function normalizeJavbusFilm(d, opts){
     full:   {}
   };
   var quotaSaveSeen = {}; // 按天去重，避免详情语言兜底下 tmdbSave 重复计数
+  var _searchQidSeen = []; // v424：一次点击内的多个 /search 子请求共用一个 qid，只计一次额度
   function quotaDayKey(){ var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
   function quotaStoreKey(){ return 'nfo_quota_' + quotaDayKey(); }
   function quotaLoad(){ try { return JSON.parse(localStorage.getItem(quotaStoreKey()) || '{}'); } catch (e) { return {}; } }
@@ -794,6 +807,42 @@ function normalizeJavbusFilm(d, opts){
       out.push({ field: f, label: QUOTA_LABELS[f], used: used, limit: lim, remaining: Math.max(0, lim - used) });
     });
     return out;
+  }
+
+  // ===== v424 智能搜索：判定「这次搜到的是电影还是剧集」=====
+  /* 归一化片名：小写 + 去掉字母数字汉字以外的字符，让「教父 The Godfather」和「教父」可比 */
+  function tmdbNormTitle(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '');
+  }
+  /* 单条结果的匹配强度：2 = 强匹配（标题/原名与查询全等）、1 = 弱匹配（互相包含）、0 = 不相关 */
+  function tmdbMatchLevel(item, qNorm) {
+    if (!item || !qNorm) return 0;
+    var names = [item.title, item.name, item.original_title, item.original_name];
+    var best = 0;
+    for (var i = 0; i < names.length; i++) {
+      var n = tmdbNormTitle(names[i]);
+      if (!n) continue;
+      if (n === qNorm) return 2;
+      if (best < 1 && (n.indexOf(qNorm) === 0 || qNorm.indexOf(n) === 0)) best = 1;
+    }
+    return best;
+  }
+  /* 电影 / 剧集两批结果 → 这次应该显示哪一类。
+     primary = 'movie' | 'tv' | ''（两类都空，交给调用方去搜人物）。
+     判定顺序：强匹配条数多者胜 → 只有一类有强匹配就选它 → 都没强匹配时按结果条数兜底
+     （一边有结果另一边空，直接选有结果的那边；两边都有就选条数多的）。 */
+  function classifyTmdbResults(movies, tvs, q) {
+    movies = movies || []; tvs = tvs || [];
+    var qNorm = tmdbNormTitle(q);
+    var mStrong = 0, tStrong = 0, i;
+    for (i = 0; i < movies.length; i++) if (tmdbMatchLevel(movies[i], qNorm) >= 2) mStrong++;
+    for (i = 0; i < tvs.length; i++) if (tmdbMatchLevel(tvs[i], qNorm) >= 2) tStrong++;
+    var primary = '';
+    if (mStrong || tStrong) primary = (tStrong > mStrong) ? 'tv' : 'movie';
+    else if (movies.length && !tvs.length) primary = 'movie';
+    else if (tvs.length && !movies.length) primary = 'tv';
+    else if (movies.length && tvs.length) primary = (tvs.length > movies.length * 1.5) ? 'tv' : 'movie';
+    return { primary: primary, movieStrong: mStrong, tvStrong: tStrong, movieCount: movies.length, tvCount: tvs.length };
   }
 
   // ===== v418 磁力搜索垃圾过滤（纯逻辑，三层方案）=====
@@ -868,6 +917,9 @@ function normalizeJavbusFilm(d, opts){
     magnetRelevant: magnetRelevant,
     magnetSpam: magnetSpam,
     filterMagnetResults: filterMagnetResults,
+    tmdbNormTitle: tmdbNormTitle,
+    tmdbMatchLevel: tmdbMatchLevel,
+    classifyTmdbResults: classifyTmdbResults,
     buildMovieXml: buildMovieXml,
     buildTvShowXml: buildTvShowXml,
     TRANSLATE_SYSTEM_PROMPT: TRANSLATE_SYSTEM_PROMPT,

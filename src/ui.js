@@ -947,7 +947,7 @@ function renderLibSearchDropdown(films, q, mode){
     }).join('');
     _libSearchActive = 0;
     dd.classList.remove('hidden');
-    fetchTrailersForResults(films, state.tmdbMediaType);
+    fetchTrailersForResults(films, (state.tmdbMediaType === 'tv') ? 'tv' : 'movie');
     return;
   }
   /* 本地结果（保留兼容，当前库页搜索不再使用） */
@@ -1115,7 +1115,8 @@ function renderTMDBResults(results){
     box.innerHTML = '<div class="empty"><div class="empty-title">未找到匹配结果</div><div class="empty-desc">换个关键词试试</div></div>';
     return;
   }
-  var mt = state.tmdbMediaType;
+  // v424：手机端 tmdbMediaType 初始为空（类型未知），PC 端没有自动识别，空值统一按电影处理
+  var mt = (state.tmdbMediaType === 'tv') ? 'tv' : 'movie';
   box.innerHTML = results.slice(0, 20).map(function(item){
     var name = item.title || item.name || item.original_title || item.original_name || '';
     var orig = item.original_title || item.original_name || '';
@@ -1257,7 +1258,7 @@ function syncSearchSourceUI(){
   var typeSel = document.getElementById('tmdbTypeBtn');
   if (typeSel){
     typeSel.style.display = (state.metaSource === 'tmdb') ? '' : 'none';
-    typeSel.value = state.tmdbMediaType;
+    typeSel.value = (state.tmdbMediaType === 'tv') ? 'tv' : 'movie';
   }
   var censor = document.getElementById('javCensorBtn');
   if (censor){

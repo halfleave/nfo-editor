@@ -172,4 +172,18 @@ const sortItems = [
 assert(NfoCore.filterMagnetResults(sortItems, '某电影', [], false).keep[0].seeders === 100, '优化：做种数高的排前');
 assert(NfoCore.filterMagnetResults([{ title: '某电影1' }, { title: '某电影2' }], '某电影', [], false).keep.length === 2, '优化：无磁力链接项不参与去重');
 
+/* —— v424 智能搜索：识别命中的是电影还是剧集 —— */
+assert(NfoCore.classifyTmdbResults([{ title: '教父' }], [{ name: '教父剧版' }], '教父').primary === 'movie', '识别：电影标题全等 → 电影');
+assert(NfoCore.classifyTmdbResults([{ title: '教父' }], [{ name: '教父' }], '教父').primary === 'movie', '识别：两类都全等 → 电影优先');
+assert(NfoCore.classifyTmdbResults([{ title: '教父2' }], [{ name: '教父' }], '教父').primary === 'tv', '识别：剧集全等、电影只是前缀 → 剧集');
+assert(NfoCore.classifyTmdbResults([{ title: '无关片' }], [], '教父').primary === 'movie', '识别：只有电影有结果（即使弱匹配）→ 电影');
+assert(NfoCore.classifyTmdbResults([], [{ name: '无关剧' }], '教父').primary === 'tv', '识别：只有剧集有结果 → 剧集');
+assert(NfoCore.classifyTmdbResults([], [], '教父').primary === '', '识别：两类都空 → 空（交给上层搜人物）');
+assert(NfoCore.classifyTmdbResults([{ title: 'A' }], [{ name: 'B' }, { name: 'C' }], 'x').primary === 'tv', '识别：都无强匹配时条数多者胜');
+assert(NfoCore.classifyTmdbResults([{ title: '请回答1988' }], [{ name: '请回答1988' }], '请回答1988').movieCount === 1, '识别：计数原样返回');
+assert(NfoCore.tmdbMatchLevel({ title: 'The Godfather' }, NfoCore.tmdbNormTitle('the godfather')) === 2, '识别：大小写/空格归一化后全等');
+assert(NfoCore.tmdbMatchLevel({ original_title: '教父' }, NfoCore.tmdbNormTitle('教父')) === 2, '识别：original_title 也参与匹配');
+assert(NfoCore.tmdbMatchLevel({ title: '教父2' }, NfoCore.tmdbNormTitle('教父')) === 1, '识别：前缀算弱匹配');
+assert(NfoCore.tmdbMatchLevel({ title: '完全无关' }, NfoCore.tmdbNormTitle('教父')) === 0, '识别：不相关为 0');
+
 console.log('core-shared 完成');

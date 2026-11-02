@@ -416,7 +416,9 @@ var state = {
   translateFailedIds: new Set(), // 翻译失败的影片 id 集合（详情页简介下方显示「重新翻译」按钮）
   overviewTab: 'movie',
   adult: false,
-  metaSource: 'tmdb', tmdbMediaType: 'movie', // tmdbMediaType: 'movie' | 'tv'，支持剧集搜索
+  /* v424：tmdbMediaType 默认空串 = 「还不知道这次搜到的是什么」。
+     搜索前不显示右上角类型切换，搜到电影/剧集后自动置为该类型并显示，用户可再切。 */
+  metaSource: 'tmdb', tmdbMediaType: '',
   javCensor: 'masked', // javCensor: 'masked'(有码) | 'uncensored'(无码)，仅 metaSource==='jav' 时生效，切换 JavBus 搜索路由
   source: '',
   javbusId: null, javbusMagnets: []   // javbusId 记录番号供刷新；javbusMagnets 为详情页抓取的磁力列表；JavBus 基址由 Worker 代理地址自动推导（state.magnetWorker + '/javbus'）
@@ -8176,31 +8178,125 @@ var DEFAULT_WORKER = 'https://nfo-magnet-proxy-vercel.vercel.app';
 function tmdbImgUrl(path, size){ return NfoCore.tmdbImgUrl(path, size); }
 /* CC_MAP（ISO 3166-1 → 中文国名）已迁入共享核心 src/core-shared.js（NfoCore.CC_MAP）；populateFromTMDB 改调 NfoCore.normalizeTmdbFilm，本地不再引用 CC_MAP */
 
+/* ===== v424 智能搜索（只动 TMDB 影视搜索；JAV / 磁力搜索不涉及）=====
+   一次点击 = 一次额度：同批次内并发 movie / tv / person 多个请求共享一个 qid（见 core-shared.tmdbRequest）。
+   流程：并发搜电影 + 剧集 → 命中哪类就只显示哪类（不合并）→ 两类都空才去搜人物。
+   切换类型：按钮立即翻牌 + 结果区立即进 loading，防抖窗口过后才真正发请求（连点只发最后一次）；
+   另一类的结果刚才已经拿到、在缓存里，就直接渲染，0 请求。
+   请求序号兜底：过期结果一律丢弃，慢的电影结果不会覆盖后来的剧集结果。 */
+var TMDB_RESEARCH_DELAY = 400;   // 切换类型后的防抖窗口（连点只保留最后一次）；想更慢改成 1000 即可
+var _tmdbResearchTimer = null;
+var _tmdbSearchSeq = 0;
+var _tmdbCache = {};      // 当前关键词下已拿到的结果：{ movie:[], tv:[], person:[] }
+var _tmdbCacheQ = '';     // 缓存归属的关键词，换词即失效
+
+function tmdbPath(type){ return type === 'tv' ? '/search/tv' : (type === 'person' ? '/search/person' : '/search/movie'); }
+function tmdbNewQid(){ return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function cancelTmdbResearch(){
+  if (_tmdbResearchTimer){ clearTimeout(_tmdbResearchTimer); _tmdbResearchTimer = null; }
+}
+function tmdbResetCache(q){ if (_tmdbCacheQ !== q){ _tmdbCache = {}; _tmdbCacheQ = q; } }
+function tmdbReqBase(key, code, qid){
+  return { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code, qid: qid };
+}
+/* 渲染某一类型的结果（只渲染这一类，不合并另一类） */
+function renderTmdbType(list, type, py){
+  state.tmdbMediaType = type;
+  syncRightSideControls();          // 命中后才让右上角的类型切换出现
+  if (type === 'person'){ renderTMDBPersonResults(list || []); return; }
+  if (!list || !list.length){
+    var box = document.getElementById('tmdbResults');
+    if (box) box.innerHTML = '<div class="tmdb-msg">没有找到匹配的' + tmdbTypeLabel(type) + '结果<br>可以切到其它类型再看看</div>';
+    return;
+  }
+  renderTMDBResults(NfoCore.rankTitleYearResults(list, py));
+}
+/* 点「搜索」/ 回车：自动判定类型的一次点击 */
 function searchTMDB(){
-  var q = document.getElementById('tmdbQuery').value.trim();
+  var q = (document.getElementById('tmdbQuery').value || '').trim();
   if (!q){ showToast('请输入影片名', 'error'); return; }
+  cancelTmdbResearch();
+  tmdbResetCache(q);
   addSearchHistory(q);
+  // 新的一次搜索：类型未知 → 先把右上角切换藏起来，等命中再决定显示什么
+  state.tmdbMediaType = '';
+  syncRightSideControls();
+  var seq = ++_tmdbSearchSeq;
   var box = document.getElementById('tmdbResults');
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
     var key = res[0] || '', code = res[1] || '';
-    // TMDB 成人内容：里模式解锁后包含，否则不包含
+    var adult = state.themeHidden ? 'true' : 'false';   // 里模式解锁后包含成人内容
+    var base = tmdbReqBase(key, code, tmdbNewQid());    // 整个点击共用一个 qid = 只算一次额度
+    var py = NfoCore.parseTitleYear(q);                 // v398：「标题.年份」拆开搜、命中置顶
+    var params = { language: 'zh-CN', include_adult: adult, query: py.title };
+    // 单类失败不影响另一类；ok=false 的结果不进缓存（下次切换会真的重试，不会误报「没有结果」）
+    function req(type){
+      return NfoCore.tmdbRequest(tmdbPath(type), params, base)
+        .then(function(d){ return { ok: true, list: (d && d.results) || [] }; })
+        .catch(function(){ return { ok: false, list: [] }; });
+    }
+    return Promise.all([req('movie'), req('tv')]).then(function(r){
+      if (seq !== _tmdbSearchSeq) return;               // 期间又切了 / 又搜了 → 本批结果作废
+      var mv = r[0].list, tv = r[1].list;
+      if (r[0].ok) _tmdbCache.movie = mv;
+      if (r[1].ok) _tmdbCache.tv = tv;
+      var cls = NfoCore.classifyTmdbResults(mv, tv, py.title);
+      if (cls.primary === 'movie' || cls.primary === 'tv'){
+        renderTmdbType(cls.primary === 'movie' ? mv : tv, cls.primary, py);
+        return;
+      }
+      // 电影、剧集都没命中 → 才轮到搜人物
+      return req('person').then(function(pr){
+        if (seq !== _tmdbSearchSeq) return;
+        if (pr.ok) _tmdbCache.person = pr.list;
+        if (pr.list.length){ renderTmdbType(pr.list, 'person', py); return; }
+        box.innerHTML = '<div class="tmdb-msg">未找到匹配结果</div>';
+      });
+    });
+  }).catch(function(err){
+    if (seq !== _tmdbSearchSeq) return;
+    box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err && err.message) || '请求失败') + '</div>';
+  }).finally(function(){ if (seq === _tmdbSearchSeq) stopLoadingRotator(); });
+}
+/* 按指定类型搜（切换类型后走这里） */
+function tmdbSearchByType(type){
+  var q = (document.getElementById('tmdbQuery').value || '').trim();
+  if (!q) return;
+  tmdbResetCache(q);
+  var seq = ++_tmdbSearchSeq;
+  var box = document.getElementById('tmdbResults');
+  stopLoadingRotator();
+  box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
     var adult = state.themeHidden ? 'true' : 'false';
-    var mt = state.tmdbMediaType;
-    var path = mt === 'tv' ? '/search/tv' : (mt === 'person' ? '/search/person' : '/search/movie');
-    var opts = { ownKey: key, workerBase: state.magnetWorker || DEFAULT_WORKER, code: code };
-    /* v398 搜索增强：「标题.年份」（教父.1972 / 教父 1972 / 教父（1972））拆出标题与年份，
-       query 只带标题去搜，拿到结果后把「标题对 + 年份也对」的精准项排到最上方（不再硬过滤，
-       完整结果仍在列表里）。片名本身像「请回答1988」不会被误拆（parseTitleYear 有分隔符要求）。 */
+    var base = tmdbReqBase(key, code, tmdbNewQid());    // 切换算一次新的点击 → 新 qid = 再计一次
     var py = NfoCore.parseTitleYear(q);
-    NfoCore.tmdbRequest(path, { language: 'zh-CN', include_adult: adult, query: py.title }, opts)
-      .then(function(data){
-        var list = NfoCore.rankTitleYearResults((data && data.results) || [], py);
-        if (state.tmdbMediaType === 'person') renderTMDBPersonResults(list);
-        else renderTMDBResults(list);
-      })
-      .catch(function(err){ box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err&&err.message)||'请求失败') + '</div>'; }).finally(function(){ stopLoadingRotator(); });
-  }).catch(function(){ stopLoadingRotator(); });
+    return NfoCore.tmdbRequest(tmdbPath(type), { language: 'zh-CN', include_adult: adult, query: py.title }, base)
+      .then(function(d){
+        if (seq !== _tmdbSearchSeq) return;
+        var list = (d && d.results) || [];
+        _tmdbCache[type] = list;
+        if (!list.length){ box.innerHTML = '<div class="tmdb-msg">没有找到匹配的' + tmdbTypeLabel(type) + '结果</div>'; return; }
+        renderTmdbType(list, type, py);
+      });
+  }).catch(function(err){
+    if (seq !== _tmdbSearchSeq) return;
+    box.innerHTML = '<div class="tmdb-msg">搜索失败：' + escapeHtml((err && err.message) || '请求失败') + '</div>';
+  }).finally(function(){ if (seq === _tmdbSearchSeq) stopLoadingRotator(); });
+}
+/* 切换类型后的调度：立即给反馈（按钮已翻牌 + 结果区 loading），防抖后再真正发请求。
+   窗口内又切了一次 → 清掉定时器重新计时，只搜最后一次。 */
+function scheduleTmdbTypeSearch(){
+  cancelTmdbResearch();
+  var box = document.getElementById('tmdbResults');
+  if (box){ stopLoadingRotator(); box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml); }
+  _tmdbSearchSeq++;                       // 让在途的旧请求立刻作废，别在等待窗口里插队渲染
+  _tmdbResearchTimer = setTimeout(function(){
+    _tmdbResearchTimer = null;
+    tmdbSearchByType(state.tmdbMediaType);
+  }, TMDB_RESEARCH_DELAY);
 }
 
 /* ===== R18.dev 元数据搜索（AV 元数据来源，经 Worker 代理） ===== */
@@ -8236,6 +8332,7 @@ function setMetaSource(src, btn){
   var sc = document.getElementById('searchClear');
   if (sc) sc.classList.remove('show');
   document.getElementById('tmdbResults').innerHTML = '';
+  state.tmdbMediaType = '';   // 换源后类型重新未知，右上角切换收起
   if (src === 'jav') updateJavPlaceholder();
   else updateSearchPlaceholder();
   renderSearchHistory(); // 切源后按当前源刷新历史（输入框已清空→显示历史）
@@ -8250,7 +8347,9 @@ function updateSearchPlaceholder(){
   else if (state.tmdbMediaType === 'person') el.placeholder = '输入演员 / 导演姓名';
   else el.placeholder = '泰坦尼克号';
 }
-/* TMDB 搜索的电影/剧集切换：复用 flip-type 翻转动画样式，仅在 metaSource==='tmdb' 时显示 */
+/* TMDB 搜索的类型切换：复用 flip-type 翻转动画。
+   v424：按钮不再常显——类型未知时隐藏，搜到电影/剧集/人物后自动出现并指向命中的类型；
+   三态保留（电影 → 剧集 → 人物）。切换时【保留关键词】直接重搜，不再清空输入框。 */
 function tmdbTypeLabel(mt){ return mt === 'tv' ? '剧集' : (mt === 'person' ? '人物' : '电影'); }
 function cycleTmdbType(){
   var order = ['movie','tv','person'];
@@ -8270,12 +8369,16 @@ function cycleTmdbType(){
     curEl.textContent = tmdbTypeLabel(next);
     btn.classList.remove('animating');
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ btn.classList.remove('no-transition'); }); });
-    var qEl = document.getElementById('tmdbQuery');
-    if (qEl) qEl.value = '';
-    var sc = document.getElementById('searchClear');
-    if (sc) sc.classList.remove('show');
-    document.getElementById('tmdbResults').innerHTML = '';
-    renderSearchHistory();
+    var q = (document.getElementById('tmdbQuery').value || '').trim();
+    // 另一类刚才并发搜过、结果已经在缓存里 → 直接渲染，不等防抖、不发请求
+    if (q && _tmdbCacheQ === q && _tmdbCache[next]){
+      cancelTmdbResearch();
+      stopLoadingRotator();
+      _tmdbSearchSeq++;
+      renderTmdbType(_tmdbCache[next], next, NfoCore.parseTitleYear(q));
+      return;
+    }
+    scheduleTmdbTypeSearch();
   }, 260);
 }
 function javCensorLabel(c){ return c === 'uncensored' ? '无码' : '有码'; }
@@ -8300,7 +8403,11 @@ function syncTmdbTypeBtn(){
   var btn = document.getElementById('tmdbTypeBtn');
   if (!btn) return;
   var curEl = btn.querySelector('.flip-type-layer.is-current');
-  if (state.metaSource === 'tmdb'){
+  /* 类型未知（还没搜索 / 刚换了关键词）→ 不显示切换按钮。
+     用户不该在搜索之前就先做一个自己也不知道对错的选择；搜到了再显示且直接写对。 */
+  var known = state.metaSource === 'tmdb'
+    && (state.tmdbMediaType === 'movie' || state.tmdbMediaType === 'tv' || state.tmdbMediaType === 'person');
+  if (known){
     btn.style.display = '';
     btn.classList.remove('animating');
     if (curEl) curEl.textContent = tmdbTypeLabel(state.tmdbMediaType);
@@ -8326,7 +8433,11 @@ function syncRightSideControls(){
   syncJavCensorBtn();
   var input = document.getElementById('tmdbQuery');
   var wrap = input ? input.parentNode : null;
-  if (wrap) wrap.classList.toggle('has-type-label', state.metaSource === 'tmdb' || state.metaSource === 'jav');
+  // 右侧是否真有控件显示，决定清除×和药丸的避让距离（类型未知时按钮是隐藏的）
+  var tb = document.getElementById('tmdbTypeBtn');
+  var jb = document.getElementById('javCensorBtn');
+  var anyShown = !!((tb && tb.style.display !== 'none') || (jb && jb.style.display !== 'none'));
+  if (wrap) wrap.classList.toggle('has-type-label', anyShown);
 }
 function syncSearchSourceUI(){
   var seg = document.querySelector('#searchMetaSeg .seg');
@@ -8783,6 +8894,9 @@ function clearSearch(){
   el.value = '';
   document.getElementById('searchClear').classList.remove('show');
   document.getElementById('tmdbResults').innerHTML = '';
+  // 清空 = 下一次是新的搜索：类型回到未知，右上角切换收起
+  state.tmdbMediaType = '';
+  syncRightSideControls();
   el.focus();
   renderSearchHistory(); // 清空后回到历史视图
 }
@@ -8801,7 +8915,9 @@ function renderTMDBResults(results){
     if (date) metaParts.push(date);
     if (orig && orig !== name) metaParts.push(orig);
     var meta = metaParts.join(' · ');
-    html += '<div class="tmdb-result" data-tmdb-id="' + item.id + '" data-tmdb-type="' + mt + '" data-poster-path="' + escapeAttr(item.poster_path || '') + '" onclick="selectTMDB(' + item.id + ')">';
+    /* 类型以结果自己携带的 media_type 为准（多类型混排时不会串）；没有则用当前搜索类型兜底 */
+    var itemType = (item.media_type === 'tv' || item.media_type === 'movie') ? item.media_type : (mt || 'movie');
+    html += '<div class="tmdb-result" data-tmdb-id="' + item.id + '" data-tmdb-type="' + itemType + '" data-poster-path="' + escapeAttr(item.poster_path || '') + '" onclick="selectTMDB(' + item.id + ')">';
     html += poster ? '<img src="' + poster + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>';
     html += '<div class="tr-info">';
     html += '<div class="tr-title">' + escapeHtml(name) + (item.adult ? '<span class="adult-tag">18+</span>' : '') + '</div>';
@@ -8811,7 +8927,8 @@ function renderTMDBResults(results){
   });
   box.innerHTML = html;
   // A+B+C：限并发拉取每个结果的预告信息，按 tmdb id 缓存到 IndexedDB，列表先渲染后懒加载点亮角标
-  fetchTrailersForResults(results.slice(0, 20), mt);
+  // v424：只渲染单一类型，这里统一用本次列表的类型（mt 为空时按电影处理）
+  fetchTrailersForResults(results.slice(0, 20), mt || 'movie');
 }
 /* ===== TMDB 人物搜索（仅手机端 v329+）：搜人物 → 反查参演作品 → 点作品直接保存影片 ===== */
 var _tmdbPersonPrevHtml = '';
