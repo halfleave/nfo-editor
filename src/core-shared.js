@@ -902,10 +902,14 @@ function normalizeJavbusFilm(d, opts){
       m = raw.match(/(?:^|[^0-9a-z])(\d{1,2})\s?[x×]\s?(\d{1,3})(?!\d)/i);
       if (m && +m[1] > 0 && +m[1] <= 30) { s = +m[1]; ep = +m[2]; }
     }
-    // 季号：Season 2 / 第2季 / 第二季 / 单独 S02
+    // 季号：Season 2 / 第2季 / 第二季 / 2季 / 单独 S02
     if (!s) {
       m = raw.match(/season\s*(\d{1,2})(?!\d)/i) || raw.match(/第\s*([零一二两三四五六七八九十\d]{1,3})\s*[季部]/);
       if (m) s = cnSmallNum(m[1]);
+    }
+    if (!s) {
+      m = raw.match(/(?:^|[^0-9])(\d{1,2})\s*季/);   // 「2季」这种省略「第」的写法（剧集磁力常见）
+      if (m && +m[1] > 0 && +m[1] <= 30) s = +m[1];
     }
     if (!s) {
       m = raw.match(/(?:^|[^a-z0-9])s(\d{1,2})(?![0-9a-z])/i);
@@ -915,6 +919,15 @@ function normalizeJavbusFilm(d, opts){
     if (!ep) {
       m = raw.match(/第\s*([零一二两三四五六七八九十百\d]{1,3})\s*[集话話]/);
       if (m) ep = cnSmallNum(m[1]);
+    }
+    // 「05集 / 12话」省略「第」的写法；「全10集 / 共10集」是总集数不是某一集，跳过
+    if (!ep && !/(?:全|共)\s*\d{1,4}\s*[集话話]/.test(raw)) {
+      m = raw.match(/(\d{1,4})\s*[集话話]/);
+      if (m && +m[1] > 0 && +m[1] < 1900) ep = +m[1];
+    }
+    if (!ep) {
+      m = raw.match(/episode\s*(\d{1,4})(?!\d)/i);
+      if (m) ep = +m[1];
     }
     if (!ep) {
       m = raw.match(/(?:^|[^a-z0-9])(?:ep|e)\s?(\d{1,3})(?![0-9a-z])/i);

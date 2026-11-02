@@ -207,6 +207,12 @@ assert(NfoCore.magnetEpLabel('[诸神字幕组][海贼王][1085][1080P]') === 'E
 assert(NfoCore.magnetEpLabel('葬送的芙莉莲 01-28 合集 1080p') === '01-28', '季集标签：合集范围');
 assert(NfoCore.magnetEpLabel('某电影.2023.2160p.WEB-DL.H265') === '', '季集标签：年份/分辨率不当集号');
 assert(NfoCore.magnetEpLabel('SSIS-123-C') === '', '季集标签：番号不误判');
+assert(NfoCore.magnetEpLabel('黑袍纠察队 2季05集 1080p') === 'S02E05', '季集标签：省略「第」的「2季05集」（剧集磁力常见）');
+assert(NfoCore.magnetEpLabel('某剧 12话 [1080p]') === 'E12', '季集标签：省略「第」的「12话」');
+assert(NfoCore.magnetEpLabel('The Boys Season 2 Episode 5 1080p') === 'S02E05', '季集标签：英文 Season/Episode 全称');
+assert(NfoCore.magnetEpLabel('权力的游戏 全10集 1080p') === '', '季集标签：全N集是总集数，不当某一集');
+assert(NfoCore.magnetEpLabel('权力的游戏 共10集') === '', '季集标签：共N集同样不当集号');
+assert(NfoCore.magnetEpLabel('[人人影视]黑袍纠察队.The.Boys.S02E05.中英字幕.HDTVrip.mp4') === 'S02E05', '季集标签：bt4g 剧集发布名（前缀+扩展名）');
 assert(NfoCore.magnetEpLabel('') === '', '季集标签：空标题返回空');
 
 console.log('core-shared 完成');

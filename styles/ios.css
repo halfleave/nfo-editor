@@ -952,9 +952,9 @@ html.stills-open, html.stills-open body { background: #000; }
 .settings-row.danger .sr-label { color: var(--danger); }
 /* 里模式开关：与标题拉开间距，图标改为黑底暗黄字 18+，普通模式下隐藏 */
 .settings-group.mode-group { margin-top: 18px; }
-/* 设置页顶部工具图标横排（取代原「工具箱」列表行入口） */
-.settings-tools { display: flex; gap: 8px; margin: 6px 0 var(--gap); }
-.settings-tool { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 4px; background: var(--card); border: none; border-radius: var(--radius-lg); box-shadow: 0 1px 2px rgba(0,0,0,0.05); -webkit-tap-highlight-color: transparent; }
+/* 设置页顶部工具图标横排（取代原「工具箱」列表行入口）：四个工具合在一个卡片里 */
+.settings-tools { display: flex; gap: 4px; margin: 6px 0 var(--gap); padding: 6px; background: var(--card); border-radius: var(--radius-lg); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.settings-tool { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 4px; background: transparent; border: none; border-radius: var(--radius-sm); -webkit-tap-highlight-color: transparent; }
 .settings-tool:active { background: var(--gray-fill); }
 .settings-tool .tc-icon { width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
 .settings-tool .tc-icon svg { width: 22px; height: 22px; }
@@ -1515,8 +1515,12 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* ===== 磁力搜索结果 ===== */
 .magnet-result { display: flex; align-items: center; gap: 12px; padding: 13px 4px; border-bottom: 0.5px solid var(--sep); }
 .magnet-result:active { background: var(--gray-fill); border-radius: var(--radius-sm); }
-.magnet-result .mr-icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-fill); color: var(--accent-fg); display: flex; align-items: center; justify-content: center; }
-.magnet-result .mr-icon svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+/* 左侧复选框（v430）：常显，点它进多选；勾中一点即进多选离线模式 */
+.magnet-result .mr-check { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--label-3); color: transparent; display: flex; align-items: center; justify-content: center; transition: background .15s, border-color .15s, color .15s; }
+.magnet-result .mr-check svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.magnet-result .mr-check.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.magnet-result.is-sel { background: var(--accent-fill); border-radius: var(--radius-sm); }
+.magnet-result .mr-check.sk-check { border-color: transparent; background: var(--gray-fill); }
 .magnet-result .mr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
 /* 标题两行（一行看不出是哪一季哪一集）；省略交给 CSS，DOM 里保留完整标题供自动化建档命名 */
 .magnet-result .mr-title { font-size: 15px; font-weight: 600; color: var(--label); line-height: 1.35; max-width: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; word-break: break-word; }
@@ -1576,7 +1580,21 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .mf-chip.active em { color: var(--accent-text); opacity: .75; }
 .mf-chip:active { opacity: .75; }
 .mf-more { flex: 0 0 auto; align-self: center; font-size: 12px; color: var(--label-3); }
-.magnet-result .mr-meta > .mr-fansub { flex: 0 1 auto; max-width: 42%; overflow: hidden; text-overflow: ellipsis; color: var(--accent-fg); font-weight: 600; }
+/* 字幕组不在行内显示（标题已带，按组看用上方筛选条） */
+/* ===== v430 多选 → 批量离线：底部浮条（勾第一个复选框后出现） ===== */
+.magnet-selbar {
+  position: sticky; bottom: 0; z-index: 3;
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 10px; padding: 10px 12px;
+  background: var(--card); border-top: 0.5px solid var(--sep);
+  border-radius: 14px; box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+}
+.magnet-selbar .msb-count { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.magnet-selbar button { flex: 0 0 auto; height: 32px; padding: 0 14px; border: none; border-radius: 16px; font-size: 13.5px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
+.magnet-selbar .msb-cancel { background: var(--card-fill); color: var(--label-2); }
+.magnet-selbar .msb-go { background: var(--accent); color: var(--accent-text); }
+.magnet-selbar button:active { opacity: .75; }
+.magnet-selbar button:disabled { opacity: .4; }
 .sheet-pad { padding: 16px var(--pad); }
 .ios-textarea { width: 100%; box-sizing: border-box; border: none; border-radius: 12px; background: var(--card-fill); color: var(--text); font-size: 16px; line-height: 1.6; padding: 10px 12px; resize: none; -webkit-appearance: none; }
 .ios-textarea::placeholder { font-size: 16px; color: var(--label-3); }
@@ -1586,8 +1604,9 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #filterWordsSheet .sheet-pad { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 #filterWordsSheet .ios-textarea { flex: 1; height: auto; min-height: 0; }
 #magnetComboSheet .magnet-sheet-head .magnet-clear:active { opacity: 0.5; }
-/* 磁力：添加/搜索 胶囊 tab */
-.magnet-combo-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 10px; }
+/* 磁力：添加/搜索 胶囊 tab（v432：tab 居中，过滤词绝对定位贴右，不再把 tab 挤到左边） */
+.magnet-combo-bar { position: relative; display: flex; align-items: center; justify-content: center; padding: 6px 2px 10px; }
+.magnet-combo-bar .magnet-filter-tab { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); }
 .magnet-filter-tab { appearance: none; -webkit-appearance: none; border: none; background: transparent; color: var(--label-2); font-family: inherit; font-size: 14px; padding: 6px 4px; -webkit-tap-highlight-color: transparent; }
 .magnet-filter-tab:active { opacity: .6; }
 .magnet-combo-tabs { display: inline-flex; background: var(--gray-fill); border-radius: 999px; padding: 3px; gap: 2px; }
@@ -1809,6 +1828,11 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 #page-toolbox-magnet .tbm-add-clear:active { opacity: .5; }
 #page-toolbox-magnet .tbm-offline { display: block; width: 65%; margin: 8px auto 0; border: none; border-radius: 20px; padding: 11px 0; background: var(--accent); color: #fff; font-size: 15px; font-weight: 600; }
 #page-toolbox-magnet .tbm-offline:active { opacity: .8; }
+/* v432：添加 tab 里的 +（空着也能点，追加一行输入框）与「离线到 115」并排 */
+#page-toolbox-magnet .tbm-add-ops { display: flex; align-items: stretch; justify-content: center; gap: 10px; margin-top: 8px; }
+#page-toolbox-magnet .tbm-add-ops .tbm-offline { width: auto; flex: 1 1 auto; max-width: 65%; margin: 0; }
+#page-toolbox-magnet .tbm-add-ops .tbm-plus { flex: 0 0 auto; width: 48px; border: none; border-radius: 20px; background: var(--accent); color: #fff; font-size: 22px; font-weight: 400; -webkit-tap-highlight-color: transparent; }
+#page-toolbox-magnet .tbm-add-ops .tbm-plus:active { opacity: .8; }
 #page-toolbox-magnet .tbm-offline.disabled { background: var(--card-fill); color: var(--label-3); }
 #page-toolbox-magnet .tbm-add.disabled .tbm-add-input { opacity: .55; }
 #page-toolbox-magnet .tbm-add-tip { display: none; padding: 7px 2px 0; font-size: 12px; line-height: 1.5; color: var(--label-3); }
@@ -2198,7 +2222,7 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .magnet-input { width: 100%; box-sizing: border-box; border: 1px solid var(--sep); border-radius: 12px; background: var(--gray-fill); color: var(--label); font-size: 14px; line-height: 1.5; padding: 10px 12px; resize: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 .magnet-input::placeholder { color: var(--label-2); }
 /* 多磁力 composer（v336）：默认单框 + 添加按钮；添加后收起为紧凑 chip，可继续叠加多条 */
-.magnet-composer { display: flex; flex-direction: column; gap: 10px; }
+.magnet-composer { display: flex; flex-direction: column; gap: 10px; max-height: 40vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .magnet-composer .mc-rows { display: flex; flex-direction: column; gap: 8px; }
 .magnet-composer .mc-chip { display: flex; align-items: center; gap: 8px; background: var(--gray-fill); border: 1px solid var(--sep); border-radius: 10px; padding: 8px 10px; }
 .magnet-composer .mc-text { flex: 1; font-size: 13px; line-height: 1.35; color: var(--label); word-break: break-all; max-height: 54px; overflow: hidden; }

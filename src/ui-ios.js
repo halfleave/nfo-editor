@@ -2033,11 +2033,13 @@ function renderMagnetResults(items, box, q){
     var r = NfoCore.filterMagnetResults(items, q, words, isDvd, fromAnime);
     box._mItems = r.keep;        // 供字幕组筛选重新渲染（不重新请求）
     box._mFansub = '';
+    box._mSel = {};              // 新一次搜索：清空上轮勾选
+    box._mSelOn = false;
     var html;
     if (r.keep.length){
       html = '<div class="magnet-count">共找到 ' + r.keep.length + ' 条结果</div>'
-        + magnetFansubBar(r.keep)
-        + '<div class="magnet-list">' + magnetRowsHtml(r.keep) + '</div>';
+        + magnetFansubBar(r.keep, fromAnime)
+        + '<div class="magnet-list">' + magnetRowsHtml(r.keep, box._mSel) + '</div>';
     } else if (r.demoted.length || r.blocked.length){
       html = '<div class="tmdb-msg">没有直接匹配的结果，相关度较低或已屏蔽的见下方</div>';
     } else {
@@ -2047,32 +2049,52 @@ function renderMagnetResults(items, box, q){
       html += '<button type="button" class="magnet-filtered-toggle" onclick="toggleMagnetBlocked(this)"'
         + ' data-label-hidden="相关度较低已折叠 ' + r.demoted.length + ' 条（点击展开）"'
         + ' data-label-shown="相关度较低 ' + r.demoted.length + ' 条（点击收起）">相关度较低已折叠 ' + r.demoted.length + ' 条（点击展开）</button>'
-        + '<div class="magnet-blocked" style="display:none;">' + magnetRowsHtml(r.demoted) + '</div>';
+        + '<div class="magnet-blocked" style="display:none;">' + magnetRowsHtml(r.demoted, box._mSel) + '</div>';
     }
     if (r.blocked.length){
       html += '<button type="button" class="magnet-filtered-toggle" onclick="toggleMagnetBlocked(this)"'
         + ' data-label-hidden="已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击查看）"'
         + ' data-label-shown="已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击收起）">已按过滤词隐藏 ' + r.blocked.length + ' 条结果（点击查看）</button>'
-        + '<div class="magnet-blocked" style="display:none;">' + magnetRowsHtml(r.blocked) + '</div>';
+        + '<div class="magnet-blocked" style="display:none;">' + magnetRowsHtml(r.blocked, box._mSel) + '</div>';
     }
     box.innerHTML = html;
   }).catch(function(){
+    // 过滤词读失败也要把动漫源的筛选条画出来（否则「一定显示」在异常路径上会漏）
     box._mItems = items;
-    box.innerHTML = '<div class="magnet-list">' + magnetRowsHtml(items) + '</div>';
+    box._mSel = {};
+    box._mSelOn = false;
+    var fAnime = items.length > 0 && items[0].source === 'anime';
+    box.innerHTML = magnetFansubBar(items, fAnime) + '<div class="magnet-list">' + magnetRowsHtml(items, box._mSel) + '</div>';
   });
 }
 /* ===== v425 字幕组筛选（仅在动漫源结果里出现）=====
    字幕组从本次结果里聚合，不额外请求；只有 ≥2 个组时才出筛选条（1 个组筛了也没意义）。
    点击只重渲染列表，不重新搜。 */
-function magnetFansubBar(items){
+/* 取一条结果的字幕组：优先服务端给的 fansub 字段；为空时从标题首个方括号兜底。
+   发布名惯例是「[字幕组] 片名 - 08 ...」，兜底能把没字段的条目也归到组里，
+   但必须挡住分辨率/编码/语言/「新番」这类标签，否则会造出假组名。 */
+function magnetFansubOf(it){
+  var g = String((it && it.fansub) || '').trim();
+  if (g) return g;
+  var m = String((it && it.title) || '').match(/^\s*[\[【]\s*([^\]】]{2,24})\s*[\]】]/);
+  if (!m) return '';
+  var v = m[1].trim();
+  if (/\d{3,}/.test(v)) return '';   // [1080] [2160] 这类
+  if (/(1080|720|2160|4k|web|bdrip|bluray|hevc|avc|x26[45]|aac|flac|chs|cht|big5|\bgb\b|简|繁|内封|外挂|双语|多语|合集|全集|raw|mp4|mkv|新番|连载|完结|剧场版|ova)/i.test(v)) return '';
+  return v;
+}
+/* forceAnime（本次走的是动漫源）→ 一定要出筛选条：认不出组的条目算进「全部」，
+   所以哪怕只认出一个组、甚至一个都认不出，也给「全部 N」这一个 chip，不让用户以为筛选丢了。 */
+function magnetFansubBar(items, forceAnime){
   var map = {}, order = [];
   for (var i = 0; i < items.length; i++){
-    var g = String(items[i].fansub || '').trim();
+    var g = magnetFansubOf(items[i]);
     if (!g) continue;
     if (!map[g]){ map[g] = 0; order.push(g); }
     map[g]++;
   }
-  if (order.length < 2) return '';
+  if (!forceAnime && order.length < 2) return '';
+  if (forceAnime && !items.length) return '';
   order.sort(function(a, b){ return map[b] - map[a]; });
   var cap = order.slice(0, 12);
   var html = '<div class="magnet-fansub-bar">';
@@ -2096,15 +2118,98 @@ function magnetPickFansub(btn){
   var chips = bar.querySelectorAll('.mf-chip');
   for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('active', chips[i] === btn);
   var all = box._mItems || [];
-  var shown = name ? all.filter(function(x){ return String(x.fansub || '') === name; }) : all;
-  list.innerHTML = magnetRowsHtml(shown);
+  var shown = name ? all.filter(function(x){ return magnetFansubOf(x) === name; }) : all;
+  list.innerHTML = magnetRowsHtml(shown, box._mSel);   // 筛选后保留已勾选状态
+}
+/* ===== v430 磁力结果多选 → 批量离线 =====
+   每行左侧常显复选框；勾中任意一个就进多选模式（底部浮出操作条），取消或全部取消即退出。
+   提交时一次把多条磁力交给 115（后端 add_task_urls 批量接口，失败再逐条回落）。 */
+function magnetBoxOf(el){
+  var n = el;
+  for (var i = 0; i < 10 && n; i++){
+    if (n._mItems) return n;
+    n = n.parentNode;
+  }
+  return null;
+}
+function magnetSelCount(box){
+  var sel = box._mSel || {}, n = 0;
+  for (var k in sel) if (sel[k]) n++;
+  return n;
+}
+function magnetSelSync(box){
+  if (!box) return;
+  var n = magnetSelCount(box);
+  var bar = box.querySelector ? box.querySelector('.magnet-selbar') : null;
+  if (!n){
+    box._mSelOn = false;
+    if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
+    return;
+  }
+  box._mSelOn = true;
+  if (!bar){
+    bar = document.createElement('div');
+    bar.className = 'magnet-selbar';
+    bar.innerHTML = '<span class="msb-count"></span>'
+      + '<button type="button" class="msb-cancel" onclick="magnetSelClear(this)">取消</button>'
+      + '<button type="button" class="msb-go" onclick="magnetSelGo(this)">115 离线</button>';
+    box.appendChild(bar);
+  }
+  var c = bar.querySelector('.msb-count');
+  if (c) c.textContent = '已选 ' + n + ' 条';
+}
+function magnetSelTap(ev, el){
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  var box = magnetBoxOf(el);
+  if (!box || !el) return;
+  if (!box._mSel) box._mSel = {};
+  var key = el.getAttribute('data-mkey') || '';
+  if (!key) return;
+  var on = !box._mSel[key];
+  if (on) box._mSel[key] = 1; else delete box._mSel[key];
+  el.classList.toggle('on', on);
+  var row = el.parentNode;
+  if (row && row.classList) row.classList.toggle('is-sel', on);
+  magnetSelSync(box);
+}
+function magnetSelClear(from){
+  var box = (from && from._mItems) ? from : magnetBoxOf(from);
+  if (!box) return;
+  box._mSel = {};
+  box._mSelOn = false;
+  var bar = box.querySelector('.magnet-selbar');
+  if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
+  var on = box.querySelectorAll('.mr-check.on');
+  for (var i = 0; i < on.length; i++){
+    on[i].classList.remove('on');
+    if (on[i].parentNode && on[i].parentNode.classList) on[i].parentNode.classList.remove('is-sel');
+  }
+}
+function magnetSelGo(from){
+  var box = magnetBoxOf(from);
+  if (!box) return;
+  var sel = box._mSel || {};
+  var mags = [], seen = {};
+  var items = box._mItems || [];
+  for (var i = 0; i < items.length; i++){
+    var it = items[i];
+    var k = magnetRowKey(it);
+    if (!sel[k] || seen[k]) continue;
+    var m = String(it.magnet || '').trim();
+    if (!m) continue;
+    seen[k] = 1;
+    mags.push(m);
+  }
+  if (!mags.length){ showToast('请先勾选要离线的磁力', 'error'); return; }
+  magnetSelClear(box);
+  toolboxMagnetOffline(mags);   // 多条一次提交（115 支持一次传多条）
 }
 /* 骨架屏：6 行占位，行高与真实结果一致，搜索完成时不会跳版 */
 function magnetSkeletonHtml(){
   var rows = '';
   for (var i = 0; i < 6; i++){
     rows += '<div class="magnet-result sk">'
-      + '<span class="mr-icon sk-block"></span>'
+      + '<span class="mr-check sk-check"></span>'
       + '<div class="mr-info">'
       + '<div class="sk-line" style="width:' + (88 - (i % 3) * 6) + '%;"></div>'
       + '<div class="sk-line" style="width:' + (56 + (i % 2) * 10) + '%;"></div>'
@@ -2113,19 +2218,24 @@ function magnetSkeletonHtml(){
   }
   return '<div class="magnet-skeleton">' + rows + '</div>';
 }
-function magnetRowsHtml(items){
+/* 一条结果的多选键：优先 btih（同一资源不同标题算一条），没有就用整条磁力 */
+function magnetRowKey(it){
+  var h = '';
+  try { h = auto115Btih((it && it.magnet) || ''); } catch (e) { h = ''; }
+  return h ? String(h).toLowerCase() : String((it && it.magnet) || '');
+}
+function magnetRowsHtml(items, selMap){
   var html = '';
+  selMap = selMap || {};
   for (var i = 0; i < items.length; i++){
     var it = items[i];
     var title = escapeHtml(it.title || '无标题');
     var size = escapeHtml(it.size || '');
     var srcRaw = it.source || 'bt4g';
     var src = escapeHtml(srcRaw === 'anime' ? '动漫' : srcRaw);   // anime 是内部标识，界面上叫「动漫」
-    var fansub = String(it.fansub || '').trim();
     // 元信息拆成独立标签，做种数单独上色（原先把大小/做种/下载挤在一个 span 里，一长就换行）
-    // 动漫源没有做种数，改用「字幕组 + 体积 + 发布日」，信息量对等
+    // 字幕组不在行内重复显示——标题里已经带了，要按组看用上方的字幕组筛选条
     var meta = [];
-    if (fansub) meta.push('<span class="mr-fansub">' + escapeHtml(fansub) + '</span>');
     if (size) meta.push('<span>' + size + '</span>');
     if (it.seeders) meta.push('<span class="mr-seed">做种 ' + escapeHtml(String(it.seeders)) + '</span>');
     if (it.leechers) meta.push('<span>下载 ' + escapeHtml(String(it.leechers)) + '</span>');
@@ -2134,9 +2244,12 @@ function magnetRowsHtml(items){
     // 季集标签：标题两行也未必看得出是第几季第几集，从标题里认出来单独做个 pill
     var epTag = '';
     try { epTag = NfoCore.magnetEpLabel(it.title || ''); } catch (e) { epTag = ''; }
-    // 不再渲染整条磁力串（一串 base64 噪音，占一行且看不懂）；要链接点行内「复制」即可
-    html += '<div class="magnet-result' + (srcRaw === 'anime' ? ' is-anime' : '') + '" data-magnet="' + magnet + '" onclick="openMagnetOp(this)">'
-      + '<span class="mr-icon"><svg viewBox="0 0 24 24"><path d="M6 21L9 21L9 13Q9 8 14 8Q19 8 19 13L19 21L22 21L22 13Q22 5 14 5Q6 5 6 13Z"/></svg></span>'
+    var mkey = magnetRowKey(it);
+    var checked = selMap[mkey] ? ' on' : '';
+    // 左侧固定是复选框（v430）：点它进多选、点其余部分仍是原来的单条操作层
+    html += '<div class="magnet-result' + (srcRaw === 'anime' ? ' is-anime' : '') + (checked ? ' is-sel' : '') + '" data-magnet="' + magnet + '" data-mkey="' + escapeAttr(mkey) + '" onclick="openMagnetOp(this)">'
+      + '<span class="mr-check' + checked + '" data-mkey="' + escapeAttr(mkey) + '" onclick="magnetSelTap(event,this)">'
+      + '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 6.9"/></svg></span>'
       + '<div class="mr-info">'
       + '<div class="mr-title">' + title + '</div>'
       + '<div class="mr-meta">'
@@ -2213,6 +2326,12 @@ var magnetOpRow = null;
 var magnetOpTitle = '';
 function openMagnetOp(el){
   if (!el) return;
+  // 多选模式中点整行 = 切换勾选（不弹单条操作层，避免误触「离线这一条」）
+  var mbox0 = magnetBoxOf(el);
+  if (mbox0 && mbox0._mSelOn){
+    var chk0 = el.querySelector ? el.querySelector('.mr-check') : null;
+    if (chk0){ magnetSelTap(null, chk0); return; }
+  }
   var magnet = el.getAttribute('data-magnet') || el.getAttribute('data-link') || '';
   magnet = decodeXmlEntities(magnet || '');
   // 再点同一条 → 收起
@@ -3334,6 +3453,66 @@ function auto115StepSubmit(t){
 }
 /* 真正发提交请求。提交前先查一次 115 任务列表：同一个 hash 已经在离线列表里就直接复用，
    避免「上次提交成功但响应丢了/超时被判失败」后再提交一次造成重复离线。 */
+/* 批量提交：115 网页版「新建任务」支持一次传多条（add_task_urls，urls 用换行分隔），
+   所以多磁力任务只发一次请求。两种兜底：①全部已在 115 列表里（按 btih 预查）→ 直接算提交成功；
+   ②批量接口不认 / 整批失败 → 逐条回落 add_task_url 老路径，最坏等于旧行为。 */
+function auto115SubmitBatch(t, ms){
+  var todo = [];
+  // 预查只拉一次任务列表（原先是每条磁力各查一次，N 条就 N 次读请求）
+  return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=task_lists', 'page=1&page_row=100').then(function(res){
+    var d = (res && res.d) || {};
+    var tasks = d.tasks || (d.data && d.data.tasks) || [];
+    var have = {};
+    for (var i = 0; i < tasks.length; i++){
+      var x = tasks[i];
+      var h = ((x.info_hash || x.infohash || x.hash || '') + '').toUpperCase();
+      if (h) have[h] = x;
+    }
+    for (var j = 0; j < ms.length; j++){
+      var m = ms[j], hash = (auto115Btih(m.magnet) || '').toUpperCase();
+      var hit = hash ? have[hash] : null;
+      if (hit){
+        m.infoHash = hash;
+        m.offlineName = hit.name || m.offlineName || m.title || '';
+        m.state = 'submitted';
+      } else {
+        todo.push(m);
+      }
+    }
+  }).catch(function(){
+    todo = ms.slice();   // 列表都查不到就当全要提交，交给后面批量/逐条判断
+  }).then(function(){
+    if (!todo.length) return true;
+    var urls = todo.map(function(x){ return String(x.magnet || '').trim(); }).filter(Boolean);
+    if (!urls.length) return true;
+    var body = 'urls=' + encodeURIComponent(urls.join('\n')) + '&wp_path_id=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
+    return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_urls', body).then(function(res){
+      var d = res.d || {};
+      var ok = res.ok && (d.state === true || d.errcode === 10008 || d.errno === 0);
+      if (!ok) return false;
+      // 有逐条失败项（state:false）时不猜对应关系，整批走逐条回落——已成功的再提交只会返回「已存在」
+      if (Object.prototype.toString.call(d.data) === '[object Array]'
+          && d.data.some(function(x){ return x && x.state === false; })) return false;
+      // 批量接口不回每条的 info_hash（顺序也不保证），用本地算的 btih 回填；名字留给等待阶段从任务列表补
+      todo.forEach(function(x){
+        x.infoHash = (auto115Btih(x.magnet) || '').toUpperCase();
+        x.state = 'submitted';
+        if (!x.offlineName) x.offlineName = x.title || '';
+      });
+      return true;
+    }).catch(function(){ return false; });
+  }).then(function(ok){
+    if (ok) return true;
+    // 批量失败 → 逐条回落（写操作仍受 c115Call 串行节流）
+    return Promise.all(todo.map(function(m){
+      return auto115SubmitOneMagnet(t, m).then(function(){ return 1; }).catch(function(){ return 0; });
+    })).then(function(rs){
+      var okN = rs.filter(Boolean).length;
+      if (!okN) throw new Error('提交失败');
+      return true;
+    });
+  });
+}
 function auto115SubmitPost(t){
   var body = 'url=' + encodeURIComponent(t.magnet) + '&wp_path_id=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
   var hash = auto115Btih(t.magnet);
@@ -4762,7 +4941,7 @@ function auto115StepSubmitMulti(t){
   var ms = Auto115Core.magnets(t).filter(function(m){ return m.state !== 'submitted'; });
   if (!ms.length){ delete auto115Submitting[t.id]; return auto115BeginWait(t); }
   auto115Set(t, 'submit', 'running', '正在提交 ' + ms.length + ' 条磁力到 115…');
-  return Promise.all(ms.map(function(m){ return auto115SubmitOneMagnet(t, m); })).then(function(){
+  return auto115SubmitBatch(t, ms).then(function(){
     delete auto115Submitting[t.id];
     auto115Set(t, 'submit', 'ok', '已提交 ' + Auto115Core.magnets(t).length + ' 条磁力');
     return auto115BeginWait(t);
@@ -6437,13 +6616,8 @@ function auto115PasteMagnet(){
 }
 /* ============ 多磁力 composer（v336）：默认单框 + 添加按钮；点添加后该磁力收起成紧凑 chip，可继续加多条 ============ */
 /* 两入口（影片自动化 modal / 磁力库添加 tab）各自挂一个容器，读值统一走 auto115ComposerValues。 */
-function renderMagnetComposer(containerId){
-  var box = document.getElementById(containerId);
-  if (!box || box.getAttribute('data-composed') === '1') return;   /* 已初始化不重渲染（避免清掉已有值） */
-  box.setAttribute('data-composed', '1');
-  box.classList.add('magnet-composer');
-  box.innerHTML = '';
-  var rows = document.createElement('div'); rows.className = 'mc-rows';
+/* v432：空状态也能点 + ——没内容时追加一个新的空输入框，有内容时才收成 chip */
+function auto115ComposerNewRow(box){
   var inputRow = document.createElement('div'); inputRow.className = 'mc-input-row';
   var ta = document.createElement('textarea'); ta.className = 'mc-input'; ta.rows = 1;
   ta.readOnly = true;   /* 禁止唤起键盘：点按自动读剪贴板填充（仅识别磁力/ed2k），长按仍可原生粘贴 */
@@ -6456,15 +6630,27 @@ function renderMagnetComposer(containerId){
       if (/^(magnet:\?|ed2k:\/\/)/i.test(txt)) ta.value = txt;
     }).catch(function(){});
   };
-  /* v416：输入框占满一整行（去掉行内圆加号）；添加入口移到「确定」左侧的 + 按钮（宽 1:3） */
   inputRow.appendChild(ta);
-  box.appendChild(rows); box.appendChild(inputRow);
+  box.appendChild(inputRow);
+  return inputRow;
+}
+function renderMagnetComposer(containerId){
+  var box = document.getElementById(containerId);
+  if (!box || box.getAttribute('data-composed') === '1') return;   /* 已初始化不重渲染（避免清掉已有值） */
+  box.setAttribute('data-composed', '1');
+  box.classList.add('magnet-composer');
+  box.innerHTML = '';
+  var rows = document.createElement('div'); rows.className = 'mc-rows';
+  box.appendChild(rows);
+  auto115ComposerNewRow(box);   /* 默认一行；点 + 继续追加 */
 }
 function auto115ComposerAdd(containerId){
   var box = document.getElementById(containerId); if (!box) return;
-  var ta = box.querySelector('.mc-input'); if (!ta) return;
-  var lines = (ta.value || '').split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
-  if (!lines.length) return;
+  var inputs = box.querySelectorAll('.mc-input');
+  var ta = inputs.length ? inputs[inputs.length - 1] : null;
+  var lines = ta ? (ta.value || '').split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean) : [];
+  // 没粘贴内容也给出新输入框（用户要求：空着点 + 也要有反应），点确定时有几条传几条
+  if (!lines.length){ auto115ComposerNewRow(box); return; }
   var rows = box.querySelector('.mc-rows');
   lines.forEach(function(line){
     var chip = document.createElement('div'); chip.className = 'mc-chip';
@@ -6472,17 +6658,20 @@ function auto115ComposerAdd(containerId){
     var x = document.createElement('button'); x.type = 'button'; x.className = 'mc-x'; x.textContent = '×';
     x.onclick = function(){ chip.remove(); };
     chip.appendChild(span); chip.appendChild(x);
-    rows.appendChild(chip);
+    if (rows) rows.appendChild(chip);
   });
-  ta.value = '';
+  ta.value = '';   // 收成 chip 后原框清空，继续用这一行粘贴下一条
 }
 function auto115ComposerValues(containerId){
   var box = document.getElementById(containerId); if (!box) return [];
   var out = [];
   var chips = box.querySelectorAll('.mc-chip .mc-text');
   for (var i = 0; i < chips.length; i++){ var v = (chips[i].textContent || '').trim(); if (v) out.push(v); }
-  var ta = box.querySelector('.mc-input');
-  if (ta){ ta.value.split(/\r?\n/).forEach(function(s){ s = (s || '').trim(); if (s) out.push(s); }); }
+  // 多个输入框全部收集（空框自动跳过）
+  var inputs = box.querySelectorAll('.mc-input');
+  for (var j = 0; j < inputs.length; j++){
+    (inputs[j].value || '').split(/\r?\n/).forEach(function(s){ s = (s || '').trim(); if (s) out.push(s); });
+  }
   return out;
 }
 function auto115ComposerReset(containerId){
@@ -8462,8 +8651,8 @@ function updateSearchPlaceholder(){
   var el = document.getElementById('tmdbQuery');
   if (!el) return;
   if (state.metaSource === 'jav') updateJavPlaceholder();
-  else if (state.tmdbMediaType === 'person') el.placeholder = '输入演员 / 导演姓名';
-  else el.placeholder = '泰坦尼克号';
+  // v432：提示语统一成一部片名，不再跟着上次搜的类型变（人物搜索后清空会残留「输入演员 / 导演姓名」）
+  else el.placeholder = '肖申克的救赎';
 }
 /* TMDB 搜索的类型切换：复用 flip-type 翻转动画。
    v424：按钮不再常显——类型未知时隐藏，搜到电影/剧集/人物后自动出现并指向命中的类型；
@@ -9015,6 +9204,7 @@ function clearSearch(){
   // 清空 = 下一次是新的搜索：类型回到未知，右上角切换收起
   state.tmdbMediaType = '';
   syncRightSideControls();
+  updateSearchPlaceholder();   // 提示语跟着回默认，别停在上次搜的类型上
   el.focus();
   renderSearchHistory(); // 清空后回到历史视图
 }
@@ -12863,7 +13053,10 @@ function clearTbmAddInput(){
    支持多磁力（v336）：composer 里的多条磁力合成一条 multi 任务，下载完停在「待整理」即可（tbm 不整理）。 */
 function toolboxMagnetOffline(magnet){
   var mags;
-  if (magnet != null){
+  // 支持传数组：磁力搜索结果勾选多条后一次性提交（v430）
+  if (Object.prototype.toString.call(magnet) === '[object Array]'){
+    mags = magnet.map(function(x){ return String(x || '').trim(); }).filter(Boolean);
+  } else if (magnet != null){
     mags = [String(magnet).trim()].filter(Boolean);
   } else {
     mags = auto115ComposerValues('tbmMagnetComposer').filter(Boolean);
@@ -13279,6 +13472,15 @@ function setThemeHidden(hidden){
     // 切回普通模式：重置为影片/TMDB
     state.metaSource = 'tmdb';
     state.overviewTab = 'movie';
+    // 关掉里模式后搜索页要回到干净状态，否则还挂着刚才的 AV 搜索结果（用户反馈）
+    var qEl = document.getElementById('tmdbQuery');
+    if (qEl) qEl.value = '';
+    var clrEl = document.getElementById('searchClear');
+    if (clrEl) clrEl.classList.remove('show');
+    var resEl = document.getElementById('tmdbResults');
+    if (resEl) resEl.innerHTML = '';
+    state.tmdbMediaType = '';
+    if (typeof renderSearchHistory === 'function') renderSearchHistory();
     // 同步首页 tab 高亮（普通模式 tab 隐藏，但需保证状态一致）
     var seg = document.getElementById('overviewTabs');
     if (seg) seg.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === state.overviewTab); });
