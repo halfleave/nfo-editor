@@ -50,10 +50,11 @@ const FULL = {
 // ---- 1. 四家都在 ----
 const h1 = sandbox.detailRatingsHtml(FULL);
 ok('四个角标都画出来', (h1.match(/class="dr-item/g) || []).length === 4, h1);
-ok('IMDb 分一位小数', /dr-imdb"><em>IMDb<\/em><b>8\.7<\/b>/.test(h1), h1);
+ok('IMDb 分一位小数', /dr-imdb-ico">IMDb<\/i><b>8\.7<\/b>/.test(h1), h1);
 ok('番茄 83%', /🍅<\/i><b>83%/.test(h1), h1);
 ok('爆米花 85%', /🍿<\/i><b>85%/.test(h1), h1);
-ok('Metascore 73', /dr-mc"><em>MC<\/em><b>73<\/b>/.test(h1), h1);
+ok('Metascore 73', /dr-mc-ico">MC<\/i><b>73<\/b>/.test(h1), h1);
+ok('不再有胶囊底色类名', h1.indexOf('dr-imdb"') < 0 && h1.indexOf('dr-mc"') < 0, h1);
 
 // ---- 2. IMDb 整数也补 .0 ----
 const h2 = sandbox.detailRatingsHtml({ imdb: { rating: 8 } });

@@ -209,21 +209,33 @@ img { display: block; }
 .detail-info-av { text-align: center; font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.6; margin: 0 0 4px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
 .detail-info2 { text-align: center; font-size: 13px; color: rgba(255,255,255,0.72); line-height: 1.6; margin-bottom: 16px; text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
 .detail-info1:empty, .detail-info2:empty, .detail-info-av:empty { display: none; }
-/* v438：类型下面那行多平台评分（IMDb / 🍅 / 🍿 / MC）；缺源不画，全缺整行隐藏（由 JS 控制） */
-.detail-ratings { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; margin: -6px 0 16px; }
+/* v439：类型下面那行多平台评分（IMDb / 🍅 / 🍿 / MC）；缺源不画，全缺整行隐藏（由 JS 控制）
+   v439b：去掉胶囊底，只留「图标 + 分数」；IMDb / MC 的图标用纯 CSS 画（黄底黑字 / 绿底），不引图片 */
+.detail-ratings { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; margin: -6px 0 16px; }
 .detail-ratings .dr-item {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: 22px; padding: 0 8px; border-radius: 11px;
-  background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.96);
-  font-size: 12px; font-weight: 700; line-height: 1;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.25);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 12.5px; font-weight: 700; line-height: 1;
+  color: rgba(255,255,255,0.96);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
-.detail-ratings .dr-item em { font-style: normal; font-size: 9.5px; font-weight: 800; letter-spacing: 0.02em; }
-.detail-ratings .dr-item i { font-style: normal; font-size: 11px; line-height: 1; }
-.detail-ratings .dr-item b { font-weight: 800; font-variant-numeric: tabular-nums; }
-.detail-ratings .dr-imdb { background: #f5c518; color: #111; text-shadow: none; }
-.detail-ratings .dr-mc { background: #66cc33; color: #10240a; text-shadow: none; }
+.detail-ratings .dr-item i { font-style: normal; font-size: 12px; line-height: 1; }
+.detail-ratings .dr-item b { font-weight: 400; font-variant-numeric: tabular-nums; }
+/* IMDb 图标：黄底黑字，模仿官方 logo 的比例（小、方角、字重拉满） */
+.detail-ratings .dr-imdb-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 15px; padding: 0 3px; border-radius: 2.5px;
+  background: #f5c518; color: #000;
+  font-size: 9.5px; font-weight: 900; letter-spacing: -0.3px;
+  text-shadow: none;
+}
+/* Metacritic 图标：同样的处理，绿底深字 */
+.detail-ratings .dr-mc-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 15px; padding: 0 3px; border-radius: 2.5px;
+  background: #66cc33; color: #0d2408;
+  font-size: 9px; font-weight: 900; letter-spacing: -0.2px;
+  text-shadow: none;
+}
 .edit-type-seg { display: flex; margin: 0 0 6px; }
 .meta-type-tag { display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: var(--label-2); background: var(--card); border-radius: 10px; }
 /* 胶囊主按钮：占屏宽约 80%，水平居中 */

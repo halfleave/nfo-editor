@@ -10781,8 +10781,9 @@ function detailIsTv(d){
 function detailRatingsHtml(data){
   data = data || {};
   var items = [];
+  // 只有「图标 + 分数」：IMDb 与 MC 的图标是纯 CSS 画的小色块，🍅/🍿 用 emoji
   if (data.imdb && data.imdb.rating != null){
-    items.push('<span class="dr-item dr-imdb"><em>IMDb</em><b>' + Number(data.imdb.rating).toFixed(1) + '</b></span>');
+    items.push('<span class="dr-item"><i class="dr-imdb-ico">IMDb</i><b>' + Number(data.imdb.rating).toFixed(1) + '</b></span>');
   }
   var rt = data.rottenTomatoes || {};
   if (rt.critics && rt.critics.score != null){
@@ -10792,7 +10793,7 @@ function detailRatingsHtml(data){
     items.push('<span class="dr-item"><i>🍿</i><b>' + rt.audience.score + '%</b></span>');
   }
   if (data.metacritic && data.metacritic.critics && data.metacritic.critics.score != null){
-    items.push('<span class="dr-item dr-mc"><em>MC</em><b>' + data.metacritic.critics.score + '</b></span>');
+    items.push('<span class="dr-item"><i class="dr-mc-ico">MC</i><b>' + data.metacritic.critics.score + '</b></span>');
   }
   return items.join('');
 }
