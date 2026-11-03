@@ -1187,19 +1187,12 @@ function fetchFc2Search(num, box, jbCode){
     }).finally(function(){ stopLoadingRotator(); });
 }
 
-function fetchJavbusSearch(q, box){
-  var base = javbusApiBase();
-  /* 与 115/AI 整理一致：拼上激活码走个人配额桶；否则走匿名桶（15 次/天），填码用户搜满后被拦成「未找到」 */
-  var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
-  /* FC2 番号分流：javbus 搜不到 FC2PPV，一律走 FC2 专用链（fc2ppvdb） */
-  var fc2n = fc2Num(q);
-  if (fc2n){ fetchFc2Search(fc2n, box, jbCode); return; }
-  // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
-  // （javbus-scraper 已做双区互备：当前区 0 结果自动补搜另一区）
-  var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
+/* v443：单个区发一次搜索（有码/无码是两个独立路由）。每次请求各计一次 javSearch 配额 */
+function javSearchZone(base, q, zone, jbCode){
+  var path = zone === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
   var url = base + path + '?keyword=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now();
   NfoCore.quotaInc('javSearch');
-  javFetchRetry(url, { cache: 'no-store' })
+  return javFetchRetry(url, { cache: 'no-store' })
     .then(function(r){
       if (!r.ok) {
         // 把服务端返回的错误正文也读出来，便于定位（如 unknown route / JavBus 代理请求失败）
@@ -1212,31 +1205,60 @@ function fetchJavbusSearch(q, box){
       return r.json();
     })
     .then(function(res){
-      if (res && res.error){ box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(res.error) + '</div>'; return; }
-      var movies = (res && res.movies) || [];
-      if (!movies.length){
-        // 无结果回退：FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内；放宽到「任意像番号的输入」也直查 /api/meta，
-        // 以补全 JavBus 无但 DMM 有的数据（DMM 按番号搜，关键词搜不了，故片名仍走 JavBus/未找到）
-        var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
-        if (looksLikeId) {
-          javFetchRetry(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now(), { cache: 'no-store' })
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (d) {
-              if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
-              else box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>';
-            })
-            .catch(function () { box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>'; });
-          return;
-        }
-        box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>';
-        return;
-      }
-      renderJavbusResults(movies, box);
+      if (res && res.error) throw new Error(res.error);
+      return (res && res.movies) || [];
+    });
+}
+/* v443：两个区都空时的最后兜底（FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内 → 像番号就直查 /api/meta） */
+function javMetaFallback(q, base, jbCode, box){
+  var notFound = function(){
+    box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '（有码 / 无码区都搜过了）</div>';
+  };
+  var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
+  if (!looksLikeId){ notFound(); return Promise.resolve(); }
+  return javFetchRetry(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
+      else notFound();
     })
-    .catch(function(e){
-      var m = (e && e.message) || '';
-      var friendly = /load failed|network|无法连接/i.test(m) ? '网络波动，请再点一次搜索' : m;
-      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(friendly || '未知错误') + '</div>';
+    .catch(notFound);
+}
+function fetchJavbusSearch(q, box, opts){
+  opts = opts || {};
+  var base = javbusApiBase();
+  /* 与 115/AI 整理一致：拼上激活码走个人配额桶；否则走匿名桶（15 次/天），填码用户搜满后被拦成「未找到」 */
+  var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
+  /* FC2 番号分流：javbus 搜不到 FC2PPV，一律走 FC2 专用链（fc2ppvdb）；它没有有码/无码之分 */
+  var fc2n = fc2Num(q);
+  if (fc2n){ fetchFc2Search(fc2n, box, jbCode); return; }
+  /* v443：与手机端同一套——opts.censor 是手动指定的区（只搜它）；否则按 javZoneOrder 自动依次试两个区 */
+  var zones = opts.censor ? [opts.censor] : NfoCore.javZoneOrder(q);
+  var err = null, errCount = 0;
+
+  function runFrom(i){
+    if (i >= zones.length) return Promise.resolve(false);
+    return javSearchZone(base, q, zones[i], jbCode).then(function(movies){
+      if (movies && movies.length){
+        state.javCensor = zones[i];
+        renderJavbusResults(movies, box);
+        return true;
+      }
+      return runFrom(i + 1);
+    }, function(e){
+      err = e; errCount++;
+      return runFrom(i + 1);
+    });
+  }
+
+  runFrom(0).then(function(hit){
+    if (hit) return;
+    if (err && errCount >= zones.length) throw err;
+    return javMetaFallback(q, base, jbCode, box);
+  }).catch(function(e){
+    var m = (e && e.message) || '';
+    var friendly = /load failed|network|无法连接/i.test(m) ? '网络波动，请再点一次搜索' : m;
+    box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(friendly || '未知错误') + '</div>';
   }).finally(function(){ stopLoadingRotator(); });
 }
 

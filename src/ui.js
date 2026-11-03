@@ -1104,6 +1104,9 @@ function searchJAV(){
   }
   box.innerHTML = tmdbLoadingHtml();
   startLoadingRotator(box, tmdbLoadingHtml);
+  /* v443/v444：不再依赖用户预先选有码/无码——无论输入什么一律先搜有码区，有码 0 结果再自动搜无码区
+     （PC 端没有药丸，只吃转区逻辑） */
+  state.javCensor = 'masked';
   fetchJavbusSearch(q, box);
 }
 

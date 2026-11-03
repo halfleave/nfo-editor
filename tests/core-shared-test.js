@@ -229,4 +229,13 @@ assert(NfoCore.isChineseText(null) === true, '中文判定：null 当中文');
 assert(NfoCore.needsTranslation('彼は信じていた') === true, '自动翻译判定：日文仍触发');
 assert(NfoCore.needsTranslation('A hacker learns the truth') === false, '自动翻译判定：英文不自动翻（只给手动按钮）');
 
+/* —— v444 AV 搜索区顺序：无论输入什么，一律有码优先，空了再搜无码 —— */
+assert(NfoCore.javZoneOrder('SSIS-406').join(',') === 'masked,uncensored', '区顺序：番号 → 有码优先');
+assert(NfoCore.javZoneOrder('三上悠亜').join(',') === 'masked,uncensored', '区顺序：女优名同样有码优先');
+assert(NfoCore.javZoneOrder('The Matrix').join(',') === 'masked,uncensored', '区顺序：英文片名同样有码优先');
+assert(NfoCore.javZoneOrder('~~~').join(',') === 'masked,uncensored', '区顺序：认不出的输入也有码优先');
+assert(NfoCore.javZoneOrder('').join(',') === 'masked,uncensored', '区顺序：空输入也有码优先');
+assert(NfoCore.javZoneOrder().join(',') === 'masked,uncensored', '区顺序：不带参数调用同样成立');
+assert(typeof NfoCore.javCensorGuess === 'undefined', 'v444：旧的「按输入猜区」已移除，不再两套规则并存');
+
 console.log('core-shared 完成');

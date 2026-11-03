@@ -374,6 +374,14 @@ function mapActressEnToZh(en){
   return ACTRESS_EN2ZH[key] || en; // 未命中原样返回英文
 }
 
+/* ===== v444：AV 搜索的「区」顺序（有码 / 无码）=====
+   背景：搜索框不再让用户预先选有码/无码。v443 曾按输入猜起始区（番号→有码、片名/女优名→无码），
+   v444 按用户要求简化：**无论输入什么一律先搜有码区**，有码 0 结果再搜无码区，都空才兜底 / 未找到。
+   有码区片量大，先试它命中率最高，也避免猜错区白烧一次配额。 */
+function javZoneOrder(){
+  return ['masked', 'uncensored'];
+}
+
 /* 图片代理：DMM 图床（pics.dmm.co.jp）经 Worker /img 代理绕跨域；workerBase 为空则直连 */
 function javCoverUrl(raw, workerBase){
   if (raw && workerBase && raw.indexOf('pics.dmm.co.jp') > -1){
@@ -1031,6 +1039,7 @@ function normalizeJavbusFilm(d, opts){
     TRANSLATE_SYSTEM_PROMPT: TRANSLATE_SYSTEM_PROMPT,
     needsTranslation: needsTranslation,
     isChineseText: isChineseText,
+    javZoneOrder: javZoneOrder,
     extractJsonObject: extractJsonObject,
     computeTranslateNeed: computeTranslateNeed,
     translateMeta: translateMeta,

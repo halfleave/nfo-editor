@@ -412,6 +412,7 @@ var state = {
   autoClear: '3d',
   appearance: 'auto',
   themeHidden: false,
+  avCoverMask: false,   // v446：里模式下不显示 AV 封面（列表/首页用 浅深底+番号 占位，详情页照常）
   tier: '', activationCode: '',
   translateBaseUrl: '', translateApiKey: '', translateModel: '', // 翻译 AI 配置（OpenAI 兼容，客户端直连）
   translatingIds: new Set(), // 正在后台翻译的影片 id 集合（仅运行时，用于首页加载图标）
@@ -8284,13 +8285,16 @@ function renderOverview(){
       var enc = escapeAttr(encodeURIComponent(f.id));
       var subOn = !!(f.data && f.data.hasSubtitle);   // 持久化字幕标记
       var d0 = f.data || {};
+      var avMask = !!state.avCoverMask && isAvFilm(f);   // v446：里模式下 AV 卡片只露番号，不露封面
       var lightUrl = d0.poster || f.posterDataUrl || '';   // 轻量封面（搜索列表自带的小图）优先秒显
       var hiRes = f.posterDataUrl || '';                    // 高清大图：只进 hiResPool，渲染完由 applyOverviewHiResSwap 后台换图
-      if (hiRes && hiRes !== lightUrl) hiResPool[f.id] = hiRes;
-      var posterCls = (isAvFilm(f) && lightUrl) ? 'mc-poster av-poster' : 'mc-poster';
-      var poster = lightUrl
-        ? '<div class="' + posterCls + '"' + (hiRes && hiRes !== lightUrl ? ' data-hrid="' + enc + '"' : '') + ' style="background-image:url(' + escapeAttr(lightUrl) + ')">' + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
-        : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>';
+      if (!avMask && hiRes && hiRes !== lightUrl) hiResPool[f.id] = hiRes;   // 屏蔽封面时不排高清图，省流量
+      var posterCls = (isAvFilm(f) && lightUrl && !avMask) ? 'mc-poster av-poster' : 'mc-poster';
+      var poster = avMask
+        ? '<div class="mc-poster av-cover-mask">' + avCoverMaskHtml(d0.dvdId || f.title || f.id) + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
+        : (lightUrl
+          ? '<div class="' + posterCls + '"' + (hiRes && hiRes !== lightUrl ? ' data-hrid="' + enc + '"' : '') + ' style="background-image:url(' + escapeAttr(lightUrl) + ')">' + (subOn ? '<div class="img-sub-badge">字幕</div>' : '') + '</div>'
+          : '<div class="mc-poster" style="background:linear-gradient(135deg,#cfd0da,#a9aab8);"></div>');
       var hasTrailer = !!(f.data && f.data.trailer);
       var badgeHtml = '';
       if (f.rating) badgeHtml += '<div class="mc-rating">' + escapeHtml(f.rating) + '</div>';
@@ -8709,6 +8713,10 @@ function normalizeTextField(v){
 }
 function setMetaSource(src, btn){
   state.metaSource = src;
+  /* v445：先重置类型状态再同步右侧控件——原来同步在上、重置在下，切到 JAV 时会把上一次的
+     「有码/无码」药丸留在输入框右边 */
+  state.tmdbMediaType = '';
+  _javCensorKnown = false; _javLastFc2 = false;
   if (btn && btn.parentNode){
     btn.parentNode.querySelectorAll('button[data-source]').forEach(function(b){ b.classList.toggle('active', b === btn); });
   } else {
@@ -8721,7 +8729,6 @@ function setMetaSource(src, btn){
   var sc = document.getElementById('searchClear');
   if (sc) sc.classList.remove('show');
   document.getElementById('tmdbResults').innerHTML = '';
-  state.tmdbMediaType = '';   // 换源后类型重新未知，右上角切换收起
   if (src === 'jav') updateJavPlaceholder();
   else updateSearchPlaceholder();
   renderSearchHistory(); // 切源后按当前源刷新历史（输入框已清空→显示历史）
@@ -8771,6 +8778,9 @@ function cycleTmdbType(){
   }, 260);
 }
 function javCensorLabel(c){ return c === 'uncensored' ? '无码' : '有码'; }
+/* v443：有码/无码不再让用户预先选。判定标记 + 本次是否走的 FC2 专用源（FC2 没有有码/无码之分，药丸不显示） */
+var _javCensorKnown = false;
+var _javLastFc2 = false;
 function cycleJavCensor(){
   var next = state.javCensor === 'uncensored' ? 'masked' : 'uncensored';
   var btn = document.getElementById('javCensorBtn');
@@ -8782,11 +8792,21 @@ function cycleJavCensor(){
   requestAnimationFrame(function(){ btn.classList.add('animating'); });
   setTimeout(function(){
     state.javCensor = next;
+    _javCensorKnown = true;
     btn.classList.add('no-transition');
     curEl.textContent = javCensorLabel(next);
     btn.classList.remove('animating');
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ btn.classList.remove('no-transition'); }); });
+    javResearchAs(next);   // v443：换区后立刻用同一关键词重搜（手动指定，不再自动转区）
   }, 260);
+}
+/* 手动换区重搜：只搜指定的区，空就空（不自动回落另一个区，否则点一下又弹回原区像按钮失灵） */
+function javResearchAs(zone){
+  var q = (document.getElementById('tmdbQuery').value || '').trim();
+  var box = document.getElementById('tmdbResults');
+  if (!q || !box) return;
+  box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
+  fetchJavbusSearch(q, box, { censor: zone });
 }
 function syncTmdbTypeBtn(){
   var btn = document.getElementById('tmdbTypeBtn');
@@ -8808,7 +8828,14 @@ function syncJavCensorBtn(){
   var btn = document.getElementById('javCensorBtn');
   if (!btn) return;
   var curEl = btn.querySelector('.flip-type-layer.is-current');
-  if (state.metaSource === 'jav'){
+  /* v443：与 TMDB 同款——没搜过不显示；搜过之后显示「本次实际出结果的区」，点一下换区重搜。
+     FC2 走专用源，没有有码/无码之分，一律不显示。
+     v445：再多一道「结果区有内容」判定——刚进搜索页 / 换源清空结果时输入框右侧必须干净，
+     只有下面真的挂着结果（含「未找到」提示）时才出现。 */
+  var box = document.getElementById('tmdbResults');
+  var hasOut = !!(box && box.firstChild);
+  var show = state.metaSource === 'jav' && _javCensorKnown && !_javLastFc2 && hasOut;
+  if (show){
     btn.style.display = '';
     btn.classList.remove('animating');
     if (curEl) curEl.textContent = javCensorLabel(state.javCensor);
@@ -8854,6 +8881,12 @@ function searchJAV(){
     return;
   }
   // 仅走 JavBus（已去掉 R18 兜底，便于单独验证 JavBus 搜索）
+  /* v443/v444：不再让用户先选有码/无码——无论输入什么一律先搜有码区，有码 0 结果再自动搜无码区；
+     判定结果写回 state.javCensor，搜完药丸显示实际出结果的那个区 */
+  _javCensorKnown = false;
+  _javLastFc2 = false;
+  state.javCensor = 'masked';
+  syncRightSideControls();
   box.innerHTML = tmdbLoadingHtml(); startLoadingRotator(box, tmdbLoadingHtml);
   fetchJavbusSearch(q, box);
 }
@@ -8921,19 +8954,12 @@ function fetchFc2Search(num, box, jbCode){
     }).finally(function(){ stopLoadingRotator(); });
 }
 /* JavBus 搜索（仅 JavBus，无 R18 兜底）：关键词/番号 → 列表 */
-function fetchJavbusSearch(q, box){
-  var base = javbusApiBase();
-  /* 与 115/AI 整理一致：把已填的激活码拼到 Worker 请求上，让 jav 搜索走个人配额桶，
-     否则一律走匿名桶（15 次/天），填了激活码的用户搜满后会被拦截成「未找到」 */
-  var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
-  /* FC2 番号分流：javbus 搜不到 FC2PPV，一律走 FC2 专用链（fc2ppvdb） */
-  var fc2n = fc2Num(q);
-  if (fc2n){ fetchFc2Search(fc2n, box, jbCode); return; }
-  // 有码/无码走不同 JavBus 搜索路由：对应 javbus.com/search 与 javbus.com/uncensored/search/
-  // （javbus-scraper 已做双区互备：当前区 0 结果自动补搜另一区）
-  var path = state.javCensor === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
+/* v443：单个区发一次搜索请求。成功返回影片数组（可能为空），硬失败抛错。
+   有码/无码是两个独立路由：javbus.com/search 与 javbus.com/uncensored/search */
+function javSearchZone(base, q, zone, jbCode){
+  var path = zone === 'uncensored' ? '/api/movies/uncensored/search' : '/api/movies/search';
   var url = base + path + '?keyword=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now();
-  javFetchRetry(url, { cache: 'no-store' })
+  return javFetchRetry(url, { cache: 'no-store' })
     .then(function(r){
       if (!r.ok) {
         // 把服务端返回的错误正文也读出来，便于定位（如 unknown route / JavBus 代理请求失败）
@@ -8946,29 +8972,76 @@ function fetchJavbusSearch(q, box){
       return r.json();
     })
     .then(function(res){
-      if (res && res.error){ box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml(res.error) + '</div>'; return; }
-      var movies = (res && res.movies) || [];
-      if (!movies.length){
-        // 无结果回退：FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内；放宽到「任意像番号的输入」也直查 /api/meta，
-        // 以补全 JavBus 无但 DMM 有的数据（DMM 按番号搜，关键词搜不了，故片名仍走 JavBus/未找到）
-        var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
-        if (looksLikeId) {
-          javFetchRetry(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now(), { cache: 'no-store' })
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (d) {
-              if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
-              else box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>';
-            })
-            .catch(function () { box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>'; });
-          return;
-        }
-        box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '</div>';
-        return;
-      }
-      renderJavbusResults(movies, box);
+      if (res && res.error) throw new Error(res.error);
+      return (res && res.movies) || [];
+    });
+}
+/* v443：两个区都空时的最后兜底：FC2/HEYZO/D2Pass 不在 JavBus 搜索结果内，
+   像番号的输入直查 /api/meta，以补全 JavBus 无但 DMM 有的数据（片名仍按未找到处理） */
+function javMetaFallback(q, base, jbCode, box){
+  var notFound = function(){
+    box.innerHTML = '<div class="tmdb-msg">未找到：' + escapeHtml(q) + '（有码 / 无码区都搜过了）</div>';
+  };
+  var looksLikeId = /^(fc2|heyzo|d2pass)[-\s_]?\d+$/i.test(q) || /^[a-z]{2,6}[-\s_]?\d{2,5}$/i.test(q);
+  if (!looksLikeId){ notFound(); return Promise.resolve(); }
+  return javFetchRetry(base + '/api/meta?dvd_id=' + encodeURIComponent(q) + jbCode + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (d && d.id) renderJavbusResults([{ id: d.id, title: d.title, img: d.img, date: d.date, tags: [] }], box);
+      else notFound();
     })
-    .catch(function(e){
-      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((e && e.message) ? e.message : '未知错误') + '</div>';
+    .catch(notFound);
+}
+function fetchJavbusSearch(q, box, opts){
+  opts = opts || {};
+  var base = javbusApiBase();
+  /* 与 115/AI 整理一致：把已填的激活码拼到 Worker 请求上，让 jav 搜索走个人配额桶，
+     否则一律走匿名桶（15 次/天），填了激活码的用户搜满后会被拦截成「未找到」 */
+  var jbCode = state.activationCode ? ('&code=' + encodeURIComponent(state.activationCode)) : '';
+  /* FC2 番号分流：javbus 搜不到 FC2PPV，一律走 FC2 专用链（fc2ppvdb）；它没有有码/无码之分 */
+  var fc2n = fc2Num(q);
+  if (fc2n){
+    _javCensorKnown = true; _javLastFc2 = true;
+    syncRightSideControls();
+    fetchFc2Search(fc2n, box, jbCode);
+    return;
+  }
+  /* v443：opts.censor 是用户手动指定的区（点药丸换区，只搜它、不回落）；
+     否则按 javZoneOrder 自动依次试两个区——一个区 0 结果就换另一个区，都空才兜底 / 未找到 */
+  var zones = opts.censor ? [opts.censor] : NfoCore.javZoneOrder(q);
+  var err = null, errCount = 0;
+
+  function runFrom(i){
+    if (i >= zones.length) return Promise.resolve(false);
+    return javSearchZone(base, q, zones[i], jbCode).then(function(movies){
+      if (movies && movies.length){
+        state.javCensor = zones[i];   // 药丸显示「实际出结果」的那个区
+        _javCensorKnown = true;
+        _javLastFc2 = false;
+        renderJavbusResults(movies, box);   // 先出结果再同步药丸（药丸要求结果区有内容才显示）
+        syncRightSideControls();
+        return true;
+      }
+      return runFrom(i + 1);
+    }, function(e){
+      err = e; errCount++;
+      return runFrom(i + 1);
+    });
+  }
+
+  runFrom(0).then(function(hit){
+    if (hit) return;
+    _javCensorKnown = true;   // 没搜到也算判定过，用户可以直接点药丸换区再试
+    _javLastFc2 = false;
+    syncRightSideControls();
+    /* 只有所有区都硬失败（网络/接口错）才报错；只要有一个区正常返回空，就按「未找到」处理 */
+    if (err && errCount >= zones.length){
+      box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((err && err.message) ? err.message : '未知错误') + '</div>';
+      return;
+    }
+    return javMetaFallback(q, base, jbCode, box);
+  }).catch(function(e){
+    box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((e && e.message) ? e.message : '未知错误') + '</div>';
   }).finally(function(){ stopLoadingRotator(); });
 }
 /* 封面域名 pics.dmm.co.jp 无 CORS 头，已配 Worker 时经 /img 路由代理以绕跨域。
@@ -8984,6 +9057,10 @@ function renderJavbusResults(items, box){
     var id = it.id || '';
     var date = it.date || '';
     var cover = javbusImgUrl(it.img);
+    /* v446：里模式「不显示 AV 封面」——列表左侧改为 浅深底 + 番号 占位（不拉图，省流量也更隐蔽） */
+    var coverHtml = state.avCoverMask
+      ? '<div class="tr-cover av-cover-mask">' + avCoverMaskHtml(id || title) + '</div>'
+      : (cover ? '<img class="tr-cover" src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>');
     // 搜索接口 tags 数组含「高清/字幕/新种」三类；海报不加角标，标签放到标题下方独立一行
     var tags = (it.tags && it.tags.indexOf) ? it.tags.slice() : [];
     var tagBadges = tags.length ? tags.map(function(t){
@@ -8995,7 +9072,7 @@ function renderJavbusResults(items, box){
     if (id) metaParts.push(id);
     var meta = metaParts.join(' · ');
     return '<div class="tmdb-result" onclick="applyJavbusResult(' + i + ')">'
-      + (cover ? '<img class="tr-cover" src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>')
+      + coverHtml
       + '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + '</div>'
       + (tagBadges ? '<div class="tr-tags">' + tagBadges + '</div>' : '')
       + (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '')
@@ -9285,6 +9362,7 @@ function clearSearch(){
   document.getElementById('tmdbResults').innerHTML = '';
   // 清空 = 下一次是新的搜索：类型回到未知，右上角切换收起
   state.tmdbMediaType = '';
+  _javCensorKnown = false; _javLastFc2 = false;   // v443：JAV 的药丸同理收起
   syncRightSideControls();
   updateSearchPlaceholder();   // 提示语跟着回默认，别停在上次搜的类型上
   el.focus();
@@ -13768,21 +13846,53 @@ function syncThemeHiddenSwitch(){
   if (sw) sw.checked = state.themeHidden;
   var group = document.getElementById('themeHiddenSettingsGroup');
   if (group) group.style.display = state.themeHidden ? '' : 'none';
+  syncAvCoverMaskSwitch();
 }
 function updateHiddenBadge(){
   var badge = document.getElementById('hiddenBadge');
   if (badge) badge.style.display = state.themeHidden ? 'inline-flex' : 'none';
 }
 function getThemeHidden(){ return idbGet('kv', 'themeHidden').then(function(v){ return !!v; }); }
-var settingsTitleTap = { count: 0, last: 0 };
-function onSettingsTitleTap(){
+/* v446：里模式入口改到底部 tab —— 连续点「设置」图标 3 次切换（原来点设置页标题 3 次）。
+   800ms 内算连续；每次点击照常切到设置页，第 3 下再切换里模式状态。 */
+var settingsTabTap = { count: 0, last: 0 };
+function onSettingsTabTap(){
+  switchPage('settings');
   var now = Date.now();
-  if (now - settingsTitleTap.last > 1000) settingsTitleTap.count = 0;
-  settingsTitleTap.count++;
-  settingsTitleTap.last = now;
-  if (settingsTitleTap.count >= 3){
-    settingsTitleTap.count = 0;
+  if (now - settingsTabTap.last > 800) settingsTabTap.count = 0;
+  settingsTabTap.count++;
+  settingsTabTap.last = now;
+  if (settingsTabTap.count >= 3){
+    settingsTabTap.count = 0;
     setThemeHidden(!state.themeHidden);
+    showToast(state.themeHidden ? '里模式已开启' : '里模式已关闭', 'success');
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+  }
+}
+
+/* ===== v446：里模式「不显示 AV 封面」 =====
+   开启后，搜索列表（JavBus 结果）与首页 AV 卡片的封面统一换成「浅色底 / 深色底 + 番号」占位；
+   详情页海报、磁力弹窗等其它位置照常显示。 */
+function getAvCoverMask(){ return idbGet('kv', 'avCoverMask').then(function(v){ return !!v; }); }
+function syncAvCoverMaskSwitch(){
+  var sw = document.getElementById('avCoverMaskSwitch');
+  if (sw) sw.checked = !!state.avCoverMask;
+}
+/* 占位块的内部 HTML：番号居中显示（无番号时退回标题，仍不露封面） */
+function avCoverMaskHtml(code){
+  var txt = String(code == null ? '' : code).trim();
+  return '<span>' + escapeHtml(txt || '无番号') + '</span>';
+}
+function toggleAvCoverMask(checkbox){
+  state.avCoverMask = !!(checkbox && checkbox.checked);
+  syncAvCoverMaskSwitch();
+  idbPut('kv', 'avCoverMask', state.avCoverMask).catch(function(){});
+  // 首页：重渲染一遍（分帧渲染自带防串台，重复调用安全）
+  if (typeof renderOverview === 'function') renderOverview();
+  // 搜索列表：已有结果就地重绘，不重新发请求、不耗配额
+  if (state.metaSource === 'jav' && lastJavbusResults && lastJavbusResults.length){
+    var box = document.getElementById('tmdbResults');
+    if (box && box.querySelector('.tmdb-result')) renderJavbusResults(lastJavbusResults, box);
   }
 }
 function renderThemeGrid(){
@@ -14260,6 +14370,8 @@ function bootApp(){
       state.translateBaseUrl = c.baseUrl || ''; state.translateApiKey = c.apiKey || ''; state.translateModel = c.model || '';
     }).catch(function(){}),
     getAdultLoadingPhrases().then(function(list){ currentAdultPhrases = list; }).catch(function(){}),
+    /* v446：里模式「不显示 AV 封面」开关状态（要在 renderOverview 之前读到，首屏才能直接出占位） */
+    getAvCoverMask().then(function(v){ state.avCoverMask = !!v; syncAvCoverMaskSwitch(); }).catch(function(){}),
     getThemeHidden().then(function(h){
       state.themeHidden = !!h;
       if (!state.themeHidden){
