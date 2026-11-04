@@ -530,15 +530,23 @@
     syncScrollState();
   })();
 
-  /* ================= 手势：左右滑动（只此一种，不放假箭头按钮） ================= */
+  /* ================= 手势：左右滑动 + 轻点进详情（不放假箭头按钮） =================
+     一次触摸要么是「滑」要么是「点」，不能既滑又点：
+       · 位移超过 8px 就锁定方向，锁定过（横向或纵向）就不是点击；
+       · 松手时再核一次滚动位置，上滑滚动的惯性/位移不会被当成点击；
+       · 页码点、顶部日期胶囊自己处理点击，不参与（否则会和详情跳转打架）。 */
   (function bindSwipe(){
     var hero = d('homeHero');
     if (!hero) return;
     var startX = 0, startY = 0, dx = 0, dragging = false, locked = null, w = 0;
+    var startT = 0, startTop = 0;
     hero.addEventListener('pointerdown', function(e){
       if (!heroFilms.length) return;
-      if (e.target.closest('.hero-top')) return;
+      if (e.target.closest('.hero-top') || e.target.closest('.hero-dots')) return;
       startX = e.clientX; startY = e.clientY; dx = 0; dragging = true; locked = null;
+      startT = Date.now();
+      var sc = d('homeScroll');
+      startTop = sc ? sc.scrollTop : 0;
       w = hero.clientWidth;
       dragBase = curAmb ? curAmb.slice() : null;
       var track = d('heroTrack');
@@ -563,7 +571,7 @@
         applyAmbient(lerpHsl(dragBase, nextAmb, Math.min(Math.abs(frac), 1)));
       }
     });
-    function end(){
+    function end(allowTap){
       if (!dragging) return;
       dragging = false;
       var track = d('heroTrack');
@@ -572,10 +580,19 @@
       if (page) page.classList.remove('amb-live');    // 先恢复过渡再落位，颜色收尾才不硬跳
       if (locked === 'x' && Math.abs(dx) > Math.min(70, w * .16)) go(heroIdx + (dx < 0 ? 1 : -1));
       else go(heroIdx);
+
+      /* 点击进详情：没锁过方向（没左右滑也没上下滑）、按得不久、页面没被滚走 */
+      if (!allowTap || locked) return;
+      if (Date.now() - startT > 900) return;
+      var sc = d('homeScroll');
+      if (sc && Math.abs(sc.scrollTop - startTop) > 2) return;
+      var f = heroFilms[heroIdx];
+      if (!f || typeof openFilmDetail !== 'function') return;
+      openFilmDetail(encodeURIComponent(f.id));
     }
-    hero.addEventListener('pointerup', end);
-    hero.addEventListener('pointercancel', end);
-    hero.addEventListener('pointerleave', end);
+    hero.addEventListener('pointerup', function(){ end(true); });
+    hero.addEventListener('pointercancel', function(){ end(false); });
+    hero.addEventListener('pointerleave', function(){ end(false); });
 
     var dots = d('heroDots');
     if (dots) dots.addEventListener('click', function(e){
