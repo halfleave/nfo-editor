@@ -342,20 +342,26 @@
   }
 
   function render(){
-    var host = d('homeRows');
-    if (!host) return Promise.resolve();
-    syncHead();
-    if (!state.themeHidden) state.overviewTab = 'movie';      // 普通模式只放非番号影片
-    return listFilms().then(function(all){
-      var films = (all || []).slice().sort(function(a, b){ return addedAt(b) - addedAt(a); });  // 添加顺序：新的在前
-      var mode = state.overviewTab === 'xv' ? 'xv' : 'movie';
-      var pool = films.filter(function(f){ return mode === 'xv' ? kindOf(f) === 'xv' : kindOf(f) !== 'xv'; });
-      renderHero(pool, mode);
-      renderRows(films);
-      /* 停在「全部」二级页时（比如在那儿长按删了一部），首页重画顺便把二级页也刷一遍 */
-      var allPage = d('page-all');
-      if (allPage && allPage.classList.contains('active') && allKind) openAll(allKind, '');
-    }).catch(function(){});
+    /* v453：这个函数是启动流程的一环（renderOverview 转调过来），
+       同步抛错会让启动页永远停住，所以整体兜住，出任何问题都返回一个已完成的 Promise。 */
+    try {
+      var host = d('homeRows');
+      if (!host) return Promise.resolve();
+      syncHead();
+      if (!state.themeHidden) state.overviewTab = 'movie';      // 普通模式只放非番号影片
+      return listFilms().then(function(all){
+        var films = (all || []).slice().sort(function(a, b){ return addedAt(b) - addedAt(a); });  // 添加顺序：新的在前
+        var mode = state.overviewTab === 'xv' ? 'xv' : 'movie';
+        var pool = films.filter(function(f){ return mode === 'xv' ? kindOf(f) === 'xv' : kindOf(f) !== 'xv'; });
+        renderHero(pool, mode);
+        renderRows(films);
+        /* 停在「全部」二级页时（比如在那儿长按删了一部），首页重画顺便把二级页也刷一遍 */
+        var allPage = d('page-all');
+        if (allPage && allPage.classList.contains('active') && allKind) openAll(allKind, '');
+      }).catch(function(){});
+    } catch (e) {
+      return Promise.resolve();
+    }
   }
 
   function toggleTab(){

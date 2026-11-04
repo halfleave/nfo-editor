@@ -1,6 +1,11 @@
 
 /* ===== 骨架导航 + 全局交互（页面切换、Toast、各类弹窗开合） ===== */
 
+/* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
+   两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
+   由页面里的自愈逻辑清掉离线缓存重载一次。 */
+window.__SCRIPT_VER = '453';
+
 var currentPage = '';
 function switchPage(page) {
   var from = currentPage;
@@ -387,6 +392,7 @@ function showContextSheet(title, items, anchor){
 function setupBigTitle() {
   var sc = document.getElementById('editScroll');
   var bar = document.getElementById('editPageBar');
+  if (!sc || !bar) return;      // v453：节点不在就直接跳过，别在启动阶段抛空指针
   sc.addEventListener('scroll', function(){
     bar.classList.toggle('shrunk', sc.scrollTop > 20);
     bar.classList.toggle('scrolled', sc.scrollTop > 10);
@@ -8278,7 +8284,13 @@ var renderOverviewSeq = 0;     // 分帧渲染防串台：新一轮渲染开始�
    这个函数是所有「数据变了要刷新首页」的公共入口，保留原签名，内部转调新模块；
    拿不到新模块（比如被裁掉的构建）时才退回旧的三列网格。 */
 function renderOverview(){
-  if (window.HomeHero && document.getElementById('homeRows')) return window.HomeHero.render();
+  /* v453：这里被 bootApp 放在 rAF 里调用，同步抛错会让那个 Promise 永远不 resolve，
+     启动页就一直停着。所以整段都兜住，出错也返回一个已完成的 Promise。 */
+  try {
+    if (window.HomeHero && document.getElementById('homeRows')){
+      return Promise.resolve(window.HomeHero.render());
+    }
+  } catch (e) {}
   var grid = document.getElementById('overviewGrid');
   var empty = document.getElementById('overviewEmpty');
   if (!grid) return Promise.resolve();
@@ -14349,6 +14361,9 @@ function finishSplashProgress(){
 }
 function enterHome(){
   finishSplashProgress();
+  /* v453：正常进首页 → 撤掉页面里的兜底计时器，并清掉版本自愈的计数 */
+  if (window.__bootDone) { try { window.__bootDone(); } catch (e) {} }
+  try { sessionStorage.removeItem('__verfix'); } catch (e) {}
   setTimeout(hideSplash, 1000); // 0.5s 滑到末尾 + 0.5s 停留后再进首页
 }
 function hideSplash(){
@@ -14476,16 +14491,20 @@ function bootApp(){
   });
   initIosBottomBarHeal();   // 键盘收起 / 双击后自愈底部浏览器栏
   startSplashProgress();
-  setupBigTitle();
-  setWelcome();
+  /* v453：这一段全是同步的界面装配，任何一个节点取空都会抛错，
+     而它一旦抛错整个 bootApp 就断在这里、永远走不到 enterHome —— 启动页就那么停着。
+     逐个包住（而不是整体包住）：坏一个不影响其它的初始化。 */
+  [setupBigTitle, setWelcome, renderCountryChips, renderGenreChips,
+   initNativeSelects, initDetailScrollOverlay, syncAllSelectDisplays,
+   populateSettingSelects, updateSubtitleBtn].forEach(function(fn){
+    try { fn(); } catch (e) { console.warn('[boot]', (fn.name || '?') + ' 失败', e); }
+  });
   setInterval(setWelcome, 60000);
   /* 「即将清除」遮罩定时刷新：跨过「剩 1 天」门槛时列表自动点亮遮罩（仅首页可见时，静默无提示） */
   setInterval(function(){
     var home = document.getElementById('page-home');
     if (home && home.classList.contains('active')) renderOverview();
   }, 60000);
-  renderCountryChips();
-  renderGenreChips();
   loadPresets().then(function(){ renderCountryChips(); renderGenreChips(); }).catch(function(){});
   initNativeSelects();
   initDetailScrollOverlay();
@@ -14495,7 +14514,7 @@ function bootApp(){
 
   // ② 加载本地配置（异步，可并行）
   setSplashStep('正在加载配置…');
-  Promise.all([
+  var settingsReady = Promise.all([
     getTMDBKey().then(function(k){ state.apiKey = k || ''; }).catch(function(){}),
     getThemeColor().then(function(c){
       if (c) applyThemeColor(c, false);
@@ -14531,13 +14550,25 @@ function bootApp(){
     }).catch(function(){}),
     /* 方案 A：启动即加载 tbm 磁力库文档，保证后台探针/调度也能找到工具箱磁力任务 */
     auto115EnsureLibraryDoc().catch(function(){})
-  ]).then(function(){
+  ]);
+  /* v453：配置读取任何一项在真机上挂住（网络/存储卡死）都不能拖住启动页，最多等 5 秒 */
+  var settingsTimeout = new Promise(function(res){ setTimeout(res, 5000); });
+  Promise.race([settingsReady, settingsTimeout]).then(function(){
     // ②·⑤ 启动即恢复：方案 A 磁力库里上轮遗留的孤儿任务（running 步骤重置后续跑），与 openAuto115Page 里的 auto115Resume 互补
     auto115ResetOrphanSteps();
     auto115KickStuck();
     // ③ 加载影片列表（较重的同步渲染，放到一帧之后做，避免卡住启动页）
     setSplashStep('正在加载影片…');
-    return new Promise(function(res){ requestAnimationFrame(function(){ renderOverview().then(res, res); }); });
+    return new Promise(function(res){
+      requestAnimationFrame(function(){
+        /* v453：同步异常 + Promise 永不 resolve 两种情况都要能落地，
+           否则启动页会一直停在这里（这就是 v452 卡启动页的死法）。 */
+        var done = false;
+        var fin = function(){ if (!done){ done = true; res(); } };
+        setTimeout(fin, 6000);   // 兜底：6 秒还没画完也放行
+        try { Promise.resolve(renderOverview()).then(fin, fin); } catch (e) { fin(); }
+      });
+    });
   }).then(function(){
     // ④ 收尾：装配详情/状态/默认页，然后淡出启动页
     setSplashStep('即将完成…');
