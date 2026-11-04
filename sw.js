@@ -1,15 +1,19 @@
 /* nfo-editor-ios Service Worker —— 离线缓存应用壳 + 海报图片
- * 策略：
- *  - 磁力代理（*.workers.dev）：始终走网络、不缓存，保证每次都打到最新 Worker
- *  - 同源（nfo-editor-ios.html / manifest.json 等应用壳）：网络优先且**绕过浏览器 HTTP 缓存**，
- *    离线回退缓存（支持离线打开）。绕过缓存是为了让 PWA 独立窗口每次打开都拿到最新版，
- *    不再需要用户手动清站缓存 / 重加主屏。
- *  - 跨域图片（image.tmdb.org 等海报）：缓存优先，离线可见已加载过的图
+ * v448 策略（「秒开 + 后台静默更新」）：
+ *  - 同源（应用壳）：**缓存优先**——有缓存立刻返回，不再等网络（旧版是网络优先 + cache:'reload'，
+ *    弱网时会白屏十几秒）。缓存未命中才联网，拿到后顺手写入缓存。
+ *    HTML 也不做后台覆盖：同一次发版的所有文件共用一个 CACHE 桶，整桶替换只发生在
+ *    「新版本 sw.js 安装」时，避免出现「新 HTML 配旧 JS/CSS」的错位。
+ *  - install：逐文件预缓存（allSettled），单个文件失败不连累其它；**不再 skipWaiting**——
+ *    新版本停在 waiting，等用户在设置页点「发现新版本」或下次启动生效。
+ *  - message SKIP_WAITING：设置页点更新时由页面通知，立即接管。
+ *  - 磁力代理（*.workers.dev / Vercel）：始终走网络、不缓存
+ *  - 跨域图片（tmdb 等海报）：缓存优先，离线可见已加载过的图
  *  - 其余（TMDB API 等）：走网络，不缓存
- * 改版时递增下方 CACHE 版本号，旧缓存会在 activate 阶段被清理。
- * 逐版本变更记录见 git log，此处不再罗列。
+ * 改版时递增下方 CACHE 版本号（tools/bump.js 自动改），旧缓存会在 activate 阶段被清理。
+ * 注意：不发版就别改这个号——sw.js 字节不变浏览器就认为没有新版本，设置页的更新按钮也永远不会出现。
  */
-const CACHE = 'nfo-ios-v447';
+const CACHE = 'nfo-ios-v448';
 const APP_SHELL = ['./nfo-editor-ios.html', './manifest.json', './src/core-shared.js', './src/pinyin-initial.js', './src/auto115-core.js', './src/toolbox-core.js', './src/tidy-core.js', './styles/ios.css', './src/ui-ios.js', './src/qrcode.min.js'];
 // 注意：真实 Worker 部署在 Vercel（nfo-magnet-proxy-vercel.vercel.app），并非 Cloudflare 的 *.workers.dev，
 // 故此处须同时匹配 vercel.app 上的 Worker 域名，否则「Worker 请求永远走网络、不缓存」的规则对其不生效，
@@ -27,11 +31,11 @@ function isImageReq(req) {
 }
 
 self.addEventListener('install', function (e) {
-  e.waitUntil((function () {
-    return caches.open(CACHE).then(function (c) {
-      return c.addAll(APP_SHELL).catch(function () { return c.add('./nfo-editor-ios.html').catch(function () {}); });
-    });
-  })().then(function () { return self.skipWaiting(); }));
+  // allSettled：弱网下个别文件失败不连累其余文件入缓存（缺的等真正用到时再补下载）
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return Promise.allSettled(APP_SHELL.map(function (u) { return c.add(u); }));
+  }));
+  // 不调用 skipWaiting：新版本先停在 waiting，等用户点「发现新版本」或下次启动自动接管
 });
 
 self.addEventListener('activate', function (e) {
@@ -40,6 +44,11 @@ self.addEventListener('activate', function (e) {
       return k !== CACHE ? caches.delete(k) : Promise.resolve();
     }));
   }).then(function () { return self.clients.claim(); }));
+});
+
+/* 设置页「发现新版本 → 点击更新」：页面通知后立即接管（页面在 controllerchange 里重载） */
+self.addEventListener('message', function (e) {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', function (e) {
@@ -53,23 +62,22 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // 同源：网络优先（绕过 HTTP 缓存，保证拿到最新），离线回退缓存
+  // 同源：缓存优先（秒开），未命中才联网并回填缓存
   if (url.origin === self.location.origin) {
-    e.respondWith(
-      fetch(req, { cache: 'reload' }).then(function (res) {
-        if (okToCache(res)) {
-          var copy = res.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, copy); });
+    e.respondWith(caches.open(CACHE).then(function (c) {
+      // ignoreSearch：页面引用的是 styles/ios.css?v=448，预缓存的是无查询串版本
+      return c.match(req, { ignoreSearch: true }).then(function (hit) {
+        if (hit) return hit;
+        // 导航请求兜底：start_url 与文件路径不一致时也能落到缓存的壳上
+        if (req.mode === 'navigate') {
+          return c.match('./nfo-editor-ios.html').then(function (shellHit) {
+            if (shellHit) return shellHit;
+            return fetchAndCache(c, req);
+          });
         }
-        return res;
-      }).catch(function () {
-        return caches.match(req).then(function (cached) {
-          if (cached) return cached;
-          // 静态资源带 ?v= 版本号，忽略查询串回退到预缓存的无参数版本
-          return caches.match(req, { ignoreSearch: true }).then(function (c2) { return c2 || caches.match('./nfo-editor-ios.html'); });
-        });
-      })
-    );
+        return fetchAndCache(c, req);
+      });
+    }));
     return;
   }
 
@@ -91,3 +99,13 @@ self.addEventListener('fetch', function (e) {
   }
   // 其余（TMDB API 等）走网络，不缓存
 });
+
+function fetchAndCache(c, req) {
+  return fetch(req).then(function (res) {
+    if (okToCache(res)) {
+      var copy = res.clone();
+      c.put(req, copy).catch(function () {});
+    }
+    return res;
+  });
+}

@@ -30,6 +30,8 @@ function switchPage(page) {
   if (page === 'settings'){
     syncThemeHiddenSwitch(); // 进入设置页同步里模式开关状态
     renderSettingsTools();   // 顶部工具图标横排按当前档位重绘
+    syncAppUpdateRow();      // v448：有新版本才显示「发现新版本」行
+    swCheckForUpdate();      // v448：顺手比对一次 sw.js（60 秒内不重复）
   }
 }
 /* —— Tab 切换滑动动画（所有 tab 通用） ——
@@ -14417,18 +14419,67 @@ if (document.readyState === 'loading'){
 }
 document.addEventListener('visibilitychange', function(){ if (document.hidden) cancelDrag(); });
 
-/* —— PWA：Service Worker 离线缓存（仅 HTTPS / localhost 生效；file:// 直接跳过） —— */
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
+/* —— PWA：Service Worker 离线缓存（仅 HTTPS / localhost 生效；file:// 直接跳过） ——
+   v448：改为「缓存优先 + 后台静默更新」。新版本装好后停在 waiting，不自动打断用户；
+   设置页出现「发现新版本」按钮，点了才 skipWaiting + 重载（全走缓存，几乎无感知）。 */
+var swRegistration = null, swUpdateReady = false, swUpdatePending = false, swLastCheck = 0;
+function swSupported(){
+  return 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+}
+function syncAppUpdateRow(){
+  var row = document.getElementById('appUpdateRow');
+  if (row) row.style.display = swUpdateReady ? '' : 'none';
+}
+function markSwUpdateReady(){
+  if (swUpdateReady) return;
+  swUpdateReady = true;
+  syncAppUpdateRow();
+  showToast('有新版本，可在设置里更新', 'success');
+}
+/* 进设置页时主动比对一次 sw.js（60 秒内不重复），免得非要等下次启动才知道有新版本 */
+function swCheckForUpdate(){
+  if (!swRegistration || !swRegistration.update) return;
+  var now = Date.now();
+  if (now - swLastCheck < 60000) return;
+  swLastCheck = now;
+  swRegistration.update().catch(function(){});
+}
+/* 设置页点「发现新版本」：让 waiting 的 SW 立即接管 → controllerchange 里重载 */
+function applyAppUpdate(){
+  if (!navigator.serviceWorker){ location.reload(); return; }
+  if (swRegistration && swRegistration.waiting){
+    swUpdatePending = true;
+    swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    return;
+  }
+  // 还在下载中（installing）：这时重载会回到旧版本，看起来像「点了没反应」
+  if (swRegistration && swRegistration.installing){
+    showToast('正在准备更新，稍等几秒再点', 'error');
+    return;
+  }
+  location.reload();
+}
+if (swSupported()){
   window.addEventListener('load', function(){
     /* updateViaCache:'none' —— sw.js 自身也不许走 HTTP 缓存，保证每次打开都能发现新版本 */
-    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(function(err){ console.warn('SW 注册失败：', err); });
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(function(reg){
+      swRegistration = reg;
+      // 本次打开前就已经装好在 waiting 的新版本
+      if (reg.waiting && navigator.serviceWorker.controller) markSwUpdateReady();
+      reg.addEventListener('updatefound', function(){
+        var nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', function(){
+          // installed 且已有旧版在控制 → 这是一次「更新」而非首次安装
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) markSwUpdateReady();
+        });
+      });
+    }).catch(function(err){ console.warn('SW 注册失败：', err); });
   });
-  /* 新 SW 接管后自动刷新一次（同一个会话只刷一次，避免打断用户操作） */
-  var swReloaded = false;
+  /* 只有用户点了更新（skipWaiting 生效）才重载；其它情况一律不打断 */
   navigator.serviceWorker.addEventListener('controllerchange', function(){
-    if (swReloaded) return;
-    try { if (sessionStorage.getItem('nfoSwReloaded')) return; sessionStorage.setItem('nfoSwReloaded', '1'); } catch (e2) {}
-    swReloaded = true;
+    if (!swUpdatePending) return;
+    swUpdatePending = false;
     location.reload();
   });
 }
