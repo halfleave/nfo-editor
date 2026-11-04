@@ -2399,7 +2399,8 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
   --home-blur: 0px;      /* 底图模糊半径：上滑越大 */
   --home-blur-n: 0;      /* 同一进度的无单位值，供 scale() 放大用 */
   --home-veil: 0;        /* 盖在底图上的底色浓度：模糊后保阅读对比 */
-  --home-fade: 1;        /* 焦点区文字透明度：上滑时让位给下面的横滑列表 */
+  --home-lift: 0px;      /* 焦点区文字层上移量：等于 scrollTop，文字跟页面上移、底图钉住 */
+  --home-mask: 6%;       /* 海报从下沿往上渐隐到全透明的分界（透明区随上滑往上涨） */
 }
 /* 手指拖动时临时关掉底色过渡，否则 .55s 缓动会拖在手指后面 */
 #page-home.amb-live { transition: none; }
@@ -2433,12 +2434,17 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .hero-track.dragging { transition: none; }
 .hero-slide { position: relative; flex: 0 0 100%; height: 100%; overflow: hidden; }
 /* 清晰海报本身也跟着模糊（不淡出，否则会和后面的模糊底图错位重影）；
-   scale 随模糊同步放大一点，把模糊产生的透明毛边挤出可视区，四周才不会发亮。 */
+   scale 随模糊同步放大一点，把模糊产生的透明毛边挤出可视区，四周才不会发亮。
+   v460：下沿不再硬切 —— 用一条从底往上「透明 → 实心」的遮罩，把海报渐隐进整页底色；
+   上滑时 --home-mask 往上涨，透明区从下往上吃进海报，最后整块让给底图，接缝处永远是渐变、
+   没有一条横线（.hero-slide 的 overflow:hidden 才是硬边，遮罩解决了它）。 */
 .hero-slide > img {
   width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none;
   filter: blur(var(--home-blur, 0px));
   -webkit-filter: blur(var(--home-blur, 0px));
   transform: scale(calc(1 + var(--home-blur-n, 0) * .12));
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0) var(--home-mask, 6%), #000 calc(var(--home-mask, 6%) + 11%));
+  mask-image: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0) var(--home-mask, 6%), #000 calc(var(--home-mask, 6%) + 11%));
 }
 /* 只在最底下一小段收进整页底色，避免海报下沿出现一条硬边。
    v455：原来从 40% 就开始压黑的那层遮罩已按要求去掉，海报颜色一直到底。 */
@@ -2455,19 +2461,22 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 }
 /* 空态不压暗（那一屏本来就是整片延伸色） */
 .hero-slide.no-shade::after { display: none; }
-/* 里模式「隐私封面」：不拉海报，只给番号 */
+/* 里模式「隐私封面」：不拉海报，只给番号（同样按 --home-mask 渐隐，上滑后不会留一块硬边方块） */
 .hero-mask {
   position: absolute; inset: 0; display: grid; place-items: center;
   background: #202027; color: rgba(255,255,255,.72);
   font-size: 15px; font-weight: 600; letter-spacing: 1px;
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0) var(--home-mask, 6%), #000 calc(var(--home-mask, 6%) + 11%));
+  mask-image: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0) var(--home-mask, 6%), #000 calc(var(--home-mask, 6%) + 11%));
 }
 
-/* —— 顶部浮层：左「日期 · 问候」/ 右「影片·XV」图标切换 —— */
+/* —— 顶部浮层：左「日期 · 问候」—— 上滑时跟文字层一起上移（底图不动） */
 .hero-top {
   position: absolute; left: 0; right: 0; top: 0; z-index: 4;
   padding: calc(var(--sat) + 12px) 16px 0;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  opacity: var(--home-fade, 1);
+  transform: translate3d(0, calc(-1 * var(--home-lift, 0px)), 0);
+  will-change: transform;
 }
 .hero-pill {
   display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px 0 12px;
@@ -2481,8 +2490,14 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .hero-pill .hp-dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,.45); }
 .hero-pill .hp-hi { color: rgba(255,255,255,.78); }
 
-/* —— 底部信息层：logo / 地区行（居中）/ [片名] + 简介 3 行 / 平台评分（居中） —— */
-.hero-info { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 0 18px 46px; color: #fff; opacity: var(--home-fade, 1); }
+/* —— 底部信息层：logo / 地区行（居中）/ [片名] + 简介 3 行 / 平台评分（居中） ——
+   v460：上滑时这一层按「滚动距离 1:1」往上走（和底图脱开），看着就是普通内容被滚走，
+   而不是钉在海报上干等着淡出。 */
+.hero-info {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 0 18px 46px; color: #fff;
+  transform: translate3d(0, calc(-1 * var(--home-lift, 0px)), 0);
+  will-change: transform;
+}
 .hero-logo { display: flex; justify-content: center; margin-bottom: 10px; }
 .hero-logo img {
   max-width: 66%; max-height: 62px; object-fit: contain; display: block;
@@ -2512,7 +2527,7 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .hero-rate.detail-ratings { margin: 12px 0 0; gap: 13px; }
 
 /* —— 页码点 —— */
-.hero-dots { position: absolute; left: 0; right: 0; bottom: 14px; z-index: 4; display: flex; align-items: center; justify-content: center; gap: 6px; opacity: var(--home-fade, 1); }
+.hero-dots { position: absolute; left: 0; right: 0; bottom: 14px; z-index: 4; display: flex; align-items: center; justify-content: center; gap: 6px; transform: translate3d(0, calc(-1 * var(--home-lift, 0px)), 0); will-change: transform; }
 .hero-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.32); transition: width .22s, background .22s; }
 .hero-dots i.on { width: 17px; border-radius: 3px; background: rgba(255,255,255,.95); }
 

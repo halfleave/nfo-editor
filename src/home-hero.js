@@ -6,7 +6,9 @@
               AVideo 行只在里模式出现，标题右侧的眼镜 = 设置页「隐私封面」开关（直接控封面显隐）。
      全部     —— 某类超过 15 部才在排头出现入口，点了进二级页 #page-all（不是弹窗）。
    背景：取当前海报的综合色铺满整页（浅/深色模式都不影响）。
-   滚动：焦点区是 sticky 的，上滑时海报钉住不动、逐渐模糊，横滑列表从它上面滑过去（对齐详情页观感）。
+   滚动：焦点区是 sticky 的 —— 上滑时**底图（海报 + 模糊底图）钉住不动**，文字层（日期胶囊 / logo /
+        简介 / 评分 / 页码点）按滚动距离 1:1 上移，横滑列表从海报上滑过去；海报下沿用遮罩从下往上
+        渐隐到全透明，所以滚到哪都不会出现一条硬边横线（对齐详情页观感）。
    底色：按影片缓存（内存 + IndexedDB），一进首页就把 8 部全取好；拖动时底色按拖动比例插值，跟手不跳。
    依赖 ui-ios.js 的全局：state / listFilms / escapeHtml / escapeAttr / NfoCore / idbGet / idbPut /
    DEFAULT_WORKER / detailRatingsHtml / DETAIL_RATINGS_TTL / avCoverMaskHtml / bindOverviewLongPress。 */
@@ -499,13 +501,11 @@
     var sc = d('homeScroll'); if (sc) sc.scrollTop = 0;
   }
 
-  /* ================= 滚动：底图钉住不动、随上滑逐渐模糊（对齐详情页的观感） =================
-     焦点区是 sticky 的（CSS），内容从它上面滑过去；这里按滚动进度推四个变量：
-       --home-bg    整屏模糊底图的显影（0 → 1，与清晰海报交叉淡入）
-       --home-blur  底图模糊半径
-       --home-veil  底图上那层自身底色的浓度（模糊后仍要有对比，字/卡片才看清）
-       --home-fade  焦点区文字（日期胶囊 / logo / 简介 / 评分 / 页码点）的透明度
-     只改 CSS 变量、只碰一个节点，不触发重排，滚动才不卡。 */
+  /* ================= 滚动：底图钉住不动、文字层跟着页面上移（对齐详情页的观感） =================
+     焦点区是 sticky 的（CSS），海报/底图钉在原地不动；文字层（日期胶囊 / logo / 简介 / 评分 / 页码点）
+     用 --home-lift 按滚动距离 1:1 上移，观感上就是普通内容被滚走，而不是钉在图上。
+     海报下沿用 --home-mask 从下往上渐隐到全透明（上滑时透明区往上涨），最后整块让给模糊底图，
+     所以底部不会出现一条“海报忽然结束”的硬边横线。 */
   function syncScrollState(){
     var sc = d('homeScroll'), hero = d('homeHero'), page = d('page-home');
     if (!sc || !hero || !page) return;
@@ -516,7 +516,8 @@
     page.style.setProperty('--home-blur', (t * 22).toFixed(1) + 'px');
     page.style.setProperty('--home-blur-n', t.toFixed(3));
     page.style.setProperty('--home-veil', (t * .55).toFixed(3));
-    page.style.setProperty('--home-fade', Math.max(1 - t * 3.2, 0).toFixed(3));
+    page.style.setProperty('--home-lift', Math.min(sc.scrollTop, h) + 'px');
+    page.style.setProperty('--home-mask', (6 + t * 100).toFixed(2) + '%');
   }
   (function bindScroll(){
     var sc = d('homeScroll');
