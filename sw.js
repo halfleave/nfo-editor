@@ -13,8 +13,8 @@
  * 改版时递增下方 CACHE 版本号（tools/bump.js 自动改），旧缓存会在 activate 阶段被清理。
  * 注意：不发版就别改这个号——sw.js 字节不变浏览器就认为没有新版本，设置页的更新按钮也永远不会出现。
  */
-const CACHE = 'nfo-ios-v448';
-const APP_SHELL = ['./nfo-editor-ios.html', './manifest.json', './src/core-shared.js', './src/pinyin-initial.js', './src/auto115-core.js', './src/toolbox-core.js', './src/tidy-core.js', './styles/ios.css', './src/ui-ios.js', './src/qrcode.min.js'];
+const CACHE = 'nfo-ios-v452';
+const APP_SHELL = ['./nfo-editor-ios.html', './manifest.json', './src/core-shared.js', './src/pinyin-initial.js', './src/auto115-core.js', './src/toolbox-core.js', './src/tidy-core.js', './styles/ios.css', './src/home-hero.js', './src/ui-ios.js', './src/qrcode.min.js'];
 // 注意：真实 Worker 部署在 Vercel（nfo-magnet-proxy-vercel.vercel.app），并非 Cloudflare 的 *.workers.dev，
 // 故此处须同时匹配 vercel.app 上的 Worker 域名，否则「Worker 请求永远走网络、不缓存」的规则对其不生效，
 // 故障期的 404 可能被浏览器 HTTP 缓存住而在手机端持续出现。

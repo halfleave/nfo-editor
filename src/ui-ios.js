@@ -17,6 +17,8 @@ function switchPage(page) {
   // 之前用「黑名单」枚举三级页，每新增一个页面就漏一次（任务详情页就这样把 tab 栏串到了二级页上）。
   var TOP_LEVEL = ['home', 'search', 'settings'];
   if (tb) tb.style.display = (TOP_LEVEL.indexOf(page) >= 0) ? '' : 'none';
+  /* v452：从别的页面回到首页时重画（新首页由 home-hero.js 负责，数据可能已在别处变过） */
+  if (page === 'home' && from && from !== 'home' && window.HomeHero) window.HomeHero.render();
   if (page === 'search'){
     // 普通模式（themeHidden=false）强制只能用 TMDB，里模式保留上次源
     if (!state.themeHidden){
@@ -73,6 +75,8 @@ function updateOverviewTabVisibility(){
     if (datePill) datePill.style.display = 'none';
     if (searchSeg) searchSeg.style.display = 'flex';
   }
+  /* v452：新首页的「影片 / XV」是一个图标按钮，显隐与状态由 home-hero 自己同步 */
+  if (window.HomeHero && window.HomeHero.syncHead) window.HomeHero.syncHead();
 }
 
 /* 详情页「从左边缘右滑返回首页」手势：兼容触摸与鼠标（桌面模式），与竖向滚动/下拉放大互斥 */
@@ -8231,17 +8235,22 @@ function setWelcome(){
   else if (h >= 19 && h < 23) greet = '晚上好';
   else if (h >= 23 || h < 5) greet = '夜深了';
   else greet = '天要亮了';
-  document.getElementById('welcomeSub').textContent = greet + '，';
+  /* v452：新首页的问候语在 hero 顶部的胶囊里（日期左、问候右），交给 home-hero 同步；
+     旧的 welcomeSub / welcomeTitle / datePill 节点已经不在了，取不到就跳过，别再空指针。 */
+  if (window.HomeHero && window.HomeHero.syncHead) window.HomeHero.syncHead();
+  var sub = document.getElementById('welcomeSub');
+  if (sub) sub.textContent = greet + '，';
   var now = new Date();
   var slot = Math.floor((now.getHours() * 60 + now.getMinutes()) / 30);
   if (slot !== lastPhraseSlot){
     lastPhraseSlot = slot;
     var phrase = pickRandomPhrase();
     var titleEl = document.getElementById('welcomeTitle');
-    if (titleEl.firstChild && titleEl.firstChild.nodeType === 3) titleEl.firstChild.textContent = phrase + ' ';
+    if (titleEl && titleEl.firstChild && titleEl.firstChild.nodeType === 3) titleEl.firstChild.textContent = phrase + ' ';
   }
   var wd = ['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
-  document.getElementById('datePill').textContent = (now.getMonth() + 1) + '月' + now.getDate() + '日 ' + wd;
+  var pill = document.getElementById('datePill');
+  if (pill) pill.textContent = (now.getMonth() + 1) + '月' + now.getDate() + '日 ' + wd;
 }
 /* 「即将清除」遮罩判定：仅 14d/3d 模式（6h 窗口太短、预警无意义），距清除剩不足 1 天且未锁定；
    已过期的影片由 clearExpiredFilms 直接删除，等不到遮罩 */
@@ -8265,7 +8274,11 @@ function resetExpireTimer(id){
 }
 var hiResPool = {};            // 影片id → 高清封面 dataURL：不再整段 base64 塞进 HTML 属性（方案二），渲染字符串瘦身
 var renderOverviewSeq = 0;     // 分帧渲染防串台：新一轮渲染开始后，旧渲染还没铺完的批次自动作废
+/* v452：首页整块交给 home-hero.js（海报焦点 + 三排横滑 + 二级「全部」页）。
+   这个函数是所有「数据变了要刷新首页」的公共入口，保留原签名，内部转调新模块；
+   拿不到新模块（比如被裁掉的构建）时才退回旧的三列网格。 */
 function renderOverview(){
+  if (window.HomeHero && document.getElementById('homeRows')) return window.HomeHero.render();
   var grid = document.getElementById('overviewGrid');
   var empty = document.getElementById('overviewEmpty');
   if (!grid) return Promise.resolve();
@@ -10328,6 +10341,7 @@ function openFilmDetail(encId){
     if (!film) return showToast('未找到影片', 'error');
     currentDetailFilmId = film.id;
     renderFilmDetail(film);
+    maybeRefetchPlot(film);               // v449：简介为空时进详情页补取一次（正在更新的剧集常见）
     maybeDetailFallbackTranslate(film);   // 兜底：详情页看到日文且没在翻 → 触发一次后台翻译（翻完自动刷新详情简介）
     switchPage('detail');
     auto115Doc = null;                 // 切影片：重置自动化文档，按新影片重新载入并刷新角标
@@ -10446,6 +10460,50 @@ function refreshDetailPlot(){
       plotEl.onclick = openPlotSheet;
     }
     updateTranslateRetryBtn();
+  }).catch(function(){});
+}
+/* ===== v449 详情页补简介 =====
+   正在更新的剧集在添加时常常还没有 overview（TMDB 后来才补），老记录就一直空着。
+   进详情页发现简介为空 → 静默重取一次（zh-CN 空再回落 en-US），拿到就写库并就地刷新简介，
+   不用重进页面、也不用重新保存整部影片。同一条记录 6 小时内只试一次，避免每次进详情都打 TMDB。 */
+var PLOT_REFETCH_GAP = 6 * 3600 * 1000;   // 重试间隔（毫秒）
+var _plotRetryAt = {};                     // filmId → 上次尝试时间（仅本会话，兜住「库里还没写标记」的那次）
+function maybeRefetchPlot(film){
+  if (!film || !film.id) return;
+  var d = film.data || {};
+  if (String(d.plot || '').trim()) return;            // 已有简介：什么都不做
+  if (!d.tmdbId) return;                               // 没有 TMDB id 无从补（老 AV / 手填记录）
+  var now = Date.now();
+  if (d.plotFetchAt && now - d.plotFetchAt < PLOT_REFETCH_GAP) return;
+  if (_plotRetryAt[film.id] && now - _plotRetryAt[film.id] < PLOT_REFETCH_GAP) return;
+  _plotRetryAt[film.id] = now;
+  var path = (d.tmdbMediaType === 'tv' ? '/tv/' : '/movie/') + d.tmdbId;
+  dsOpts().then(function(opts){
+    return NfoCore.tmdbRequest(path, { language: 'zh-CN' }, opts).then(function(zh){
+      var ov = String((zh && zh.overview) || '').trim();
+      if (ov) return ov;
+      // 中文条目还没有简介（新剧最常见）→ 回落英文原文，有就先存上
+      return NfoCore.tmdbRequest(path, { language: 'en-US' }, opts)
+        .then(function(en){ return String((en && en.overview) || '').trim(); })
+        .catch(function(){ return ''; });
+    });
+  }).then(function(ov){
+    // 重新读一遍再写：避免覆盖用户在此期间对海报/季集等做的其它改动
+    return loadFilm(film.id).then(function(fresh){
+      if (!fresh || !fresh.data) return '';
+      fresh.data.plotFetchAt = Date.now();              // 无论有没有拿到都记一笔，免得反复打接口
+      if (ov && !String(fresh.data.plot || '').trim()) fresh.data.plot = ov;
+      return saveFilm(fresh).then(function(){ return ov; });
+    });
+  }).then(function(ov){
+    if (!ov) return;
+    if (currentDetailFilmId !== film.id) return;        // 已经切到别的影片了：只存库，不动界面
+    refreshDetailPlot();
+    if (currentDetailFilm) currentDetailFilm.data.plot = ov;
+    // 简介弹窗正开着、且当时是「暂无简介」→ 就地补上正文
+    var modal = document.getElementById('plotModal');
+    if (modal && modal.classList.contains('on') && !document.getElementById('plotSheetText')) openPlotSheet();
+    showToast('已补全简介', 'success');
   }).catch(function(){});
 }
 function retryTranslate(){
@@ -10807,6 +10865,7 @@ function dsPickSeason(n){
   dsPaintSeason(document.getElementById('detailSeasons'), film, n, dsRenderSeq);
 }
 /* 单集简介弹层：剧照 + 集名 + 日期/时长/评分 + 全文 + 复制 */
+var epSheetKey = '';   // 当前弹窗对应的「影片:季:集」——补简介回来时据此判断要不要重画
 function openEpSheet(n, ep){
   var film = currentDetailFilm; if (!film) return;
   var pack = ((film.data || {}).tvSeasons || {})[String(n)];
@@ -10825,6 +10884,7 @@ function openEpSheet(n, ep){
   if (e.overview){
     html += '<div class="ep-plot">' + (e.en ? '<span class="ep-lang">原文</span>' : '') + escapeHtml(e.overview) + '</div>';
   } else {
+    /* v451：简介为空就直接说没有——补取在后台静默进行，查到后自己补上，不做「正在获取」这种占位提示 */
     html += '<div class="ep-empty">本集暂无简介</div>';
   }
   html += '<div class="ep-acts">'
@@ -10835,12 +10895,87 @@ function openEpSheet(n, ep){
   var mask = document.getElementById('epMask'), modal = document.getElementById('epModal');
   if (mask) mask.classList.add('on');
   if (modal) modal.classList.add('on');
+  epSheetKey = film.id + ':' + n + ':' + ep;
+  maybeRefetchEpPlot(film, n, ep);   // v450：本集简介为空 → 点开时补取一次
 }
 function dsCloseEp(){
   var mask = document.getElementById('epMask'), modal = document.getElementById('epModal');
   if (mask) mask.classList.remove('on');
   if (modal) modal.classList.remove('on');
+  epSheetKey = '';
 }
+
+/* ===== v450 某一集简介为空时补取 =====
+   正在更新的剧集，最新几集常常还没有 overview（TMDB 过几天才补），选集卡片就一直是空的。
+   点开某一集的卡片时，只针对这一集发一次 /tv/<id>/season/<n>/episode/<ep>：
+   zh-CN 没有简介再回落 en-US；拿到就写进影片的季缓存、原地补上卡片与弹窗，不用重进页面。
+   v451：全程静默——弹窗直接显示「本集暂无简介」，查到后自己补上，不弹提示。
+   同一集 6 小时内只试一次，避免反复打 TMDB。 */
+var EP_PLOT_GAP = 6 * 3600 * 1000;
+var _epPlotBusy = {};
+function maybeRefetchEpPlot(film, n, ep){
+  if (!film || !film.id) return;
+  var d = film.data || {};
+  if (d.tmdbMediaType !== 'tv' || !d.tmdbId) return;      // 只有剧集能补单集
+  var pack = (d.tvSeasons || {})[String(n)];
+  var target = null;
+  ((pack && pack.episodes) || []).forEach(function(x){ if (x.ep === ep) target = x; });
+  if (!target) return;
+  if (String(target.overview || '').trim()) return;        // 已有简介：什么都不做
+  var now = Date.now();
+  if (target.plotFetchAt && now - target.plotFetchAt < EP_PLOT_GAP) return;
+  var key = film.id + ':' + n + ':' + ep;
+  if (_epPlotBusy[key]) return;
+  _epPlotBusy[key] = true;
+  var path = '/tv/' + d.tmdbId + '/season/' + n + '/episode/' + ep;
+  dsOpts().then(function(opts){
+    return NfoCore.tmdbRequest(path, { language: 'zh-CN' }, opts).then(function(zh){
+      var ov = String((zh && zh.overview) || '').trim();
+      if (ov) return { ov: ov, en: false };
+      return NfoCore.tmdbRequest(path, { language: 'en-US' }, opts).then(function(en){
+        return { ov: String((en && en.overview) || '').trim(), en: true };
+      }).catch(function(){ return { ov: '', en: false }; });
+    });
+  }).then(function(res){
+    delete _epPlotBusy[key];
+    var got = !!res.ov;
+    target.plotFetchAt = Date.now();                       // 无论有没有拿到都记一笔，6 小时内不再试
+    if (got){ target.overview = res.ov; target.en = !!res.en; }
+    if (currentDetailFilmId === film.id){
+      if (got){
+        patchEpCard(film, n, ep, target);                    // 卡片就地上字，不重排列表、滚动不跳
+        /* v451：静默补全——不弹提示；只有真的拿到简介、且弹窗仍停在这一集时才重画，
+           没拿到就保持「本集暂无简介」原样，不重画（避免无谓闪烁、丢滚动位置） */
+        var modal = document.getElementById('epModal');
+        if (epSheetKey === key && modal && modal.classList.contains('on')) openEpSheet(n, ep);
+      }
+    }
+    // 写库：重新读一遍再改，避免覆盖这期间其它改动
+    return loadFilm(film.id).then(function(fresh){
+      if (!fresh || !fresh.data) return;
+      var p2 = (fresh.data.tvSeasons || {})[String(n)];
+      var t2 = null;
+      ((p2 && p2.episodes) || []).forEach(function(x){ if (x.ep === ep) t2 = x; });
+      if (!t2) return;
+      t2.plotFetchAt = Date.now();
+      if (got && !String(t2.overview || '').trim()){ t2.overview = res.ov; t2.en = !!res.en; }
+      return saveFilm(fresh);
+    });
+  }).catch(function(){ delete _epPlotBusy[key]; });
+}
+/* 只改那张卡片里的简介，不动整个列表（dsPaintEps 重排会丢滚动位置） */
+function patchEpCard(film, n, ep, e){
+  if (!film || !e || !e.overview) return;
+  if (dsSelSeason[film.id] !== n) return;                  // 已切到别的季：别把上一季的简介写进同名集号
+  var box = document.getElementById('detailSeasons');
+  if (!box) return;
+  var card = box.querySelector('.ds-ep[data-ep="' + ep + '"]');
+  if (!card) return;
+  var plotEl = card.querySelector('.ds-plot');
+  if (!plotEl) return;
+  plotEl.innerHTML = (e.en ? '<span class="ds-lang">原文</span>' : '') + escapeHtml(e.overview);
+}
+
 
 /* ===== v438 多平台评分行（仅高级档）=====
    位置：详情页「类型」那一行下面。数据来自自建 Worker /scores：
@@ -13625,10 +13760,16 @@ function tbmAbortTask(id){ auto115Abort(id); }
 
 /* —— 概览长按操作：iOS 原生风格底部 Action Sheet —— */
 var overviewSuppressClick = false;
-function bindOverviewLongPress(startIdx){
-  var cards = document.querySelectorAll('#overviewGrid .movie-card-wrap');
+/* container：可选，卡片所在的容器节点。首页三排横滑（#homeRows）与二级「全部」页（#allGrid）
+   也用同一套长按菜单，所以不能再写死 #overviewGrid。 */
+function bindOverviewLongPress(startIdx, container){
+  var root = container || document.getElementById('overviewGrid');
+  if (!root) return;
+  var cards = root.querySelectorAll('.movie-card-wrap');
   for (var i = (startIdx || 0); i < cards.length; i++){
     (function(card){
+      if (card.getAttribute('data-lp-bound')) return;   // 分批渲染会重复调用，绑过就别再绑（否则长按弹两次）
+      card.setAttribute('data-lp-bound', '1');
       var timer = null, startX = 0, startY = 0, triggered = false;
       function getPoint(e){
         var t = e.touches && e.touches[0] ? e.touches[0] : (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : e);
@@ -14340,8 +14481,8 @@ function bootApp(){
   setInterval(setWelcome, 60000);
   /* 「即将清除」遮罩定时刷新：跨过「剩 1 天」门槛时列表自动点亮遮罩（仅首页可见时，静默无提示） */
   setInterval(function(){
-    var g = document.getElementById('overviewGrid');
-    if (g && g.offsetParent) renderOverview();
+    var home = document.getElementById('page-home');
+    if (home && home.classList.contains('active')) renderOverview();
   }, 60000);
   renderCountryChips();
   renderGenreChips();
