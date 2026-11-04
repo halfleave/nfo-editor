@@ -14038,8 +14038,9 @@ function avCoverMaskHtml(code){
   var txt = String(code == null ? '' : code).trim();
   return '<span>' + escapeHtml(txt || '无番号') + '</span>';
 }
-function toggleAvCoverMask(checkbox){
-  state.avCoverMask = !!(checkbox && checkbox.checked);
+/* 统一入口：首页 AV 行标题右侧的眼镜按钮也走这里（点击直接开关，和设置页开关联动） */
+function setAvCoverMask(v){
+  state.avCoverMask = !!v;
   syncAvCoverMaskSwitch();
   idbPut('kv', 'avCoverMask', state.avCoverMask).catch(function(){});
   // 首页：重渲染一遍（分帧渲染自带防串台，重复调用安全）
@@ -14049,6 +14050,9 @@ function toggleAvCoverMask(checkbox){
     var box = document.getElementById('tmdbResults');
     if (box && box.querySelector('.tmdb-result')) renderJavbusResults(lastJavbusResults, box);
   }
+}
+function toggleAvCoverMask(checkbox){
+  setAvCoverMask(checkbox && checkbox.checked);
 }
 function renderThemeGrid(){
   var grid = document.getElementById('themeGrid');

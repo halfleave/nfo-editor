@@ -1,10 +1,13 @@
-/* ===== v452 首页改版：海报焦点 + 分类横滑 =====
+/* ===== 首页：海报焦点 + 分类横滑 =====
    结构（原型 prototype/home-v2.html 落地）：
-     焦点区  —— 最多 8 部随机，整幅海报作底图；底部信息依次是「地区行（居中）/ 片名（居中）/
-              简介（3 行，左对齐）/ 平台评分（居中）」，可左右滑动，页码点可点。
-     三排横滑 —— 电影 / 剧集 / 动漫（动画类剧集），按添加顺序（新的在前）。
+     焦点区  —— 最多 8 部随机（**永远不含 AV**），整幅海报作底图；底部信息依次是「logo 位（有番号显示番号）/
+              地区行（居中）/[片名] + 简介（3 行）/ 平台评分（居中）」，可左右滑动，页码点可点。
+     横滑列表 —— 电影 / 剧集 / 动漫（动画类剧集）/ AVideo，按添加顺序（新的在前）。
+              AVideo 行只在里模式出现，标题右侧的眼镜 = 设置页「隐私封面」开关（直接控封面显隐）。
      全部     —— 某类超过 15 部才在排头出现入口，点了进二级页 #page-all（不是弹窗）。
-   背景：取当前海报的综合色铺满整页（浅/深色模式都不影响），海报底部用同色渐变衔接，不留分割线。
+   背景：取当前海报的综合色铺满整页（浅/深色模式都不影响）。
+   滚动：焦点区是 sticky 的，上滑时海报钉住不动、逐渐模糊，横滑列表从它上面滑过去（对齐详情页观感）。
+   底色：按影片缓存（内存 + IndexedDB），一进首页就把 8 部全取好；拖动时底色按拖动比例插值，跟手不跳。
    依赖 ui-ios.js 的全局：state / listFilms / escapeHtml / escapeAttr / NfoCore / idbGet / idbPut /
    DEFAULT_WORKER / detailRatingsHtml / DETAIL_RATINGS_TTL / avCoverMaskHtml / bindOverviewLongPress。 */
 (function(){
@@ -19,7 +22,10 @@
   var heroIdx = 0;
   var allKind = '';          // 「全部」二级页当前在看哪一类
   var allTitle = '';         // 以及它的标题（刷新时沿用）
-  var ambById = {};          // 影片 id → [h,s,l]
+  var ambById = {};          // 影片 id → { url, hsl }：底色按影片缓存（内存 + IndexedDB），滑到就有色，不再现算
+  var ambPending = {};       // 同一部片的取样去重（拖动时会被反复问）
+  var curAmb = null;         // 当前铺在页面上的底色 [h,s,l]
+  var dragBase = null;       // 本次拖动开始时的底色，插值从它起算
   var scoreTried = {};       // 评分请求去重（会话内）
   var ambCanvas = document.createElement('canvas');
   ambCanvas.width = 24; ambCanvas.height = 36;
@@ -131,9 +137,67 @@
     var page = d('page-home');
     if (!page) return;
     var c = hsl || [215, 14, 20];
+    curAmb = c;
     page.style.setProperty('--home-h', c[0]);
     page.style.setProperty('--home-s', c[1] + '%');
     page.style.setProperty('--home-l', c[2] + '%');
+  }
+  function ambOf(f){
+    var hit = f && ambById[f.id];
+    return hit && hit.hsl ? hit.hsl : null;
+  }
+  /* 取一部片的底色：内存 → IndexedDB → 现取样，三级缓存。
+     开了预取之后，滑到的那一部基本都已经有色，切换时不会再「先是旧色、半秒后才跳」 */
+  function ensureAmb(f){
+    var url = posterOf(f);
+    if (!url) return Promise.resolve(null);
+    var hit = ambById[f.id];
+    if (hit && hit.url === url) return Promise.resolve(hit.hsl);
+    if (ambPending[f.id]) return ambPending[f.id];
+    var key = 'amb:' + f.id;
+    var p = idbGet('kv', key).then(function(rec){
+      if (rec && rec.url === url && rec.hsl && rec.hsl.length === 3){
+        ambById[f.id] = { url: url, hsl: rec.hsl };
+        return rec.hsl;
+      }
+      return null;
+    }).catch(function(){ return null; }).then(function(cached){
+      if (cached) return cached;
+      return ambientOfUrl(url).then(function(hsl){
+        if (hsl){
+          ambById[f.id] = { url: url, hsl: hsl };
+          idbPut('kv', key, { url: url, hsl: hsl }).catch(function(){});
+        }
+        return hsl;
+      });
+    });
+    ambPending[f.id] = p;
+    p.catch(function(){}).then(function(){ delete ambPending[f.id]; });
+    return p;
+  }
+  /* 两个底色之间插值：色相走最短弧，避免红→紫绕一整圈 */
+  function lerpHsl(a, b, t){
+    if (!a) return b;
+    if (!b) return a;
+    var d = b[0] - a[0];
+    if (d > 180) d -= 360; else if (d < -180) d += 360;
+    var h = a[0] + d * t;
+    if (h < 0) h += 360; else if (h >= 360) h -= 360;
+    return [
+      Math.round(h),
+      Math.round(a[1] + (b[1] - a[1]) * t),
+      Math.round(a[2] + (b[2] - a[2]) * t)
+    ];
+  }
+
+  /* 整屏模糊底图用的是哪张海报（顶栏里已经有一份清晰海报，这里只负责上滑后接管整屏） */
+  function setBackdrop(f){
+    var page = d('page-home');
+    if (!page) return;
+    if (!f){ page.style.setProperty('--home-bg-img', 'none'); return; }
+    var url = posterOf(f);
+    var masked = !!state.avCoverMask && NfoCore.isAvFilm(f);   // 隐私封面下不把海报铺到底图上
+    page.style.setProperty('--home-bg-img', (!masked && url) ? 'url("' + url.replace(/"/g, '%22') + '")' : 'none');
   }
 
   /* ================= 焦点区 ================= */
@@ -156,18 +220,29 @@
           ? '<img src="' + escapeAttr(poster) + '" alt="" draggable="false" onerror="this.style.display=\'none\'">'
           : '');
 
-    /* 影片 logo（TMDB 的透明标题图，详情页同一个字段 d.logo）放在地区行上方；没有就不占位 */
+    /* logo 位：有番号就直接显示番号（番号片本来也没有 TMDB 标题图）；
+       没有番号才用 TMDB 的透明标题图（详情页同一个字段 d.logo）；两者都没有就不占位 */
+    var code = String(x.dvdId || x.content_id || '').trim();
     var logo = String(x.logo || '').trim();
-    var logoHtml = logo
-      ? '<div class="hero-logo"><img src="' + escapeAttr(logo) + '" alt="' + escapeAttr(titleOf(f)) + '" draggable="false" onerror="this.parentNode.style.display=\'none\'"></div>'
-      : '';
+    var logoHtml = '';
+    if (code){
+      logoHtml = '<div class="hero-logo"><span class="hero-code">' + escapeHtml(code.toUpperCase()) + '</span></div>';
+    } else if (logo){
+      logoHtml = '<div class="hero-logo"><img src="' + escapeAttr(logo) + '" alt="' + escapeAttr(titleOf(f)) + '" draggable="false" onerror="this.parentNode.style.display=\'none\'"></div>';
+    }
+
+    /* 片名不单独占行：用 [] 包住接在简介前面，整段最多 3 行。
+       番号片的 titleOf 本身就是番号，上面 logo 位已经显示过一次了，这里改回真实片名免得重复；
+       没有真实片名就干脆不加前缀。 */
+    var ttl = titleOf(f);
+    if (code && ttl.toUpperCase() === code.toUpperCase()) ttl = String(f.title || x.title || '').trim();
+    var ttlHtml = ttl ? '<b class="hero-ttl">[' + escapeHtml(ttl) + ']</b>' : '';
 
     return '<div class="hero-slide">' + media
       + '<div class="hero-info">'
       +   logoHtml
       +   '<div class="hero-meta">' + meta + '</div>'
-      /* v452：片名不再单独一行，改成【片名】直接接在简介前面，整段最多 3 行 */
-      +   '<p class="hero-plot"><b class="hero-ttl">【' + escapeHtml(titleOf(f)) + '】</b>' + escapeHtml(String(x.plot || '').trim() || '暂无简介') + '</p>'
+      +   '<p class="hero-plot">' + ttlHtml + escapeHtml(String(x.plot || '').trim() || '暂无简介') + '</p>'
       +   '<div class="hero-rate detail-ratings" data-fid="' + escapeAttr(f.id) + '"></div>'
       + '</div></div>';
   }
@@ -192,18 +267,17 @@
     return heroFilms;
   }
 
-  function renderHero(pool, mode){
+  function renderHero(pool){
     var hero = d('homeHero'), track = d('heroTrack'), dots = d('heroDots');
     if (!hero || !track) return;
     var list = pickHero(pool);
     if (!list.length){
       /* 空态直接写在焦点区里（外面不再放第二块提示，避免两句话叠着说） */
-      var t1 = mode === 'xv' ? '还没有 XV 影片' : '还没有影片';
-      var t2 = mode === 'xv' ? '在里模式下添加后会出现在这里' : '从「搜索」添加后会出现在这里';
-      track.innerHTML = '<div class="hero-slide no-shade"><div class="hero-empty"><b>' + t1 + '</b><span>' + t2 + '</span></div></div>';
+      track.innerHTML = '<div class="hero-slide no-shade"><div class="hero-empty"><b>还没有影片</b><span>从「搜索」添加后会出现在这里</span></div></div>';
       track.style.transform = 'translate3d(0,0,0)';
       if (dots) dots.innerHTML = '';
       applyAmbient(null);
+      setBackdrop(null);
       return;
     }
     if (heroIdx >= list.length) heroIdx = 0;
@@ -212,14 +286,22 @@
     track.style.transform = 'translate3d(' + (-heroIdx * 100) + '%,0,0)';
     track.classList.remove('dragging');
     applyIdx(heroIdx);
+    /* 一进来就把 8 部的底色全取好（内存/IndexedDB 有就秒回）：左右滑到谁都有色可切，
+       而不是滑完才现取样、半秒后底色再跳一下 */
+    list.forEach(function(f){ if (f.id !== list[heroIdx].id) ensureAmb(f).catch(function(){}); });
   }
 
   function applyIdx(i){
     var f = heroFilms[i];
     if (!f) return;
     var id = f.id;
-    if (ambById[id]) applyAmbient(ambById[id]);
-    else ambientOfUrl(posterOf(f)).then(function(c){ ambById[id] = c; if (heroFilms[heroIdx] && heroFilms[heroIdx].id === id) applyAmbient(c); });
+    var cached = ambOf(f);
+    if (cached) applyAmbient(cached);
+    setBackdrop(f);
+    ensureAmb(f).then(function(c){
+      if (!c) return;
+      if (heroFilms[heroIdx] && heroFilms[heroIdx].id === id) applyAmbient(c);
+    }).catch(function(){});
     var track = d('heroTrack');
     var rateEl = track ? track.querySelectorAll('.hero-rate')[i] : null;
     if (rateEl) loadScores(f, rateEl);
@@ -299,20 +381,35 @@
   var ROW_DEFS = [
     { key: 'movie', title: '电影' },
     { key: 'tv',    title: '剧集' },
-    { key: 'anime', title: '动漫' }
+    { key: 'anime', title: '动漫' },
+    { key: 'xv',    title: 'AVideo', av: true }     // 只在里模式出现；标题右侧的眼镜控制封面显隐
   ];
+
+  /* 眼镜按钮：睁眼 = 显示封面，划线眼 = 隐私封面（只露番号）。
+     它和设置页「隐私封面」是同一个开关（state.avCoverMask），点这里设置页也会跟着变。 */
+  function eyeBtnHtml(masked){
+    return '<button class="row-eye' + (masked ? ' masked' : '') + '" onclick="HomeHero.toggleMask()"'
+      + ' aria-label="' + (masked ? '显示 AV 封面' : '隐藏 AV 封面') + '">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
+      + '<path d="M2.2 12S5.9 6 12 6s9.8 6 9.8 6-3.9 6-9.8 6S2.2 12 2.2 12z"/>'
+      + '<circle cx="12" cy="12" r="3"/>'
+      + '<path class="eye-slash" d="M3.4 20.6L20.6 3.4"/>'
+      + '</svg></button>';
+  }
 
   function renderRows(films){
     var host = d('homeRows');
     if (!host) return;
-    var mode = state.overviewTab === 'xv' ? 'xv' : 'movie';
-    var defs = mode === 'xv' ? [{ key: 'xv', title: 'XV' }] : ROW_DEFS;
-    var html = defs.map(function(def){
+    var masked = !!state.avCoverMask;
+    var html = ROW_DEFS.map(function(def){
+      if (def.av && !state.themeHidden) return '';     // 普通模式不显示 AV 行（里外隔离照旧）
       var list = films.filter(function(f){ return kindOf(f) === def.key; });
       if (!list.length) return '';
       var showAll = list.length > ALL_THRESHOLD;
       return '<section class="home-row">'
-        + '<div class="home-row-head"><h2>' + def.title + '<em>' + list.length + '</em></h2>'
+        + '<div class="home-row-head"><h2>' + def.title
+        + (def.av ? eyeBtnHtml(masked) : '')
+        + '<em>' + list.length + '</em></h2>'
         + (showAll ? '<button class="home-more" onclick="HomeHero.openAll(\'' + def.key + '\',\'' + def.title + '\')">全部'
             + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>' : '')
         + '</div>'
@@ -325,12 +422,6 @@
 
   /* ================= 入口 ================= */
   function syncHead(){
-    var btn = d('homeModeBtn');
-    var xv = state.overviewTab === 'xv';
-    if (btn){
-      btn.style.display = state.themeHidden ? '' : 'none';   // 只在里模式给「影片 / XV」切换
-      btn.classList.toggle('is-xv', xv);
-    }
     var dt = d('homeDate'), hi = d('homeHi');
     if (dt && hi){
       var now = new Date(), h = now.getHours();
@@ -348,13 +439,13 @@
       var host = d('homeRows');
       if (!host) return Promise.resolve();
       syncHead();
-      if (!state.themeHidden) state.overviewTab = 'movie';      // 普通模式只放非番号影片
       return listFilms().then(function(all){
         var films = (all || []).slice().sort(function(a, b){ return addedAt(b) - addedAt(a); });  // 添加顺序：新的在前
-        var mode = state.overviewTab === 'xv' ? 'xv' : 'movie';
-        var pool = films.filter(function(f){ return mode === 'xv' ? kindOf(f) === 'xv' : kindOf(f) !== 'xv'; });
-        renderHero(pool, mode);
+        /* 焦点区永远不读取 AV 影片（AV 只在下面那排里出现，且要里模式） */
+        var pool = films.filter(function(f){ return kindOf(f) !== 'xv'; });
+        renderHero(pool);
         renderRows(films);
+        syncScrollState();      // 重画后把模糊/遮罩状态按当前滚动位置拉正（回到首页时一般是 0）
         /* 停在「全部」二级页时（比如在那儿长按删了一部），首页重画顺便把二级页也刷一遍 */
         var allPage = d('page-all');
         if (allPage && allPage.classList.contains('active') && allKind) openAll(allKind, '');
@@ -364,13 +455,16 @@
     }
   }
 
-  function toggleTab(){
-    if (!state.themeHidden){ showToast('里模式下才有 XV 列表', 'info'); return; }
-    state.overviewTab = state.overviewTab === 'xv' ? 'movie' : 'xv';
-    heroSig = '';                 // 换分类要重洗焦点区，不然还停在上一次那几部
+  /* 首页 AV 行标题右侧的眼镜：和设置页「隐私封面」同一个开关 */
+  function toggleMask(){
+    var v = !state.avCoverMask;
+    if (typeof setAvCoverMask === 'function'){
+      setAvCoverMask(v);          // 内部会同步设置页开关、持久化、并重画首页
+      return;
+    }
+    state.avCoverMask = v;
+    idbPut('kv', 'avCoverMask', v).catch(function(){});
     render();
-    window.scrollTo(0, 0);
-    var sc = d('homeScroll'); if (sc) sc.scrollTop = 0;
   }
 
   /* ================= 全部（二级页） ================= */
@@ -405,6 +499,37 @@
     var sc = d('homeScroll'); if (sc) sc.scrollTop = 0;
   }
 
+  /* ================= 滚动：底图钉住不动、随上滑逐渐模糊（对齐详情页的观感） =================
+     焦点区是 sticky 的（CSS），内容从它上面滑过去；这里按滚动进度推四个变量：
+       --home-bg    整屏模糊底图的显影（0 → 1，与清晰海报交叉淡入）
+       --home-blur  底图模糊半径
+       --home-veil  底图上那层自身底色的浓度（模糊后仍要有对比，字/卡片才看清）
+       --home-fade  焦点区文字（日期胶囊 / logo / 简介 / 评分 / 页码点）的透明度
+     只改 CSS 变量、只碰一个节点，不触发重排，滚动才不卡。 */
+  function syncScrollState(){
+    var sc = d('homeScroll'), hero = d('homeHero'), page = d('page-home');
+    if (!sc || !hero || !page) return;
+    var h = hero.offsetHeight || 1;
+    var t = sc.scrollTop / (h * .55);
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    page.style.setProperty('--home-bg', Math.min(t * 1.6, 1).toFixed(3));
+    page.style.setProperty('--home-blur', (t * 22).toFixed(1) + 'px');
+    page.style.setProperty('--home-blur-n', t.toFixed(3));
+    page.style.setProperty('--home-veil', (t * .55).toFixed(3));
+    page.style.setProperty('--home-fade', Math.max(1 - t * 3.2, 0).toFixed(3));
+  }
+  (function bindScroll(){
+    var sc = d('homeScroll');
+    if (!sc) return;
+    var ticking = false;
+    sc.addEventListener('scroll', function(){
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(function(){ ticking = false; syncScrollState(); });
+    }, { passive: true });
+    syncScrollState();
+  })();
+
   /* ================= 手势：左右滑动（只此一种，不放假箭头按钮） ================= */
   (function bindSwipe(){
     var hero = d('homeHero');
@@ -415,6 +540,7 @@
       if (e.target.closest('.hero-top')) return;
       startX = e.clientX; startY = e.clientY; dx = 0; dragging = true; locked = null;
       w = hero.clientWidth;
+      dragBase = curAmb ? curAmb.slice() : null;
       var track = d('heroTrack');
       if (track) track.classList.add('dragging');
     });
@@ -427,12 +553,23 @@
       var resist = (heroIdx === 0 && dx > 0) || (heroIdx === heroFilms.length - 1 && dx < 0) ? .35 : 1;
       var track = d('heroTrack');
       if (track) track.style.transform = 'translate3d(' + (-heroIdx * w + dx * resist) + 'px,0,0)';
+      /* 底色跟着手指走：按拖过去的比例，在当前片与相邻片的底色之间插值。
+         这一段必须关掉 CSS 过渡（.amb-live），否则 .55s 缓动会拖在手指后面，看着一卡一卡的 */
+      var frac = -(dx * resist) / (w || 1);
+      var nextAmb = ambOf(heroFilms[heroIdx + (frac > 0 ? 1 : -1)]);
+      if (dragBase && nextAmb){
+        var page = d('page-home');
+        if (page) page.classList.add('amb-live');
+        applyAmbient(lerpHsl(dragBase, nextAmb, Math.min(Math.abs(frac), 1)));
+      }
     });
     function end(){
       if (!dragging) return;
       dragging = false;
       var track = d('heroTrack');
       if (track) track.classList.remove('dragging');
+      var page = d('page-home');
+      if (page) page.classList.remove('amb-live');    // 先恢复过渡再落位，颜色收尾才不硬跳
       if (locked === 'x' && Math.abs(dx) > Math.min(70, w * .16)) go(heroIdx + (dx < 0 ? 1 : -1));
       else go(heroIdx);
     }
@@ -450,7 +587,8 @@
   window.HomeHero = {
     render: render,
     syncHead: syncHead,
-    toggleTab: toggleTab,
+    syncScroll: syncScrollState,
+    toggleMask: toggleMask,
     openAll: openAll,
     backFromAll: backFromAll,
     go: go
