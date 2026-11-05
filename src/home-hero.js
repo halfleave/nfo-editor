@@ -182,7 +182,12 @@
      每格带自己的 --s-*，横滑时就是两张完整构图对推，不是整屏混色。 */
   function bgSlideHtml(f){
     var x = dataOf(f);
-    var poster = posterOf(f);
+    /* v484：焦点区优先用本地存下的封面（base64，立刻画得出来）。
+       x.poster 是网图地址，要先下载 —— 刚加完片回首页那一两秒里它是空白的，
+       下面的卡片会换成高清底图所以看着正常，焦点区就变成「过一会儿才刷出来」。
+       超过 400KB 的 base64 仍走网图，避免一次拼进几十兆字符串把首页拖慢。 */
+    var local = f.posterDataUrl || '';
+    var poster = (local && local.length < 400000) ? local : (x.poster || local);
     var avMask = !!state.avCoverMask && NfoCore.isAvFilm(f);
     var media = avMask
       ? '<div class="hero-mask">' + avCoverMaskHtml((x.dvdId || titleOf(f))) + '</div>'

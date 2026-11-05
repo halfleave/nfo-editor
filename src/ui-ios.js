@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '483';
+window.__SCRIPT_VER = '486';
 
 var currentPage = '';
 /* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
@@ -16,7 +16,7 @@ var HOME_PUSH_PX = 28;                       // 进详情时首页被推开的�
 function homePushTransform(){ return 'translate3d(-' + HOME_PUSH_PX + 'px,0,0)'; }
 function clearDetailTransforms(){
   var dp = document.getElementById('page-detail');
-  if (dp){ dp.style.transition = ''; dp.style.transform = ''; dp.style.boxShadow = ''; }
+  if (dp){ dp.style.transition = ''; dp.style.transform = ''; dp.style.boxShadow = ''; dp.style.willChange = ''; }
 }
 /* v465：等转场真正结束再做收尾。
    原来用的是 setTimeout(PAGE_SLIDE_MS)，和动画是「竞速」：主线程一忙，定时器就会在动画还剩最后
@@ -66,6 +66,9 @@ function animateDetailIn(){
   page.style.transition = 'none';
   page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
   page.style.boxShadow = '-12px 0 28px rgba(0,0,0,.35)';
+  /* v485：转场期间先「预定」一层合成层，别让浏览器在动画途中才决定要提升 —— 
+     中途提升同样要重新光栅化，那一下也是掉帧。收尾时 clearDetailTransforms 会撤掉。 */
+  page.style.willChange = 'transform';
   if (pushHome){ home.style.transition = 'none'; home.style.transform = 'translate3d(0,0,0)'; }
   switchPage('detail');
   /* 转场期间首页要留在下面透出（switchPage 已经把 .active 摘掉了，会变成 display:none），动画完再撤 */
@@ -98,17 +101,21 @@ function switchPage(page) {
   if (from === 'detail' && page !== 'detail'){
     /* 内联样式复位很便宜，留在这一帧（不然详情页会带着 translateX(屏宽) 留在 DOM 里） */
     clearDetailTransforms();
-    var hp = document.getElementById('page-home');
-    if (hp){ hp.style.transition = 'none'; hp.style.transform = ''; }
+    /* v485：首页的 transform 复位也挪到「画面落定之后」再做。
+       把 transform 抹掉会让浏览器把这个整屏层降级、重新光栅化（焦点区大图 + 四排卡片 +
+       海报色渐变全都要重画一遍）。它原来正好砸在返回动画的最后几帧上 ——
+       手感就是「详情页快贴边时顿一下」。现在动画窗口里只让它停在 0，等眼睛离开画面再收拾。 */
     afterSlideIdle(function(){
       if (currentPage === 'detail') return;   // 又进详情页了，不能清它的运行时状态
+      var hp = document.getElementById('page-home');
+      if (hp){ hp.style.transition = 'none'; hp.style.transform = ''; }
       stopDetailBgSlideshow();
       clearDetailShotCache();
     });
   }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
-  /* v480：状态栏磨砂玻璃只在浅色内容页生效。首页是深色海报、详情页是深色背景，
-     浅色玻璃糊上去会把状态栏的黑字/白字压得看不清，这两页直接撤掉。 */
+  /* v480/v485：状态栏那一条磨砂玻璃，首页是深色海报、详情页是深色背景，
+     所以给它们挂 on-dark —— 只把玻璃底色压到近乎透明，模糊照旧（海报透上来被糊掉）。 */
   var sg = document.querySelector('.status-glass');
   if (sg) sg.classList.toggle('on-dark', page === 'home' || page === 'detail');
   // 返回/进入详情页：页面已显示后再恢复底图缓慢放大，确保 transition 从 scale(1) 真正生效
@@ -329,6 +336,7 @@ function animateDetailBack(){
   if (home) void home.offsetWidth;   // 先让它按当前（被推开 -28px 的）位置渲染一帧，才能从这里过渡回去
   page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
   page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
+  page.style.willChange = 'transform';   // v485：转场期间保持合成层，避免动画途中才提升（会掉帧）
   page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
   if (home){
     home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
@@ -9516,7 +9524,7 @@ function toggleSearchClear(){
   if (el.value.length) btn.classList.add('show'); else btn.classList.remove('show');
   renderSearchHistory(); // 输入有内容→隐藏历史；清空→显示历史
 }
-function clearSearch(){
+function clearSearch(wantsFocus){
   var el = document.getElementById('tmdbQuery');
   el.value = '';
   document.getElementById('searchClear').classList.remove('show');
@@ -9526,7 +9534,9 @@ function clearSearch(){
   _javCensorKnown = false; _javLastFc2 = false;   // v443：JAV 的药丸同理收起
   syncRightSideControls();
   updateSearchPlaceholder();   // 提示语跟着回默认，别停在上次搜的类型上
-  el.focus();
+  /* v486：传 false 时不唤键盘（双击 tab 清列表用，别顺带弹个键盘上来） */
+  if (wantsFocus === false){ try { el.blur(); } catch (e) {} }
+  else { el.focus(); }
   renderSearchHistory(); // 清空后回到历史视图
 }
 function renderTMDBResults(results){
@@ -14145,6 +14155,22 @@ function updateHiddenBadge(){
   if (badge) badge.style.display = state.themeHidden ? 'inline-flex' : 'none';
 }
 function getThemeHidden(){ return idbGet('kv', 'themeHidden').then(function(v){ return !!v; }); }
+/* v486：底部 tab「搜索」双击 → 清空当前搜索列表（回到历史/空态）。
+   只在真的有列表时才动手；没列表就还是普通的一次切页。
+   300ms 内算双击，判中后把计时清零，免得「三连击」又触发一次。 */
+var searchTabTapLast = 0;
+function onSearchTabTap(){
+  switchPage('search');
+  var now = Date.now();
+  var isDouble = (now - searchTabTapLast) < 300;
+  searchTabTapLast = isDouble ? 0 : now;
+  if (!isDouble) return;
+  var box = document.getElementById('tmdbResults');
+  if (!box || !box.innerHTML.trim()) return;   // 没列表：什么都不做
+  clearSearch(false);                          // false = 别把键盘弹出来
+  if (navigator.vibrate) { try { navigator.vibrate(10); } catch (e) {} }
+}
+
 /* v446：里模式入口改到底部 tab —— 连续点「设置」图标 3 次切换（原来点设置页标题 3 次）。
    800ms 内算连续；每次点击照常切到设置页，第 3 下再切换里模式状态。 */
 var settingsTabTap = { count: 0, last: 0 };

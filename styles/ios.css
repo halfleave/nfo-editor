@@ -525,10 +525,14 @@ img { display: block; }
 [data-theme="dark"] .restore-confirm-title { color: var(--label, #fff); }
 [data-theme="dark"] .restore-confirm-body { color: var(--label-2, #98989F); }
 
-/* ===== 状态栏磨砂玻璃（v480）=====
+/* ===== 状态栏磨砂玻璃（v480 / v485 重做）=====
    高度正好等于安全区顶部（系统状态栏那一条），悬在页面内容之上、tab 栏与弹窗之下。
-   只负责背景与模糊、不接任何交互。文件末尾那条 `* { backdrop-filter:none !important }`
-   是全站停用毛玻璃留下来的，这里靠选择器特异性（.status-glass > *）把它盖回来。 */
+   只负责背景与模糊、不接任何交互。
+   v485：v475 把 `<meta name="apple-mobile-web-app-status-bar-style">` 改成 `default` 后，
+   系统占掉状态栏那一条并自己刷成白底 —— 网页内容根本顶不上去，`env(safe-area-inset-top)`
+   回到 0，这条玻璃高度也就变成 0，所以看到的是「一条白栏」。
+   现在改回 `black-translucent`：内容重新顶到状态栏下面，--sat 有值，玻璃才真的看得见，
+   海报从状态栏底下透上来、被模糊掉，高度也正好就是状态栏那一条。 */
 .status-glass {
   position: fixed; top: 0; left: 0; right: 0;
   height: var(--sat);
@@ -539,12 +543,10 @@ img { display: block; }
   backdrop-filter: saturate(180%) blur(20px) !important;
 }
 [data-theme="dark"] .status-glass { background: rgba(0,0,0,0.5); }
-/* 首页（深色海报底）/ 详情页（深色背景）：撤掉玻璃，用 class 由 switchPage 控制 */
-.status-glass.on-dark {
-  background: transparent;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-}
+/* 首页（深色海报底）/ 详情页（深色背景）：玻璃留着，只把底色压到几乎透明，
+   让海报自己透上来被糊掉 —— 这才是「顶部一条磨砂」想要的样子。
+   v485 前这里是整条撤掉模糊，等于没有玻璃。 */
+.status-glass.on-dark { background: rgba(0,0,0,0.16); }
 
 /* 顶部大标题栏（fixed 固定顶部，避免 sticky 在 iOS 滚动子容器内失效） */
 /* v454：顶栏压扁一档 + 更透。原来是 18/10 内边距、rgba .78 的玻璃，滚动时像顶上挂着一条厚渐变栏；
@@ -2473,7 +2475,13 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
    所以手指停在正中时，左半屏是上一部的海报+色、右半屏是下一部的，不会变成整屏混色。
    模糊照详情页的做法直接挂在这一层上（.home-bg 的 filter），四周外扩 32px 给模糊采样留余量。 */
 .home-bg {
-  position: fixed; inset: -32px; z-index: 0; pointer-events: none;
+  /* v485：原来是 position:fixed。但进/出详情页时 #page-home 会被加 transform，
+     而 transform 的祖先会成为 fixed 子元素的包含块 —— 等于动画一开始、以及动画结束
+     把 transform 抹掉的那一刻，这一整层（还是带 filter:blur 的整屏层）都要重新定位、
+     重新光栅化。返回时最后那一下「快贴边顿一下」就是这么来的。
+     #page-home 本身也是 fixed、铺满视口且不滚动（滚动的是里面的 .home-scroll），
+     所以改成 absolute 后视觉位置一模一样，但不再随祖先的 transform 变化而变化。 */
+  position: absolute; inset: -32px; z-index: 0; pointer-events: none;
   background: hsl(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%));
   transition: background-color .55s ease, filter .15s linear;
   filter: blur(var(--home-glass, 0px));
@@ -2512,9 +2520,10 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 }
 
 /* ---------- 二、压暗层：上滑时海报色逐渐盖上来（对齐详情页 --dt-alpha 那层） ---------- */
-/* 放在模糊层外面，避免和底图一起被 blur 重算；只改 opacity，代价最低。 */
+/* 放在模糊层外面，避免和底图一起被 blur 重算；只改 opacity，代价最低。
+   v485：同样由 fixed 改 absolute，理由见 .home-bg 那段（不让祖先 transform 改变它的包含块）。 */
 #page-home::after {
-  content: ''; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
   background: hsl(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%));
   opacity: var(--home-alpha, 0);
   transition: background-color .55s ease;
@@ -2667,4 +2676,4 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 /* ===== v481：恢复毛玻璃 =====
    v475 那条「全站停用 backdrop-filter」已经撤掉。当时以为 tab 栏发糊是毛玻璃自糊，
    后来查明是 PWA 装了旧包（v479 结论）。现在 tab 栏、搜索框、弹窗、菜单都用回真玻璃。
-   唯一保留的例外是首页/详情页的状态栏条（.status-glass.on-dark 里显式关掉）。 */
+   （v485 起状态栏那一条也改成真磨砂，不再例外。） */
