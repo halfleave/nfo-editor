@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '464';
+window.__SCRIPT_VER = '468';
 
 var currentPage = '';
 /* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
@@ -17,6 +17,44 @@ function homePushTransform(){ return 'translate3d(-' + HOME_PUSH_PX + 'px,0,0)';
 function clearDetailTransforms(){
   var dp = document.getElementById('page-detail');
   if (dp){ dp.style.transition = ''; dp.style.transform = ''; dp.style.boxShadow = ''; }
+}
+/* v465：等转场真正结束再做收尾。
+   原来用的是 setTimeout(PAGE_SLIDE_MS)，和动画是「竞速」：主线程一忙，定时器就会在动画还剩最后
+   一小段时抢跑，收尾里那些同步活（切页、改 DOM、重新排版）又把主线程占住，最后那几十像素就冻一下
+   再消失 —— 就是「点返回，快贴边时卡一下」。改成听 transitionend，定时器只做兜底（且留足余量）。
+   每次调用会作废上一个等待中的收尾（连点返回 / 返回途中又进详情时不会互相打架）。 */
+var slideToken = 0;
+function finishSlide(el, ms, fn){
+  if (!el){ fn(); return; }
+  var token = ++slideToken;
+  var done = false;
+  function cleanup(){ el.removeEventListener('transitionend', onEnd); }
+  function run(){
+    if (done || token !== slideToken){ cleanup(); return; }
+    done = true;
+    cleanup();
+    /* 再等两帧（约 32ms）才做收尾：让「详情页彻底移出屏幕」这一帧先真正画出来。
+       原来收尾和动画最后一帧挤在一起，主线程一被占住，最后那几十像素就冻在屏幕上不动，
+       过一会儿才「啪」地消失 —— 手感就是返回快贴边时顿一下。 */
+    setTimeout(function(){
+      if (token !== slideToken) return;
+      fn();
+    }, 32);
+  }
+  function onEnd(e){
+    if (e.target !== el) return;
+    if (e.propertyName && e.propertyName !== 'transform') return;
+    run();
+  }
+  el.addEventListener('transitionend', onEnd);
+  setTimeout(run, ms + 320);      // 兜底：真机偶尔拿不到 transitionend
+}
+/* 转场结束后的重活挪到「下一帧之后再空闲时」：这一帧只负责把画面落定，DOM 重建/清缓存不抢占它。
+   iOS 没有 requestIdleCallback，退化成 160ms 后（那时画面早已静止）。 */
+function afterSlideIdle(fn){
+  var run = function(){ try { fn(); } catch (e) {} };
+  if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 500 });
+  else setTimeout(run, 160);
 }
 /* 进详情：先摆到右侧 → 切页（此时才 display:flex）→ 下一帧落位 */
 function animateDetailIn(){
@@ -42,23 +80,31 @@ function animateDetailIn(){
       }
     });
   });
-  setTimeout(function(){
-    clearDetailTransforms();
-    /* v464：转场结束后**不再**把首页撤成 display:none。
-       原来一撤，首页的布局/绘制全被丢掉，返回时要重新排一遍（焦点区 + 四排卡片 + 海报），
-       那一整块同步开销就压在返回动画的第一帧上 —— 手感就是「点返回先愣一下再滑」。
-       详情页是不透明的，盖在上面看不见；首页留在下面当缓存，返回时只是把 transform 归零。 */
-  }, PAGE_SLIDE_MS + 60);
+  /* v464：转场结束后**不再**把首页撤成 display:none。
+     原来一撤，首页的布局/绘制全被丢掉，返回时要重新排一遍（焦点区 + 四排卡片 + 海报），
+     那一整块同步开销就压在返回动画的第一帧上 —— 手感就是「点返回先愣一下再滑」。
+     详情页是不透明的，盖在上面看不见；首页留在下面当缓存，返回时只是把 transform 归零。
+     v465：清内联样式也改成听 transitionend，避免早于动画把最后一段砍掉。 */
+  finishSlide(page, PAGE_SLIDE_MS, function(){
+    clearDetailTransforms();          // 落位后把内联样式抹掉（若中途已开始返回，finishSlide 会把这次回调作废）
+  });
 }
 function switchPage(page) {
   var from = currentPage;
   currentPage = page;
-  if (from === 'detail' && page !== 'detail'){ stopDetailBgSlideshow(); clearDetailShotCache(); } // 离开详情页：停掉底图轮播 + 清空剧照运行时缓存（底图本身保留）
-  /* 离开详情页时把转场留下的内联样式抹掉：详情页复位到原位，首页从 -28px 归零（不再有过渡，避免跳一下） */
+  /* v465：离开详情页的收尾工作全部推到「画面落定之后」再做。
+     原来同步跑在这一帧上：停底图轮播、清空剧照区（innerHTML）、回来再重建首页，任何一项都可能让
+     主线程堵上几十毫秒，正好卡在转场最后一小段上 —— 看着就是「快贴边时顿一下」。 */
   if (from === 'detail' && page !== 'detail'){
+    /* 内联样式复位很便宜，留在这一帧（不然详情页会带着 translateX(屏宽) 留在 DOM 里） */
     clearDetailTransforms();
     var hp = document.getElementById('page-home');
     if (hp){ hp.style.transition = 'none'; hp.style.transform = ''; }
+    afterSlideIdle(function(){
+      if (currentPage === 'detail') return;   // 又进详情页了，不能清它的运行时状态
+      stopDetailBgSlideshow();
+      clearDetailShotCache();
+    });
   }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
   // 返回/进入详情页：页面已显示后再恢复底图缓慢放大，确保 transition 从 scale(1) 真正生效
@@ -72,8 +118,13 @@ function switchPage(page) {
   var TOP_LEVEL = ['home', 'search', 'settings'];
   if (tb) tb.style.display = (TOP_LEVEL.indexOf(page) >= 0) ? '' : 'none';
   resetTabbarScroll();      // 换页时把「滚动收起」状态复位，新页面一进来栏就在位
-  /* v452：从别的页面回到首页时重画（新首页由 home-hero.js 负责，数据可能已在别处变过） */
-  if (page === 'home' && from && from !== 'home' && window.HomeHero) window.HomeHero.render();
+  /* v452：从别的页面回到首页时重画（新首页由 home-hero.js 负责，数据可能已在别处变过）。
+     v465：从详情页回来时同样推到画面落定后再重画（指纹没变的话它就是一次空跑）。 */
+  if (page === 'home' && from === 'detail' && window.HomeHero){
+    afterSlideIdle(function(){ if (currentPage === 'home' && window.HomeHero) window.HomeHero.render(); });
+  } else if (page === 'home' && from && from !== 'home' && window.HomeHero){
+    window.HomeHero.render();
+  }
   if (page === 'search'){
     // 普通模式（themeHidden=false）强制只能用 TMDB，里模式保留上次源
     if (!state.themeHidden){
@@ -153,20 +204,21 @@ function initEdgeSwipeBack(){
         home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
         home.style.transform = 'translate3d(0,0,0)';
       }
-      setTimeout(function(){
-        page.style.transition = ''; page.style.transform = ''; page.style.userSelect = ''; page.style.boxShadow = '';
+      finishSlide(page, PAGE_SLIDE_MS, function(){
+        if (currentPage !== 'detail') return;
         switchPage('home');
-      }, PAGE_SLIDE_MS);
+      });
     } else {
       page.style.transform = 'translate3d(0,0,0)';
       if (home){
         home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
         home.style.transform = homePushTransform();
       }
-      setTimeout(function(){
-        page.style.transition = ''; page.style.transform = ''; page.style.userSelect = ''; page.style.boxShadow = '';
-        if (home) home.classList.remove('active');
-      }, PAGE_SLIDE_MS);
+      finishSlide(page, PAGE_SLIDE_MS, function(){
+        clearDetailTransforms();
+        page.style.userSelect = '';
+        if (currentPage === 'detail' && home) home.classList.remove('active');
+      });
     }
   }
   page.addEventListener('touchstart', function(e){
@@ -278,10 +330,11 @@ function animateDetailBack(){
     home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
     home.style.transform = 'translate3d(0,0,0)';
   }
-  setTimeout(function(){
+  /* v465：收尾听 transitionend，别再和动画竞速（早跑一点就冻住最后几十像素） */
+  finishSlide(page, PAGE_SLIDE_MS, function(){
+    if (currentPage !== 'detail') return;    // 期间已经切到别的页，别再抢着切首页
     switchPage('home');
-    clearDetailTransforms();
-  }, PAGE_SLIDE_MS);
+  });
 }
 
 /* ===== 编辑页元素前缀（电影页 / 剧集页 两套独立 DOM，靠前缀解析元素避免 id 冲突）=====
@@ -14569,8 +14622,10 @@ function initIosBottomBarHeal(){
    上滑（内容往上走）→ 整条快速滑出屏幕下沿；下滑 → 快速滑回来；回到顶部一律出现。
    只改一个 class（transform 过渡），不参与逐帧计算；滚动事件用捕获阶段挂在 document 上，
    这样三个一级页各自的 .page-scroll 都能收到，不用逐页绑定。
-   相邻两次滚动不足 6px 不动手 —— 否则手指轻微抖动会让栏反复抽搐。 */
-var tabbarLastSc = null, tabbarLastTop = 0;
+   v466：改成「同一方向累计到一定距离才动手」，单帧 1~2px 的慢滑也算得进去，
+   不会手指刚离屏就唰一下收走；收起慢一点（.34s）、回显快一点（.26s），收放都有缓冲感。 */
+var tabbarLastSc = null, tabbarLastTop = 0, tabbarUp = 0, tabbarDown = 0;
+var TAB_HIDE_AT = 24, TAB_SHOW_AT = 14;   // 累计上滑 24px 收起 / 累计下滑 14px 露出
 function setTabbarHidden(hide){
   var tb = document.getElementById('tabBar');
   if (!tb) return;
@@ -14585,6 +14640,7 @@ function resetTabbarScroll(){
   var sc = page ? page.querySelector('.page-scroll') : null;
   tabbarLastSc = sc || null;
   tabbarLastTop = sc ? sc.scrollTop : 0;
+  tabbarUp = tabbarDown = 0;
 }
 function initTabbarAutoHide(){
   document.addEventListener('scroll', function(e){
@@ -14595,10 +14651,18 @@ function initTabbarAutoHide(){
     if (!page || page === document || !page.classList.contains('active')) return;
     if (sc !== tabbarLastSc){ tabbarLastSc = sc; tabbarLastTop = sc.scrollTop; return; }
     var y = sc.scrollTop, dy = y - tabbarLastTop;
-    if (Math.abs(dy) < 6) return;
     tabbarLastTop = y;
-    if (y <= 6) setTabbarHidden(false);        // 回到顶部：一定露出来
-    else setTabbarHidden(dy > 0);              // 往下滚 → 收起；往上滚 → 出现
+    if (y <= 6){                               // 回到顶部：一定露出来
+      tabbarUp = tabbarDown = 0;
+      setTabbarHidden(false);
+      return;
+    }
+    if (!dy) return;
+    /* 同方向累加、反方向清零 —— 抖动不会来回抽，慢滑也能攒够距离 */
+    if (dy > 0){ tabbarUp += dy; tabbarDown = 0; }
+    else { tabbarDown -= dy; tabbarUp = 0; }
+    if (tabbarUp >= TAB_HIDE_AT){ tabbarUp = 0; setTabbarHidden(true); }
+    else if (tabbarDown >= TAB_SHOW_AT){ tabbarDown = 0; setTabbarHidden(false); }
   }, true);
 }
 
