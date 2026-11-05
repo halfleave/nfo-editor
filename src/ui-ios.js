@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '475';
+window.__SCRIPT_VER = '483';
 
 var currentPage = '';
 /* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
@@ -107,6 +107,10 @@ function switchPage(page) {
     });
   }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
+  /* v480：状态栏磨砂玻璃只在浅色内容页生效。首页是深色海报、详情页是深色背景，
+     浅色玻璃糊上去会把状态栏的黑字/白字压得看不清，这两页直接撤掉。 */
+  var sg = document.querySelector('.status-glass');
+  if (sg) sg.classList.toggle('on-dark', page === 'home' || page === 'detail');
   // 返回/进入详情页：页面已显示后再恢复底图缓慢放大，确保 transition 从 scale(1) 真正生效
   if (from && from !== 'detail' && page === 'detail') resumeDetailBgZoom();
   document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.toggle('active', t.dataset.page === page); });
@@ -14811,69 +14815,77 @@ function swCheckForUpdate(){
 /* 设置页点「发现新版本」：让 waiting 的 SW 立即接管 → controllerchange 里重载 */
 function applyAppUpdate(){
   if (!navigator.serviceWorker){ location.reload(); return; }
-  if (swRegistration && swRegistration.waiting){
+  var reg = swRegistration;
+  if (reg && reg.waiting){
     swUpdatePending = true;
-    swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     return;
   }
-  // 还在下载中（installing）：这时重载会回到旧版本，看起来像「点了没反应」
-  if (swRegistration && swRegistration.installing){
-    showToast('正在准备更新，稍等几秒再点', 'error');
+  /* v476：还在下载也允许点 —— 装好那一刻自动接管并重载，不用用户盯着倒计时再点一次 */
+  if (reg && reg.installing){
+    var nw = reg.installing;
+    showToast('正在下载新版本，装好后自动重启');
+    nw.addEventListener('statechange', function(){
+      if (nw.state === 'installed' && reg.waiting){
+        swUpdatePending = true;
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+    });
     return;
   }
   location.reload();
 }
-/* v472：设置页「检查更新」—— 手动向服务器要一次 sw.js，确认有没有比当前新的版本。
-   ① 已经装好新版（waiting）→ 直接提示点上面那行更新；
-   ② 否则 update()，最多等 6 秒看 installing / waiting；没动静就当「已是最新」。
-   手动检查不吃 swCheckForUpdate 的 60 秒节流。 */
+/* v476：检查更新重写。原来只调 registration.update()，而 GitHub Pages 对 sw.js 有约 10 分钟
+   CDN 缓存，固定地址拿回来的还是旧脚本 —— 刚推送的新版根本查不到。
+   现在改成「直接抓一份服务器上的 sw.js（带时间戳，CDN 必然回源），读它的版本号比对」：
+   远端比本地新 → 换一个带版本串的脚本地址去注册（新 URL 不在 CDN 缓存里），装好后
+   「发现新版本」那行自动出现。 */
 var swChecking = false;
 function syncAppUpdateVer(){
   var el = document.getElementById('appCheckUpdateValue');
   var v = window.__SCRIPT_VER || '';
   if (el && v) el.textContent = 'v2.0.' + v;
 }
-/* v474 的诊断行已撤（v475）：顶部那行糊不在 CSS 层，见 styles/ios.css 末尾说明。 */
+function swRemoteVer(){
+  return fetch('./sw.js?t=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(function(txt){
+      var m = txt.match(/VER\s*=\s*['"](\d+)['"]/) || txt.match(/nfo-ios-v(\d+)/);
+      return m ? Number(m[1]) : 0;
+    });
+}
 function manualCheckUpdate(){
   var el = document.getElementById('appCheckUpdateValue');
-  if (swUpdateReady){
-    showToast('发现新版本，点上面「发现新版本」更新', 'success');
-    return;
-  }
-  if (!swSupported()){
-    showToast('当前打开方式不支持检查更新', 'error');
-    return;
-  }
-  if (!swRegistration){
-    showToast('还在初始化，稍等两秒再试', 'error');
-    return;
-  }
+  if (!swSupported()){ showToast('当前打开方式不支持检查更新', 'error'); return; }
   if (swChecking) return;
+  var cur = Number(window.__SCRIPT_VER || 0);
   swChecking = true;
-  var base = 'v2.0.' + (window.__SCRIPT_VER || '');
   if (el) el.textContent = '检查中…';
-  var done = function(msg, kind){
+  var finish = function(msg, kind){
     swChecking = false;
-    if (el) el.textContent = base;
+    if (el) el.textContent = 'v2.0.' + cur;
     if (msg) showToast(msg, kind || 'success');
   };
-  swLastCheck = 0;
-  try { swRegistration.update().catch(function(){}); } catch (e) {}
-  var t0 = Date.now();
-  var timer = setInterval(function(){
-    // 有新版本时 markSwUpdateReady 已经弹过提示，这里只收尾
-    if (swUpdateReady){ clearInterval(timer); done(null); return; }
-    if (Date.now() - t0 > 6000){
-      clearInterval(timer);
-      if (swRegistration && swRegistration.installing) done('正在下载新版本，稍后回来看');
-      else done('已是最新版本');
-    }
-  }, 400);
+  swRemoteVer().then(function(remote){
+    if (!remote){ finish('没读到服务器版本，稍后再试', 'error'); return; }
+    if (remote <= cur){ finish('已是最新版本 v2.0.' + cur); return; }
+    finish('发现新版本 v2.0.' + remote + '，正在下载');
+    // 用新版本号当查询串：这个 URL CDN 没缓存过，一定回源拿到 476 的 sw.js
+    navigator.serviceWorker.register('./sw.js?v=' + remote, { updateViaCache: 'none' }).then(function(reg){
+      swRegistration = reg;
+      swUpdateReady = true;          // 先让「发现新版本」那行出现，点它时若还没装好会提示等一下
+      syncAppUpdateRow();
+    }).catch(function(){ showToast('新版本下载失败，稍后再试', 'error'); });
+  }).catch(function(){ finish('网络异常，检查失败', 'error'); });
 }
 if (swSupported()){
   window.addEventListener('load', function(){
-    /* updateViaCache:'none' —— sw.js 自身也不许走 HTTP 缓存，保证每次打开都能发现新版本 */
-    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(function(reg){
+    /* updateViaCache:'none' —— sw.js 自身也不许走 HTTP 缓存。
+       v476：地址再带上版本串。GitHub Pages 对 sw.js 有约 10 分钟 CDN 缓存，
+       固定地址会让刚推送的新版在这段时间里发现不了；地址随版本变化后，
+       每次发版都是全新 URL，CDN 必然回源，注册时就能直接拿到新版 sw.js。 */
+    var swUrl = './sw.js?v=' + (window.__SCRIPT_VER || '0');
+    navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' }).then(function(reg){
       swRegistration = reg;
       // 本次打开前就已经装好在 waiting 的新版本
       if (reg.waiting && navigator.serviceWorker.controller) markSwUpdateReady();

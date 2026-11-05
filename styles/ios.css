@@ -60,15 +60,15 @@
   --tabbar-fg-2: rgba(255,255,255,0.55);
 }
 /* 硬编码浅色表面在深色下的覆盖 */
-[data-theme="dark"] .sheet { background: var(--card); }
+[data-theme="dark"] .sheet { background: rgba(28,28,30,0.86); }
 [data-theme="dark"] .sheet::before { background: rgba(255,255,255,0.24); }
 [data-theme="dark"] .sheet.sheet-action { background: transparent; }
-[data-theme="dark"] #listSheet { background: var(--card); }
+[data-theme="dark"] #listSheet { background: rgba(28,28,30,0.86); }
 [data-theme="dark"] .about-modal { background: var(--card); }
 [data-theme="dark"] .crop-modal { background: var(--card); }
 [data-theme="dark"] .crop-stage { background: transparent; }
-[data-theme="dark"] .search-box input[type="text"] { background: var(--card-fill); }
-[data-theme="dark"] .search-box .ios-input { background: var(--card-fill); }
+[data-theme="dark"] .search-box input[type="text"] { background: rgba(44,44,46,0.66); }
+[data-theme="dark"] .search-box .ios-input { background: rgba(44,44,46,0.66); }
 [data-theme="dark"] #apiSheet .ios-input { background: var(--card-fill); }
 [data-theme="dark"] .meta-tabs button.active { background: var(--card-fill); color: var(--label); }
 [data-theme="dark"] .home-tab.active { background: var(--card-fill); color: var(--label); }
@@ -524,6 +524,27 @@ img { display: block; }
 [data-theme="dark"] .restore-confirm-modal { background: var(--card, #1C1C1E); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
 [data-theme="dark"] .restore-confirm-title { color: var(--label, #fff); }
 [data-theme="dark"] .restore-confirm-body { color: var(--label-2, #98989F); }
+
+/* ===== 状态栏磨砂玻璃（v480）=====
+   高度正好等于安全区顶部（系统状态栏那一条），悬在页面内容之上、tab 栏与弹窗之下。
+   只负责背景与模糊、不接任何交互。文件末尾那条 `* { backdrop-filter:none !important }`
+   是全站停用毛玻璃留下来的，这里靠选择器特异性（.status-glass > *）把它盖回来。 */
+.status-glass {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--sat);
+  z-index: 90;
+  pointer-events: none;
+  background: rgba(242,241,246,0.62);
+  -webkit-backdrop-filter: saturate(180%) blur(20px) !important;
+  backdrop-filter: saturate(180%) blur(20px) !important;
+}
+[data-theme="dark"] .status-glass { background: rgba(0,0,0,0.5); }
+/* 首页（深色海报底）/ 详情页（深色背景）：撤掉玻璃，用 class 由 switchPage 控制 */
+.status-glass.on-dark {
+  background: transparent;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
 
 /* 顶部大标题栏（fixed 固定顶部，避免 sticky 在 iOS 滚动子容器内失效） */
 /* v454：顶栏压扁一档 + 更透。原来是 18/10 内边距、rgba .78 的玻璃，滚动时像顶上挂着一条厚渐变栏；
@@ -1205,7 +1226,10 @@ html.splashing, html.splashing body { background: #ffffff; }
 .ctx-mask.show { opacity: 1; pointer-events: auto; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 501;
-  background: #fff;
+  /* v481：弹窗改成真玻璃 —— 半透明底 + 强模糊，背后的页面会透上来（接近 iOS 原生 sheet） */
+  background: rgba(255,255,255,0.86);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  backdrop-filter: saturate(180%) blur(30px);
   border-radius: 24px 24px 0 0; padding: 8px var(--pad) calc(var(--sab) + 56px);
   box-shadow: 0 -4px 24px rgba(0,0,0,0.08);
   transform: translateY(100%); transition: transform .32s cubic-bezier(.32,.72,0,1);
@@ -1745,7 +1769,13 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .search-box { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
 .search-box .search-input-wrap { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
 .search-box .ios-input,
-.search-box input[type="text"] { flex: 1; min-width: 0; border: none; background: #fff; border-radius: 22px; padding: 11px 18px; font-size: 16px; color: var(--label); }
+.search-box input[type="text"] {
+  flex: 1; min-width: 0; border: none; background: rgba(255,255,255,0.62); border-radius: 22px; padding: 11px 18px; font-size: 16px; color: var(--label);
+  /* v481：搜索框也做成薄玻璃 —— 半透明底 + 模糊，滚动时底下的历史/结果会透上来一点 */
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  backdrop-filter: saturate(180%) blur(12px);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55);
+}
 .search-box .search-input-wrap .ios-input,
 .search-box .search-input-wrap input[type="text"] { padding-right: 40px; }
 .search-input-wrap.has-type-label .ios-input,
@@ -2634,11 +2664,7 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .all-count { font-size: 12.5px; color: var(--label-2); }
 .all-loading { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--label-2); }
 
-/* ===== v475：全站停用 backdrop-filter（长期方案，不再是排查开关）=====
-   实测：关掉它之后底部 tab 栏立刻变清晰，说明 iOS 26 上「毛玻璃会把自身内容一起烘焙再模糊」
-   是真的。所以这条留着 —— 只是不再顺带关 filter / will-change / text-shadow（那些会毁掉
-   首页与详情页的底图模糊）。需要玻璃感的元素改成半透明实色 + 描边即可。 */
-*, *::before, *::after {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
+/* ===== v481：恢复毛玻璃 =====
+   v475 那条「全站停用 backdrop-filter」已经撤掉。当时以为 tab 栏发糊是毛玻璃自糊，
+   后来查明是 PWA 装了旧包（v479 结论）。现在 tab 栏、搜索框、弹窗、菜单都用回真玻璃。
+   唯一保留的例外是首页/详情页的状态栏条（.status-glass.on-dark 里显式关掉）。 */

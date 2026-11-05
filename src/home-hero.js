@@ -259,12 +259,20 @@
       if (heroFilms.length) return heroFilms;
     }
     heroSig = sig;
-    var arr = pool.slice();
-    for (var i = arr.length - 1; i > 0; i--){                  // 每次随机 8 部
+    /* v483：没海报的片不进焦点区。焦点区整块靠海报撑画面，缺图就只剩一层纯色，
+       看着就像「选中了但海报没刷出来」。全库都没图时才退回原列表（至少还有片名可读）。 */
+    var withPic = pool.filter(function(f){ return !!posterOf(f); });
+    var src = withPic.length ? withPic : pool;
+    /* v482：最新添加的 2 部固定留在焦点区最前面 —— 刚加完片回首页，先看到的必须是它；
+       其余名额仍然随机（保留「每次打开都有新鲜感」的老行为）。 */
+    var byNew = src.slice().sort(function(a, b){ return addedAt(b) - addedAt(a); });
+    var head = Math.min(2, byNew.length);
+    var rest = byNew.slice(head);
+    for (var i = rest.length - 1; i > 0; i--){                  // 其余随机
       var j = Math.floor(Math.random() * (i + 1));
-      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      var t = rest[i]; rest[i] = rest[j]; rest[j] = t;
     }
-    heroFilms = arr.slice(0, Math.min(HERO_MAX, arr.length));
+    heroFilms = byNew.slice(0, head).concat(rest).slice(0, Math.min(HERO_MAX, byNew.length));
     heroIdx = 0;
     return heroFilms;
   }
