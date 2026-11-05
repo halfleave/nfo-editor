@@ -755,8 +755,11 @@ function normalizeJavbusFilm(d, opts){
     if (code) wu.searchParams.set('code', code);
     /* v424：qid = 一次用户动作（一次点击）的批次号。
        智能搜索在一次点击里可能并发 movie / tv / person 三个请求，额度必须按「点击次数」算而不是请求数：
-       同一个 qid 只记第一次；qid 同时透传给服务端（checkQuota 幂等），保证 /quota 回填的数字也一致。 */
-    var qid = (opts.qid || '').trim();
+       同一个 qid 只记第一次；qid 同时透传给服务端（checkQuota 幂等），保证 /quota 回填的数字也一致。
+       v490：调用方没显式给 qid 时，自动挂上「当前动作」的 qid（见 beginTmdbAction）。
+       保存一部片其实要发好几个请求（详情 / 英文兜底 / 中文片的别名 / 分级 …），
+       以前每个都单独扣一次「TMDB保存」，点一次保存就能把当天额度打空。 */
+    var qid = (opts.qid || _actionQid || '').trim();
     if (qid) wu.searchParams.set('qid', qid);
     // 配额计数：仅服务端代理路径消耗共享配额（自填 key 直连不计数）。search/save 区分；/videos、/images、/person 为读取不计；详情按 id 去重避免语言兜底重复计数
     if (path.indexOf('/search') >= 0) {
@@ -768,10 +771,19 @@ function normalizeJavbusFilm(d, opts){
       }
     }
     else if (path.indexOf('/videos') < 0 && path.indexOf('/images') < 0 && path.indexOf('/person/') < 0 && path.indexOf('/collection/') < 0) {
-      var _m = path.match(/\/(movie|tv)\/(\d+)/); var _id = _m ? _m[2] : null; var _day = quotaDayKey();
-      if (!_id || !(quotaSaveSeen[_day] && quotaSaveSeen[_day][_id])) {
-        quotaInc('tmdbSave');
-        if (_id) { quotaSaveSeen[_day] = quotaSaveSeen[_day] || {}; quotaSaveSeen[_day][_id] = true; }
+      if (qid) {
+        /* v490：一次保存 = 一次额度。整批请求共用同一个 qid，只在这里计一次。 */
+        if (_saveQidSeen.indexOf(qid) < 0) {
+          quotaInc('tmdbSave');
+          _saveQidSeen.push(qid);
+          if (_saveQidSeen.length > 20) _saveQidSeen.shift();
+        }
+      } else {
+        var _m = path.match(/\/(movie|tv)\/(\d+)/); var _id = _m ? _m[2] : null; var _day = quotaDayKey();
+        if (!_id || !(quotaSaveSeen[_day] && quotaSaveSeen[_day][_id])) {
+          quotaInc('tmdbSave');
+          if (_id) { quotaSaveSeen[_day] = quotaSaveSeen[_day] || {}; quotaSaveSeen[_day][_id] = true; }
+        }
       }
     }
     return withTimeout(fetch(wu.toString(), { headers: { 'Accept': 'application/json' } })
@@ -814,6 +826,22 @@ function normalizeJavbusFilm(d, opts){
   };
   var quotaSaveSeen = {}; // 按天去重，避免详情语言兜底下 tmdbSave 重复计数
   var _searchQidSeen = []; // v424：一次点击内的多个 /search 子请求共用一个 qid，只计一次额度
+  var _saveQidSeen = [];   // v490：一次保存内的多个请求共用一个 qid，只计一次额度
+  /* v490：「当前用户动作」的批次号。保存一部片会连着发好几个 TMDB 请求
+     （详情、英文兜底、中文片别名、分级…），它们必须算成一次点击。
+     做法：在每个动作的入口调一次 beginTmdbAction()，之后这个动作里所有没显式带 qid 的
+     请求都自动挂上它 —— 不用去改几十处调用点。 */
+  var _actionQid = '';
+  var _actionAt = 0;
+  /* force=true 强制开新批次；默认 2 秒内复用当前批次 ——
+     保存完紧接着自动打开详情页（也是我们代码触发的）属于同一次点击，不该再扣一次。 */
+  function beginTmdbAction(force){
+    var now = Date.now();
+    if (!force && _actionQid && (now - _actionAt) < 2000) return _actionQid;
+    _actionAt = now;
+    _actionQid = 'a' + now.toString(36) + Math.random().toString(36).slice(2, 7);
+    return _actionQid;
+  }
   function quotaDayKey(){ var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
   function quotaStoreKey(){ return 'nfo_quota_' + quotaDayKey(); }
   function quotaLoad(){ try { return JSON.parse(localStorage.getItem(quotaStoreKey()) || '{}'); } catch (e) { return {}; } }
@@ -1062,6 +1090,7 @@ function normalizeJavbusFilm(d, opts){
     tmdbIsChinese: tmdbIsChinese,
     tmdbEnTitle: tmdbEnTitle,
     tmdbRequest: tmdbRequest,
+    beginTmdbAction: beginTmdbAction,   // v490：一次点击 = 一次额度，动作入口调一下
     translateRequest: translateRequest,
     quotaInc: quotaInc,
     quotaData: quotaData,

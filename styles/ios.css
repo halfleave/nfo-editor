@@ -23,6 +23,10 @@
   --navbar-h: 40px;
   --tabbar-h: 56px;
   --sat: env(safe-area-inset-top, 0px);
+  /* v489：iOS 在状态栏那一块会自己叠一层玻璃，实测比状态栏本身还高，会把页面顶部的内容
+     （首页的问候胶囊、搜索/设置的标题）压住。这层是系统的，CSS 改不掉，只能让内容躲开它。
+     改这一个数字就能整体调「让多少」：大了显得顶部空，小了还会被压住。 */
+  --top-gap: 22px;
   --sar: env(safe-area-inset-right, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
@@ -548,10 +552,17 @@ img { display: block; }
   backdrop-filter: saturate(180%) blur(20px) !important;
 }
 [data-theme="dark"] .status-glass { background: rgba(0,0,0,0.5); }
-/* 首页（深色海报底）/ 详情页（深色背景）：玻璃留着，只把底色压到几乎透明，
-   让海报自己透上来被糊掉 —— 这才是「顶部一条磨砂」想要的样子。
-   v485 前这里是整条撤掉模糊，等于没有玻璃。 */
-.status-glass.on-dark { background: rgba(0,0,0,0.16); }
+/* 首页（深色海报底）/ 详情页（深色背景）：**不要磨砂、也不要硬边**。
+   v485 那版是「20px 模糊 + 16% 底色」，糊出来是一整条边界清楚的带子，比状态栏还显眼，
+   下沿容易压到问候胶囊那一排。这里换成一层自上而下自然消失的极淡压暗：
+   上沿就是屏幕顶，往下大约一个状态栏高度就没了，既没有「一条」的边，也不挡内容，
+   白色状态栏文字照样读得清。 */
+.status-glass.on-dark {
+  height: calc(var(--sat) + 18px);
+  background: linear-gradient(to bottom, rgba(0,0,0,0.30), rgba(0,0,0,0));
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
 
 /* 顶部大标题栏（fixed 固定顶部，避免 sticky 在 iOS 滚动子容器内失效） */
 /* v454：顶栏压扁一档 + 更透。原来是 18/10 内边距、rgba .78 的玻璃，滚动时像顶上挂着一条厚渐变栏；
@@ -625,6 +636,10 @@ img { display: block; }
 #page-search .page-scroll { padding-top: 0; }
 /* 一级页面顶栏移入滚动容器后：水平内边距改由 .page-scroll 提供，避免双重缩进 */
 #page-home .home-header, #page-search .page-bar, #page-settings .page-bar { padding-left: 0; padding-right: 0; }
+/* v489：搜索 / 设置的大标题也往下让一点，躲开 iOS 自己叠在状态栏那块的那层玻璃 */
+#page-search .page-bar, #page-settings .page-bar {
+  padding-top: calc(var(--sat) + var(--top-gap) + 10px);
+}
 .meta-panel { display: none; }
 .meta-panel.active { display: block; }
 
@@ -2562,7 +2577,9 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 /* —— 顶部浮层：左「问候」/ 右「日期」，两个同款小胶囊 —— */
 .hero-top {
   position: absolute; left: 0; right: 0; top: 0; z-index: 4;
-  padding: calc(var(--sat) + 12px) 16px 0;
+  /* v489：多加 --top-gap，躲开 iOS 自己叠在状态栏那块的那层玻璃。
+     只动内容层（这俩胶囊），底下的 .home-bg 海报位置不变。 */
+  padding: calc(var(--sat) + var(--top-gap) + 12px) 16px 0;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
 .hero-pill {

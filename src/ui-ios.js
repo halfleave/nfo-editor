@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '487';
+window.__SCRIPT_VER = '492';
 
 var currentPage = '';
 /* ===== 页面转场：纯平移，不淡入淡出 =====
@@ -142,7 +142,7 @@ function switchPage(page) {
   if (page === 'settings'){
     syncThemeHiddenSwitch(); // 进入设置页同步里模式开关状态
     renderSettingsTools();   // 顶部工具图标横排按当前档位重绘
-    syncAppUpdateRow();      // v448：有新版本才显示「发现新版本」行
+    syncAppUpdateRow();      // v492：刷新「检查更新 / 发现新版本」这一行的状态
     swCheckForUpdate();      // v448：顺手比对一次 sw.js（60 秒内不重复）
   }
 }
@@ -8215,6 +8215,8 @@ function deletePerson(){
   showToast('已删除');
 }
 function saveToDisk(){
+  /* v490：点「保存」= 一次用户动作，保存后连带的元数据/封面补拉都算这一次的额度。 */
+  if (NfoCore.beginTmdbAction) NfoCore.beginTmdbAction();
   var title = getVal('title');
   var filename = getVal('filename');
   if (!filename && !title){ showToast('请先填写影片名或文件名', 'error'); return; }
@@ -9623,6 +9625,9 @@ function selectTMDB(id){
 // 按 TMDB id 拉取影片详情并填充编辑态；afterApply（可选）在图片加载完成后回调
 // posterHint：搜索列表已展示过的 poster_path，用于保存时直接复用已加载封面、免去再次拉取
 function applyTMDBById(id, afterApply, quick, posterHint, mediaType){
+  /* v490：从「选搜索结果」这一步起算一次用户动作。后面拉详情、英文兜底、别名、分级……
+     好几个请求都归到这一次点击的额度里（以前每个请求各自扣一次「TMDB保存」）。 */
+  if (NfoCore.beginTmdbAction) NfoCore.beginTmdbAction();
   mediaType = mediaType || state.tmdbMediaType || 'movie';
   // 「一个激活码搞定」：自填 TMDB Key 优先（直连），无则走 Worker /tmdb 代理（需激活码档位配额）
   Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
@@ -11196,6 +11201,8 @@ function renderDetailRatings(d){
   });
 }
 function renderFilmDetail(film){
+  /* v490：打开一部片的详情 = 一次用户动作。里面拉季列表 / 补简介等请求共用这次额度。 */
+  if (NfoCore.beginTmdbAction) NfoCore.beginTmdbAction();
   currentDetailFilm = film || null;
   // 切换影片时重置自动化文档缓存（跨影片残留防护），并刷新角标
   if (!auto115Doc || auto115Doc.filmId !== (film && film.id)){ auto115Doc = null; }
@@ -11822,6 +11829,7 @@ function tvBuildFilmFromCurrent(){
   return film;
 }
 function tvSaveToDisk(){
+  if (NfoCore.beginTmdbAction) NfoCore.beginTmdbAction();   // v490：同上，一次点击算一次
   var title = getVal('title');
   var filename = getVal('filename');
   if (!filename && !title){ showToast('请先填写剧集名或文件名', 'error'); return; }
@@ -14810,8 +14818,32 @@ function swSupported(){
   return 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 }
 function syncAppUpdateRow(){
-  var row = document.getElementById('appUpdateRow');
-  if (row) row.style.display = swUpdateReady ? '' : 'none';
+  /* v492：合并成一行 —— 平时「检查更新 + 当前版本号（蓝、刷新图标）」，
+     查到新版并装好后换成「发现新版本 + 点击更新（绿、下载图标）」。 */
+  var label = document.getElementById('appUpdateLabel');
+  var val = document.getElementById('appUpdateValue');
+  var icon = document.getElementById('appUpdateIcon');
+  var iCheck = document.getElementById('appUpdateIconCheck');
+  var iDown = document.getElementById('appUpdateIconDown');
+  if (swUpdateReady){
+    if (label) label.textContent = '发现新版本';
+    if (val){ val.textContent = '点击更新'; val.style.color = 'var(--accent-fg)'; val.style.fontWeight = '600'; }
+    if (icon) icon.style.background = '#34C759';
+    if (iCheck) iCheck.style.display = 'none';
+    if (iDown) iDown.style.display = '';
+  } else {
+    if (label) label.textContent = '检查更新';
+    if (val){ val.style.color = ''; val.style.fontWeight = ''; }
+    if (icon) icon.style.background = '#0A84FF';
+    if (iCheck) iCheck.style.display = '';
+    if (iDown) iDown.style.display = 'none';
+    syncAppUpdateVer();
+  }
+}
+/* v492：这一行点下去做什么，取决于当前状态 —— 有新版本待装就装，否则查一次 */
+function onUpdateRowTap(){
+  if (swUpdateReady) applyAppUpdate();
+  else manualCheckUpdate();
 }
 function markSwUpdateReady(){
   if (swUpdateReady) return;
@@ -14856,10 +14888,19 @@ function applyAppUpdate(){
    远端比本地新 → 换一个带版本串的脚本地址去注册（新 URL 不在 CDN 缓存里），装好后
    「发现新版本」那行自动出现。 */
 var swChecking = false;
+/* v491：显示用的版本号改成「2.<次版本>.<补丁>」，补丁只留两位。内部流水号照旧每次 +1
+   （sw 缓存键、各 ?v= 强刷串都用它），只是显示换了更慢的节奏：
+   490 → 2.4.90，499 → 2.4.99，500 → 2.5.0，599 → 2.5.99，600 → 2.6.0 … */
+function appVerText(n){
+  n = Number(n) || 0;
+  return '2.' + Math.floor(n / 100) + '.' + (n % 100);
+}
 function syncAppUpdateVer(){
-  var el = document.getElementById('appCheckUpdateValue');
+  /* v492：有新版本待装时右侧要显示「点击更新」，不能被版本号盖掉 */
+  if (swUpdateReady) return;
+  var el = document.getElementById('appUpdateValue');
   var v = window.__SCRIPT_VER || '';
-  if (el && v) el.textContent = 'v2.0.' + v;
+  if (el && v) el.textContent = 'v' + appVerText(v);
 }
 function swRemoteVer(){
   return fetch('./sw.js?t=' + Date.now(), { cache: 'no-store' })
@@ -14870,25 +14911,25 @@ function swRemoteVer(){
     });
 }
 function manualCheckUpdate(){
-  var el = document.getElementById('appCheckUpdateValue');
   if (!swSupported()){ showToast('当前打开方式不支持检查更新', 'error'); return; }
   if (swChecking) return;
   var cur = Number(window.__SCRIPT_VER || 0);
   swChecking = true;
+  var el = document.getElementById('appUpdateValue');
   if (el) el.textContent = '检查中…';
   var finish = function(msg, kind){
     swChecking = false;
-    if (el) el.textContent = 'v2.0.' + cur;
+    syncAppUpdateVer();          // v492：查完把右侧恢复成版本号（有待装版本时会被 syncAppUpdateRow 覆盖成「点击更新」）
     if (msg) showToast(msg, kind || 'success');
   };
   swRemoteVer().then(function(remote){
     if (!remote){ finish('没读到服务器版本，稍后再试', 'error'); return; }
-    if (remote <= cur){ finish('已是最新版本 v2.0.' + cur); return; }
-    finish('发现新版本 v2.0.' + remote + '，正在下载');
+    if (remote <= cur){ finish('已是最新版本 v' + appVerText(cur)); return; }
+    finish('发现新版本 v' + appVerText(remote) + '，正在下载');
     // 用新版本号当查询串：这个 URL CDN 没缓存过，一定回源拿到 476 的 sw.js
     navigator.serviceWorker.register('./sw.js?v=' + remote, { updateViaCache: 'none' }).then(function(reg){
       swRegistration = reg;
-      swUpdateReady = true;          // 先让「发现新版本」那行出现，点它时若还没装好会提示等一下
+      swUpdateReady = true;          // 这一行立刻变成「发现新版本 / 点击更新」，点它时若还没装好会提示等一下
       syncAppUpdateRow();
     }).catch(function(){ showToast('新版本下载失败，稍后再试', 'error'); });
   }).catch(function(){ finish('网络异常，检查失败', 'error'); });
