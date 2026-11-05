@@ -969,6 +969,15 @@
           <span class="sr-value" id="appUpdateValue" style="color:var(--accent-fg);font-weight:600;">点击更新</span>
           <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
         </button>
+        <!-- v472：手动检查更新 —— 主动向服务器要一次 sw.js，比对有没有比当前新的版本 -->
+        <button class="settings-row" id="appCheckUpdateRow" onclick="manualCheckUpdate()">
+          <span class="sr-icon" style="background:#0A84FF;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.4-5.9"/><path d="M20 3.5V8h-4.5"/></svg>
+          </span>
+          <span class="sr-label">检查更新</span>
+          <span class="sr-value" id="appCheckUpdateValue"></span>
+          <span class="sr-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
         <button class="settings-row" onclick="openApiKeySheet()" data-page-node-id="u2tkCKmlQIHvPPseILfhFr">
           <span class="sr-icon" style="background:#FF9500;" data-page-node-id="qy4DvHmfOl38B5Y7oLCeA7"><svg viewBox="0 0 24 24" fill="#fff" data-page-node-id="KOHfSSRc1WyDg1XjEzmK75"><path d="M8 6 2 12l6 6 1.4-1.4L4.8 12l4.6-4.6zm8 0 6 6-6 6-1.4-1.4L19.2 12l-4.6-4.6z" data-page-node-id="4ulN5AEXnwreK48i8lMOC9"/></svg></span>
           <span class="sr-label" data-page-node-id="T6Mzz8MejvJovKb0R5B4OW">应用配置</span>
