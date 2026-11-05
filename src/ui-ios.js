@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '469';
+window.__SCRIPT_VER = '470';
 
 var currentPage = '';
 /* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
@@ -11903,6 +11903,9 @@ function renderSettingsTools(){
   var row = document.getElementById('settingsToolRow');
   if (!row || typeof ToolboxCore === 'undefined') return;
   var list = ToolboxCore.visibleTools(state.tier || '', toolboxUsage());
+  var head = document.getElementById('settingsToolsHeading');
+  if (head) head.style.display = list.length ? '' : 'none';   // 没有工具时连标题一起收掉
+  row.style.display = list.length ? '' : 'none';
   row.innerHTML = list.map(function(item){
     var t = item.tool;
     var badge = item.ok ? '' : '<span class="tc-soon">' + escapeHtml(item.reason || '即将上线') + '</span>';
