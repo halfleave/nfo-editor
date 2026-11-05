@@ -2382,7 +2382,10 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .magnet-inline-actions button:active { opacity: .7; }
 
 /* ============================================================
-   v452 首页改版：海报焦点 + 分类横滑（结构见 src/home-hero.js）
+   v461 首页三层（结构见 src/home-hero.js）
+     z0 .home-bg    海报 + 海报色渐变 —— 钉住不动，只跟着左右切换
+     z1 .home-blur  同一份构图的预模糊副本 —— 只推 opacity，上滑逐渐糊掉背景
+     z2 .home-scroll 内容层 —— 真滚动，文字/列表整体上下移动
    —— 整页底色 = 当前海报的综合色，深浅模式都不影响
    ============================================================ */
 
@@ -2394,109 +2397,112 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
   /* 首页文字一律浅色（底色永远是海报的深色侧） */
   --home-fg: rgba(255,255,255,0.96);
   --home-fg-2: rgba(255,255,255,0.62);
-  /* 滚动/拖动时由 home-hero.js 逐帧改写这些值（见 syncScrollState / pointermove） */
-  --home-bg: 0;          /* 整屏模糊底图的显影程度：上滑时 0 → 1 */
-  --home-blur: 0px;      /* 底图模糊半径：上滑越大 */
-  --home-blur-n: 0;      /* 同一进度的无单位值，供 scale() 放大用 */
-  --home-veil: 0;        /* 盖在底图上的底色浓度：模糊后保阅读对比 */
-  --home-lift: 0px;      /* 焦点区文字层上移量：等于 scrollTop，文字跟页面上移、底图钉住 */
-  --home-mask: 6%;       /* 海报从下沿往上渐隐到全透明的分界（透明区随上滑往上涨） */
+  /* 三层共用的横滑位置：--hero-i 按片（百分比），--hero-dx 是拖动时的跟手位移。
+     写一次变量，底层 / 模糊层 / 文字层三份 track 一起动，永远不会错位。 */
+  --hero-i: 0%;
+  --hero-dx: 0px;
+  /* 模糊副本的显影程度：上滑时 0 → 1（见 syncScrollState） */
+  --home-blur-o: 0;
 }
 /* 手指拖动时临时关掉底色过渡，否则 .55s 缓动会拖在手指后面 */
 #page-home.amb-live { transition: none; }
-/* 上滑时接管整屏的模糊底图：同一张海报铺满全屏（cover）+ 模糊 + 一层自身底色。
-   海报本身是 sticky 不动的，这里只做「清晰 → 模糊」的交叉淡入，所以看起来是底图不动、渐渐虚化。
-   inset 取负值把模糊后的透明毛边推到屏幕外，四周才不会露出亮边。 */
-#page-home::after {
-  content: ''; position: fixed; inset: -48px; z-index: 0; pointer-events: none;
-  background-image:
-    linear-gradient(hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), var(--home-veil, 0)) 0%,
-                    hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), var(--home-veil, 0)) 100%),
-    var(--home-bg-img, none);
-  background-size: cover; background-position: center; background-repeat: no-repeat;
-  opacity: var(--home-bg, 0);
-  filter: blur(var(--home-blur, 0px));
-  -webkit-filter: blur(var(--home-blur, 0px));
-}
-/* 焦点图要铺满整幅，去掉滚动容器的左右内边距；内边距转由各区块自己给 */
-#page-home .home-scroll { position: relative; z-index: 1; padding-left: 0; padding-right: 0; }
+#page-home .home-scroll { position: relative; z-index: 2; padding-left: 0; padding-right: 0; }
 
-/* ---------- 一、焦点区 ---------- */
-/* v455：sticky —— 上滑时海报钉在原地不动，下面的横滑列表从它上面滑过去（对齐详情页的观感） */
-.home-hero {
-  position: sticky; top: 0; z-index: 0; width: 100%;
-  aspect-ratio: 2 / 3;                                  /* 与海报同比例：整张海报完整呈现，不裁切 */
-  max-height: min(calc(100dvh - 92px), 720px);
-  overflow: hidden; background: transparent;
-  touch-action: pan-y; user-select: none; -webkit-user-select: none;
+/* ---------- 一、底层：海报 + 海报色渐变 ---------- */
+/* 海报按 2:3 完整呈现（和内容层的占位同高），下面接整块海报色，中间用「从下往上」的渐变化开。
+   整屏只有这一份构图，所以永远不会有“海报忽然结束”的横线。 */
+.home-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: hsl(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%));
+  transition: background-color .55s ease;
 }
-.hero-track { display: flex; height: 100%; will-change: transform; transition: transform .42s cubic-bezier(.22,.61,.36,1); }
-.hero-track.dragging { transition: none; }
-.hero-slide { position: relative; flex: 0 0 100%; height: 100%; overflow: hidden; }
-/* 清晰海报本身也跟着模糊（不淡出，否则会和后面的模糊底图错位重影）；
-   scale 随模糊同步放大一点，把模糊产生的透明毛边挤出可视区，四周才不会发亮。
-   v460：下沿不再硬切 —— 用一条从底往上「透明 → 实心」的遮罩，把海报渐隐进整页底色；
-   上滑时 --home-mask 往上涨，透明区从下往上吃进海报，最后整块让给底图，接缝处永远是渐变、
-   没有一条横线（.hero-slide 的 overflow:hidden 才是硬边，遮罩解决了它）。 */
-.hero-slide > img {
-  width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none;
-  filter: blur(var(--home-blur, 0px));
-  -webkit-filter: blur(var(--home-blur, 0px));
-  transform: scale(calc(1 + var(--home-blur-n, 0) * .12));
-  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0) var(--home-mask, 6%), #000 calc(var(--home-mask, 6%) + 11%));
-  mask-image: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0) var(--home-mask, 6%), #000 calc(var(--home-mask, 6%) + 11%));
+#page-home.amb-live .home-bg { transition: none; }
+.bg-track {
+  position: absolute; top: 0; left: 0; width: 100%;
+  aspect-ratio: 2 / 3; max-height: min(calc(100dvh - 92px), 720px);
+  display: flex;
+  transform: translate3d(calc(var(--hero-i, 0%) + var(--hero-dx, 0px)), 0, 0);
+  transition: transform .42s cubic-bezier(.22,.61,.36,1);
+  will-change: transform;
 }
-/* 只在最底下一小段收进整页底色，避免海报下沿出现一条硬边。
-   v455：原来从 40% 就开始压黑的那层遮罩已按要求去掉，海报颜色一直到底。 */
-.hero-slide::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
-  background: linear-gradient(180deg,
-      rgba(0,0,0,0) 0%,
-      rgba(0,0,0,0) 91%,
-      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .55) 96%,
-      hsl(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%)) 100%);
-  transition: background-image .55s ease;
-  /* 上滑后整屏由后面的模糊底图接管，这层收边渐变要让开，否则海报下沿会压出一条深色带 */
-  opacity: calc(1 - var(--home-bg, 0));
+#page-home.hero-drag .bg-track,
+#page-home.hero-drag .fg-track { transition: none; }
+.bg-slide { position: relative; flex: 0 0 100%; height: 100%; overflow: hidden; }
+.bg-slide > img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
+  pointer-events: none; -webkit-user-drag: none;
+}
+/* 海报色从下往上：底部实心 → 往上全透明。底部正好接上 .home-bg 的纯色，接缝不可见 */
+.bg-slide::after {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(to top,
+      hsl(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%)) 0%,
+      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .82) 15%,
+      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .52) 34%,
+      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .22) 56%,
+      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), 0) 76%);
+}
+
+/* ---------- 二、中间层：预模糊副本（同构图，只推透明度） ---------- */
+/* 不逐帧改 blur 半径（那是整层重算，最费），改成「清晰层 + 固定模糊层」交叉淡入：
+   每帧只动 opacity，其余交给 GPU 合成。图比格子大一圈，避免模糊采到边界外的透明变亮边。 */
+.home-blur {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  opacity: var(--home-blur-o, 0);
+  background: hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .34);
+}
+.home-blur .bg-slide > img {
+  left: -70px; top: -70px; width: calc(100% + 140px); height: calc(100% + 140px);
+  filter: blur(22px); -webkit-filter: blur(22px);
 }
 /* 空态不压暗（那一屏本来就是整片延伸色） */
-.hero-slide.no-shade::after { display: none; }
-/* 里模式「隐私封面」：不拉海报，只给番号（同样按 --home-mask 渐隐，上滑后不会留一块硬边方块） */
+.bg-slide.no-shade::after { display: none; }
+/* 里模式「隐私封面」：不拉海报，只给番号 */
 .hero-mask {
   position: absolute; inset: 0; display: grid; place-items: center;
   background: #202027; color: rgba(255,255,255,.72);
   font-size: 15px; font-weight: 600; letter-spacing: 1px;
-  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0) var(--home-mask, 6%), #000 calc(var(--home-mask, 6%) + 11%));
-  mask-image: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0) var(--home-mask, 6%), #000 calc(var(--home-mask, 6%) + 11%));
 }
 
-/* —— 顶部浮层：左「日期 · 问候」—— 上滑时跟文字层一起上移（底图不动） */
+/* ---------- 三、内容层：焦点区占位 + 文字 ---------- */
+/* 只当“海报那么高的一块地方”，本身不动（跟着页面滚），手势也绑在它身上 */
+.home-hero {
+  position: relative; width: 100%;
+  aspect-ratio: 2 / 3;                                  /* 与海报同比例：整张海报完整呈现，不裁切 */
+  max-height: min(calc(100dvh - 92px), 720px);
+  background: transparent;
+  touch-action: pan-y; user-select: none; -webkit-user-select: none;
+}
+.hero-fg { position: absolute; inset: 0; overflow: hidden; }
+.fg-track {
+  display: flex; height: 100%;
+  transform: translate3d(calc(var(--hero-i, 0%) + var(--hero-dx, 0px)), 0, 0);
+  transition: transform .42s cubic-bezier(.22,.61,.36,1);
+  will-change: transform;
+}
+.fg-slide { position: relative; flex: 0 0 100%; height: 100%; }
+
+/* —— 顶部浮层：左「问候」/ 右「日期」，两个同款小胶囊 —— */
 .hero-top {
   position: absolute; left: 0; right: 0; top: 0; z-index: 4;
   padding: calc(var(--sat) + 12px) 16px 0;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  transform: translate3d(0, calc(-1 * var(--home-lift, 0px)), 0);
-  will-change: transform;
 }
 .hero-pill {
-  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px 0 12px;
-  border-radius: 999px; background: rgba(20,20,22,.42);
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border-radius: 999px; background: rgba(20,20,22,.40);
   -webkit-backdrop-filter: blur(14px) saturate(160%); backdrop-filter: blur(14px) saturate(160%);
   border: 1px solid rgba(255,255,255,.14);
   color: rgba(255,255,255,.95); font-size: 12.5px; letter-spacing: .2px;
-  box-shadow: 0 6px 20px rgba(0,0,0,.24);
+  box-shadow: 0 6px 20px rgba(0,0,0,.22);
+  white-space: nowrap;
 }
-.hero-pill .hp-date { font-variant-numeric: tabular-nums; }
-.hero-pill .hp-dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,.45); }
-.hero-pill .hp-hi { color: rgba(255,255,255,.78); }
+.hero-pill.hero-hi { font-weight: 600; }
+.hero-pill .hp-date { font-variant-numeric: tabular-nums; color: rgba(255,255,255,.82); }
 
-/* —— 底部信息层：logo / 地区行（居中）/ [片名] + 简介 3 行 / 平台评分（居中） ——
-   v460：上滑时这一层按「滚动距离 1:1」往上走（和底图脱开），看着就是普通内容被滚走，
-   而不是钉在海报上干等着淡出。 */
+/* —— 底部信息层：logo / 地区行（居中）/ [片名] + 简介 3 行 / 平台评分（居中） —— */
 .hero-info {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 0 18px 46px; color: #fff;
-  transform: translate3d(0, calc(-1 * var(--home-lift, 0px)), 0);
-  will-change: transform;
 }
 .hero-logo { display: flex; justify-content: center; margin-bottom: 10px; }
 .hero-logo img {
@@ -2526,8 +2532,8 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .hero-plot .hero-ttl { font-weight: 700; color: #fff; margin-right: 1px; }
 .hero-rate.detail-ratings { margin: 12px 0 0; gap: 13px; }
 
-/* —— 页码点 —— */
-.hero-dots { position: absolute; left: 0; right: 0; bottom: 14px; z-index: 4; display: flex; align-items: center; justify-content: center; gap: 6px; transform: translate3d(0, calc(-1 * var(--home-lift, 0px)), 0); will-change: transform; }
+/* —— 页码点（跟着内容层一起滚，不参与横滑） —— */
+.hero-dots { position: absolute; left: 0; right: 0; bottom: 14px; z-index: 4; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .hero-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.32); transition: width .22s, background .22s; }
 .hero-dots i.on { width: 17px; border-radius: 3px; background: rgba(255,255,255,.95); }
 

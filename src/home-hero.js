@@ -1,15 +1,12 @@
 /* ===== 首页：海报焦点 + 分类横滑 =====
-   结构（原型 prototype/home-v2.html 落地）：
-     焦点区  —— 最多 8 部随机（**永远不含 AV**），整幅海报作底图；底部信息依次是「logo 位（有番号显示番号）/
-              地区行（居中）/[片名] + 简介（3 行）/ 平台评分（居中）」，可左右滑动，页码点可点。
-     横滑列表 —— 电影 / 剧集 / 动漫（动画类剧集）/ AVideo，按添加顺序（新的在前）。
-              AVideo 行只在里模式出现，标题右侧的眼镜 = 设置页「隐私封面」开关（直接控封面显隐）。
-     全部     —— 某类超过 15 部才在排头出现入口，点了进二级页 #page-all（不是弹窗）。
-   背景：取当前海报的综合色铺满整页（浅/深色模式都不影响）。
-   滚动：焦点区是 sticky 的 —— 上滑时**底图（海报 + 模糊底图）钉住不动**，文字层（日期胶囊 / logo /
-        简介 / 评分 / 页码点）按滚动距离 1:1 上移，横滑列表从海报上滑过去；海报下沿用遮罩从下往上
-        渐隐到全透明，所以滚到哪都不会出现一条硬边横线（对齐详情页观感）。
-   底色：按影片缓存（内存 + IndexedDB），一进首页就把 8 部全取好；拖动时底色按拖动比例插值，跟手不跳。
+   三层结构（v461）：
+     底图层 .home-bg   —— 海报（2:3 完整）+ 海报色从下往上的渐变；钉住不动，只跟左右切换
+     模糊层 .home-blur —— 同一份构图的预模糊副本，只推 opacity：上滑时背景逐渐糊掉
+     内容层 .home-scroll —— 真滚动：焦点区文字（logo / 地区 / [片名]+简介 / 评分）、日期胶囊、
+                          页码点、横滑列表整体上下移动；左右切换时文字跟底层同步横移。
+   横滑只写两个变量：--hero-i（按片，百分比）/ --hero-dx（拖动跟手位移），三份 track 一起动。
+   焦点区最多 8 部随机（**永远不含 AV**）；AVideo 行只在里模式出现，标题右侧眼镜 = 隐私封面开关。
+   底色：按影片缓存（内存 + IndexedDB），一进首页就把 8 部全取好；拖动时按比例插值，跟手不跳。
    依赖 ui-ios.js 的全局：state / listFilms / escapeHtml / escapeAttr / NfoCore / idbGet / idbPut /
    DEFAULT_WORKER / detailRatingsHtml / DETAIL_RATINGS_TTL / avCoverMaskHtml / bindOverviewLongPress。 */
 (function(){
@@ -192,18 +189,23 @@
     ];
   }
 
-  /* 整屏模糊底图用的是哪张海报（顶栏里已经有一份清晰海报，这里只负责上滑后接管整屏） */
-  function setBackdrop(f){
-    var page = d('page-home');
-    if (!page) return;
-    if (!f){ page.style.setProperty('--home-bg-img', 'none'); return; }
-    var url = posterOf(f);
-    var masked = !!state.avCoverMask && NfoCore.isAvFilm(f);   // 隐私封面下不把海报铺到底图上
-    page.style.setProperty('--home-bg-img', (!masked && url) ? 'url("' + url.replace(/"/g, '%22') + '")' : 'none');
+  /* ================= 焦点区 ================= */
+  /* 底层的一格：海报（里模式下是番号占位）。底层与模糊层共用这份 HTML —— 模糊靠 CSS 做，
+     两层几何完全一致，上滑时只是「清晰 → 虚化」的叠化，不会像以前那样两套裁切对不上。 */
+  function bgSlideHtml(f){
+    var x = dataOf(f);
+    var poster = posterOf(f);
+    var avMask = !!state.avCoverMask && NfoCore.isAvFilm(f);
+    var media = avMask
+      ? '<div class="hero-mask">' + avCoverMaskHtml((x.dvdId || titleOf(f))) + '</div>'
+      : (poster
+          ? '<img src="' + escapeAttr(poster) + '" alt="" draggable="false" onerror="this.style.display=\'none\'">'
+          : '');
+    return '<div class="bg-slide">' + media + '</div>';
   }
 
-  /* ================= 焦点区 ================= */
-  function heroInfoHtml(f){
+  /* 内容层的一格：只有文字（透明背景），图在底层，这一层跟着页面滚动、也跟着左右滑动 */
+  function fgSlideHtml(f){
     var x = dataOf(f);
     var score = String(f.rating || x.rating || '').trim();
     var bits = [];
@@ -213,14 +215,6 @@
     if (pl) bits.push('<span>' + escapeHtml(pl) + '</span>');
     if (gg) bits.push('<span>' + escapeHtml(gg) + '</span>');
     var meta = bits.length > 1 ? bits.join('<span class="hi-sep">｜</span>') : bits.join('');
-
-    var avMask = !!state.avCoverMask && NfoCore.isAvFilm(f);
-    var poster = posterOf(f);
-    var media = avMask
-      ? '<div class="hero-mask">' + avCoverMaskHtml((x.dvdId || titleOf(f))) + '</div>'
-      : (poster
-          ? '<img src="' + escapeAttr(poster) + '" alt="" draggable="false" onerror="this.style.display=\'none\'">'
-          : '');
 
     /* logo 位：有番号就直接显示番号（番号片本来也没有 TMDB 标题图）；
        没有番号才用 TMDB 的透明标题图（详情页同一个字段 d.logo）；两者都没有就不占位 */
@@ -240,8 +234,7 @@
     if (code && ttl.toUpperCase() === code.toUpperCase()) ttl = String(f.title || x.title || '').trim();
     var ttlHtml = ttl ? '<b class="hero-ttl">[' + escapeHtml(ttl) + ']</b>' : '';
 
-    return '<div class="hero-slide">' + media
-      + '<div class="hero-info">'
+    return '<div class="fg-slide"><div class="hero-info">'
       +   logoHtml
       +   '<div class="hero-meta">' + meta + '</div>'
       +   '<p class="hero-plot">' + ttlHtml + escapeHtml(String(x.plot || '').trim() || '暂无简介') + '</p>'
@@ -269,24 +262,35 @@
     return heroFilms;
   }
 
+  /* 焦点区横向位置只写两个变量，底层 / 模糊层 / 文字层三份 track 一起动（见 ios.css） */
+  function setHeroX(i){
+    var page = d('page-home');
+    if (!page) return;
+    page.style.setProperty('--hero-i', (-i * 100) + '%');
+    page.style.setProperty('--hero-dx', '0px');
+  }
+
   function renderHero(pool){
     var hero = d('homeHero'), track = d('heroTrack'), dots = d('heroDots');
+    var bg = d('bgTrack'), blur = d('blurTrack');
     if (!hero || !track) return;
     var list = pickHero(pool);
     if (!list.length){
-      /* 空态直接写在焦点区里（外面不再放第二块提示，避免两句话叠着说） */
-      track.innerHTML = '<div class="hero-slide no-shade"><div class="hero-empty"><b>还没有影片</b><span>从「搜索」添加后会出现在这里</span></div></div>';
-      track.style.transform = 'translate3d(0,0,0)';
+      /* 空态直接写在内容层里（外面不再放第二块提示，避免两句话叠着说） */
+      track.innerHTML = '<div class="fg-slide"><div class="hero-empty"><b>还没有影片</b><span>从「搜索」添加后会出现在这里</span></div></div>';
+      if (bg) bg.innerHTML = '';
+      if (blur) blur.innerHTML = '';
       if (dots) dots.innerHTML = '';
       applyAmbient(null);
-      setBackdrop(null);
       return;
     }
     if (heroIdx >= list.length) heroIdx = 0;
-    track.innerHTML = list.map(heroInfoHtml).join('');
+    var media = list.map(bgSlideHtml).join('');
+    if (bg) bg.innerHTML = media;
+    if (blur) blur.innerHTML = media;      // 同一份构图，模糊由 CSS 加
+    track.innerHTML = list.map(fgSlideHtml).join('');
     if (dots) dots.innerHTML = list.map(function(_, i){ return '<i data-i="' + i + '"' + (i === heroIdx ? ' class="on"' : '') + '></i>'; }).join('');
-    track.style.transform = 'translate3d(' + (-heroIdx * 100) + '%,0,0)';
-    track.classList.remove('dragging');
+    setHeroX(heroIdx);
     applyIdx(heroIdx);
     /* 一进来就把 8 部的底色全取好（内存/IndexedDB 有就秒回）：左右滑到谁都有色可切，
        而不是滑完才现取样、半秒后底色再跳一下 */
@@ -299,7 +303,6 @@
     var id = f.id;
     var cached = ambOf(f);
     if (cached) applyAmbient(cached);
-    setBackdrop(f);
     ensureAmb(f).then(function(c){
       if (!c) return;
       if (heroFilms[heroIdx] && heroFilms[heroIdx].id === id) applyAmbient(c);
@@ -313,8 +316,8 @@
     var n = heroFilms.length;
     if (!n) return;
     heroIdx = ((i % n) + n) % n;
-    var track = d('heroTrack'), dots = d('heroDots');
-    if (track) track.style.transform = 'translate3d(' + (-heroIdx * 100) + '%,0,0)';
+    var dots = d('heroDots');
+    setHeroX(heroIdx);
     if (dots) Array.prototype.forEach.call(dots.children, function(el, k){ el.classList.toggle('on', k === heroIdx); });
     applyIdx(heroIdx);
   }
@@ -501,23 +504,17 @@
     var sc = d('homeScroll'); if (sc) sc.scrollTop = 0;
   }
 
-  /* ================= 滚动：底图钉住不动、文字层跟着页面上移（对齐详情页的观感） =================
-     焦点区是 sticky 的（CSS），海报/底图钉在原地不动；文字层（日期胶囊 / logo / 简介 / 评分 / 页码点）
-     用 --home-lift 按滚动距离 1:1 上移，观感上就是普通内容被滚走，而不是钉在图上。
-     海报下沿用 --home-mask 从下往上渐隐到全透明（上滑时透明区往上涨），最后整块让给模糊底图，
-     所以底部不会出现一条“海报忽然结束”的硬边横线。 */
+  /* ================= 滚动：底图/模糊层钉住，内容层整体滚走 =================
+     内容层（文字 + 横滑列表）就是普通内容，滚多少走多少 —— 不用逐帧 transform，快滑也跟得上。
+     这里只推一个值：模糊副本的显影（0 → 1），到 1 时整屏就是那张海报的虚化版，与底图同构图，
+     所以上下滚到哪儿都不会出现接缝或硬边。 */
   function syncScrollState(){
     var sc = d('homeScroll'), hero = d('homeHero'), page = d('page-home');
     if (!sc || !hero || !page) return;
     var h = hero.offsetHeight || 1;
     var t = sc.scrollTop / (h * .55);
     if (t < 0) t = 0; else if (t > 1) t = 1;
-    page.style.setProperty('--home-bg', Math.min(t * 1.6, 1).toFixed(3));
-    page.style.setProperty('--home-blur', (t * 22).toFixed(1) + 'px');
-    page.style.setProperty('--home-blur-n', t.toFixed(3));
-    page.style.setProperty('--home-veil', (t * .55).toFixed(3));
-    page.style.setProperty('--home-lift', Math.min(sc.scrollTop, h) + 'px');
-    page.style.setProperty('--home-mask', (6 + t * 100).toFixed(2) + '%');
+    page.style.setProperty('--home-blur-o', Math.min(t * 1.45, 1).toFixed(3));
   }
   (function bindScroll(){
     var sc = d('homeScroll');
@@ -550,8 +547,8 @@
       startTop = sc ? sc.scrollTop : 0;
       w = hero.clientWidth;
       dragBase = curAmb ? curAmb.slice() : null;
-      var track = d('heroTrack');
-      if (track) track.classList.add('dragging');
+      var page = d('page-home');
+      if (page) page.classList.add('hero-drag');    // 拖动时关掉落位过渡，跟手才不拖
     });
     hero.addEventListener('pointermove', function(e){
       if (!dragging) return;
@@ -560,14 +557,14 @@
       if (locked !== 'x') return;
       dx = mx;
       var resist = (heroIdx === 0 && dx > 0) || (heroIdx === heroFilms.length - 1 && dx < 0) ? .35 : 1;
-      var track = d('heroTrack');
-      if (track) track.style.transform = 'translate3d(' + (-heroIdx * w + dx * resist) + 'px,0,0)';
+      /* 只写一个位移变量：底层、模糊层、文字层三份 track 用的是同一个值，永远不会错位 */
+      var page = d('page-home');
+      if (page) page.style.setProperty('--hero-dx', (dx * resist) + 'px');
       /* 底色跟着手指走：按拖过去的比例，在当前片与相邻片的底色之间插值。
          这一段必须关掉 CSS 过渡（.amb-live），否则 .55s 缓动会拖在手指后面，看着一卡一卡的 */
       var frac = -(dx * resist) / (w || 1);
       var nextAmb = ambOf(heroFilms[heroIdx + (frac > 0 ? 1 : -1)]);
       if (dragBase && nextAmb){
-        var page = d('page-home');
         if (page) page.classList.add('amb-live');
         applyAmbient(lerpHsl(dragBase, nextAmb, Math.min(Math.abs(frac), 1)));
       }
@@ -575,10 +572,9 @@
     function end(allowTap){
       if (!dragging) return;
       dragging = false;
-      var track = d('heroTrack');
-      if (track) track.classList.remove('dragging');
       var page = d('page-home');
-      if (page) page.classList.remove('amb-live');    // 先恢复过渡再落位，颜色收尾才不硬跳
+      if (page) page.classList.remove('hero-drag');   // 先恢复过渡再落位，滑过去才有动画
+      if (page) page.classList.remove('amb-live');
       if (locked === 'x' && Math.abs(dx) > Math.min(70, w * .16)) go(heroIdx + (dx < 0 ? 1 : -1));
       else go(heroIdx);
 
