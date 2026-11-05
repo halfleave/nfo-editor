@@ -2634,10 +2634,10 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .all-count { font-size: 12.5px; color: var(--label-2); }
 .all-loading { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--label-2); }
 
-/* ===== v471 临时排查开关：全站关掉毛玻璃 =====
-   目的只有一个：确认「顶部整块 / 底部 tab 栏发虚」是不是 backdrop-filter 引起的。
-   ★ 排查完就删掉这一整块（或只保留确实需要的几处）。
-   这一版里 tab 栏、搜索框、长按菜单、弹窗都会失去磨砂感，变成半透明色块 —— 属于预期。 */
+/* ===== v475：全站停用 backdrop-filter（长期方案，不再是排查开关）=====
+   实测：关掉它之后底部 tab 栏立刻变清晰，说明 iOS 26 上「毛玻璃会把自身内容一起烘焙再模糊」
+   是真的。所以这条留着 —— 只是不再顺带关 filter / will-change / text-shadow（那些会毁掉
+   首页与详情页的底图模糊）。需要玻璃感的元素改成半透明实色 + 描边即可。 */
 *, *::before, *::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;

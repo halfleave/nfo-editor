@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '472';
+window.__SCRIPT_VER = '475';
 
 var currentPage = '';
 /* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
@@ -14833,6 +14833,7 @@ function syncAppUpdateVer(){
   var v = window.__SCRIPT_VER || '';
   if (el && v) el.textContent = 'v2.0.' + v;
 }
+/* v474 的诊断行已撤（v475）：顶部那行糊不在 CSS 层，见 styles/ios.css 末尾说明。 */
 function manualCheckUpdate(){
   var el = document.getElementById('appCheckUpdateValue');
   if (swUpdateReady){
