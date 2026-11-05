@@ -587,7 +587,11 @@ img { display: block; }
 .home-tab.active { background: #fff; color: #2F2F2F; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
 
 /* 滚动区 */
-.page-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 var(--pad) calc(var(--sab) + 92px); overscroll-behavior: contain; will-change: transform; }
+/* v469：撤掉 -webkit-overflow-scrolling:touch 和 will-change:transform。
+   这两个都会把 .page-scroll 提升成 iOS 的独立「滚动合成层」，而容器里 position:relative + z-index:5
+   的 .page-bar 会再被单独光栅化一次，结果就是顶栏那一整块（大标题、里模式胶囊）发虚发糊，
+   同一页的正文却清晰 —— 这正是「所有页面顶部都糊」的来源。现代 iOS 默认有惯性滚动，无需这两条。 */
+.page-scroll { flex: 1; overflow-y: auto; padding: 0 var(--pad) calc(var(--sab) + 92px); overscroll-behavior: contain; }
 #page-settings .page-scroll { padding-top: 0; }
 #page-home .page-scroll { padding-top: 0; }
 #page-search .page-scroll { padding-top: 0; }
