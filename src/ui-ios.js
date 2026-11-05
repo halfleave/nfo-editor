@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '471';
+window.__SCRIPT_VER = '472';
 
 var currentPage = '';
 /* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
@@ -14688,7 +14688,7 @@ function bootApp(){
      逐个包住（而不是整体包住）：坏一个不影响其它的初始化。 */
   [setupBigTitle, setWelcome, renderCountryChips, renderGenreChips,
    initNativeSelects, initDetailScrollOverlay, syncAllSelectDisplays,
-   populateSettingSelects, updateSubtitleBtn].forEach(function(fn){
+   populateSettingSelects, updateSubtitleBtn, syncAppUpdateVer].forEach(function(fn){
     try { fn(); } catch (e) { console.warn('[boot]', (fn.name || '?') + ' 失败', e); }
   });
   setInterval(setWelcome, 60000);
@@ -14822,6 +14822,52 @@ function applyAppUpdate(){
     return;
   }
   location.reload();
+}
+/* v472：设置页「检查更新」—— 手动向服务器要一次 sw.js，确认有没有比当前新的版本。
+   ① 已经装好新版（waiting）→ 直接提示点上面那行更新；
+   ② 否则 update()，最多等 6 秒看 installing / waiting；没动静就当「已是最新」。
+   手动检查不吃 swCheckForUpdate 的 60 秒节流。 */
+var swChecking = false;
+function syncAppUpdateVer(){
+  var el = document.getElementById('appCheckUpdateValue');
+  var v = window.__SCRIPT_VER || '';
+  if (el && v) el.textContent = 'v2.0.' + v;
+}
+function manualCheckUpdate(){
+  var el = document.getElementById('appCheckUpdateValue');
+  if (swUpdateReady){
+    showToast('发现新版本，点上面「发现新版本」更新', 'success');
+    return;
+  }
+  if (!swSupported()){
+    showToast('当前打开方式不支持检查更新', 'error');
+    return;
+  }
+  if (!swRegistration){
+    showToast('还在初始化，稍等两秒再试', 'error');
+    return;
+  }
+  if (swChecking) return;
+  swChecking = true;
+  var base = 'v2.0.' + (window.__SCRIPT_VER || '');
+  if (el) el.textContent = '检查中…';
+  var done = function(msg, kind){
+    swChecking = false;
+    if (el) el.textContent = base;
+    if (msg) showToast(msg, kind || 'success');
+  };
+  swLastCheck = 0;
+  try { swRegistration.update().catch(function(){}); } catch (e) {}
+  var t0 = Date.now();
+  var timer = setInterval(function(){
+    // 有新版本时 markSwUpdateReady 已经弹过提示，这里只收尾
+    if (swUpdateReady){ clearInterval(timer); done(null); return; }
+    if (Date.now() - t0 > 6000){
+      clearInterval(timer);
+      if (swRegistration && swRegistration.installing) done('正在下载新版本，稍后回来看');
+      else done('已是最新版本');
+    }
+  }, 400);
 }
 if (swSupported()){
   window.addEventListener('load', function(){
