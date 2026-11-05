@@ -198,10 +198,13 @@ img { display: block; }
 }
 .detail-topbar button svg { width: 24px; height: 24px; }
 /* 修复A：详情页顶部暗色渐变遮罩（仅最顶一小段向下渐隐），压暗亮背景让白色文字/返回键清晰 */
+/* v464：高度从 sat+96 收到 sat+56、起始浓度 .5 → .42。
+   这层只为了压住状态栏和返回键底下那一小块海报，96px 会一路压到大标题上方，
+   海报顶部像蒙了一层灰。收到 56px 后只覆盖状态栏 + 一行按钮的高度。 */
 .detail-top-fade {
   position: fixed; top: 0; left: 0; right: 0; z-index: 3; pointer-events: none;
-  height: calc(var(--sat) + 96px);
-  background: linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0));
+  height: calc(var(--sat) + 56px);
+  background: linear-gradient(to bottom, rgba(0,0,0,0.42), rgba(0,0,0,0));
 }
 .detail-scroll {
   position: fixed; inset: 0; z-index: 5;
@@ -854,6 +857,19 @@ html.stills-open, html.stills-open body { background: #000; }
   -webkit-tap-highlight-color: transparent;
 }
 .splash.hide { opacity: 0; pointer-events: none; }
+/* 启动页铺到浏览器工具栏后面。
+   iOS Safari / 微信等内置浏览器的底栏是浏览器自己的浮层，网页盖不住它本身，
+   但 fixed 的盒子只到「可视视口」为止 —— 栏后面那一条会露出 body 的底色
+   （浅色是 #f2f1f6、深色是纯黑），看上去就是「启动页下方多出一条栏」。
+   这里把同色背景往下多画 200px，栏后面也是白的，视觉上启动页才真正满屏；
+   启动页收起时整块节点被删掉，这段外延跟着一起消失，不影响别的页面。 */
+.splash::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 200px;
+  background: #ffffff;
+}
+/* 启动页还没收起时，整页底色也是启动页的白：安全区边缘、底栏后面、回弹露出的
+   边角都不会闪一下 body 的灰/黑。收起时（hideSplash）再把 class 摘掉。 */
+html.splashing, html.splashing body { background: #ffffff; }
 .splash-ver { position: absolute; left: 0; right: 0; bottom: calc(28px + env(safe-area-inset-bottom)); text-align: center; font-size: 12px; color: var(--label-2, #8e8e93); }
 .splash-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 0 24px; margin-top: calc(25vh + env(safe-area-inset-top)); }
 .splash-logo {
@@ -1055,6 +1071,12 @@ html.stills-open, html.stills-open body { background: #000; }
   /* 玻璃边缘一道亮线 + 极淡内侧高光：深色底（首页海报）上也能看出轮廓，不然整条会跟背景糊在一起 */
   box-shadow: 0 6px 20px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.14);
   border: 1px solid var(--tabbar-line);
+  /* v464：跟着滚动方向进出（见 initTabbarAutoHide）。只动 transform，整条滑到屏幕外 */
+  transition: transform .22s cubic-bezier(.32,.72,0,1);
+  will-change: transform;
+}
+.ios-tabbar.tabbar-hide {
+  transform: translate(-50%, calc(100% + 46px));
 }
 .tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--tabbar-fg-2); font-size: 10px; font-weight: 500; padding: 4px 0; border-radius: 999px; transition: .2s; text-shadow: 0 1px 4px rgba(0,0,0,0.26); }
 .tab-item .ti-icon { font-size: 21px; line-height: 1; }

@@ -21,6 +21,7 @@
 
   var heroFilms = [];        // 本次焦点区选中的影片
   var heroSig = '';          // 选中集合签名：数据没变就不重洗，避免每次渲染都跳
+  var lastSig = '';          // 整页渲染指纹（片单 + 开关）：一样就跳过重建，返回首页才不会顿一下
   var heroIdx = 0;
   var allKind = '';          // 「全部」二级页当前在看哪一类
   var allTitle = '';         // 以及它的标题（刷新时沿用）
@@ -450,7 +451,7 @@
     }
   }
 
-  function render(){
+  function render(force){
     /* v453：这个函数是启动流程的一环（renderOverview 转调过来），
        同步抛错会让启动页永远停住，所以整体兜住，出任何问题都返回一个已完成的 Promise。 */
     try {
@@ -459,6 +460,18 @@
       syncHead();
       return listFilms().then(function(all){
         var films = (all || []).slice().sort(function(a, b){ return addedAt(b) - addedAt(a); });  // 添加顺序：新的在前
+        /* v464：数据没变就不重建 DOM。
+           从详情页返回时 switchPage 会调这里，而这一下正好压在转场落地的同一帧上，
+           重建整页（焦点区 + 四排卡片、几十张图）会顿一下 —— 就是那个「返回有停顿感」。
+           指纹 = 每部片的 id + 更新时间 + 数量 + 里模式/隐私封面开关，任何一项变了才真的重画。 */
+        var sig = films.length + '|' + (state.themeHidden ? 1 : 0) + '|' + (state.avCoverMask ? 1 : 0) + '|'
+                + films.map(function(f){ return f.id + '#' + (f.updatedAt || 0); }).join(',');
+        if (!force && sig === lastSig){
+          syncHeroHeight();
+          syncScrollState();
+          return;
+        }
+        lastSig = sig;
         /* 焦点区永远不读取 AV 影片（AV 只在下面那排里出现，且要里模式） */
         var pool = films.filter(function(f){ return kindOf(f) !== 'xv'; });
         renderHero(pool);

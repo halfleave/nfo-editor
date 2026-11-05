@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '462';
+window.__SCRIPT_VER = '464';
 
 var currentPage = '';
 /* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
@@ -44,7 +44,10 @@ function animateDetailIn(){
   });
   setTimeout(function(){
     clearDetailTransforms();
-    if (pushHome && currentPage === 'detail') home.classList.remove('active');
+    /* v464：转场结束后**不再**把首页撤成 display:none。
+       原来一撤，首页的布局/绘制全被丢掉，返回时要重新排一遍（焦点区 + 四排卡片 + 海报），
+       那一整块同步开销就压在返回动画的第一帧上 —— 手感就是「点返回先愣一下再滑」。
+       详情页是不透明的，盖在上面看不见；首页留在下面当缓存，返回时只是把 transform 归零。 */
   }, PAGE_SLIDE_MS + 60);
 }
 function switchPage(page) {
@@ -68,6 +71,7 @@ function switchPage(page) {
   // 之前用「黑名单」枚举三级页，每新增一个页面就漏一次（任务详情页就这样把 tab 栏串到了二级页上）。
   var TOP_LEVEL = ['home', 'search', 'settings'];
   if (tb) tb.style.display = (TOP_LEVEL.indexOf(page) >= 0) ? '' : 'none';
+  resetTabbarScroll();      // 换页时把「滚动收起」状态复位，新页面一进来栏就在位
   /* v452：从别的页面回到首页时重画（新首页由 home-hero.js 负责，数据可能已在别处变过） */
   if (page === 'home' && from && from !== 'home' && window.HomeHero) window.HomeHero.render();
   if (page === 'search'){
@@ -14447,7 +14451,13 @@ function hideSplash(){
   var s = document.getElementById('splash');
   if (!s) return;
   s.classList.add('hide');
-  setTimeout(function(){ if (s && s.parentNode) s.parentNode.removeChild(s); }, 420);
+  setTimeout(function(){
+    if (s && s.parentNode) s.parentNode.removeChild(s);
+    /* 启动页彻底撤掉后，再把「启动期白底」还回去：
+       早摘会让底栏后面提前变回应用的灰/黑，跟还在淡出的白启动页打架。
+       放在同一帧，底下露出来的就一直是应用自己的底色。 */
+    document.documentElement.classList.remove('splashing');
+  }, 420);
 }
 // —— 页面 rubber-band 回弹：内容不满屏也能拖，指数阻尼（越拖越慢），松手弹性复位 ——
 function enableRubberBand(el){
@@ -14555,6 +14565,43 @@ function initIosBottomBarHeal(){
   });
 }
 
+/* ===== 底部 tab 栏：跟着滚动方向进出（v464）=====
+   上滑（内容往上走）→ 整条快速滑出屏幕下沿；下滑 → 快速滑回来；回到顶部一律出现。
+   只改一个 class（transform 过渡），不参与逐帧计算；滚动事件用捕获阶段挂在 document 上，
+   这样三个一级页各自的 .page-scroll 都能收到，不用逐页绑定。
+   相邻两次滚动不足 6px 不动手 —— 否则手指轻微抖动会让栏反复抽搐。 */
+var tabbarLastSc = null, tabbarLastTop = 0;
+function setTabbarHidden(hide){
+  var tb = document.getElementById('tabBar');
+  if (!tb) return;
+  if (tb.classList.contains('tabbar-hide') === !!hide) return;
+  tb.classList.toggle('tabbar-hide', !!hide);
+}
+/* 切页时复位：新页面一进来栏必须在位，基准点取当前页滚动容器现在的 scrollTop，
+   这样切页后第一下滚动就能判方向（否则要等第二次事件才认得出来） */
+function resetTabbarScroll(){
+  setTabbarHidden(false);
+  var page = document.querySelector('.page.active');
+  var sc = page ? page.querySelector('.page-scroll') : null;
+  tabbarLastSc = sc || null;
+  tabbarLastTop = sc ? sc.scrollTop : 0;
+}
+function initTabbarAutoHide(){
+  document.addEventListener('scroll', function(e){
+    var sc = e.target;
+    if (!sc || !sc.classList || !sc.classList.contains('page-scroll')) return;
+    var page = sc.parentNode;
+    while (page && page !== document && !(page.classList && page.classList.contains('page'))) page = page.parentNode;
+    if (!page || page === document || !page.classList.contains('active')) return;
+    if (sc !== tabbarLastSc){ tabbarLastSc = sc; tabbarLastTop = sc.scrollTop; return; }
+    var y = sc.scrollTop, dy = y - tabbarLastTop;
+    if (Math.abs(dy) < 6) return;
+    tabbarLastTop = y;
+    if (y <= 6) setTabbarHidden(false);        // 回到顶部：一定露出来
+    else setTabbarHidden(dy > 0);              // 往下滚 → 收起；往上滚 → 出现
+  }, true);
+}
+
 function bootApp(){
   // ① 轻量 UI 装配（同步，先把界面骨架画出来）
   // iOS 聚焦 input/textarea 时会滚动 window 把底部浏览器栏带出来；即便已锁死 body，
@@ -14567,6 +14614,7 @@ function bootApp(){
     }
   });
   initIosBottomBarHeal();   // 键盘收起 / 双击后自愈底部浏览器栏
+  initTabbarAutoHide();     // 上滑收起 tab 栏、下滑出现
   startSplashProgress();
   /* v453：这一段全是同步的界面装配，任何一个节点取空都会抛错，
      而它一旦抛错整个 bootApp 就断在这里、永远走不到 enterHome —— 启动页就那么停着。
