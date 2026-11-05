@@ -2383,8 +2383,8 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 
 /* ============================================================
    v461 首页三层（结构见 src/home-hero.js）
-     z0 .home-bg    海报 + 海报色渐变 —— 钉住不动，只跟着左右切换
-     z1 .home-blur  同一份构图的预模糊副本 —— 只推 opacity，上滑逐渐糊掉背景
+     z0 .home-bg    海报 + 海报色渐变（每片一整屏）—— 钉住不动，只跟着左右切换；上滑时真实 blur
+     z1 ::after     海报色压暗层 —— 上滑渐显，给内容层托对比
      z2 .home-scroll 内容层 —— 真滚动，文字/列表整体上下移动
    —— 整页底色 = 当前海报的综合色，深浅模式都不影响
    ============================================================ */
@@ -2397,29 +2397,34 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
   /* 首页文字一律浅色（底色永远是海报的深色侧） */
   --home-fg: rgba(255,255,255,0.96);
   --home-fg-2: rgba(255,255,255,0.62);
-  /* 三层共用的横滑位置：--hero-i 按片（百分比），--hero-dx 是拖动时的跟手位移。
-     写一次变量，底层 / 模糊层 / 文字层三份 track 一起动，永远不会错位。 */
+  /* 两层共用的横滑位置：--hero-i 按片（百分比），--hero-dx 是拖动时的跟手位移。
+     写一次变量，底层 / 文字层两份 track 一起动，永远不会错位。 */
   --hero-i: 0%;
   --hero-dx: 0px;
-  /* 模糊副本的显影程度：上滑时 0 → 1（见 syncScrollState） */
-  --home-blur-o: 0;
+  /* v462：模糊改走详情页那套 —— 同一层上真实改 blur 半径（不再做预模糊副本的交叉淡入）。
+     --home-glass 模糊半径(px)、--home-alpha 海报色压暗(0~1)，都由 syncScrollState 逐帧写。 */
+  --home-glass: 0px;
+  --home-alpha: 0;
+  /* 海报高（= 焦点区占位高）：底层那张图、它的渐隐遮罩、内容层占位全用这一个值，永远对得上。
+     2:3 完整呈现 → 高 = 宽 × 1.5；上限沿用原来的 min(视口高 - 92, 720)。 */
+  --hero-h: min(calc(100vw * 1.5), calc(100dvh - 92px), 720px);
 }
-/* 手指拖动时临时关掉底色过渡，否则 .55s 缓动会拖在手指后面 */
-#page-home.amb-live { transition: none; }
 #page-home .home-scroll { position: relative; z-index: 2; padding-left: 0; padding-right: 0; }
 
-/* ---------- 一、底层：海报 + 海报色渐变 ---------- */
-/* 海报按 2:3 完整呈现（和内容层的占位同高），下面接整块海报色，中间用「从下往上」的渐变化开。
-   整屏只有这一份构图，所以永远不会有“海报忽然结束”的横线。 */
+/* ---------- 一、底层：海报 + 海报色渐变（每片一整屏，横滑就是两张整屏构图对推） ---------- */
+/* 每个 .bg-slide 自己就是一整屏：上方 --hero-h 高的海报，下面接「这一片自己的」海报色一直到屏幕底。
+   所以手指停在正中时，左半屏是上一部的海报+色、右半屏是下一部的，不会变成整屏混色。
+   模糊照详情页的做法直接挂在这一层上（.home-bg 的 filter），四周外扩 32px 给模糊采样留余量。 */
 .home-bg {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  position: fixed; inset: -32px; z-index: 0; pointer-events: none;
   background: hsl(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%));
-  transition: background-color .55s ease;
+  transition: background-color .55s ease, filter .15s linear;
+  filter: blur(var(--home-glass, 0px));
+  -webkit-filter: blur(var(--home-glass, 0px));
 }
-#page-home.amb-live .home-bg { transition: none; }
+/* inset:-32px 只为了让模糊有肉可采，track 用 inset:32px 补回来 → 内容仍然精确对齐视口 */
 .bg-track {
-  position: absolute; top: 0; left: 0; width: 100%;
-  aspect-ratio: 2 / 3; max-height: min(calc(100dvh - 92px), 720px);
+  position: absolute; inset: 32px;
   display: flex;
   transform: translate3d(calc(var(--hero-i, 0%) + var(--hero-dx, 0px)), 0, 0);
   transition: transform .42s cubic-bezier(.22,.61,.36,1);
@@ -2427,33 +2432,35 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 }
 #page-home.hero-drag .bg-track,
 #page-home.hero-drag .fg-track { transition: none; }
-.bg-slide { position: relative; flex: 0 0 100%; height: 100%; overflow: hidden; }
+/* 一格 = 一整屏：海报在上（--hero-h 高），其余是这一片自己的底色，一直铺到屏幕底 */
+.bg-slide {
+  position: relative; flex: 0 0 100%; height: 100%; overflow: hidden;
+  background: hsl(var(--s-h, var(--home-h, 215)), var(--s-s, var(--home-s, 14%)), var(--s-l, var(--home-l, 20%)));
+}
 .bg-slide > img {
-  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
+  position: absolute; left: 0; top: 0; width: 100%; height: var(--hero-h);
+  object-fit: cover; display: block;
   pointer-events: none; -webkit-user-drag: none;
 }
-/* 海报色从下往上：底部实心 → 往上全透明。底部正好接上 .home-bg 的纯色，接缝不可见 */
+/* 海报色从下往上：底部实心 → 往上全透明。底部正好接上这一格自己的纯色，接缝不可见 */
 .bg-slide::after {
-  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  content: ''; position: absolute; left: 0; top: 0; width: 100%; height: var(--hero-h);
+  z-index: 1; pointer-events: none;
   background: linear-gradient(to top,
-      hsl(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%)) 0%,
-      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .82) 15%,
-      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .52) 34%,
-      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .22) 56%,
-      hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), 0) 76%);
+      hsl(var(--s-h, var(--home-h, 215)), var(--s-s, var(--home-s, 14%)), var(--s-l, var(--home-l, 20%))) 0%,
+      hsla(var(--s-h, var(--home-h, 215)), var(--s-s, var(--home-s, 14%)), var(--s-l, var(--home-l, 20%)), .82) 15%,
+      hsla(var(--s-h, var(--home-h, 215)), var(--s-s, var(--home-s, 14%)), var(--s-l, var(--home-l, 20%)), .52) 34%,
+      hsla(var(--s-h, var(--home-h, 215)), var(--s-s, var(--home-s, 14%)), var(--s-l, var(--home-l, 20%)), .22) 56%,
+      hsla(var(--s-h, var(--home-h, 215)), var(--s-s, var(--home-s, 14%)), var(--s-l, var(--home-l, 20%)), 0) 76%);
 }
 
-/* ---------- 二、中间层：预模糊副本（同构图，只推透明度） ---------- */
-/* 不逐帧改 blur 半径（那是整层重算，最费），改成「清晰层 + 固定模糊层」交叉淡入：
-   每帧只动 opacity，其余交给 GPU 合成。图比格子大一圈，避免模糊采到边界外的透明变亮边。 */
-.home-blur {
-  position: fixed; inset: 0; z-index: 1; pointer-events: none;
-  opacity: var(--home-blur-o, 0);
-  background: hsla(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%), .34);
-}
-.home-blur .bg-slide > img {
-  left: -70px; top: -70px; width: calc(100% + 140px); height: calc(100% + 140px);
-  filter: blur(22px); -webkit-filter: blur(22px);
+/* ---------- 二、压暗层：上滑时海报色逐渐盖上来（对齐详情页 --dt-alpha 那层） ---------- */
+/* 放在模糊层外面，避免和底图一起被 blur 重算；只改 opacity，代价最低。 */
+#page-home::after {
+  content: ''; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: hsl(var(--home-h, 215), var(--home-s, 14%), var(--home-l, 20%));
+  opacity: var(--home-alpha, 0);
+  transition: background-color .55s ease;
 }
 /* 空态不压暗（那一屏本来就是整片延伸色） */
 .bg-slide.no-shade::after { display: none; }
@@ -2468,8 +2475,7 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 /* 只当“海报那么高的一块地方”，本身不动（跟着页面滚），手势也绑在它身上 */
 .home-hero {
   position: relative; width: 100%;
-  aspect-ratio: 2 / 3;                                  /* 与海报同比例：整张海报完整呈现，不裁切 */
-  max-height: min(calc(100dvh - 92px), 720px);
+  height: var(--hero-h);                                /* 与底层海报同一个值，天然对齐 */
   background: transparent;
   touch-action: pan-y; user-select: none; -webkit-user-select: none;
 }
@@ -2497,7 +2503,13 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
   box-shadow: 0 6px 20px rgba(0,0,0,.22);
   white-space: nowrap;
 }
-.hero-pill.hero-hi { font-weight: 600; }
+/* 左胶囊里是「早上好·六字短语✨」，比右边日期长：给一个上限 + 省略号，
+   窄屏（320）也不会把日期挤出去、更不会换行撑破胶囊 */
+.hero-pill.hero-hi {
+  font-weight: 600;
+  display: inline-block; max-width: 64%; line-height: 28px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .hero-pill .hp-date { font-variant-numeric: tabular-nums; color: rgba(255,255,255,.82); }
 
 /* —— 底部信息层：logo / 地区行（居中）/ [片名] + 简介 3 行 / 平台评分（居中） —— */

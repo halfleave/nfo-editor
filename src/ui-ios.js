@@ -4,13 +4,59 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '461';
+window.__SCRIPT_VER = '462';
 
 var currentPage = '';
+/* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
+   进详情：详情页从屏幕右侧平移进屏，首页同时往左轻推 28px；
+   返回：详情页向右平移出屏，首页从 -28px 回到 0。进出同一时长、同一条曲线。 */
+var PAGE_SLIDE_MS = 380;
+var PAGE_SLIDE_EASE = 'cubic-bezier(.32,.72,0,1)';
+var HOME_PUSH_PX = 28;                       // 进详情时首页被推开的距离
+function homePushTransform(){ return 'translate3d(-' + HOME_PUSH_PX + 'px,0,0)'; }
+function clearDetailTransforms(){
+  var dp = document.getElementById('page-detail');
+  if (dp){ dp.style.transition = ''; dp.style.transform = ''; dp.style.boxShadow = ''; }
+}
+/* 进详情：先摆到右侧 → 切页（此时才 display:flex）→ 下一帧落位 */
+function animateDetailIn(){
+  var page = document.getElementById('page-detail');
+  var home = document.getElementById('page-home');
+  if (!page){ switchPage('detail'); return; }
+  /* 只有「首页 → 详情」才推首页（从编辑页/自动化页回来进详情时，首页根本没在前台） */
+  var pushHome = !!home && home.classList.contains('active');
+  page.style.transition = 'none';
+  page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
+  page.style.boxShadow = '-12px 0 28px rgba(0,0,0,.35)';
+  if (pushHome){ home.style.transition = 'none'; home.style.transform = 'translate3d(0,0,0)'; }
+  switchPage('detail');
+  /* 转场期间首页要留在下面透出（switchPage 已经把 .active 摘掉了，会变成 display:none），动画完再撤 */
+  if (pushHome) home.classList.add('active');
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
+      page.style.transform = 'translate3d(0,0,0)';
+      if (pushHome){
+        home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
+        home.style.transform = homePushTransform();
+      }
+    });
+  });
+  setTimeout(function(){
+    clearDetailTransforms();
+    if (pushHome && currentPage === 'detail') home.classList.remove('active');
+  }, PAGE_SLIDE_MS + 60);
+}
 function switchPage(page) {
   var from = currentPage;
   currentPage = page;
   if (from === 'detail' && page !== 'detail'){ stopDetailBgSlideshow(); clearDetailShotCache(); } // 离开详情页：停掉底图轮播 + 清空剧照运行时缓存（底图本身保留）
+  /* 离开详情页时把转场留下的内联样式抹掉：详情页复位到原位，首页从 -28px 归零（不再有过渡，避免跳一下） */
+  if (from === 'detail' && page !== 'detail'){
+    clearDetailTransforms();
+    var hp = document.getElementById('page-home');
+    if (hp){ hp.style.transition = 'none'; hp.style.transform = ''; }
+  }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
   // 返回/进入详情页：页面已显示后再恢复底图缓慢放大，确保 transition 从 scale(1) 真正生效
   if (from && from !== 'detail' && page === 'detail') resumeDetailBgZoom();
@@ -96,21 +142,27 @@ function initEdgeSwipeBack(){
   function finish(goHome){
     if (!dragging) return;
     dragging = false; axis = null;
-    page.style.transition = 'transform .32s cubic-bezier(.32,.72,0,1), opacity .32s';
+    page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
     if (goHome){
-      page.style.transform = 'translateX(' + window.innerWidth + 'px)';
-      page.style.opacity = '0';
+      page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
+      if (home){
+        home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
+        home.style.transform = 'translate3d(0,0,0)';
+      }
       setTimeout(function(){
-        page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = ''; page.style.boxShadow = '';
+        page.style.transition = ''; page.style.transform = ''; page.style.userSelect = ''; page.style.boxShadow = '';
         switchPage('home');
-      }, 320);
+      }, PAGE_SLIDE_MS);
     } else {
-      page.style.transform = 'translateX(0)';
-      page.style.opacity = '1';
+      page.style.transform = 'translate3d(0,0,0)';
+      if (home){
+        home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
+        home.style.transform = homePushTransform();
+      }
       setTimeout(function(){
-        page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.userSelect = ''; page.style.boxShadow = '';
+        page.style.transition = ''; page.style.transform = ''; page.style.userSelect = ''; page.style.boxShadow = '';
         if (home) home.classList.remove('active');
-      }, 320);
+      }, PAGE_SLIDE_MS);
     }
   }
   page.addEventListener('touchstart', function(e){
@@ -138,8 +190,13 @@ function initEdgeSwipeBack(){
     if (home && !home.classList.contains('active')) home.classList.add('active'); // 首页透出到背景
     page.style.transform = 'translateX(' + dx + 'px)';
     page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
-    var op = 1 - dx / (window.innerWidth * 1.6);
-    page.style.opacity = (op < 0.35 ? 0.35 : op).toFixed(3);
+    /* 首页跟着手指从 -28px 线性往回到 0：详情页滑到哪儿、首页就退出多少，不再是透明度淡入 */
+    if (home){
+      var vw = window.innerWidth || 1;
+      var k = Math.min(dx / vw, 1);
+      home.style.transition = 'none';
+      home.style.transform = 'translate3d(' + (-HOME_PUSH_PX * (1 - k)) + 'px,0,0)';
+    }
   }, { passive: false });
   page.addEventListener('touchend', function(){ if (dragging) finish(moved > threshold()); });
   page.addEventListener('touchcancel', function(){ if (dragging) finish(moved > threshold()); });
@@ -203,20 +260,24 @@ function initDetailTitleCopy(){
   t.addEventListener('mouseleave', function(){ st = 0; moved = false; clearSingle(); });
 }
 initDetailTitleCopy();
-/* 顶部「返回」按钮：与边缘右滑一致的滑出退场动画（详情页从右移出、首页透出） */
+/* 顶部「返回」按钮：与边缘右滑一致的滑出动画（详情页向右滑出、首页从 -28px 回位，全程不淡出） */
 function animateDetailBack(){
   var page = document.getElementById('page-detail');
   if (!page){ switchPage('home'); return; }
   var home = document.getElementById('page-home');
   if (home && !home.classList.contains('active')) home.classList.add('active');
-  page.style.transition = 'transform .32s cubic-bezier(.32,.72,0,1), opacity .32s';
+  if (home) void home.offsetWidth;   // 先让它按当前（被推开 -28px 的）位置渲染一帧，才能从这里过渡回去
+  page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
   page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
-  page.style.transform = 'translateX(' + window.innerWidth + 'px)';
-  page.style.opacity = '0';
+  page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
+  if (home){
+    home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
+    home.style.transform = 'translate3d(0,0,0)';
+  }
   setTimeout(function(){
-    page.style.transition = ''; page.style.transform = ''; page.style.opacity = ''; page.style.boxShadow = '';
     switchPage('home');
-  }, 320);
+    clearDetailTransforms();
+  }, PAGE_SLIDE_MS);
 }
 
 /* ===== 编辑页元素前缀（电影页 / 剧集页 两套独立 DOM，靠前缀解析元素避免 id 冲突）=====
@@ -8219,7 +8280,6 @@ function getAdultLoadingPhrases(){
 function setAdultLoadingPhrases(list){
   return idbPut('kv', ADULT_PHRASES_KEY, { list: list });
 }
-var lastPhraseSlot = -1;
 var lastPhraseText = '';
 function pickRandomPhrase(){
   var pool = HEALING_PHRASES;
@@ -8230,30 +8290,43 @@ function pickRandomPhrase(){
   lastPhraseText = p;
   return p;
 }
+/* v462：首页左上胶囊 = 时段问候 + 「·」 + 六字短语 + ✨（例：早上好·所求皆能如愿✨）。
+   短语按 30 分钟一个 slot 换一句，同一 slot 内反复渲染都返回同一句，切回首页不会跳字。 */
+function greetWordOfHour(h){
+  if (h >= 6 && h < 8) return '早上好';
+  if (h >= 8 && h < 11) return '上午好';
+  if (h >= 11 && h < 14) return '中午好';
+  if (h >= 14 && h < 17) return '下午好';
+  if (h >= 17 && h < 19) return '傍晚好';
+  if (h >= 19 && h < 23) return '晚上好';
+  if (h >= 23 || h < 5) return '夜深了';
+  return '天要亮了';
+}
+var greetPhraseCache = { slot: -1, text: '' };
+function currentGreetingPhrase(){
+  var now = new Date();
+  var slot = Math.floor((now.getHours() * 60 + now.getMinutes()) / 30);
+  if (slot !== greetPhraseCache.slot || !greetPhraseCache.text){
+    greetPhraseCache.slot = slot;
+    greetPhraseCache.text = pickRandomPhrase();
+  }
+  return greetPhraseCache.text;
+}
+/* 停在首页半小时也要换词：只重写那几个字，60 秒一次，代价可以忽略 */
+setInterval(function(){
+  if (window.HomeHero && window.HomeHero.syncHead) window.HomeHero.syncHead();
+}, 60000);
 function setWelcome(){
   var h = new Date().getHours();
-  var greet;
-  if (h >= 6 && h < 8) greet = '早上好';
-  else if (h >= 8 && h < 11) greet = '上午好';
-  else if (h >= 11 && h < 14) greet = '中午好';
-  else if (h >= 14 && h < 17) greet = '下午好';
-  else if (h >= 17 && h < 19) greet = '傍晚好';
-  else if (h >= 19 && h < 23) greet = '晚上好';
-  else if (h >= 23 || h < 5) greet = '夜深了';
-  else greet = '天要亮了';
-  /* v452：新首页的问候语在 hero 顶部的胶囊里（日期左、问候右），交给 home-hero 同步；
+  var greet = greetWordOfHour(h);
+  /* v452：新首页的问候语在 hero 顶部的胶囊里，交给 home-hero 同步；
      旧的 welcomeSub / welcomeTitle / datePill 节点已经不在了，取不到就跳过，别再空指针。 */
   if (window.HomeHero && window.HomeHero.syncHead) window.HomeHero.syncHead();
   var sub = document.getElementById('welcomeSub');
   if (sub) sub.textContent = greet + '，';
+  var titleEl = document.getElementById('welcomeTitle');
+  if (titleEl && titleEl.firstChild && titleEl.firstChild.nodeType === 3) titleEl.firstChild.textContent = currentGreetingPhrase() + ' ';
   var now = new Date();
-  var slot = Math.floor((now.getHours() * 60 + now.getMinutes()) / 30);
-  if (slot !== lastPhraseSlot){
-    lastPhraseSlot = slot;
-    var phrase = pickRandomPhrase();
-    var titleEl = document.getElementById('welcomeTitle');
-    if (titleEl && titleEl.firstChild && titleEl.firstChild.nodeType === 3) titleEl.firstChild.textContent = phrase + ' ';
-  }
   var wd = ['周日','周一','周二','周三','周四','周五','周六'][now.getDay()];
   var pill = document.getElementById('datePill');
   if (pill) pill.textContent = (now.getMonth() + 1) + '月' + now.getDate() + '日 ' + wd;
@@ -10355,7 +10428,7 @@ function openFilmDetail(encId){
     renderFilmDetail(film);
     maybeRefetchPlot(film);               // v449：简介为空时进详情页补取一次（正在更新的剧集常见）
     maybeDetailFallbackTranslate(film);   // 兜底：详情页看到日文且没在翻 → 触发一次后台翻译（翻完自动刷新详情简介）
-    switchPage('detail');
+    animateDetailIn();                    // v462：详情页从右侧平移进屏（首页同时往左轻推）
     auto115Doc = null;                 // 切影片：重置自动化文档，按新影片重新载入并刷新角标
     auto115EnsureDoc().then(updateAutoBadge).catch(function(){});
   });

@@ -1,14 +1,17 @@
 /* ===== 首页：海报焦点 + 分类横滑 =====
-   三层结构（v461）：
-     底图层 .home-bg   —— 海报（2:3 完整）+ 海报色从下往上的渐变；钉住不动，只跟左右切换
-     模糊层 .home-blur —— 同一份构图的预模糊副本，只推 opacity：上滑时背景逐渐糊掉
+   三层结构（v462）：
+     底图层 .home-bg   —— 每一格就是一整屏：海报（2:3 完整）+ 这一片自己的海报色一直到屏底；
+                        钉住不动，只跟左右切换。上滑时整层真实 blur（对齐详情页 --dt-glass）
+    压暗层 #page-home::after —— 海报色按滚动进度压上来（对齐详情页 --dt-alpha），给文字托对比
      内容层 .home-scroll —— 真滚动：焦点区文字（logo / 地区 / [片名]+简介 / 评分）、日期胶囊、
                           页码点、横滑列表整体上下移动；左右切换时文字跟底层同步横移。
-   横滑只写两个变量：--hero-i（按片，百分比）/ --hero-dx（拖动跟手位移），三份 track 一起动。
+   横滑只写两个变量：--hero-i（按片，百分比）/ --hero-dx（拖动跟手位移），两份 track 一起动。
+   每格带自己的 --s-h/--s-s/--s-l，所以拖到一半是「左半屏上一部、右半屏下一部」，不是整屏混色。
    焦点区最多 8 部随机（**永远不含 AV**）；AVideo 行只在里模式出现，标题右侧眼镜 = 隐私封面开关。
-   底色：按影片缓存（内存 + IndexedDB），一进首页就把 8 部全取好；拖动时按比例插值，跟手不跳。
+   底色：按影片缓存（内存 + IndexedDB），一进首页就把 8 部全取好并回填到各自的格子。
    依赖 ui-ios.js 的全局：state / listFilms / escapeHtml / escapeAttr / NfoCore / idbGet / idbPut /
-   DEFAULT_WORKER / detailRatingsHtml / DETAIL_RATINGS_TTL / avCoverMaskHtml / bindOverviewLongPress。 */
+   DEFAULT_WORKER / detailRatingsHtml / DETAIL_RATINGS_TTL / avCoverMaskHtml / bindOverviewLongPress /
+   currentGreetingPhrase（左上胶囊的六字短语）。 */
 (function(){
   'use strict';
 
@@ -23,8 +26,7 @@
   var allTitle = '';         // 以及它的标题（刷新时沿用）
   var ambById = {};          // 影片 id → { url, hsl }：底色按影片缓存（内存 + IndexedDB），滑到就有色，不再现算
   var ambPending = {};       // 同一部片的取样去重（拖动时会被反复问）
-  var curAmb = null;         // 当前铺在页面上的底色 [h,s,l]
-  var dragBase = null;       // 本次拖动开始时的底色，插值从它起算
+  var curAmb = null;         // 当前铺在页面上的底色 [h,s,l]（压暗层 + 还没取到自身色的格子兜底）
   var scoreTried = {};       // 评分请求去重（会话内）
   var ambCanvas = document.createElement('canvas');
   ambCanvas.width = 24; ambCanvas.height = 36;
@@ -174,24 +176,9 @@
     p.catch(function(){}).then(function(){ delete ambPending[f.id]; });
     return p;
   }
-  /* 两个底色之间插值：色相走最短弧，避免红→紫绕一整圈 */
-  function lerpHsl(a, b, t){
-    if (!a) return b;
-    if (!b) return a;
-    var d = b[0] - a[0];
-    if (d > 180) d -= 360; else if (d < -180) d += 360;
-    var h = a[0] + d * t;
-    if (h < 0) h += 360; else if (h >= 360) h -= 360;
-    return [
-      Math.round(h),
-      Math.round(a[1] + (b[1] - a[1]) * t),
-      Math.round(a[2] + (b[2] - a[2]) * t)
-    ];
-  }
-
   /* ================= 焦点区 ================= */
-  /* 底层的一格：海报（里模式下是番号占位）。底层与模糊层共用这份 HTML —— 模糊靠 CSS 做，
-     两层几何完全一致，上滑时只是「清晰 → 虚化」的叠化，不会像以前那样两套裁切对不上。 */
+  /* 底层的一格：一整屏（海报 + 这一片自己的海报色一直到屏底）。
+     每格带自己的 --s-*，横滑时就是两张完整构图对推，不是整屏混色。 */
   function bgSlideHtml(f){
     var x = dataOf(f);
     var poster = posterOf(f);
@@ -201,7 +188,26 @@
       : (poster
           ? '<img src="' + escapeAttr(poster) + '" alt="" draggable="false" onerror="this.style.display=\'none\'">'
           : '');
-    return '<div class="bg-slide">' + media + '</div>';
+    /* 每一格带自己的海报色（--s-*）：横滑时左边半屏是上一部的颜色、右边半屏是下一部的，
+       而不是整屏一起渐变成中间色。色还没取到就先回落 --home-*（当前片），取到后 setSlideColor 回填 */
+    var c = ambOf(f);
+    var style = c ? ' style="--s-h:' + c[0] + ';--s-s:' + c[1] + '%;--s-l:' + c[2] + '%"' : '';
+    return '<div class="bg-slide" data-fid="' + escapeAttr(f.id) + '"' + style + '>' + media + '</div>';
+  }
+
+  /* 把某一部片的底色写到它自己那一格上（异步取色回来的兜底路径） */
+  function setSlideColor(fid, c){
+    var track = d('bgTrack');
+    if (!track || !c) return;
+    var kids = track.children;
+    for (var i = 0; i < kids.length; i++){
+      if (kids[i].getAttribute('data-fid') === fid){
+        kids[i].style.setProperty('--s-h', c[0]);
+        kids[i].style.setProperty('--s-s', c[1] + '%');
+        kids[i].style.setProperty('--s-l', c[2] + '%');
+        return;
+      }
+    }
   }
 
   /* 内容层的一格：只有文字（透明背景），图在底层，这一层跟着页面滚动、也跟着左右滑动 */
@@ -272,29 +278,28 @@
 
   function renderHero(pool){
     var hero = d('homeHero'), track = d('heroTrack'), dots = d('heroDots');
-    var bg = d('bgTrack'), blur = d('blurTrack');
+    var bg = d('bgTrack');
     if (!hero || !track) return;
     var list = pickHero(pool);
     if (!list.length){
       /* 空态直接写在内容层里（外面不再放第二块提示，避免两句话叠着说） */
       track.innerHTML = '<div class="fg-slide"><div class="hero-empty"><b>还没有影片</b><span>从「搜索」添加后会出现在这里</span></div></div>';
       if (bg) bg.innerHTML = '';
-      if (blur) blur.innerHTML = '';
       if (dots) dots.innerHTML = '';
       applyAmbient(null);
       return;
     }
     if (heroIdx >= list.length) heroIdx = 0;
-    var media = list.map(bgSlideHtml).join('');
-    if (bg) bg.innerHTML = media;
-    if (blur) blur.innerHTML = media;      // 同一份构图，模糊由 CSS 加
+    if (bg) bg.innerHTML = list.map(bgSlideHtml).join('');
     track.innerHTML = list.map(fgSlideHtml).join('');
     if (dots) dots.innerHTML = list.map(function(_, i){ return '<i data-i="' + i + '"' + (i === heroIdx ? ' class="on"' : '') + '></i>'; }).join('');
     setHeroX(heroIdx);
     applyIdx(heroIdx);
     /* 一进来就把 8 部的底色全取好（内存/IndexedDB 有就秒回）：左右滑到谁都有色可切，
-       而不是滑完才现取样、半秒后底色再跳一下 */
-    list.forEach(function(f){ if (f.id !== list[heroIdx].id) ensureAmb(f).catch(function(){}); });
+       取到的色写回该片自己那一格，拖动时就是两张整屏构图在对推，不再是整屏混色 */
+    list.forEach(function(f){
+      ensureAmb(f).then(function(c){ if (c) setSlideColor(f.id, c); }).catch(function(){});
+    });
   }
 
   function applyIdx(i){
@@ -305,6 +310,7 @@
     if (cached) applyAmbient(cached);
     ensureAmb(f).then(function(c){
       if (!c) return;
+      setSlideColor(id, c);
       if (heroFilms[heroIdx] && heroFilms[heroIdx].id === id) applyAmbient(c);
     }).catch(function(){});
     var track = d('heroTrack');
@@ -426,14 +432,21 @@
   }
 
   /* ================= 入口 ================= */
+  /* 顶部两个小胶囊：左「早上好·所求皆能如愿✨」、右「11月5日 周四」。
+     问候词与六字短语都来自 ui-ios.js（greetWordOfHour / currentGreetingPhrase），
+     短语 30 分钟换一次；取不到就退回纯问候，绝不因为这里抛错卡住首页。 */
   function syncHead(){
     var dt = d('homeDate'), hi = d('homeHi');
-    if (dt && hi){
-      var now = new Date(), h = now.getHours();
-      var word = h < 6 ? '凌晨好' : h < 11 ? '早上好' : h < 14 ? '中午好' : h < 18 ? '下午好' : '晚上好';
+    if (!dt && !hi) return;
+    var now = new Date();
+    if (dt){
       var week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()];
       dt.textContent = (now.getMonth() + 1) + '月' + now.getDate() + '日 ' + week;
-      hi.textContent = word;
+    }
+    if (hi){
+      var word = (typeof greetWordOfHour === 'function') ? greetWordOfHour(now.getHours()) : '你好';
+      var ph = (typeof currentGreetingPhrase === 'function') ? currentGreetingPhrase() : '';
+      hi.textContent = word + (ph ? '·' + ph : '') + '✨';
     }
   }
 
@@ -450,6 +463,7 @@
         var pool = films.filter(function(f){ return kindOf(f) !== 'xv'; });
         renderHero(pool);
         renderRows(films);
+        syncHeroHeight();       // 用实测高度校准 --hero-h（桌面预览有滚动条时 100vw 会差一点）
         syncScrollState();      // 重画后把模糊/遮罩状态按当前滚动位置拉正（回到首页时一般是 0）
         /* 停在「全部」二级页时（比如在那儿长按删了一部），首页重画顺便把二级页也刷一遍 */
         var allPage = d('page-all');
@@ -504,17 +518,45 @@
     var sc = d('homeScroll'); if (sc) sc.scrollTop = 0;
   }
 
-  /* ================= 滚动：底图/模糊层钉住，内容层整体滚走 =================
+  /* 海报高由 JS 校准一次（横竖屏、桌面滚动条都会让 100vw 和实际宽度差几个像素）：
+     2:3 完整呈现 → 宽 × 1.5，上限沿用 min(视口高 - 92, 720)。底层图、渐隐遮罩、内容层占位共用这一个值。 */
+  function syncHeroHeight(){
+    var hero = d('homeHero'), page = d('page-home');
+    if (!hero || !page) return;
+    var w = hero.clientWidth || window.innerWidth || 390;
+    var h = Math.min(w * 1.5, (window.innerHeight || 0) - 92, 720);
+    if (!(h > 0)) return;
+    page.style.setProperty('--hero-h', h.toFixed(1) + 'px');
+  }
+  window.addEventListener('resize', function(){ syncHeroHeight(); syncScrollState(); });
+  window.addEventListener('orientationchange', function(){ setTimeout(function(){ syncHeroHeight(); syncScrollState(); }, 260); });
+
+  /* ================= 滚动：底图钉住（上滑逐渐模糊+压暗），内容层整体滚走 =================
      内容层（文字 + 横滑列表）就是普通内容，滚多少走多少 —— 不用逐帧 transform，快滑也跟得上。
-     这里只推一个值：模糊副本的显影（0 → 1），到 1 时整屏就是那张海报的虚化版，与底图同构图，
-     所以上下滚到哪儿都不会出现接缝或硬边。 */
+     底图不移动，只按滚动进度改两件事：真实 blur 半径、海报色压暗浓度。 */
+  /* 滚动进度 → 两个值，曲线照抄详情页（onDetailScroll，ui-ios.js:14218）：
+       p        0（顶部）→ 1（上滑 38% 海报高，到此封顶）
+       alpha    海报色压暗 0 → 0.55，指数曲线：起步平缓、后段加速
+       glass    模糊半径 0 → 34px，从 18% 处才开始起糊，线性到顶
+     详情页是直接改底图那一层的 blur 半径（真实逐帧模糊），这里同样做法；
+     .bg-track 只是 flex 容器，blur 在 .home-bg 上，四周外扩 32px 给采样留余量。 */
+  var HOME_GLASS_MAX = 34;        // 模糊上限(px)：详情页 30，首页面积更大给 34
+  var HOME_GLASS_START_AT = .18;  // 起糊位置（占海报高）
+  var HOME_GLASS_CAP_AT = .38;    // 到顶位置（占海报高）
+  var HOME_ALPHA_MAX = .55;       // 压暗上限（详情页 .6，首页文字多略收）
+  var HOME_EXP_BASE = Math.exp(2.5);
   function syncScrollState(){
     var sc = d('homeScroll'), hero = d('homeHero'), page = d('page-home');
     if (!sc || !hero || !page) return;
     var h = hero.offsetHeight || 1;
-    var t = sc.scrollTop / (h * .55);
-    if (t < 0) t = 0; else if (t > 1) t = 1;
-    page.style.setProperty('--home-blur-o', Math.min(t * 1.45, 1).toFixed(3));
+    var p = sc.scrollTop / (h * HOME_GLASS_CAP_AT);
+    if (p < 0) p = 0; else if (p > 1) p = 1;
+    var alpha = HOME_ALPHA_MAX * (Math.exp(2.5 * p) - 1) / (HOME_EXP_BASE - 1);
+    page.style.setProperty('--home-alpha', alpha.toFixed(3));
+    var gStart = HOME_GLASS_START_AT / HOME_GLASS_CAP_AT;
+    var glass = Math.max(0, (p - gStart) / (1 - gStart)) * HOME_GLASS_MAX;
+    if (glass > HOME_GLASS_MAX) glass = HOME_GLASS_MAX;
+    page.style.setProperty('--home-glass', glass.toFixed(1) + 'px');
   }
   (function bindScroll(){
     var sc = d('homeScroll');
@@ -546,7 +588,6 @@
       var sc = d('homeScroll');
       startTop = sc ? sc.scrollTop : 0;
       w = hero.clientWidth;
-      dragBase = curAmb ? curAmb.slice() : null;
       var page = d('page-home');
       if (page) page.classList.add('hero-drag');    // 拖动时关掉落位过渡，跟手才不拖
     });
@@ -557,24 +598,17 @@
       if (locked !== 'x') return;
       dx = mx;
       var resist = (heroIdx === 0 && dx > 0) || (heroIdx === heroFilms.length - 1 && dx < 0) ? .35 : 1;
-      /* 只写一个位移变量：底层、模糊层、文字层三份 track 用的是同一个值，永远不会错位 */
+      /* 只写一个位移变量：底层和文字层两份 track 用的是同一个值，永远不会错位。
+         底色不参与插值 —— 每一格自己就是一整屏构图（海报 + 自己的海报色），
+         所以拖到一半就是「左边半屏上一部、右边半屏下一部」，而不是整屏一起变成中间色 */
       var page = d('page-home');
       if (page) page.style.setProperty('--hero-dx', (dx * resist) + 'px');
-      /* 底色跟着手指走：按拖过去的比例，在当前片与相邻片的底色之间插值。
-         这一段必须关掉 CSS 过渡（.amb-live），否则 .55s 缓动会拖在手指后面，看着一卡一卡的 */
-      var frac = -(dx * resist) / (w || 1);
-      var nextAmb = ambOf(heroFilms[heroIdx + (frac > 0 ? 1 : -1)]);
-      if (dragBase && nextAmb){
-        if (page) page.classList.add('amb-live');
-        applyAmbient(lerpHsl(dragBase, nextAmb, Math.min(Math.abs(frac), 1)));
-      }
     });
     function end(allowTap){
       if (!dragging) return;
       dragging = false;
       var page = d('page-home');
       if (page) page.classList.remove('hero-drag');   // 先恢复过渡再落位，滑过去才有动画
-      if (page) page.classList.remove('amb-live');
       if (locked === 'x' && Math.abs(dx) > Math.min(70, w * .16)) go(heroIdx + (dx < 0 ? 1 : -1));
       else go(heroIdx);
 
