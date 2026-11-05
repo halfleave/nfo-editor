@@ -4,16 +4,18 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '486';
+window.__SCRIPT_VER = '487';
 
 var currentPage = '';
-/* ===== 页面转场（v462）：纯平移，不淡入淡出 =====
-   进详情：详情页从屏幕右侧平移进屏，首页同时往左轻推 28px；
-   返回：详情页向右平移出屏，首页从 -28px 回到 0。进出同一时长、同一条曲线。 */
+/* ===== 页面转场：纯平移，不淡入淡出 =====
+   进详情：详情页从屏幕右侧平移进屏；返回：向右平移出屏。进出同一时长、同一条曲线。
+   v487：**取消「首页同时左推 28px」**。那点位移看着像立体，代价却是首页整层变成被
+   transform 的合成层：一是它的底图/压暗层（fixed）包含块会跟着变，二是每帧都要把
+   一整屏（焦点区大图 + 四排卡片 + 模糊层）重新光栅化 —— 滑到最后那一下顿就是指它。
+   现在首页完全不动，相当于一张已经画好的静态底片，详情页在上面滑；手感与系统里
+   「不动前一层、只推后一层」的转场一致。 */
 var PAGE_SLIDE_MS = 380;
 var PAGE_SLIDE_EASE = 'cubic-bezier(.32,.72,0,1)';
-var HOME_PUSH_PX = 28;                       // 进详情时首页被推开的距离
-function homePushTransform(){ return 'translate3d(-' + HOME_PUSH_PX + 'px,0,0)'; }
 function clearDetailTransforms(){
   var dp = document.getElementById('page-detail');
   if (dp){ dp.style.transition = ''; dp.style.transform = ''; dp.style.boxShadow = ''; dp.style.willChange = ''; }
@@ -61,7 +63,7 @@ function animateDetailIn(){
   var page = document.getElementById('page-detail');
   var home = document.getElementById('page-home');
   if (!page){ switchPage('detail'); return; }
-  /* 只有「首页 → 详情」才推首页（从编辑页/自动化页回来进详情时，首页根本没在前台） */
+  /* 只有「首页 → 详情」才需要把首页留在下面当背景（从编辑页/自动化页回来进详情时它根本没在前台） */
   var pushHome = !!home && home.classList.contains('active');
   page.style.transition = 'none';
   page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
@@ -69,18 +71,13 @@ function animateDetailIn(){
   /* v485：转场期间先「预定」一层合成层，别让浏览器在动画途中才决定要提升 —— 
      中途提升同样要重新光栅化，那一下也是掉帧。收尾时 clearDetailTransforms 会撤掉。 */
   page.style.willChange = 'transform';
-  if (pushHome){ home.style.transition = 'none'; home.style.transform = 'translate3d(0,0,0)'; }
   switchPage('detail');
-  /* 转场期间首页要留在下面透出（switchPage 已经把 .active 摘掉了，会变成 display:none），动画完再撤 */
+  /* 转场期间首页要留在下面透出（switchPage 已经把 .active 摘掉了，会变成 display:none） */
   if (pushHome) home.classList.add('active');
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
       page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
       page.style.transform = 'translate3d(0,0,0)';
-      if (pushHome){
-        home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
-        home.style.transform = homePushTransform();
-      }
     });
   });
   /* v464：转场结束后**不再**把首页撤成 display:none。
@@ -101,14 +98,10 @@ function switchPage(page) {
   if (from === 'detail' && page !== 'detail'){
     /* 内联样式复位很便宜，留在这一帧（不然详情页会带着 translateX(屏宽) 留在 DOM 里） */
     clearDetailTransforms();
-    /* v485：首页的 transform 复位也挪到「画面落定之后」再做。
-       把 transform 抹掉会让浏览器把这个整屏层降级、重新光栅化（焦点区大图 + 四排卡片 +
-       海报色渐变全都要重画一遍）。它原来正好砸在返回动画的最后几帧上 ——
-       手感就是「详情页快贴边时顿一下」。现在动画窗口里只让它停在 0，等眼睛离开画面再收拾。 */
+    /* v487：首页不再被 transform，就没有「抹掉 transform」这件事了（顺带也省掉一次整屏重绘）。
+       剩下的重活照样推到画面落定之后再做。 */
     afterSlideIdle(function(){
       if (currentPage === 'detail') return;   // 又进详情页了，不能清它的运行时状态
-      var hp = document.getElementById('page-home');
-      if (hp){ hp.style.transition = 'none'; hp.style.transform = ''; }
       stopDetailBgSlideshow();
       clearDetailShotCache();
     });
@@ -208,23 +201,16 @@ function initEdgeSwipeBack(){
   function finish(goHome){
     if (!dragging) return;
     dragging = false; axis = null;
+    freezeDetailBgZoom();          // v487：滑出这一段别让底图的 5s 缓慢放大一起跑
     page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
     if (goHome){
       page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
-      if (home){
-        home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
-        home.style.transform = 'translate3d(0,0,0)';
-      }
       finishSlide(page, PAGE_SLIDE_MS, function(){
         if (currentPage !== 'detail') return;
         switchPage('home');
       });
     } else {
       page.style.transform = 'translate3d(0,0,0)';
-      if (home){
-        home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
-        home.style.transform = homePushTransform();
-      }
       finishSlide(page, PAGE_SLIDE_MS, function(){
         clearDetailTransforms();
         page.style.userSelect = '';
@@ -257,13 +243,6 @@ function initEdgeSwipeBack(){
     if (home && !home.classList.contains('active')) home.classList.add('active'); // 首页透出到背景
     page.style.transform = 'translateX(' + dx + 'px)';
     page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
-    /* 首页跟着手指从 -28px 线性往回到 0：详情页滑到哪儿、首页就退出多少，不再是透明度淡入 */
-    if (home){
-      var vw = window.innerWidth || 1;
-      var k = Math.min(dx / vw, 1);
-      home.style.transition = 'none';
-      home.style.transform = 'translate3d(' + (-HOME_PUSH_PX * (1 - k)) + 'px,0,0)';
-    }
   }, { passive: false });
   page.addEventListener('touchend', function(){ if (dragging) finish(moved > threshold()); });
   page.addEventListener('touchcancel', function(){ if (dragging) finish(moved > threshold()); });
@@ -327,21 +306,18 @@ function initDetailTitleCopy(){
   t.addEventListener('mouseleave', function(){ st = 0; moved = false; clearSingle(); });
 }
 initDetailTitleCopy();
-/* 顶部「返回」按钮：与边缘右滑一致的滑出动画（详情页向右滑出、首页从 -28px 回位，全程不淡出） */
+/* 顶部「返回」按钮：与边缘右滑一致的滑出动画（详情页向右滑出，首页原地不动、全程不淡出） */
 function animateDetailBack(){
   var page = document.getElementById('page-detail');
   if (!page){ switchPage('home'); return; }
   var home = document.getElementById('page-home');
+  /* v487：首页不再被推走，这里只需把它放到详情页下面（它是静止的，不需要预热一帧） */
   if (home && !home.classList.contains('active')) home.classList.add('active');
-  if (home) void home.offsetWidth;   // 先让它按当前（被推开 -28px 的）位置渲染一帧，才能从这里过渡回去
+  freezeDetailBgZoom();          // v487：滑出这一段别让底图的 5s 缓慢放大一起跑
   page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
   page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
   page.style.willChange = 'transform';   // v485：转场期间保持合成层，避免动画途中才提升（会掉帧）
   page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
-  if (home){
-    home.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
-    home.style.transform = 'translate3d(0,0,0)';
-  }
   /* v465：收尾听 transitionend，别再和动画竞速（早跑一点就冻住最后几十像素） */
   finishSlide(page, PAGE_SLIDE_MS, function(){
     if (currentPage !== 'detail') return;    // 期间已经切到别的页，别再抢着切首页
@@ -14438,6 +14414,19 @@ function resumeDetailBgZoom(){
     p1.style.transition = 'opacity .9s ease, transform 5s ease-out, filter .15s linear';
     p1.style.transform = 'scale(1.1)';
   }
+}
+/* v487：把底图那个「5 秒缓慢放大」就地冻住。
+   它是一整屏带 blur 的图层在做 scale 过渡，时长 5 秒 —— 用户在看完详情页之前点返回，
+   过渡多半还在跑，于是滑出动画里每一帧都要重新算一遍模糊，滑到最后那段就掉帧。
+   冻结＝读当前缩放值写回内联样式、同时把 scale 过渡摘掉（只留透明度），画面看不出变化；
+   等页面滑走之后 stopDetailBgSlideshow 再统一复位成 scale(1)。 */
+function freezeDetailBgZoom(){
+  var p1 = document.getElementById('detailPoster');
+  if (!p1) return;
+  var t = '';
+  try { t = getComputedStyle(p1).transform; } catch (e) {}
+  if (t && t !== 'none') p1.style.transform = t;
+  p1.style.transition = 'opacity .9s ease, filter .15s linear';
 }
 
 /* 把所有「当前已显示的剧照」纳入底图轮播候选池（横版、竖版都参与切换）。
