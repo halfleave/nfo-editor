@@ -422,6 +422,23 @@
       + '</svg></button>';
   }
 
+  /* v496：最上面一排「最近添加」—— 电影 / 剧集 / 动漫混在一起，只按添加时间排，永远不含 AV
+     （跟里外模式无关：用户要的是「我最近加了什么片子」，AV 走下面自己那一排）。
+     数量上限只是横滑长度，不是数据裁剪；点卡片走的还是首页同一套长按/进详情。 */
+  var RECENT_MAX = 20;
+
+  function recentRowHtml(films){
+    var list = films.filter(function(f){ return kindOf(f) !== 'xv'; })
+                    .slice()
+                    .sort(function(a, b){ return addedAt(b) - addedAt(a); })
+                    .slice(0, RECENT_MAX);
+    if (!list.length) return '';
+    return '<section class="home-row">'
+      + '<div class="home-row-head"><h2>最近添加</h2></div>'
+      + '<div class="home-strip">' + list.map(cardHtml).join('') + '</div>'
+      + '</section>';
+  }
+
   function renderRows(films){
     var host = d('homeRows');
     if (!host) return;
@@ -441,7 +458,7 @@
         + '<div class="home-strip">' + list.map(cardHtml).join('') + '</div>'
         + '</section>';
     }).join('');
-    host.innerHTML = html;
+    host.innerHTML = recentRowHtml(films) + html;   // v496：最近添加排在「电影」上面
     bindOverviewLongPress(0, host);      // 复用首页卡片的长按菜单（编辑/刷新/锁定/删除）
   }
 

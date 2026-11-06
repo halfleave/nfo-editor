@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '494';
+window.__SCRIPT_VER = '496';
 
 var currentPage = '';
 /* ===== 页面转场：纯平移，不淡入淡出 =====
@@ -8893,13 +8893,117 @@ function setMetaSource(src, btn){
 }
 function updateJavPlaceholder(){
   document.getElementById('tmdbQuery').placeholder = '番号/关键词';
+  syncSearchPh();          // 番号源用原生 placeholder，翻滚浮层收起来
+}
+/* v495：搜索框空态提示语 = 随机高分片名，每 3 秒翻一条。
+   原生 placeholder 做不了动画，所以用一层浮层（#searchPh，两段文本上下翻），
+   动画与「电影/剧集」那个 flip-type 同一套参数，手感一致。
+   真 placeholder 平时置空；只有 JAV 源（番号/关键词）还用原生。 */
+var SEARCH_PH_TITLES = [
+  '肖申克的救赎','教父','教父2','教父3','黑暗骑士','蝙蝠侠：侠影之谜','蝙蝠侠：黑暗骑士崛起',
+  '低俗小说','辛德勒的名单','十二怒汉','指环王：护戒使者','指环王：双塔奇兵','指环王：王者无敌',
+  '黄金三镖客','搏击俱乐部','阿甘正传','盗梦空间','黑客帝国','星球大战：新希望','星球大战：帝国反击战',
+  '好家伙','飞越疯人院','七宗罪','上帝之城','沉默的羔羊','生活多美好','美丽人生','这个杀手不太冷',
+  '七武士','拯救大兵瑞恩','星际穿越','城市之光','摩登时代','美国往事','狮子王','回到未来','异形','异形2',
+  '终结者2：审判日','闪灵','2001太空漫游','发条橙','全金属外壳','出租车司机','愤怒的公牛','洛奇',
+  '阿拉伯的劳伦斯','桂河大桥','卡萨布兰卡','迷魂记','后窗','惊魂记','西北偏北','大白鲨','侏罗纪公园',
+  'E.T.外星人','夺宝奇兵','虎胆龙威','生死时速','碟中谍','谍影重重','007：大战皇家赌场','小丑','守望者',
+  '钢铁侠','复仇者联盟3：无限战争','复仇者联盟4：终局之战','蜘蛛侠：平行宇宙','银河护卫队','死侍',
+  '金刚狼3：殊死一战','X战警：逆转未来','银翼杀手','银翼杀手2049','降临','沙丘','星际迷航','第九区',
+  '机械姬','她','致命魔术','记忆碎片','敦刻尔克','奥本海默','血战钢锯岭','黑鹰坠落','野战排','猎鹿人',
+  '现代启示录','钢琴家','穿条纹睡衣的男孩','美丽心灵的永恒阳光','楚门的世界','死亡诗社','心灵捕手',
+  '当幸福来敲门','绿皮书','三块广告牌','消失的爱人','社交网络','爆裂鼓手','爱乐之城','疯狂动物城',
+  '玩具总动员3','寻梦环游记','飞屋环游记','千与千寻','龙猫','天空之城','哈尔的移动城堡','幽灵公主',
+  '你的名字','攻壳机动队','未麻的部屋','千年女优','东京物语','罗生门','影子武士','花样年华','重庆森林',
+  '春光乍泄','一一','牯岭街少年杀人事件','悲情城市','饮食男女','喜宴','卧虎藏龙','无间道','功夫',
+  '让子弹飞','霸王别姬','活着','阳光灿烂的日子','大红灯笼高高挂','鬼子来了','一代宗师','罗马假日',
+  '蒂凡尼的早餐','乱世佳人','音乐之声','雨中曲','桃色公寓','热情似火','日落大道','公民凯恩','四百击',
+  '八部半','偷自行车的人','野草莓','第七封印','芬妮与亚历山大','狩猎','荒蛮故事','谜一样的双眼',
+  '中央车站','摩托日记','潘神的迷宫','小鞋子','何处是我朋友的家','一次别离','天堂电影院',
+  '西西里的美丽传说','海上钢琴师','布达佩斯大饭店','月升王国','少年时代','爱在黎明破晓前',
+  '爱在日落黄昏时','爱在午夜降临前','婚姻故事','海边的曼彻斯特','月光男孩','为奴十二年','逃离德黑兰',
+  '聚焦','大空头','华尔街之狼','美国丽人','冰血暴','老无所依','落水狗','杀死比尔','无耻混蛋',
+  '被解救的姜戈','八恶人','好莱坞往事','阿凡达','疯狂的麦克斯4：狂暴之路','猩球崛起','人工智能','月球',
+  '彗星来的那一夜','恐怖游轮','逃出绝命镇','驱魔人'
+];
+/* 防手误重复：同名只留一条，免得随机到两次一样的 */
+SEARCH_PH_TITLES = SEARCH_PH_TITLES.filter(function(t, i, a){ return a.indexOf(t) === i; });
+var searchPhTimer = null, searchPhIdx = -1, searchPhBusy = false;
+
+function searchPhBox(){ return document.getElementById('searchPh'); }
+/* 随机一条，且不与上一条重复（连续翻到同名会像卡住了） */
+function searchPhPick(){
+  var n = Math.floor(Math.random() * SEARCH_PH_TITLES.length);
+  if (SEARCH_PH_TITLES.length > 1 && n === searchPhIdx) n = (n + 1) % SEARCH_PH_TITLES.length;
+  searchPhIdx = n;
+  return SEARCH_PH_TITLES[n];
+}
+/* 什么时候该显示：搜索页在前台、不是 JAV 源、输入框是空的 */
+function searchPhShouldShow(){
+  var el = document.getElementById('tmdbQuery');
+  var pg = document.getElementById('page-search');
+  if (!el || !pg || !pg.classList.contains('active')) return false;
+  if (state.metaSource === 'jav') return false;
+  return !(el.value || '').length;
+}
+function syncSearchPh(){
+  var box = searchPhBox();
+  if (box) box.style.display = searchPhShouldShow() ? '' : 'none';
+}
+function rotateSearchPh(first){
+  var box = searchPhBox();
+  if (!box) return;
+  var cur = box.querySelector('.is-current'), inc = box.querySelector('.is-incoming');
+  if (!cur || !inc) return;
+  if (first){ cur.textContent = searchPhPick(); box.classList.remove('animating'); return; }
+  if (searchPhBusy || !searchPhShouldShow()) return;
+  inc.textContent = searchPhPick();
+  searchPhBusy = true;
+  requestAnimationFrame(function(){ box.classList.add('animating'); });
+  setTimeout(function(){
+    /* 翻完把新词落成「当前」，然后关掉过渡复位，别让下一轮从半路开始 */
+    box.classList.add('no-transition');
+    cur.textContent = inc.textContent;
+    box.classList.remove('animating');
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ box.classList.remove('no-transition'); }); });
+    searchPhBusy = false;
+  }, 260);
+}
+function startSearchPhRotate(){
+  if (searchPhTimer) return;
+  searchPhTimer = setInterval(function(){ rotateSearchPh(false); }, 3000);
 }
 function updateSearchPlaceholder(){
   var el = document.getElementById('tmdbQuery');
   if (!el) return;
-  if (state.metaSource === 'jav') updateJavPlaceholder();
-  // v432：提示语统一成一部片名，不再跟着上次搜的类型变（人物搜索后清空会残留「输入演员 / 导演姓名」）
-  else el.placeholder = '肖申克的救赎';
+  if (state.metaSource === 'jav'){ updateJavPlaceholder(); syncSearchPh(); return; }
+  /* v432：提示语统一成片名；v495：换成会翻滚的浮层，原生 placeholder 让位 */
+  el.placeholder = '';
+  startSearchPhRotate();
+  rotateSearchPh(true);
+  syncSearchPh();
+}
+/* 点「搜索」时先把键盘收掉 —— 不然结果被键盘挡着，看着像没反应 */
+function dismissSearchKeyboard(){
+  var el = document.getElementById('tmdbQuery');
+  if (el){ try { el.blur(); } catch (e) {} }
+  syncSearchPh();
+}
+/* 点「搜索」= 直接搜输入框里现在的内容。
+   输入框空着时，就用框里正显示的那条推荐片名（它看着就是框里的内容），顺手填进去再搜。 */
+function onSearchBtnTap(){
+  var el = document.getElementById('tmdbQuery');
+  if (el && !(el.value || '').trim()){
+    var box = searchPhBox();
+    var cur = box ? box.querySelector('.is-current') : null;
+    var sug = cur ? (cur.textContent || '').trim() : '';
+    if (sug && state.metaSource !== 'jav'){
+      el.value = sug;
+      toggleSearchClear();
+    }
+  }
+  syncSearchPh();
+  searchMeta();
 }
 /* TMDB 搜索的类型切换：复用 flip-type 翻转动画。
    v424：按钮不再常显——类型未知时隐藏，搜到电影/剧集/人物后自动出现并指向命中的类型；
@@ -9511,6 +9615,7 @@ function toggleSearchClear(){
   var el = document.getElementById('tmdbQuery');
   var btn = document.getElementById('searchClear');
   if (el.value.length) btn.classList.add('show'); else btn.classList.remove('show');
+  syncSearchPh();          // v495：有内容就藏起提示语浮层，清空后又露出来
   renderSearchHistory(); // 输入有内容→隐藏历史；清空→显示历史
 }
 function clearSearch(wantsFocus){
@@ -11906,9 +12011,10 @@ function toolboxIconHtml(key){
   var color = TOOL_ICON_COLORS[key] || '#8E8E93';
   /* 主体用 currentColor（由 .tc-icon 的 color 给，深浅色自动跟随）；
      彩色只作用在 accent 这一组线上。颜色直接写进 stroke 属性，不用 CSS 变量
-     （SVG 的 presentation attribute 里 var() 不生效）。 */
+     （SVG 的 presentation attribute 里 var() 不生效）。
+     v495：图形放大到 28px，线宽从 1.8 收到 1.7，放大后不至于显得莽。 */
   return '<span class="tc-icon">' +
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
       ico.main +
       '<g stroke="' + color + '">' + ico.accent + '</g>' +
     '</svg></span>';
@@ -14683,30 +14789,62 @@ function initIosBottomBarHeal(){
   });
 }
 
-/* ===== 底部 tab 栏：跟着滚动方向进出（v464）=====
-   上滑（内容往上走）→ 整条快速滑出屏幕下沿；下滑 → 快速滑回来；回到顶部一律出现。
-   只改一个 class（transform 过渡），不参与逐帧计算；滚动事件用捕获阶段挂在 document 上，
-   这样三个一级页各自的 .page-scroll 都能收到，不用逐页绑定。
-   v466：改成「同一方向累计到一定距离才动手」，单帧 1~2px 的慢滑也算得进去，
-   不会手指刚离屏就唰一下收走；收起慢一点（v494 起 .40s，且「先慢后快」缓入）、
-   回显快一点（.26s），收放都有缓冲感。曲线在 styles/ios.css 的 .tabbar-hide 里。 */
-var tabbarLastSc = null, tabbarLastTop = 0, tabbarUp = 0, tabbarDown = 0;
-var TAB_HIDE_AT = 24, TAB_SHOW_AT = 14;   // 累计上滑 24px 收起 / 累计下滑 14px 露出
-function setTabbarHidden(hide){
-  var tb = document.getElementById('tabBar');
+/* ===== 底部 tab 栏：跟着滚动距离走（v464 引入，v495 改成真正的「跟随」）=====
+   以前是判定式的：同一方向累计 24px 就整条收走（带 .40s 过渡），所以稍微一滑就整条不见。
+   现在改成位移跟随 —— 内容往上推多少，栏就往下让多少；滑到「栏高 + 安全区余量」那么多才完全出屏；
+   往下滑则按同样的比例原路退回来。手感上栏像是被内容顶着走，而不是开关。
+   手势停住 90ms 后吸一下端点，别让它卡在半拉子位置。吸附的门槛**分方向**：
+   往下滑时让过 35% 就顺势收走；往上滑时只要退回 30% 以上就整套拉回来 ——
+   否则会出现「收起后往回滑一点、又自己缩回去」这种别扭感。
+   回到顶部一律完整在位。
+   实现只用一条内联 transform（跟手期间 transition:none，吸附时才给曲线），不做逐帧动画；
+   滚动事件用捕获阶段挂在 document 上，三个一级页的 .page-scroll 都能收到。 */
+var tabbarLastSc = null, tabbarLastTop = 0;
+var tabOffset = 0;              // 0 = 完全在位；TAB_TRAVEL = 完全出屏
+var TAB_TRAVEL = 96;            // 起手值，运行时按栏高实测覆盖
+var TAB_STEP_MAX = 24;          // 往下让的时候单次最多多少 —— 甩动时不至于一帧就跳到底
+var TAB_SNAP_MS = 90;           // 停手多久后吸附
+var TAB_SNAP_HIDE = 0.35;       // 往下滑：让过 35% 就收走
+var TAB_SNAP_SHOW = 0.70;       // 往上滑：退回 30% 以上就露回来
+var tabLastDir = 1;             // 最近一次滚动的方向：>0 收、<0 露
+var tabSnapTimer = 0;
+
+function tabbarEl(){ return document.getElementById('tabBar'); }
+/* 完全出屏要走的距离：栏自身高度 + 46px（底下那段安全区余量，与旧 CSS 的 calc(100% + 46px) 同量） */
+function tabbarTravel(tb){ return (tb.offsetHeight || 56) + 46; }
+function applyTabbarOffset(off, animate){
+  var tb = tabbarEl();
   if (!tb) return;
-  if (tb.classList.contains('tabbar-hide') === !!hide) return;
-  tb.classList.toggle('tabbar-hide', !!hide);
+  TAB_TRAVEL = tabbarTravel(tb);
+  if (off < 0) off = 0;
+  if (off > TAB_TRAVEL) off = TAB_TRAVEL;
+  tabOffset = off;
+  /* 跟手时不能有过渡（否则会慢半拍、像在追手指）；吸附时才交给曲线 */
+  tb.style.transition = animate ? 'transform .28s cubic-bezier(.32,.72,0,1)' : 'none';
+  tb.style.transform = 'translate(-50%, ' + off.toFixed(1) + 'px)';
+}
+/* 停手后归位：滚动期间不断被重置，所以只在真的停下来时才跑 */
+function scheduleTabbarSnap(){
+  if (tabSnapTimer) clearTimeout(tabSnapTimer);
+  tabSnapTimer = setTimeout(function(){
+    tabSnapTimer = 0;
+    if (tabOffset <= 0 || tabOffset >= TAB_TRAVEL) return;   // 已经在端点，不用动
+    var pct = tabOffset / TAB_TRAVEL;
+    var pass = tabLastDir >= 0 ? TAB_SNAP_HIDE : TAB_SNAP_SHOW;
+    applyTabbarOffset(pct > pass ? TAB_TRAVEL : 0, true);
+  }, TAB_SNAP_MS);
 }
 /* 切页时复位：新页面一进来栏必须在位，基准点取当前页滚动容器现在的 scrollTop，
    这样切页后第一下滚动就能判方向（否则要等第二次事件才认得出来） */
 function resetTabbarScroll(){
-  setTabbarHidden(false);
+  if (tabSnapTimer){ clearTimeout(tabSnapTimer); tabSnapTimer = 0; }
+  tabOffset = 0;
+  var tb = tabbarEl();
+  if (tb){ tb.style.transition = ''; tb.style.transform = ''; }   // 交还给 CSS 基础值
   var page = document.querySelector('.page.active');
   var sc = page ? page.querySelector('.page-scroll') : null;
   tabbarLastSc = sc || null;
   tabbarLastTop = sc ? sc.scrollTop : 0;
-  tabbarUp = tabbarDown = 0;
 }
 function initTabbarAutoHide(){
   document.addEventListener('scroll', function(e){
@@ -14718,17 +14856,18 @@ function initTabbarAutoHide(){
     if (sc !== tabbarLastSc){ tabbarLastSc = sc; tabbarLastTop = sc.scrollTop; return; }
     var y = sc.scrollTop, dy = y - tabbarLastTop;
     tabbarLastTop = y;
-    if (y <= 6){                               // 回到顶部：一定露出来
-      tabbarUp = tabbarDown = 0;
-      setTabbarHidden(false);
+    if (y <= 6){                                   // 回到顶部：一定完整露出来
+      if (tabOffset !== 0) applyTabbarOffset(0, true);
       return;
     }
     if (!dy) return;
-    /* 同方向累加、反方向清零 —— 抖动不会来回抽，慢滑也能攒够距离 */
-    if (dy > 0){ tabbarUp += dy; tabbarDown = 0; }
-    else { tabbarDown -= dy; tabbarUp = 0; }
-    if (tabbarUp >= TAB_HIDE_AT){ tabbarUp = 0; setTabbarHidden(true); }
-    else if (tabbarDown >= TAB_SHOW_AT){ tabbarDown = 0; setTabbarHidden(false); }
+    tabLastDir = dy > 0 ? 1 : -1;
+    /* 1:1 跟随（dy 为正是内容上推 → 栏往下让）。往下让时单次限量，甩动时滑一段而不是瞬移；
+       往回露不设上限 —— 手指往回带，栏就该立刻跟回来。 */
+    var step = dy;
+    if (step > TAB_STEP_MAX) step = TAB_STEP_MAX;
+    applyTabbarOffset(tabOffset + step, false);
+    scheduleTabbarSnap();
   }, true);
 }
 
