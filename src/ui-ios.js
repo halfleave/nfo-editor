@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '492';
+window.__SCRIPT_VER = '494';
 
 var currentPage = '';
 /* ===== 页面转场：纯平移，不淡入淡出 =====
@@ -67,7 +67,9 @@ function animateDetailIn(){
   var pushHome = !!home && home.classList.contains('active');
   page.style.transition = 'none';
   page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
-  page.style.boxShadow = '-12px 0 28px rgba(0,0,0,.35)';
+  /* v494：不再挂 box-shadow。外阴影画在元素外面，详情页摆到右侧时它会往左扩散进屏幕，
+     进去那一瞬先在右边缘留一条暗带（用户看到的「一闪而过」）；返回滑出去后更要等
+     收尾清样式才消失（「页面没了右边还留一条」）。层次感交给不透明页面本身的硬边。 */
   /* v485：转场期间先「预定」一层合成层，别让浏览器在动画途中才决定要提升 —— 
      中途提升同样要重新光栅化，那一下也是掉帧。收尾时 clearDetailTransforms 会撤掉。 */
   page.style.willChange = 'transform';
@@ -95,9 +97,19 @@ function switchPage(page) {
   /* v465：离开详情页的收尾工作全部推到「画面落定之后」再做。
      原来同步跑在这一帧上：停底图轮播、清空剧照区（innerHTML）、回来再重建首页，任何一项都可能让
      主线程堵上几十毫秒，正好卡在转场最后一小段上 —— 看着就是「快贴边时顿一下」。 */
+  /* —— 返回流程（v494 重新梳理）——
+     ① 返回按钮 / 边缘右滑：把详情页 translateX 到屏宽，380ms 转场；这期间 currentPage 仍是 detail，
+        首页补回 .active 垫在下面，但**不切页**，避免动画途中重排。
+     ② finishSlide 等 transitionend（再留 32ms 让最后一帧画出来）→ 才调 switchPage('home')。
+        所以「详情页完全滑出去了」到「它 display:none」之间有一小段，它还挂在 DOM 上。
+     ③ 下面这段收尾：先停轮播/清缓存的重活推到空闲，再切 active，最后清内联 transform。
+        顺序很重要：先切 active（详情页 display:none），再清 transform —— 反过来清的话，
+        .detail-topbar / .detail-top-fade / .detail-scroll 这些 fixed 子元素的包含块会
+        在那一瞬间从详情页跳回视口，真机上可能漏出一帧。
+     ④ 以前留在屏幕右边缘的「一条内容」来自两处：底图 .detail-bg 的 inset:-30px 外扩
+        （已由 #page-detail 的 overflow:hidden 裁掉），以及画在元素外面的 box-shadow
+        （已整个去掉）。现在②那一段里即使页面还在 DOM 上，也漏不出任何可见内容。 */
   if (from === 'detail' && page !== 'detail'){
-    /* 内联样式复位很便宜，留在这一帧（不然详情页会带着 translateX(屏宽) 留在 DOM 里） */
-    clearDetailTransforms();
     /* v487：首页不再被 transform，就没有「抹掉 transform」这件事了（顺带也省掉一次整屏重绘）。
        剩下的重活照样推到画面落定之后再做。 */
     afterSlideIdle(function(){
@@ -107,6 +119,7 @@ function switchPage(page) {
     });
   }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + page); });
+  if (from === 'detail' && page !== 'detail') clearDetailTransforms();
   /* v480/v485：状态栏那一条磨砂玻璃，首页是深色海报、详情页是深色背景，
      所以给它们挂 on-dark —— 只把玻璃底色压到近乎透明，模糊照旧（海报透上来被糊掉）。 */
   var sg = document.querySelector('.status-glass');
@@ -242,7 +255,6 @@ function initEdgeSwipeBack(){
     page.style.userSelect = 'none';
     if (home && !home.classList.contains('active')) home.classList.add('active'); // 首页透出到背景
     page.style.transform = 'translateX(' + dx + 'px)';
-    page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
   }, { passive: false });
   page.addEventListener('touchend', function(){ if (dragging) finish(moved > threshold()); });
   page.addEventListener('touchcancel', function(){ if (dragging) finish(moved > threshold()); });
@@ -315,7 +327,6 @@ function animateDetailBack(){
   if (home && !home.classList.contains('active')) home.classList.add('active');
   freezeDetailBgZoom();          // v487：滑出这一段别让底图的 5s 缓慢放大一起跑
   page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
-  page.style.boxShadow = '-12px 0 28px rgba(0,0,0,0.35)';
   page.style.willChange = 'transform';   // v485：转场期间保持合成层，避免动画途中才提升（会掉帧）
   page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
   /* v465：收尾听 transitionend，别再和动画竞速（早跑一点就冻住最后几十像素） */
@@ -11861,22 +11872,46 @@ function tvEditPageBack(){
    纯逻辑在 src/toolbox-core.js（注册表 + canUse）；本处只做渲染与跳转。
    卡片两态：可用 / 灰态（右上角「即将上线」角标，未实现与未达档位统一显示此文案）；
    灰态卡片不隐藏，点击给提示（留转化口子）。卡片只显示 图标 + 名称，不显示小字说明。 */
+/* v494：双色线形图标。每个图标拆成 main（主体，单色线条）+ accent（只有一条线段上色）。
+   原来是一整块彩色圆角底 + 白色线条，太重；现在主体跟着页面文字色走（深浅色自适应），
+   只留一条线用该工具的识别色，既有区分度又保持线形/极简。 */
 var TOOL_ICONS = {
-  doc:    '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
-  sub:    '<rect x="3" y="5" width="18" height="13" rx="2"/><path d="M7 10h4M7 13.5h6M14 10h3"/>',
-  magnet: '<path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/>',
-  folder: '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/><path d="M7.5 11.5h9M7.5 15h6"/>',
-  image:  '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4 4 3-2 4 4"/>'
+  doc: {
+    main:   '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>',
+    accent: '<path d="M14 3v5h5"/>'                       // 右上折角
+  },
+  sub: {
+    main:   '<rect x="3" y="5" width="18" height="13" rx="2"/><path d="M7 10h4M14 10h3"/>',
+    accent: '<path d="M7 13.5h6"/>'                       // 中间那行字幕
+  },
+  magnet: {
+    main:   '<path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/>',
+    accent: '<path d="m5 8 4 4"/>'                        // 磁铁中间的斜线
+  },
+  folder: {
+    main:   '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.1a2 2 0 0 1 1.5.7l1.3 1.5H18a2.5 2.5 0 0 1 2.5 2.5v6.8A2.5 2.5 0 0 1 18 19H5.5A2.5 2.5 0 0 1 3 16.5Z"/><path d="M7.5 15h6"/>',
+    accent: '<path d="M7.5 11.5h9"/>'                     // 夹内第一条横线
+  },
+  image: {
+    main:   '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/>',
+    accent: '<path d="m4 17 5-5 4 4 3-2 4 4"/>'           // 山形折线
+  }
 };
 var TOOL_ICON_COLORS = { doc: '#5856D6', sub: '#0A84FF', magnet: '#FF6B00', folder: '#34C759', image: '#AF52DE' };
 function toolboxUsage(){
   return (typeof NfoCore !== 'undefined' && NfoCore.quotaData) ? NfoCore.quotaData(state.tier || 'free') : null;
 }
 function toolboxIconHtml(key){
-  var body = TOOL_ICONS[key] || TOOL_ICONS.doc;
+  var ico = TOOL_ICONS[key] || TOOL_ICONS.doc;
   var color = TOOL_ICON_COLORS[key] || '#8E8E93';
-  return '<span class="tc-icon" style="background:' + color + ';">' +
-    '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + body + '</svg></span>';
+  /* 主体用 currentColor（由 .tc-icon 的 color 给，深浅色自动跟随）；
+     彩色只作用在 accent 这一组线上。颜色直接写进 stroke 属性，不用 CSS 变量
+     （SVG 的 presentation attribute 里 var() 不生效）。 */
+  return '<span class="tc-icon">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+      ico.main +
+      '<g stroke="' + color + '">' + ico.accent + '</g>' +
+    '</svg></span>';
 }
 function renderToolbox(){
   var grid = document.getElementById('toolGrid');
@@ -14653,7 +14688,8 @@ function initIosBottomBarHeal(){
    只改一个 class（transform 过渡），不参与逐帧计算；滚动事件用捕获阶段挂在 document 上，
    这样三个一级页各自的 .page-scroll 都能收到，不用逐页绑定。
    v466：改成「同一方向累计到一定距离才动手」，单帧 1~2px 的慢滑也算得进去，
-   不会手指刚离屏就唰一下收走；收起慢一点（.34s）、回显快一点（.26s），收放都有缓冲感。 */
+   不会手指刚离屏就唰一下收走；收起慢一点（v494 起 .40s，且「先慢后快」缓入）、
+   回显快一点（.26s），收放都有缓冲感。曲线在 styles/ios.css 的 .tabbar-hide 里。 */
 var tabbarLastSc = null, tabbarLastTop = 0, tabbarUp = 0, tabbarDown = 0;
 var TAB_HIDE_AT = 24, TAB_SHOW_AT = 14;   // 累计上滑 24px 收起 / 累计下滑 14px 露出
 function setTabbarHidden(hide){
@@ -14814,6 +14850,43 @@ document.addEventListener('visibilitychange', function(){ if (document.hidden) c
    v448：改为「缓存优先 + 后台静默更新」。新版本装好后停在 waiting，不自动打断用户；
    设置页出现「发现新版本」按钮，点了才 skipWaiting + 重载（全走缓存，几乎无感知）。 */
 var swRegistration = null, swUpdateReady = false, swUpdatePending = false, swLastCheck = 0;
+/* v493：刚更新完的记忆 —— 「更新的那一刻装到哪个版本」。
+   起因：用户反馈「有时候刚更新了还提示有新版本」。根因是更新那一下没真正装上
+   （见 applyAppUpdate 里的空转分支），页面壳于是停在旧版本，而服务器上的 sw.js 已经是新版，
+   下一次「检查更新」拿旧壳版本去比就必然报「发现新版本」——同一个版本被反复报成新版本。
+   现在把「刚装到的版本」记下来，比对时以它为准，并且在发现「壳比 SW 旧」时自动重载一次。 */
+var swArming = false, swTargetVer = 0;
+function swMarkJustUpdated(v){
+  v = Number(v) || 0;
+  if (!v) return;
+  try { localStorage.setItem('nfo_sw_just_updated', JSON.stringify({ v: v, at: Date.now() })); } catch (e) {}
+}
+/* 只采信 10 分钟内的记录：再久就可能是用户真的回退过版本，不能挡住新版本提示 */
+function swJustUpdatedTo(){
+  try {
+    var s = localStorage.getItem('nfo_sw_just_updated');
+    if (!s) return 0;
+    var o = JSON.parse(s);
+    if (!o || !o.v || !o.at) return 0;
+    if (Date.now() - o.at > 10 * 60 * 1000) return 0;
+    return Number(o.v) || 0;
+  } catch (e) { return 0; }
+}
+function swClearJustUpdated(){
+  try { localStorage.removeItem('nfo_sw_just_updated'); } catch (e) {}
+}
+/* 本地已装好的 SW 缓存桶里最新的版本号（同步不了，返回 Promise；拿不到就回 0） */
+function swCacheVerMax(){
+  if (!window.caches || !caches.keys) return Promise.resolve(0);
+  return caches.keys().then(function(keys){
+    var max = 0;
+    (keys || []).forEach(function(k){
+      var m = String(k).match(/nfo-ios-v(\d+)/);
+      if (m) max = Math.max(max, Number(m[1]));
+    });
+    return max;
+  }).catch(function(){ return 0; });
+}
 function swSupported(){
   return 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 }
@@ -14847,9 +14920,20 @@ function onUpdateRowTap(){
 }
 function markSwUpdateReady(){
   if (swUpdateReady) return;
-  swUpdateReady = true;
-  syncAppUpdateRow();
-  showToast('有新版本，可在设置里更新', 'success');
+  /* v493：装好一个 SW 不等于「有新版本」—— 也可能是装了个更旧的（CDN 抖动、来回注册不同
+     ?v= 地址都可能导致）。先向服务器确认版本确实比现在跑的新，否则不提示，
+     免得「刚更新完又说有新版本、点了又回去」，来回打转。 */
+  var show = function(){
+    if (swUpdateReady) return;
+    swUpdateReady = true;
+    syncAppUpdateRow();
+    showToast('有新版本，可在设置里更新', 'success');
+  };
+  swRemoteVer().then(function(remote){
+    var cur = Math.max(Number(window.__SCRIPT_VER || 0), swJustUpdatedTo());
+    if (remote && remote <= cur) return;    // 服务器上并没有更新 → 不提示
+    show();
+  }).catch(show);
 }
 /* 进设置页时主动比对一次 sw.js（60 秒内不重复），免得非要等下次启动才知道有新版本 */
 function swCheckForUpdate(){
@@ -14859,28 +14943,90 @@ function swCheckForUpdate(){
   swLastCheck = now;
   swRegistration.update().catch(function(){});
 }
-/* 设置页点「发现新版本」：让 waiting 的 SW 立即接管 → controllerchange 里重载 */
+/* 让刚装好的 SW 立即接管（controllerchange 里重载） */
+function doSwSkipWaiting(reg){
+  if (!reg || !reg.waiting){ location.reload(); return; }
+  swUpdatePending = true;
+  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+}
+/* v493：页面壳卡在旧版本的强刷 —— 清掉 SW 缓存再重载，重新从服务器取一整套。
+   只在「服务器上已经是新版，但本地根本没有待装的新 SW」时用（说明缓存的 html 本身就是旧的，
+   普通重载只会把旧壳再加载一遍，于是又提示「发现新版本」）。一个会话最多做一次，防死循环。 */
+function forceShellRefresh(){
+  try {
+    if (sessionStorage.getItem('nfo_shell_refresh') === '1') return false;
+    sessionStorage.setItem('nfo_shell_refresh', '1');
+  } catch (e) { return false; }
+  var go = function(){ location.reload(); };
+  if (!window.caches || !caches.keys){ go(); return true; }
+  caches.keys().then(function(keys){
+    return Promise.all(keys.map(function(k){ return caches.delete(k); }));
+  }).then(go).catch(go);
+  return true;
+}
+/* 盯着这次注册装好：可能现在就在 installing，也可能稍后才 updatefound */
+function swArmForApply(reg){
+  if (!reg){ location.reload(); return; }
+  var done = false;
+  var settle = function(){
+    if (done || !reg) return;
+    if (reg.waiting){ done = true; swArming = false; doSwSkipWaiting(reg); return; }
+    /* 已经开始控制页面了（说明这次注册就是当前这版、没有待装的新版）→
+       页面还停在旧壳上，普通重载没用，走强刷 */
+    if (reg.active && navigator.serviceWorker.controller === reg.active){
+      done = true; swArming = false;
+      if (!forceShellRefresh()) location.reload();
+      return;
+    }
+    if (reg.installing){
+      var w = reg.installing;
+      if (!w) return;
+      var onState = function(){
+        if (w.state === 'installed' && reg.waiting && !done){ done = true; swArming = false; doSwSkipWaiting(reg); }
+      };
+      if (w.state === 'installed') onState();
+      else w.addEventListener('statechange', onState);
+    }
+  };
+  try { reg.addEventListener('updatefound', settle); } catch (e) {}
+  settle();
+  setTimeout(function(){
+    if (done) return;
+    if (reg && (reg.waiting || reg.installing)) return;   // 还在装，不打扰
+    swArming = false;
+    showToast('新版本还没下完，稍后再试', 'error');
+  }, 15000);
+}
+/* 设置页点「发现新版本 / 点击更新」：让 waiting 的 SW 立即接管 → controllerchange 里重载 */
 function applyAppUpdate(){
   if (!navigator.serviceWorker){ location.reload(); return; }
   var reg = swRegistration;
-  if (reg && reg.waiting){
-    swUpdatePending = true;
-    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-    return;
-  }
+  if (reg && reg.waiting){ doSwSkipWaiting(reg); return; }
   /* v476：还在下载也允许点 —— 装好那一刻自动接管并重载，不用用户盯着倒计时再点一次 */
   if (reg && reg.installing){
-    var nw = reg.installing;
     showToast('正在下载新版本，装好后自动重启');
-    nw.addEventListener('statechange', function(){
-      if (nw.state === 'installed' && reg.waiting){
-        swUpdatePending = true;
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      }
-    });
+    swArmForApply(reg);
     return;
   }
-  location.reload();
+  /* v493：既没有 waiting 也没有 installing —— 老代码在这里直接 location.reload()，
+     那一下**等于什么都没更新**：重载回来的还是旧壳，下次进设置页又看见「发现新版本」，
+     用户看到的就是「刚更新了还提示有新版本」。改成真的去取一次远端版本、装上再接管。 */
+  if (swArming) { showToast('正在下载新版本，装好后自动重启'); return; }
+  swArming = true;
+  showToast('正在获取新版本…');
+  swRemoteVer().then(function(remote){
+    if (!remote){ swArming = false; showToast('没读到服务器版本，稍后再试', 'error'); return; }
+    swTargetVer = remote;
+    return navigator.serviceWorker.register('./sw.js?v=' + remote, { updateViaCache: 'none' }).then(function(r){
+      swRegistration = r;
+      swUpdateReady = true;
+      syncAppUpdateRow();
+      swArmForApply(r);
+    });
+  }).catch(function(){
+    swArming = false;
+    showToast('新版本下载失败，稍后再试', 'error');
+  });
 }
 /* v476：检查更新重写。原来只调 registration.update()，而 GitHub Pages 对 sw.js 有约 10 分钟
    CDN 缓存，固定地址拿回来的还是旧脚本 —— 刚推送的新版根本查不到。
@@ -14913,7 +15059,12 @@ function swRemoteVer(){
 function manualCheckUpdate(){
   if (!swSupported()){ showToast('当前打开方式不支持检查更新', 'error'); return; }
   if (swChecking) return;
-  var cur = Number(window.__SCRIPT_VER || 0);
+  var shellVer = Number(window.__SCRIPT_VER || 0);
+  /* v493：比对基准取「页面壳版本」和「刚更新到的版本」里大的那个。
+     刚更新完的那一下，页面壳可能还停在旧版本（新 SW 已装好、旧页面还在跑），
+     只拿壳版本去比就会把同一个版本又报一次「发现新版本」。 */
+  var just = swJustUpdatedTo();
+  var cur = Math.max(shellVer, just);
   swChecking = true;
   var el = document.getElementById('appUpdateValue');
   if (el) el.textContent = '检查中…';
@@ -14924,8 +15075,22 @@ function manualCheckUpdate(){
   };
   swRemoteVer().then(function(remote){
     if (!remote){ finish('没读到服务器版本，稍后再试', 'error'); return; }
-    if (remote <= cur){ finish('已是最新版本 v' + appVerText(cur)); return; }
+    if (remote <= cur){
+      /* v493：服务器上没更新，但本地 SW 已经比页面壳新 —— 说明上次更新装上了、壳没跟上。
+         这时候重载一次就能真的用上新版本；先清掉记录，万一重载后壳还是旧的也不会来回死循环。 */
+      if (just > shellVer){
+        swClearJustUpdated();
+        swChecking = false;
+        if (el) el.textContent = '正在应用…';
+        showToast('正在应用已下载的新版本');
+        setTimeout(function(){ location.reload(); }, 500);
+        return;
+      }
+      finish('已是最新版本 v' + appVerText(cur));
+      return;
+    }
     finish('发现新版本 v' + appVerText(remote) + '，正在下载');
+    swTargetVer = remote;
     // 用新版本号当查询串：这个 URL CDN 没缓存过，一定回源拿到 476 的 sw.js
     navigator.serviceWorker.register('./sw.js?v=' + remote, { updateViaCache: 'none' }).then(function(reg){
       swRegistration = reg;
@@ -14959,7 +15124,11 @@ if (swSupported()){
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if (!swUpdatePending) return;
     swUpdatePending = false;
-    location.reload();
+    /* v493：重载之前先把「这次装到哪个版本」记下来。万一重载回来的页面壳还是旧的，
+       下一次「检查更新」就不会把同一个版本再报一遍「发现新版本」，而是直接自动重载纠正。 */
+    var go = function(){ location.reload(); };
+    if (swTargetVer){ swMarkJustUpdated(swTargetVer); go(); return; }
+    swCacheVerMax().then(function(v){ if (v) swMarkJustUpdated(v); }).catch(function(){}).then(go);
   });
 }
 // 裁剪框为固定设计：移动/缩放作用于图片本身，手势统一由 cropStage 的 touch/pointer 事件处理；此处不再绑定框的拖拽/缩放

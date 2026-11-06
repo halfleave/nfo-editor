@@ -136,7 +136,11 @@ img { display: block; }
 .page.active { display: flex; z-index: 1; }
 
 /* 影片详情页 */
-#page-detail { padding: 0; color: #fff; background: #000; touch-action: pan-y; }
+/* v494：必须裁掉溢出。底图 .detail-bg 故意外扩 30px（inset:-30px）给缓慢放大留余量，
+   而 .page 本身没有 overflow —— 详情页被平移到屏幕右侧后，那 30px 外扩会漏在屏幕右边缘里，
+   变成「页面已经走了、右边还留一条画面」，直到 switchPage 把 .active 摘掉才一起消失。
+   打开详情页时同理（先摆到右侧再显示），所以是一闪而过。 */
+#page-detail { padding: 0; color: #fff; background: #000; touch-action: pan-y; overflow: hidden; }
 #page-detail.active ~ .ios-tabbar { display: none; }
 .detail-bg {
   /* v487：由 fixed 改 absolute。详情页滑出时 #page-detail 上带着 transform，
@@ -1070,6 +1074,9 @@ html.splashing, html.splashing body { background: #ffffff; }
 /* 里模式开关：与标题拉开间距，图标改为黑底暗黄字 18+，普通模式下隐藏 */
 .settings-group.mode-group { margin-top: 18px; }
 /* 设置页工具图标横排（取代原「工具箱」列表行入口）：四个工具合在一个卡片里，位置在「里模式/隐私封面」卡片下方 */
+/* v494：工具箱图标 = 单色线形 + 一条彩色线段（见 toolboxIconHtml）。
+   底色从「每个工具一块彩色实心方块」改成极淡中性色，主体线条用 --label，深浅色自动跟随。 */
+.tc-icon { color: var(--label); background: var(--gray-fill); }
 .settings-tools { display: flex; gap: 4px; margin: 6px 0 var(--gap); padding: 6px; background: var(--card); border-radius: var(--radius-lg); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 .settings-tool { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 4px; background: transparent; border: none; border-radius: var(--radius-sm); -webkit-tap-highlight-color: transparent; }
 .settings-tool:active { background: var(--gray-fill); }
@@ -1124,8 +1131,14 @@ html.splashing, html.splashing body { background: #ffffff; }
   transition: transform .26s cubic-bezier(.32,.72,0,1);
   will-change: transform;
 }
-/* v466：收走比回显慢一点（.34s），出场有缓冲、不「唰」一下没 */
-.ios-tabbar.tabbar-hide { transform: translate(-50%, calc(100% + 46px)); transition-duration: .34s; }
+/* v466：收走比回显慢一点。v494：下移（收起）单独换成「先慢后快」的缓入曲线，
+   别一松手就唰地冲出去；回显时这条 class 会被摘掉，走上面 .26s 的快曲线，保持干脆。
+   想调快慢改下面两个数字：.40s 是总时长，cubic-bezier 控制前慢后快的程度。 */
+.ios-tabbar.tabbar-hide {
+  transform: translate(-50%, calc(100% + 46px));
+  transition-duration: .40s;
+  transition-timing-function: cubic-bezier(.42, 0, 1, 1);
+}
 .tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--tabbar-fg-2); font-size: 10px; font-weight: 500; padding: 4px 0; border-radius: 999px; transition: .2s; text-shadow: 0 1px 4px rgba(0,0,0,0.26); }
 .tab-item .ti-icon { font-size: 21px; line-height: 1; }
 .tab-item.active { background: var(--tabbar-pill); color: var(--tabbar-fg); }
