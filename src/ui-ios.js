@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '496';
+window.__SCRIPT_VER = '497';
 
 var currentPage = '';
 /* ===== 页面转场：纯平移，不淡入淡出 =====
@@ -14681,7 +14681,30 @@ function hideSplash(){
        早摘会让底栏后面提前变回应用的灰/黑，跟还在淡出的白启动页打架。
        放在同一帧，底下露出来的就一直是应用自己的底色。 */
     document.documentElement.classList.remove('splashing');
+    dismissIosBottomBar();          // v497：进应用这一下把底部浏览器栏收掉
   }, 420);
+}
+
+/* ===== v497：进应用时收掉 iOS 底部浏览器栏 =====
+   症状：启动页收起、进入首页后，屏幕底部留一条浏览器底栏。
+   根因：iOS 15+ 的底栏只在「文档本身向上滚动」时才收起，而本应用所有页面都是
+   position:fixed 全屏、滚动都发生在页面内部的 .page-scroll 里 —— 文档高度恒等于
+   视口，系统认为页面从没滚动过，栏就再也不收。启动页期间是纯白整屏（.splash::after
+   还往下多铺了 200px 白），所以那一阵看不出来，一进应用就露出来了。
+   做法：.ios-app 留了 2px 可滚余量（见 ios.css），这里把文档顶到 1px 处，
+   系统收到一次真实滚动就收走底栏。页面内容全是 fixed，这 1px 看不出位移；
+   内部滚动容器仍是 .page-scroll，到顶到底有 overscroll-behavior 拦着，不会带跑文档。
+   只做一次的判断按「文档滚不动」来做：滚不动说明余量没生效（或是主屏 web app 里
+   本来就没有这条栏），就别白折腾。 */
+var bottomBarDismissed = false;
+function dismissIosBottomBar(){
+  if (bottomBarDismissed) return;
+  var h = document.documentElement;
+  if (h.scrollHeight <= window.innerHeight + 1) return;   // 滚不动 → 什么都不做
+  bottomBarDismissed = true;
+  try { window.scrollTo(0, 1); } catch (e) {}
+  /* 键盘弹起/窗口尺寸变化后系统可能把栏带回来，顺手再收一次（只在这一个会话里补） */
+  setTimeout(function(){ try { if (window.scrollY < 1) window.scrollTo(0, 1); } catch (e) {} }, 600);
 }
 // —— 页面 rubber-band 回弹：内容不满屏也能拖，指数阻尼（越拖越慢），松手弹性复位 ——
 function enableRubberBand(el){

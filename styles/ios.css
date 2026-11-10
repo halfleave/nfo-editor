@@ -130,7 +130,13 @@ input, textarea { font-family: inherit; font-size: 17px; }
 img { display: block; }
 
 /* ===== 页面容器 ===== */
-.ios-app { min-height: 100vh; min-height: 100dvh; }
+/* v497：底部多留 2px 可滚余量。iOS 15+ 的底部浏览器栏（Safari / 微信内置浏览器那条）
+   只在「文档本身向上滚动过」之后才收起；本应用所有页面都是 position:fixed 全屏，
+   滚动发生在各页自己的 .page-scroll 里，文档高度恒等于视口 → 系统判定「没滚动过」，
+   底栏就一直挂着（这条正是下面 html/body 注释想解决、但实际没落地的事）。
+   有了这 2px，进首页时把文档滚到 1px 处（见 ui-ios.js 的 dismissIosBottomBar），
+   系统收到一次真实滚动就把栏收走。页面内容全是 fixed，滚这 2px 看不到任何位移。 */
+.ios-app { min-height: calc(100vh + 2px); min-height: calc(100dvh + 2px); }
 /* 各页面 fixed 铺满并叠加：同一时刻仅一个 active 显示；返回动画期间首页在底层透出、详情页在上层右滑淡出，动画才可见 */
 .page { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: none; flex-direction: column; }
 .page.active { display: flex; z-index: 1; }
