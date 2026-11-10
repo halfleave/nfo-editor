@@ -329,6 +329,13 @@ img { display: block; }
 .ds-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .ds-title { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); }
 .ds-count { font-size: 13px; font-weight: 400; color: rgba(255,255,255,0.5); }
+/* v498：连载中的动画剧集 —— 「每周X更新，下次更新为…」放切季胶囊左边；单季没有胶囊时自动贴右。
+   字号比 .ds-count 再小半档：这行字长，别跟「选集」和季名抢注意力。 */
+.ds-head-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ds-air {
+  font-size: 12px; line-height: 1.35; font-weight: 400; color: rgba(255,255,255,0.5);
+  text-align: right; white-space: nowrap;
+}
 .ds-pill {
   display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px 6px 12px;
   border-radius: 999px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.16);

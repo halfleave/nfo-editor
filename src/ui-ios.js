@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '497';
+window.__SCRIPT_VER = '499';
 
 var currentPage = '';
 /* ===== 页面转场：纯平移，不淡入淡出 =====
@@ -10892,10 +10892,65 @@ function dsNormEps(raw){
 function dsPack(raw, eps, hasEn){
   return { n: (raw && raw.season_number), name: (raw && raw.name) || '', episodes: eps, en: !!hasEn, at: Date.now() };
 }
-/* 季列表：只请求一次，之后靠影片数据里的缓存 */
+/* ===== v498 播出信息：连载中的剧集在选集标题右侧标「每周X更新，下次更新为…」 =====
+   数据来自 /tv/{id} 的 next_episode_to_air / last_episode_to_air / status，
+   这个响应本来就是拉季列表时顺手回来的，不发额外请求。
+   只认 status === 'Returning Series' 且确实有下一集；已完结 / 停播 / 待续一律不显示。 */
+var DS_AIR_TTL = 12 * 3600 * 1000;   // 播出信息 12 小时过期：这集播完 next 就换下集了
+/* 日期 → 天序号。故意用 Date.UTC：air_date 本身就是「当地日期」，
+   如果拿本地时区再解一次，西半球会整体退一天，周几就错了。 */
+function tvDayNum(ymd){
+  var m = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 : NaN;
+}
+function tvWeeklyLabel(d){
+  var a = d && d.tvAir;
+  if (!a || !a.next || !a.next.date) return '';
+  if (a.status !== 'Returning Series') return '';
+  if (a.isAnime !== true) return '';          // 只标动画剧集；想让所有连载剧都显示，删掉这一行
+  var n = tvDayNum(a.next.date);
+  if (isNaN(n)) return '';
+  /* 隔周更 / 一次放全季：与上一集不是正好 7 天就别谎称「每周」 */
+  if (a.last && a.last.date){
+    var gap = n - tvDayNum(a.last.date);
+    if (isNaN(gap) || Math.round(gap) !== 7) return '';
+  }
+  var wd = new Date(n * 86400000).getUTCDay();          // 0 = 周日
+  var md = a.next.date.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  var when = md ? ((+md[1]) + '月' + (+md[2]) + '日') : '';
+  return '每周' + '日一二三四五六'.charAt(wd) + '更新' + (when ? ('，下次更新为' + when) : '');
+}
+function dsAirFresh(d){ return !!(d && d.tvAir && (Date.now() - d.tvAir.at < DS_AIR_TTL)); }
+/* v499：新集联动 —— 缓存的集列表是不是已经落后于 TMDB 的「最新已播」。
+   两种情况算落后：
+   ① last_episode_to_air 属于这一季、集号比缓存里最大集还大（最准，TMDB 播完就更新）；
+   ② 下一集的日期已经到了（该播了）但缓存里没这集 —— 兜底，防 TMDB 的 last 字段更新滞后。
+   任一命中就在打开详情页时强制重拉这一季，新集的简介也就跟着进来了。 */
+function tvTodayYmd(){
+  var dt = new Date(), m = dt.getMonth() + 1, d = dt.getDate();
+  return dt.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (d < 10 ? '0' + d : d);
+}
+function dsDatePassed(ymd){
+  var n = tvDayNum(ymd), t = tvDayNum(tvTodayYmd());
+  return !isNaN(n) && !isNaN(t) && n <= t;
+}
+function dsNeedRefreshSeason(d, n){
+  var pack = (d && d.tvSeasons) ? d.tvSeasons[String(n)] : null;
+  if (!pack || !pack.episodes || !pack.episodes.length) return false;   // 没缓存本来就会去拉
+  var a = d && d.tvAir;
+  if (!a) return false;
+  var maxEp = 0;
+  pack.episodes.forEach(function(e){ if (Number(e.ep) > maxEp) maxEp = Number(e.ep); });
+  var last = a.last, next = a.next;
+  if (last && Number(last.s) === Number(n) && Number(last.e) > maxEp) return true;
+  if (next && Number(next.s) === Number(n) && Number(next.e) > maxEp && dsDatePassed(next.date)) return true;
+  return false;
+}
+/* 季列表：只请求一次；播出信息 12 小时刷一次（顺带更新季列表，新季不会漏） */
 function dsEnsureMeta(film){
   var d = (film && film.data) || {};
-  if (d.tvSeasonMeta && d.tvSeasonMeta.length) return Promise.resolve(d.tvSeasonMeta);
+  var hasMeta = !!(d.tvSeasonMeta && d.tvSeasonMeta.length);
+  if (hasMeta && dsAirFresh(d)) return Promise.resolve(d.tvSeasonMeta);
   return dsOpts().then(function(opts){
     return NfoCore.tmdbRequest('/tv/' + d.tmdbId, { language: 'zh-CN' }, opts);
   }).then(function(tv){
@@ -10907,17 +10962,31 @@ function dsEnsureMeta(film){
           count: Number(s.episode_count) || 0
         };
       }).sort(function(a, b){ return a.n - b.n; });
-    if (!arr.length) throw new Error('没有季信息');
+    /* 同一次响应里就有播出信息，顺手存下来（零额外请求） */
+    var nxt = tv && tv.next_episode_to_air;
+    var lst = tv && tv.last_episode_to_air;
+    d.tvAir = {
+      status: (tv && tv.status) || '',
+      isAnime: ((tv && tv.genres) || []).some(function(g){ return Number(g && g.id) === 16; }),
+      next: nxt ? { date: nxt.air_date || '', s: Number(nxt.season_number) || 0, e: Number(nxt.episode_number) || 0 } : null,
+      last: lst ? { date: lst.air_date || '', s: Number(lst.season_number) || 0, e: Number(lst.episode_number) || 0 } : null,
+      at: Date.now()
+    };
+    if (!arr.length){
+      if (hasMeta) return saveFilm(film).then(function(){ return d.tvSeasonMeta; }, function(){ return d.tvSeasonMeta; });
+      throw new Error('没有季信息');
+    }
     d.tvSeasonMeta = arr;
     return saveFilm(film).then(function(){ return arr; }, function(){ return arr; });
   });
 }
-/* 某一季的每集简介：缓存优先，缺了才请求 */
-function dsLoadSeason(film, n){
+/* 某一季的每集简介：缓存优先，缺了才请求；force=true 时忽略缓存重拉（新集播出后用） */
+function dsLoadSeason(film, n, force){
   var d = (film && film.data) || {};
   d.tvSeasons = d.tvSeasons || {};
   var hit = d.tvSeasons[String(n)];
-  if (hit && hit.episodes && hit.episodes.length) return Promise.resolve(hit);
+  /* v499：force = 已播了新集，缓存不可信，直接重拉这一季 */
+  if (!force && hit && hit.episodes && hit.episodes.length) return Promise.resolve(hit);
   return dsOpts().then(function(opts){
     function get(lang){
       return NfoCore.tmdbRequest('/tv/' + d.tmdbId + '/season/' + n, { language: lang }, opts);
@@ -10990,6 +11059,39 @@ function dsPaintEps(box, film, head, n, pack){
   dsBindScroll(box);
   dsScrollTick(box);   /* v412：一进来默认高亮第一组（当前可见卡=首卡） */
 }
+/* v498：选集标题右侧那一段 —— 「每周X更新，下次更新为…」放切季胶囊左边；
+   单季没有胶囊时，靠 .ds-head 的 space-between 自动贴到最右。 */
+function dsHeadRightHtml(d, pillHtml){
+  var label = tvWeeklyLabel(d);
+  if (!label && !pillHtml) return '';
+  return '<div class="ds-head-right">'
+    + (label ? '<span class="ds-air">' + escapeHtml(label) + '</span>' : '')
+    + (pillHtml || '')
+    + '</div>';
+}
+/* 播出信息过期后后台刷新完，只改那一行小字，不重绘选集（否则滚动位置会丢）。
+   原来没标签、刷新后变成连载中的情况，这里负责把标签补建出来。 */
+function dsSyncAirLabel(film){
+  var box = document.getElementById('detailSeasons');
+  var head = box && box.querySelector('.ds-head');
+  if (!head) return;
+  var label = tvWeeklyLabel((film && film.data) || {});
+  var el = box.querySelector('.ds-air');
+  if (!el){
+    if (!label) return;
+    var right = head.querySelector('.ds-head-right');
+    if (!right){
+      right = document.createElement('div');
+      right.className = 'ds-head-right';
+      head.appendChild(right);
+    }
+    el = document.createElement('span');
+    el.className = 'ds-air';
+    right.insertBefore(el, right.firstChild);   // 始终排在切季胶囊左边
+  }
+  el.textContent = label;
+  el.style.display = label ? '' : 'none';
+}
 function dsPaintSeason(box, film, n, seq){
   if (!box) return;
   var d = film.data || {};
@@ -11001,7 +11103,7 @@ function dsPaintSeason(box, film, n, seq){
   var head = '<div class="ds-head"><div class="ds-title">选集'
     + (multi ? '' : ((info && info.count) ? '<span class="ds-count"> · ' + info.count + ' 集</span>' : ''))
     + '</div>'
-    + (multi ? dsSeasonPillHtml(meta, n) : '')
+    + dsHeadRightHtml(d, multi ? dsSeasonPillHtml(meta, n) : '')
     + '</div>';
   var cache = (d.tvSeasons || {})[String(n)];
   if (!cache || !cache.episodes || !cache.episodes.length){
@@ -11026,7 +11128,23 @@ function renderDetailSeasons(film){
   delete dsSelSeason[film.id];   /* v414：每次进详情页刷新定位记录，默认回到最新一季 */
   var seq = ++dsRenderSeq;
   if (d.tvSeasonMeta && d.tvSeasonMeta.length){
-    dsPaintSeason(box, film, dsStartSeason(film), seq);
+    /* 先按缓存把选集画出来（零等待），播出信息过期了再后台补一次。
+       回来只改那行小字 —— 不重绘选集、不丢滚动位置。
+       v499：如果这时发现已经播了新集（缓存落后），再把这一季强制重拉一次，补齐新集简介。 */
+    var n0 = dsStartSeason(film);
+    dsPaintSeason(box, film, n0, seq);
+    if (!dsAirFresh(d) || dsNeedRefreshSeason(d, n0)){
+      dsEnsureMeta(film).then(function(){
+        if (seq !== dsRenderSeq) return;
+        dsSyncAirLabel(film);
+        var n = dsSelSeason[film.id] || n0;
+        if (!dsNeedRefreshSeason(d, n)) return;
+        return dsLoadSeason(film, n, true).then(function(){
+          if (seq !== dsRenderSeq) return;
+          dsPaintSeason(box, film, n, seq);
+        });
+      }).catch(function(){});
+    }
     return;
   }
   box.innerHTML = '<div class="ds-head"><div class="ds-title">选集</div></div>' + dsSkeletonRowsHtml();
