@@ -13,12 +13,12 @@
  * 改版时递增下方 CACHE 版本号（tools/bump.js 自动改），旧缓存会在 activate 阶段被清理。
  * 注意：不发版就别改这个号——sw.js 字节不变浏览器就认为没有新版本，设置页的更新按钮也永远不会出现。
  */
-const CACHE = 'nfo-ios-v499';
+const CACHE = 'nfo-ios-v500';
 /* v453：预缓存地址统一带版本串（与 CACHE 尾号同源，由 tools/bump.js 一起抬）。
    APP_SHELL 里的地址如果每版都一样，CDN / 浏览器 HTTP 缓存会继续供上一版的内容，
    新桶就可能装进旧 ui-ios.js，页面再 ignoreSearch 命中它 —— 新页面配旧脚本，启动页卡死。
    带版本串后每版都是全新 URL，缓存键无旧可命中，一定回源拿本次发版的文件。 */
-const VER = '499';
+const VER = '500';
 const APP_SHELL = ['./nfo-editor-ios.html?v=' + VER, './manifest.json', './src/core-shared.js?v=' + VER, './src/pinyin-initial.js?v=' + VER, './src/auto115-core.js?v=' + VER, './src/toolbox-core.js?v=' + VER, './src/tidy-core.js?v=' + VER, './styles/ios.css?v=' + VER, './src/home-hero.js?v=' + VER, './src/ui-ios.js?v=' + VER, './src/qrcode.min.js?v=' + VER];
 // 注意：真实 Worker 部署在 Vercel（nfo-magnet-proxy-vercel.vercel.app），并非 Cloudflare 的 *.workers.dev，
 // 故此处须同时匹配 vercel.app 上的 Worker 域名，否则「Worker 请求永远走网络、不缓存」的规则对其不生效，

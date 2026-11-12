@@ -761,29 +761,16 @@ function normalizeJavbusFilm(d, opts){
        以前每个都单独扣一次「TMDB保存」，点一次保存就能把当天额度打空。 */
     var qid = (opts.qid || _actionQid || '').trim();
     if (qid) wu.searchParams.set('qid', qid);
-    // 配额计数：仅服务端代理路径消耗共享配额（自填 key 直连不计数）。search/save 区分；/videos、/images、/person 为读取不计；详情按 id 去重避免语言兜底重复计数
+    // 配额计数：仅服务端代理路径消耗共享配额（自填 key 直连不计数）。
+    // v500 行为计费：只有「搜索」在这里计 tmdbSearch（按点击 qid 去重，一次点击=1次）；
+    // 详情 / 预告 / 图片 / 人物 / 合集 等读取类请求一律免费，不再计 tmdbSave——
+    // 保存额度改由客户端在「点击卡片保存到首页」时经 /quota/consume 单独核减（见 ui-ios.js quickSaveAndHome）。
     if (path.indexOf('/search') >= 0) {
       if (!qid) quotaInc('tmdbSearch');
       else if (_searchQidSeen.indexOf(qid) < 0) {
         quotaInc('tmdbSearch');
         _searchQidSeen.push(qid);
         if (_searchQidSeen.length > 20) _searchQidSeen.shift();   // 只留最近 20 个批次，防无限增长
-      }
-    }
-    else if (path.indexOf('/videos') < 0 && path.indexOf('/images') < 0 && path.indexOf('/person/') < 0 && path.indexOf('/collection/') < 0) {
-      if (qid) {
-        /* v490：一次保存 = 一次额度。整批请求共用同一个 qid，只在这里计一次。 */
-        if (_saveQidSeen.indexOf(qid) < 0) {
-          quotaInc('tmdbSave');
-          _saveQidSeen.push(qid);
-          if (_saveQidSeen.length > 20) _saveQidSeen.shift();
-        }
-      } else {
-        var _m = path.match(/\/(movie|tv)\/(\d+)/); var _id = _m ? _m[2] : null; var _day = quotaDayKey();
-        if (!_id || !(quotaSaveSeen[_day] && quotaSaveSeen[_day][_id])) {
-          quotaInc('tmdbSave');
-          if (_id) { quotaSaveSeen[_day] = quotaSaveSeen[_day] || {}; quotaSaveSeen[_day][_id] = true; }
-        }
       }
     }
     return withTimeout(fetch(wu.toString(), { headers: { 'Accept': 'application/json' } })

@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '499';
+window.__SCRIPT_VER = '500';
 
 var currentPage = '';
 /* ===== 页面转场：纯平移，不淡入淡出 =====
@@ -8256,23 +8256,45 @@ function saveToDisk(){
 function quickSaveAndHome(){
   var title = getVal('title'); var filename = getVal('filename');
   if (!filename && !title){ showToast('缺少影片名，无法保存', 'error'); return Promise.resolve(); }
-  var film = NfoCore.buildFilmFromCurrent();
-  return saveFilmWithMerge(film).then(function(result){
-    var saved = result.film;
-    currentFilmId = saved.id;
-    // 保存后回到首页对应的 影片/XV 列表（按分级自动归属）
-    state.overviewTab = isAvFilm(saved) ? 'xv' : 'movie';
-    var tabs = document.getElementById('overviewTabs');
-    if (tabs) tabs.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === state.overviewTab); });
-    renderOverview(); clearExpiredFilms();
-    goAfterEdit(saved.id);
-    showToast(result.merged ? '已合并更新并保存' : '已保存，返回首页', 'success');
-    checkFilmCap(1500);
-    // 先存原文；保存时即显示首页剧照刷新图标，等 silentRefresh（图片/简介加载完）后由 flushPendingTranslate 翻译
-    NfoCore.markPendingTranslate(saved.id);
-  }).catch(function(err){
-    showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
+  // 行为计费（v500）：「保存到首页」是一次保存行为，先核减 TMDB保存 额度；超额拦截
+  return consumeSaveQuota().then(function(gate){
+    if (!gate.ok){
+      showToast('今日保存次数已用完，请明日再试', 'error');
+      return Promise.resolve();
+    }
+    NfoCore.quotaInc('tmdbSave');   // 即时本地显示（服务端已在 /quota/consume 核减）
+    var film = NfoCore.buildFilmFromCurrent();
+    return saveFilmWithMerge(film).then(function(result){
+      var saved = result.film;
+      currentFilmId = saved.id;
+      // 保存后回到首页对应的 影片/XV 列表（按分级自动归属）
+      state.overviewTab = isAvFilm(saved) ? 'xv' : 'movie';
+      var tabs = document.getElementById('overviewTabs');
+      if (tabs) tabs.querySelectorAll('.seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === state.overviewTab); });
+      renderOverview(); clearExpiredFilms();
+      goAfterEdit(saved.id);
+      showToast(result.merged ? '已合并更新并保存' : '已保存，返回首页', 'success');
+      checkFilmCap(1500);
+      // 先存原文；保存时即显示首页剧照刷新图标，等 silentRefresh（图片/简介加载完）后由 flushPendingTranslate 翻译
+      NfoCore.markPendingTranslate(saved.id);
+    }).catch(function(err){
+      showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
+    });
   });
+}
+/* 行为计费（v500）：向服务端 /quota/consume 核减一次 TMDB保存 额度；返回 {ok}。
+   超额 ok:false（拦截保存）；网络异常 fail-open 放行，避免误伤。 */
+function consumeSaveQuota(){
+  return getActivationCode().then(function(code){
+    var base = state.magnetWorker || DEFAULT_WORKER;
+    return fetch(base + '/quota/consume?field=tmdbSave&code=' + encodeURIComponent(code || ''), { cache: 'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d) return { ok: true };
+        if (d.unlimited) return { ok: true };
+        return { ok: d.ok !== false && (d.remaining === undefined || d.remaining > 0) };
+      });
+  }).catch(function(){ return { ok: true }; });
 }
 /* 图片加载完成后，用当前编辑态覆盖保存一次，补全 poster/fanart 等，并刷新首页（无提示） */
 function silentRefreshCurrentFilm(){
@@ -8763,9 +8785,16 @@ function renderTmdbType(list, type, py){
   renderTMDBResults(NfoCore.rankTitleYearResults(list, py));
 }
 /* 点「搜索」/ 回车：自动判定类型的一次点击 */
+var _lastSearchSig = '', _lastSearchTs = 0;
 function searchTMDB(){
   var q = (document.getElementById('tmdbQuery').value || '').trim();
   if (!q){ showToast('请输入影片名', 'error'); return; }
+  var py = NfoCore.parseTitleYear(q);
+  var sig = (py.title + ' ' + (py.year || '')).toLowerCase().trim();
+  var now = Date.now();
+  // 行为计费（v500）：同词 3 秒内重复点击搜索不计数、不复搜（防误触双连点）
+  if (sig && sig === _lastSearchSig && (now - _lastSearchTs) < 3000) return;
+  _lastSearchSig = sig; _lastSearchTs = now;
   cancelTmdbResearch();
   tmdbResetCache(q);
   addSearchHistory(q);
