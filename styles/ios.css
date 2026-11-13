@@ -406,6 +406,11 @@ img { display: block; }
 .detail-cast-spacer { flex: 0 0 auto; width: 4px; height: 1px; }
 .detail-cast-row::-webkit-scrollbar { display: none; }
 .detail-person { flex: 0 0 auto; width: 72px; text-align: center; }
+/* v502「AI 影评」—— 剧照上方，仅在拿到文本时由 JS 显示（无占位、无加载态） */
+.detail-ai-review { margin-top: 22px; padding: 15px 16px 16px; border-radius: 14px; background: rgba(255,255,255,0.07); }
+.detail-ai-review:empty { display: none; }
+.detail-ai-review-title { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 9px; }
+.detail-ai-review-text { font-size: 13.5px; line-height: 1.65; color: rgba(255,255,255,0.78); white-space: pre-line; }
 /* 详情页「剧照」—— 演职人员/女优下方，双列 JS 瀑布流（按列高动态选择落点） */
 .detail-shots { margin-top: 22px; padding-top: 16px; }
 .detail-shots:empty { display: none; }

@@ -10,14 +10,21 @@ const NfoCore = require('../src/core-shared.js').NfoCore;
 
 // —— 桩：拦截 fetch，记录 url/method/body，按路径返回对应 JSON 形态 ——
 let calls = [];
+let reviewRaw = null;   // v503：可切换直连 LLM 的影评返回体，测 JSON 解析各分支
+const REVIEW_RAW_DEFAULT = '```json\n{"review":"## **节奏克制**，余韵悠长。[1]"}\n```';
 function stubFetch(url, init) {
   calls.push({ url: String(url), init: init || {} });
   let payload;
   if (/\/chat\/completions$/.test(url)) {
-    // 对齐 translateMeta 期望：choices[0].message.content 是 JSON 字符串
-    payload = { choices: [{ message: { content: JSON.stringify({ title: 'T', summary: 'S' }) } }] };
+    // 按 system prompt 区分功能：影评返回 {"review":...} JSON 字符串，翻译返回 {title,summary} JSON 字符串
+    let sys = '';
+    try { sys = JSON.parse(init.body).messages[0].content || ''; } catch (e) {}
+    const isReview = /影视评论人/.test(sys);
+    payload = { choices: [{ message: { content: isReview ? (reviewRaw === null ? REVIEW_RAW_DEFAULT : reviewRaw) : JSON.stringify({ title: 'T', summary: 'S' }) } }] };
   } else if (/\/translate(\?|$)/.test(url)) {
     payload = { title: 'W', summary: 'Q' };
+  } else if (/\/ai\/review(\?|$)/.test(url)) {
+    payload = { ok: true, review: '**节奏克制**，余韵悠长。' };
   } else {
     payload = { title: 'T', summary: 'S' };
   }
@@ -106,6 +113,63 @@ async function expectReject(name, p, re) {
 
   // 7. 无 ownCfg 且缺 Worker → reject（对齐 6.3 矩阵：中/免费无自填 key 不能走服务端翻译）
   await expectReject('translate/缺配置: 正确 reject', NfoCore.translateRequest('a', 'b', {}), /未配置翻译/);
+
+  /* —— v503 AI 影评 reviewRequest：三项输入 + 严格 JSON 输出 —— */
+  const REVIEW_INFO = { title: '花样年华', originaltitle: 'In the Mood for Love', date: '2000-09-29' };
+  const OWN = { baseUrl: 'https://llm.example.com/v1', apiKey: 'K', model: 'agnes-2.5-flash' };
+  // 8. 自填 ownCfg 完整 → 直连 LLM，且用的是 review 提示词（不是 translate）
+  calls = [];
+  await NfoCore.reviewRequest(REVIEW_INFO, { ownCfg: OWN }).then(function (text) {
+    eq('review/自填cfg: 仅 1 次请求', calls.length === 1);
+    eq('review/自填cfg: endpoint 自动补 /chat/completions', calls[0].url === 'https://llm.example.com/v1/chat/completions');
+    const body = JSON.parse(calls[0].init.body);
+    eq('review/自填cfg: 用影评提示词', /影视评论人/.test(body.messages[0].content));
+    eq('review/自填cfg: 不用翻译提示词', !/译为简体中文的翻译专家/.test(body.messages[0].content));
+    eq('review/自填cfg: 提示词要求 JSON 输出', /"review"/.test(body.messages[0].content) && /JSON/.test(body.messages[0].content));
+    eq('review/自填cfg: 提示词要求专业客观', /专业、客观/.test(body.messages[0].content));
+    const um = body.messages[1].content;
+    eq('review/自填cfg: 只发三项', /【片名】/.test(um) && /【原始名称】/.test(um) && /【上映日期】/.test(um)
+      && !/【简介】/.test(um) && !/【评分】/.test(um) && !/【类型】/.test(um));
+    eq('review/自填cfg: 完整日期不截断', um.indexOf('2000-09-29') > -1);
+    eq('review/自填cfg: 原始名进 messages', um.indexOf('In the Mood for Love') > -1);
+    eq('review/自填cfg: JSON 解析并清洗', text === '节奏克制，余韵悠长。', text);
+  });
+
+  // 9. 无 ownCfg + Worker + code → POST /ai/review?code=（高级档由 Worker 放行）
+  calls = [];
+  await NfoCore.reviewRequest(REVIEW_INFO, { workerBase: 'https://w.example.com', code: 'FULL123' })
+    .then(function (text) {
+      eq('review/Worker: 走 /ai/review?code=', calls[0].url === 'https://w.example.com/ai/review?code=FULL123');
+      eq('review/Worker: POST', calls[0].init.method === 'POST');
+      const body = JSON.parse(calls[0].init.body);
+      eq('review/Worker: 只发三项', body.title === '花样年华' && body.originaltitle === 'In the Mood for Love'
+        && body.date === '2000-09-29' && !('plot' in body) && !('genres' in body) && !('rating' in body));
+      eq('review/Worker: 返回清洗后纯文本', text === '节奏克制，余韵悠长。', text);
+    });
+
+  // 10. 缺配置 → reject；缺片名 → reject（不发无谓请求）
+  await expectReject('review/缺配置: 正确 reject', NfoCore.reviewRequest(REVIEW_INFO, {}), /未配置 AI 影评/);
+  await expectReject('review/缺片名: 正确 reject', NfoCore.reviewRequest({ plot: 'x' }, { workerBase: 'https://w.example.com' }), /缺少片名/);
+
+  // 11. AI_PROMPTS 表是单点真相：translate / review 两份且内容不同
+  eq('AI_PROMPTS: 两份提示词', !!NfoCore.AI_PROMPTS && typeof NfoCore.AI_PROMPTS.translate === 'string' && typeof NfoCore.AI_PROMPTS.review === 'string');
+  eq('AI_PROMPTS: translate 与旧常量一致', NfoCore.AI_PROMPTS.translate === NfoCore.TRANSLATE_SYSTEM_PROMPT);
+
+  /* —— v503 JSON 解析：正常 / 围栏 / 噪音 / 去角标 / 五类失败 —— */
+  eq('parse/纯 JSON', NfoCore.parseAiReviewText('{"review":"节奏舒缓。"}') === '节奏舒缓。');
+  eq('parse/带噪音前后文字', NfoCore.parseAiReviewText('好的，这是影评：\n{"review":"温和而有分寸。"}\n以上。') === '温和而有分寸。');
+  const linkText = NfoCore.parseAiReviewText('{"review":"参见 [资料](https://x.com/a) 的说法。"}');
+  eq('parse/markdown 链接保留文字', linkText === '参见 资料 的说法。', linkText);
+  const cnText = NfoCore.parseAiReviewText('{"review":"影像克制【1，2】，余韵长。"}');
+  eq('parse/去中文数字角标', cnText === '影像克制，余韵长。', cnText);
+  let parseFail = 0;
+  ['这是一段纯文本，没有 JSON', '{"foo":"bar"}', '{"review":""}', '{"review":', ''].forEach(function (raw) {
+    try { NfoCore.parseAiReviewText(raw); } catch (e) { parseFail++; }
+  });
+  eq('parse/五类解析失败全部抛错', parseFail === 5, '实际抛错 ' + parseFail + ' 次');
+  reviewRaw = '抱歉，我无法找到该片资料。';
+  await expectReject('review/模型没按 JSON 回: reject（状态机静默不显示）', NfoCore.reviewRequest(REVIEW_INFO, { ownCfg: OWN }), /影评返回非 JSON/);
+  reviewRaw = null;
 
   /* —— 配额计数（本地按天，仅展示；权威以服务端为准）—— */
   // 桩 localStorage / window（quotaInc 会用到；Node 无原生实现）

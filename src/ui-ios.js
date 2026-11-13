@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '501';
+window.__SCRIPT_VER = '503';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -8250,6 +8250,7 @@ function saveToDisk(){
     // 先存原文；保存时即显示首页剧照刷新图标，等数据加载完再翻译（手动编辑无后续异步，立即 flush）
     NfoCore.markPendingTranslate(film.id);
     flushPendingTranslate(film.id);
+    maybeFetchAiReview(film.id);       // v502：保存时生成 AI 影评（幂等）
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
@@ -8279,6 +8280,7 @@ function quickSaveAndHome(){
       checkFilmCap(1500);
       // 先存原文；保存时即显示首页剧照刷新图标，等 silentRefresh（图片/简介加载完）后由 flushPendingTranslate 翻译
       NfoCore.markPendingTranslate(saved.id);
+      maybeFetchAiReview(saved.id);    // v502：保存时生成 AI 影评（幂等）
     }).catch(function(err){
       showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
     });
@@ -10631,7 +10633,102 @@ function openFilmDetail(encId){
     animateDetailIn();                    // v462：详情页从右侧平移进屏（首页同时往左轻推）
     auto115Doc = null;                 // 切影片：重置自动化文档，按新影片重新载入并刷新角标
     auto115EnsureDoc().then(updateAutoBadge).catch(function(){});
+    maybeFetchAiReview(film);           // v502：下次进入时补一次（幂等，在途/冷却会自动跳过）
   });
+}
+
+/* ===== v502：AI 影评（保存时生成，剧照上方展示）=====
+   状态放独立 kv 键 aiReview:<id>，不写进 film.data —— buildFilmFromCurrent() 每次从表单
+   重建 film 对象，silentRefreshCurrentFilm() 会把 data 里的额外字段整体覆盖掉。
+   规则：
+   ① 没拿到文本 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
+   ② 保存影片时发起一次；已有影评则永不重复调 AI
+   ③ 下次进入详情页时再尝试一次，但：
+      - 正在请求中（内存 in-flight）→ 不打断、不重入
+      - 距上次发起 < 5 分钟 → 冷却，避免「刚保存就点进去」重复打 AI
+   ④ at 在「发起时」就落库，杀掉 App 重开仍有效（不只依赖内存标记） */
+var AI_REVIEW_GAP = 5 * 60 * 1000;
+var aiReviewInFlight = {};              // filmId → true（本会话内，防打断）
+function aiReviewKey(id){ return 'aiReview:' + id; }
+function aiReviewGet(id){
+  return idbGet('kv', aiReviewKey(id)).then(function(v){
+    return (v && typeof v === 'object') ? v : { text: '', at: 0 };
+  }).catch(function(){ return { text: '', at: 0 }; });
+}
+function aiReviewSet(id, rec){
+  return idbPut('kv', aiReviewKey(id), rec).catch(function(){});
+}
+function aiReviewConfigReady(){
+  /* 1B：自填 AI 配置 → 直连 LLM；否则高级档 → Worker /ai/review 兜底 */
+  return translateConfigReady() || (state.tier || '') === 'full';
+}
+function aiReviewInfoOf(film){
+  /* v503：只发片名 / 原始名 / 完整上映日期，资料交由模型自行查阅；
+     不再发简介/类型/评分，避免模型偷懒照抄简介。 */
+  var d = (film && film.data) || {};
+  return {
+    title: String(d.title || (film && film.title) || '').slice(0, 200),
+    originaltitle: String(d.originaltitle || '').slice(0, 200),
+    date: String(d.premiered || d.year || '').slice(0, 20)
+  };
+}
+/* 只改影评这一个区块，不重绘整页（避免底图/滚动位置丢失） */
+function paintAiReview(id, text){
+  var box = document.getElementById('detailAiReview');
+  if (!box || currentDetailFilmId !== id) return;
+  var t = String(text || '').trim();
+  if (!t){ box.innerHTML = ''; box.style.display = 'none'; return; }
+  box.innerHTML = '<div class="detail-ai-review-title">AI 影评</div>'
+    + '<div class="detail-ai-review-text">' + escapeHtml(t) + '</div>';
+  box.style.display = '';
+}
+function renderAiReview(film){
+  var box = document.getElementById('detailAiReview');
+  if (!box) return;
+  box.innerHTML = ''; box.style.display = 'none';    // 切换影片先清空，防串片
+  if (!film || !film.id) return;
+  var id = film.id;
+  aiReviewGet(id).then(function(rec){
+    if (currentDetailFilmId !== id) return;
+    if (rec.text) paintAiReview(id, rec.text);
+  }).catch(function(){});
+}
+/* 幂等触发：已有 / 在途 / 冷却 / 配置未就绪 / 数据未齐 都会静默跳过 */
+function maybeFetchAiReview(filmOrId){
+  var id = (filmOrId && typeof filmOrId === 'object') ? filmOrId.id : filmOrId;
+  if (!id || aiReviewInFlight[id] || !aiReviewConfigReady()) return;
+  aiReviewGet(id).then(function(rec){
+    if (aiReviewInFlight[id]) return;
+    if (rec.text) return;                                    // ② 已有影评：永不再调
+    var now = Date.now();
+    if (rec.at && (now - rec.at) < AI_REVIEW_GAP) return;     // ③ 5 分钟冷却
+    // 先读库确认数据齐：保存瞬间片名可能还没落定，此时不落 at，
+    // 等 silentRefresh 或下次进详情数据齐了再发起，避免拿空片名白打一次 AI
+    return loadFilm(id).then(function(film){
+      if (!film || aiReviewInFlight[id]) return;
+      var info = aiReviewInfoOf(film);
+      if (!info.title) return;
+      aiReviewInFlight[id] = true;
+      return aiReviewSet(id, { text: '', at: now })           // 发起时先落时间戳（跨会话有效）
+        .then(function(){
+          return getActivationCode().then(function(code){
+            return NfoCore.reviewRequest(info, {
+              ownCfg: { baseUrl: state.translateBaseUrl, apiKey: state.translateApiKey, model: state.translateModel },
+              workerBase: state.magnetWorker || DEFAULT_WORKER,
+              code: code || ''
+            });
+          });
+        }).then(function(text){
+          text = String(text || '').trim();
+          if (!text) return;
+          return aiReviewSet(id, { text: text, at: now }).then(function(){
+            paintAiReview(id, text);                          // 详情页正开着 → 局部插入
+          });
+        }).catch(function(){
+          /* ① 失败静默：只留 at，不显示、不提示 */
+        }).then(function(){ delete aiReviewInFlight[id]; });
+    });
+  }).catch(function(){});
 }
 
 /* ===== v501：更新日历（首页右上角日期胶囊进入的二级页） =====
@@ -11558,6 +11655,7 @@ function renderFilmDetail(film){
   /* v490：打开一部片的详情 = 一次用户动作。里面拉季列表 / 补简介等请求共用这次额度。 */
   if (NfoCore.beginTmdbAction) NfoCore.beginTmdbAction();
   currentDetailFilm = film || null;
+  renderAiReview(film);              // v502：先清空影评区，再按独立 kv 记录异步回填
   // 切换影片时重置自动化文档缓存（跨影片残留防护），并刷新角标
   if (!auto115Doc || auto115Doc.filmId !== (film && film.id)){ auto115Doc = null; }
   updateAutoBadge();
@@ -12201,6 +12299,7 @@ function tvSaveToDisk(){
     checkFilmCap(1500);
     NfoCore.markPendingTranslate(film.id);
     flushPendingTranslate(film.id);
+    maybeFetchAiReview(film.id);       // v502：剧集编辑保存也生成影评（幂等）
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });

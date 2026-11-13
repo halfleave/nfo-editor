@@ -136,6 +136,86 @@
     '7. 严格输出 JSON，不要任何多余文字、不要 markdown 代码块包裹。格式：{"title":"简体中文标题","summary":"简体中文简介"}'
   ].join('\n');
 
+  /* ===== AI 通用底座（v502 架构收敛）=====
+     同一个 OpenAI 兼容 LLM，换 system prompt 就是不同功能。
+     AI_PROMPTS = 提示词表；callLLM = 客户端唯一的请求出口
+     （endpoint 补全 / Bearer / 超时 / 取 content 全在这里）。
+     各功能只负责「挑 prompt + 拼输入 + 解析结果」；服务端代理路径由各功能自己发。 */
+  var AI_PROMPTS = {
+    translate: TRANSLATE_SYSTEM_PROMPT,
+    review: [
+      '你是一位影视评论人。请根据给出的【片名】【原始名称】【上映日期】，查阅公开资料后写一段简体中文短评。',
+      '文风：专业、客观，有依据、有分寸；不吹捧也不贬损，不用「神作」「烂片」「必看」这类情绪词。但不要写成数据报告，语气温和、有阅读的愉悦感，接近杂志专栏。',
+      '内容：',
+      '1. 2~4 句、80~120 字；谈类型定位、叙事结构、影像手法、表演或它适合的观众，不剧透、不列剧情大纲、不照抄资料原文。',
+      '2. 不臆造未证实的情节、演员或获奖信息；资料不足时只谈气质与观感。',
+      '3. 正文里不要出现引用编号、来源链接、「据某某报道」等溯源字样，不要 Markdown、标题、项目符号。',
+      '4. 严格输出单个 JSON 对象，不要代码块、不要任何多余文字。格式：{"review":"影评正文"}'
+    ].join('\n')
+  };
+
+  // 调用 OpenAI 兼容接口，返回模型回复纯文本；失败 reject Error。
+  // cfg = { baseUrl, apiKey, model }；opts = { temperature, timeoutMs, configError }
+  function callLLM(messages, cfg, opts) {
+    opts = opts || {};
+    return new Promise(function (resolve, reject) {
+      var base = ((cfg && cfg.baseUrl) || '').trim().replace(/\/+$/, '');
+      var key = (cfg && cfg.apiKey) || '';
+      var model = (cfg && cfg.model) || '';
+      if (!base || !key || !model) { reject(new Error(opts.configError || 'AI 未配置')); return; }
+      var endpoint = /\/chat\/completions$/i.test(base) ? base : base + '/chat/completions';
+      var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, opts.timeoutMs || 30000) : null;
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({
+          model: model,
+          temperature: (opts.temperature == null ? 0.3 : opts.temperature),
+          messages: messages
+        }),
+        signal: ctrl ? ctrl.signal : undefined
+      }).then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error('HTTP ' + r.status + '：' + t.slice(0, 200)); });
+        return r.json();
+      }).then(function (d) {
+        if (timer) clearTimeout(timer);
+        var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+        if (!c) throw new Error('AI 返回为空');
+        resolve(String(c));
+      }).catch(function (err) {
+        if (timer) clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  // 影评清洗：去 ``` 包裹、Markdown 标题/加粗/项目符号、引用角标与来源链接、多余空行，限长
+  function cleanAiReviewText(s) {
+    var t = String(s || '').trim();
+    // 围栏单独成行时整行删掉（模型常在正文前后各放一行 ```），再兜住首尾内联围栏
+    t = t.replace(/^[ \t]*```[a-zA-Z]*[ \t]*$/gm, '');
+    t = t.replace(/^```[a-zA-Z]*[ \t]*/i, '').replace(/[ \t]*```$/, '');
+    t = t.replace(/^\s*#{1,6}\s+/gm, '').replace(/\*\*/g, '');
+    t = t.replace(/^\s*[-*]\s+/gm, '').replace(/\n{3,}/g, '\n\n');
+    // 联网模型爱带 [1] / 【1,2】 角标与 markdown 链接：链接保留文字，纯数字角标整段删
+    t = t.replace(/\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)]+\)/g, '$1');
+    t = t.replace(/[\[【]\s*\d+(?:\s*[,，]\s*\d+)*\s*[\]】]/g, '');
+    t = t.replace(/[ \t]{2,}/g, ' ');
+    return t.trim().slice(0, 300);
+  }
+
+  /* v503：AI 影评改为严格 JSON 输出，这里统一取 review 字段。
+     解析失败 / 字段为空一律抛错，由状态机按「没获取到」静默处理（不退回纯文本）。 */
+  function parseAiReviewText(raw) {
+    var obj;
+    try { obj = extractJsonObject(raw); }
+    catch (e) { throw new Error('影评返回非 JSON'); }
+    var t = cleanAiReviewText(obj && obj.review);
+    if (!t) throw new Error('影评返回为空');
+    return t;
+  }
+
   // 是否需要翻译：仅当含日文假名（平/片假名）判定为日文；纯汉字/英文/番号不翻（避免误翻中文）
   function needsTranslation(text) {
     if (!text || !String(text).trim()) return false;
@@ -243,44 +323,61 @@
     return list.sort(function (a, b) { return key(a) - key(b); });
   }
 
-  // 调用 OpenAI 兼容接口，一次请求翻译 title + plot；返回 Promise<{title, summary}>（30s 超时）
-  // cfg = { baseUrl, apiKey, model } 由调用方从配置/state 传入（不读全局，便于两端复用）
+  // 翻译：挑 translate prompt + 拼输入 + 解析 JSON；请求本身交给通用 callLLM。
+  // 返回 Promise<{title, summary}>（30s 超时）；cfg = { baseUrl, apiKey, model }
   function translateMeta(title, plot, cfg) {
-    return new Promise(function (resolve, reject) {
-      var base = ((cfg && cfg.baseUrl) || '').trim().replace(/\/+$/, '');
-      var key = (cfg && cfg.apiKey) || '';
-      var model = (cfg && cfg.model) || '';
-      if (!base || !key || !model) { reject(new Error('翻译未配置')); return; }
-      var endpoint = /\/chat\/completions$/i.test(base) ? base : base + '/chat/completions';
-      var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-      var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 30000) : null;
-      var userMsg = '【标题】\n' + (title || '') + '\n\n【简介】\n' + (plot || '');
-      fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-        body: JSON.stringify({ model: model, temperature: 0.3, messages: [
-          { role: 'system', content: TRANSLATE_SYSTEM_PROMPT },
-          { role: 'user', content: userMsg }
-        ] }),
-        signal: ctrl ? ctrl.signal : undefined
-      }).then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error('HTTP ' + r.status + '：' + t.slice(0, 200)); });
-        return r.json();
-      }).then(function (d) {
-        if (timer) clearTimeout(timer);
-        var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
-        if (!c) throw new Error('翻译返回为空');
-        try {
-          var res = extractJsonObject(c);
-          if (typeof res.title === 'string') res.title = stripTitleParens(cleanTranslatedText(res.title));
-          if (typeof res.summary === 'string') res.summary = cleanTranslatedText(res.summary);
-          resolve(res);
-        }
-        catch (e) { reject(new Error('翻译结果解析失败')); }
-      }).catch(function (err) {
-        if (timer) clearTimeout(timer);
-        reject(err);
+    var userMsg = '【标题】\n' + (title || '') + '\n\n【简介】\n' + (plot || '');
+    return callLLM([
+      { role: 'system', content: AI_PROMPTS.translate },
+      { role: 'user', content: userMsg }
+    ], cfg, { configError: '翻译未配置' }).then(function (c) {
+      var res;
+      try { res = extractJsonObject(c); }
+      catch (e) { throw new Error('翻译结果解析失败'); }
+      if (typeof res.title === 'string') res.title = stripTitleParens(cleanTranslatedText(res.title));
+      if (typeof res.summary === 'string') res.summary = cleanTranslatedText(res.summary);
+      return res;
+    });
+  }
+
+  /* AI 影评（v503）：info = { title, originaltitle, date }，只发三项，资料由模型自行查阅。
+     自填配置完整 → 直连 LLM（复用 callLLM + review prompt），返回体是 JSON，取 review 字段；
+     否则 → Worker /ai/review（仅高级档放行，Worker 已解析成纯文本）。返回清洗后的短评。 */
+  function reviewRequest(info, opts) {
+    opts = opts || {};
+    info = info || {};
+    var payload = {
+      title: String(info.title || '').slice(0, 200),
+      originaltitle: String(info.originaltitle || '').slice(0, 200),
+      date: String(info.date || '').slice(0, 20)
+    };
+    if (!payload.title.trim()) return Promise.reject(new Error('缺少片名'));
+    var own = opts.ownCfg || {};
+    if (own.baseUrl && own.apiKey && own.model) {
+      var userMsg = '【片名】' + payload.title
+        + '\n【原始名称】' + (payload.originaltitle || '未知')
+        + '\n【上映日期】' + (payload.date || '未知');
+      return callLLM([
+        { role: 'system', content: AI_PROMPTS.review },
+        { role: 'user', content: userMsg }
+      ], own, { temperature: 0.7 }).then(parseAiReviewText);
+    }
+    var base = (opts.workerBase || '').replace(/\/+$/, '');
+    if (!base) return Promise.reject(new Error('未配置 AI 影评：请填写 AI 配置或升级高级档'));
+    var url = base + '/ai/review' + (opts.code ? ('?code=' + encodeURIComponent(opts.code)) : '');
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        if (d && d.error) throw new Error(d.error);
+        return d;
       });
+    }).then(function (d) {
+      var t = cleanAiReviewText(d && d.review);
+      if (!t) throw new Error('影评返回为空');
+      return t;
     });
   }
 
@@ -1052,6 +1149,11 @@ function normalizeJavbusFilm(d, opts){
     buildMovieXml: buildMovieXml,
     buildTvShowXml: buildTvShowXml,
     TRANSLATE_SYSTEM_PROMPT: TRANSLATE_SYSTEM_PROMPT,
+    AI_PROMPTS: AI_PROMPTS,
+    callLLM: callLLM,
+    cleanAiReviewText: cleanAiReviewText,
+    parseAiReviewText: parseAiReviewText,
+    reviewRequest: reviewRequest,
     needsTranslation: needsTranslation,
     isChineseText: isChineseText,
     javZoneOrder: javZoneOrder,

@@ -246,19 +246,10 @@ function updateClearButtonState(){
   btn.classList.toggle('muted', !hasFormContent());
 }
 
-/* ===== 翻译配置（OpenAI 兼容，客户端直连 LLM） ===== */
-var TRANSLATE_SYSTEM_PROMPT = [
-  '你是将成人影视元数据译为简体中文的翻译专家。请把下方日文的影片标题与简介翻译为简体中文。',
-  '硬性规则：',
-  '1. 仅做等值翻译，不增删、不概括、不改写语气。',
-  '2. 专有名词保留原文并附中文：演员名、片商、系列名。',
-  '3. 番号/型号代码（如 SONE-456、ABC-123）一律原样输出，绝不翻译或改写。',
-  '4. 日文汉字按简体中文习惯转写（例：妻→人妻按需），但语义必须准确。',
-  '5. 不雅化也不净化原文本措辞，保持原营销/直述风格。',
-  '6. 已知源语言：日文，请勿误判。',
-  '7. 若某字段已是简体中文、英文或纯番号代码，则原样输出，不要改写或翻译。',
-  '8. 严格输出 JSON，不要任何多余文字、不要 markdown 代码块包裹。格式：{"title":"简体中文标题","summary":"简体中文简介"}'
-].join('\n');
+/* ===== 翻译配置（OpenAI 兼容，客户端直连 LLM） =====
+   v502 架构收敛：提示词与 LLM 请求实现统一放 src/core-shared.js（AI_PROMPTS + callLLM），
+   此处只保留别名与 PC 端配置读写，不再维护第二份提示词/第二份 fetch。 */
+var TRANSLATE_SYSTEM_PROMPT = (typeof NfoCore !== 'undefined' && NfoCore.TRANSLATE_SYSTEM_PROMPT) || '';
 var TRANSLATE_CFG_KEY = 'translateConfig';
 function getTranslateConfig(){
   return idbGet('kv', TRANSLATE_CFG_KEY).then(function(v){
@@ -271,58 +262,15 @@ function setTranslateConfig(cfg){
 function translateConfigReady(){
   return !!(state.translateBaseUrl && state.translateApiKey && state.translateModel);
 }
-/* 是否需要翻译：仅当文本含日文假名（平/片假名）时判定为日文，需翻译为简体中文；
-   纯汉字（视为已是中文）、英文、番号代码等不翻译，避免误翻。 */
-function needsTranslation(text){
-  if (!text || !String(text).trim()) return false;
-  return /[ぁ-んァ-ヶ]/.test(String(text));
-}
-/* 从模型返回中解析 JSON 对象：兼容 ```json 代码块包裹 / 首尾空白 / 多余噪音文字。
-   截取首个 { 到末个 } 之间的内容再 JSON.parse；失败抛出错误（由调用方保留原文）。 */
-function extractJsonObject(s){
-  s = String(s || '').trim();
-  s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  var a = s.indexOf('{'); var b = s.lastIndexOf('}');
-  if (a === -1 || b === -1 || b < a) throw new Error('翻译返回非 JSON');
-  return JSON.parse(s.slice(a, b + 1));
-}
-/* 调用 OpenAI 兼容接口，一次请求翻译 title + plot；返回 Promise<{title, summary}>（30s 超时） */
+/* v502 架构收敛：以下三个纯逻辑 / LLM 请求函数统一转发到 NfoCore（单点真相），
+   仅保留 PC 端原有函数名与签名，避免 ui.js 里任何残留调用失效。 */
+function needsTranslation(text){ return NfoCore.needsTranslation(text); }
+function extractJsonObject(s){ return NfoCore.extractJsonObject(s); }
 function translateMeta(title, plot){
-  return new Promise(function(resolve, reject){
-    if (!translateConfigReady()){ reject(new Error('翻译未配置')); return; }
-    var base = state.translateBaseUrl.trim().replace(/\/+$/, '');
-    var endpoint = /\/chat\/completions$/i.test(base) ? base : base + '/chat/completions';
-    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, 30000) : null;
-    var userMsg = '【标题】\n' + (title || '') + '\n\n【简介】\n' + (plot || '');
-    fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + state.translateApiKey },
-      body: JSON.stringify({ model: state.translateModel, temperature: 0.3, messages: [
-        { role:'system', content: TRANSLATE_SYSTEM_PROMPT },
-        { role:'user', content: userMsg }
-      ] }),
-      signal: ctrl ? ctrl.signal : undefined
-    }).then(function(r){
-      if (!r.ok) return r.text().then(function(t){ throw new Error('HTTP ' + r.status + '：' + t.slice(0,200)); });
-      return r.json();
-    }).then(function(d){
-      if (timer) clearTimeout(timer);
-      var c = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
-      if (!c) throw new Error('翻译返回为空');
-      try {
-        var res = extractJsonObject(c);
-        if (typeof NfoCore !== 'undefined' && NfoCore.cleanTranslatedText) {
-          if (typeof res.title === 'string') res.title = (NfoCore.stripTitleParens || function(x){ return x; })(NfoCore.cleanTranslatedText(res.title));
-          if (typeof res.summary === 'string') res.summary = NfoCore.cleanTranslatedText(res.summary);
-        }
-        resolve(res);
-      }
-      catch(e){ reject(new Error('翻译结果解析失败')); }
-    }).catch(function(err){
-      if (timer) clearTimeout(timer);
-      reject(err);
-    });
+  return NfoCore.translateMeta(title, plot, {
+    baseUrl: state.translateBaseUrl,
+    apiKey: state.translateApiKey,
+    model: state.translateModel
   });
 }
 /* 按字段独立判断是否需要翻译（含日文假名才翻译，已有中文/英文/番号跳过） */
