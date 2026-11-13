@@ -4,9 +4,10 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '500';
+window.__SCRIPT_VER = '501';
 
 var currentPage = '';
+var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
 /* ===== 页面转场：纯平移，不淡入淡出 =====
    进详情：详情页从屏幕右侧平移进屏；返回：向右平移出屏。进出同一时长、同一条曲线。
    v487：**取消「首页同时左推 28px」**。那点位移看着像立体，代价却是首页整层变成被
@@ -158,6 +159,7 @@ function switchPage(page) {
     syncAppUpdateRow();      // v492：刷新「检查更新 / 发现新版本」这一行的状态
     swCheckForUpdate();      // v448：顺手比对一次 sw.js（60 秒内不重复）
   }
+  if (page === 'calendar' && typeof renderUpdateCalendar === 'function') renderUpdateCalendar();  // v501：进入更新日历即按当前周重绘
 }
 /* —— Tab 切换滑动动画（所有 tab 通用） ——
    tabSlideIn：dir<0 从左滑入 / dir>0 从右滑入；先摘旧动画类再强制回流，保证连续切换可重播。
@@ -218,10 +220,10 @@ function initEdgeSwipeBack(){
     page.style.transition = 'transform ' + PAGE_SLIDE_MS + 'ms ' + PAGE_SLIDE_EASE;
     if (goHome){
       page.style.transform = 'translate3d(' + window.innerWidth + 'px,0,0)';
-      finishSlide(page, PAGE_SLIDE_MS, function(){
-        if (currentPage !== 'detail') return;
-        switchPage('home');
-      });
+  finishSlide(page, PAGE_SLIDE_MS, function(){
+    if (currentPage !== 'detail') return;
+    switchPage(detailReturnPage);
+  });
     } else {
       page.style.transform = 'translate3d(0,0,0)';
       finishSlide(page, PAGE_SLIDE_MS, function(){
@@ -332,7 +334,7 @@ function animateDetailBack(){
   /* v465：收尾听 transitionend，别再和动画竞速（早跑一点就冻住最后几十像素） */
   finishSlide(page, PAGE_SLIDE_MS, function(){
     if (currentPage !== 'detail') return;    // 期间已经切到别的页，别再抢着切首页
-    switchPage('home');
+    switchPage(detailReturnPage);
   });
 }
 
@@ -10618,6 +10620,7 @@ var currentDetailTitleFull = '';   // 详情页复制用的真实标题（双击
 var currentDetailShots = [];   // 当前详情页剧照列表（用于全屏查看）
 function openFilmDetail(encId){
   if (overviewSuppressClick){ overviewSuppressClick = false; return; }
+  detailReturnPage = (currentPage === 'calendar') ? 'calendar' : 'home';   // v501：从日历进详情，返回回到日历
   var id = decodeURIComponent(encId);
   loadFilm(id).then(function(film){
     if (!film) return showToast('未找到影片', 'error');
@@ -10628,6 +10631,94 @@ function openFilmDetail(encId){
     animateDetailIn();                    // v462：详情页从右侧平移进屏（首页同时往左轻推）
     auto115Doc = null;                 // 切影片：重置自动化文档，按新影片重新载入并刷新角标
     auto115EnsureDoc().then(updateAutoBadge).catch(function(){});
+  });
+}
+
+/* ===== v501：更新日历（首页右上角日期胶囊进入的二级页） =====
+   数据 = 影片库里每部剧集/动漫的「下一集开播日」(data.tvAir.next.date)，按日期归到对应星期。
+   顶部一周日期标题可上下周切换；下面周一~周日七栏，有更新的日子把对应影片卡放进去。 */
+var calendarWeekStart = null;   // 当前显示周的周一（本地 0 点）
+var CAL_WD = ['周一','周二','周三','周四','周五','周六','周日'];
+function calPad2(n){ return (n < 10 ? '0' : '') + n; }
+function calMondayOf(d){ var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); var wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); return x; }
+function calAddDays(d, n){ return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+function calIsoToDate(s){ var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+function calDateToIso(d){ return d.getFullYear() + '-' + calPad2(d.getMonth() + 1) + '-' + calPad2(d.getDate()); }
+function calDataOf(f){ return (f && f.data) || {}; }
+function calTitleOf(f){ var d = calDataOf(f); return d.title || f.title || ''; }
+function calYearOf(f){ var d = calDataOf(f); var y = d.premiered || d.release_date || d.first_air_date || ''; return y ? String(y).slice(0, 4) : ''; }
+function calPosterOf(f){ var d = calDataOf(f); return d.poster || d.posterUrl || ''; }
+function calCardHtml(f){
+  var id = encodeURIComponent(f.id);
+  var poster = calPosterOf(f);
+  var avMask = (!!state.avCoverMask && NfoCore.isAvFilm(f));
+  var media = avMask
+    ? '<div class="hc-poster av-cover-mask">' + avCoverMaskHtml(calDataOf(f).dvdId || calTitleOf(f)) + '</div>'
+    : '<div class="hc-poster"' + (poster ? ' style="background-image:url(' + escapeAttr(poster) + ')"' : '') + '></div>';
+  var y = calYearOf(f);
+  return '<div class="movie-card-wrap home-card" data-id="' + escapeAttr(id) + '">'
+    + media
+    + '<div class="hc-title">' + escapeAttr(calTitleOf(f)) + '</div>'
+    + (y ? '<div class="hc-year">' + escapeAttr(y) + '</div>' : '')
+    + '</div>';
+}
+function openUpdateCalendar(){
+  if (!calendarWeekStart) calendarWeekStart = calMondayOf(new Date());
+  switchPage('calendar');   // switchPage 末尾会调 renderUpdateCalendar 按当前周重绘
+}
+function closeUpdateCalendar(){ switchPage('home'); }
+function calendarShiftWeek(delta){
+  if (!calendarWeekStart) calendarWeekStart = calMondayOf(new Date());
+  calendarWeekStart = calAddDays(calendarWeekStart, delta * 7);
+  renderUpdateCalendar();
+}
+function renderUpdateCalendar(){
+  if (!calendarWeekStart) calendarWeekStart = calMondayOf(new Date());
+  var sun = calAddDays(calendarWeekStart, 6);
+  var lbl = document.getElementById('calWeekLabel');
+  if (lbl) lbl.textContent = (calendarWeekStart.getMonth() + 1) + '月' + calendarWeekStart.getDate() + '日~'
+                           + (sun.getMonth() + 1) + '月' + sun.getDate() + '日';
+  var grid = document.getElementById('calGrid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="cal-loading">加载中…</div>';
+  var weekStart = calendarWeekStart, weekEnd = sun, todayIso = calDateToIso(new Date());
+  listFilms().then(function(all){
+    var byDate = {};
+    (all || []).forEach(function(f){
+      var air = calDataOf(f).tvAir;
+      var date = air && air.next && air.next.date;
+      if (!date) return;
+      var dt = calIsoToDate(date);
+      if (!dt) return;
+      if (dt < weekStart || dt > weekEnd) return;   // 只收本周（周一~周日）
+      (byDate[date] = byDate[date] || []).push(f);
+    });
+    var html = '';
+    for (var i = 0; i < 7; i++){
+      var day = calAddDays(weekStart, i);
+      var iso = calDateToIso(day);
+      var films = byDate[iso] || [];
+      var isToday = (iso === todayIso);
+      html += '<div class="cal-day' + (isToday ? ' cal-today' : '') + '">'
+            + '<div class="cal-day-head"><span class="cal-wd">' + CAL_WD[i] + '</span>'
+            + '<span class="cal-md">' + (day.getMonth() + 1) + '/' + day.getDate() + '</span>'
+            + (isToday ? '<span class="cal-today-tag">今天</span>' : '')
+            + '</div>'
+            + (films.length
+                ? '<div class="home-strip cal-strip">' + films.map(calCardHtml).join('') + '</div>'
+                : '<div class="cal-empty"></div>')
+            + '</div>';
+    }
+    grid.innerHTML = html;
+    // 点卡片进详情（与首页一致）
+    grid.querySelectorAll('.movie-card-wrap').forEach(function(c){
+      c.addEventListener('click', function(){
+        var id = c.getAttribute('data-id');
+        if (id) openFilmDetail(id);
+      });
+    });
+  }).catch(function(){
+    if (grid) grid.innerHTML = '<div class="cal-loading">读取失败</div>';
   });
 }
 function toggleLock(id){

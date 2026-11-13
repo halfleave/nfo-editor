@@ -2735,6 +2735,26 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .all-count { font-size: 12.5px; color: var(--label-2); }
 .all-loading { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--label-2); }
 
+/* ===== v501：更新日历 ===== */
+.hp-date { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hero-pill:active .hp-date { opacity: .55; }
+.cal-weekbar { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 6px 16px 12px; }
+.cal-nav { width: 34px; height: 34px; border: none; border-radius: 50%; background: var(--gray-fill); color: var(--label); font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.cal-nav:active { opacity: .6; }
+.cal-week-label { font-size: 15px; font-weight: 600; color: var(--label); min-width: 150px; text-align: center; }
+.cal-grid { padding: 6px 0 calc(var(--sab, 0px) + 50px); }
+.cal-day { padding: 8px 0; }
+.cal-day-head { display: flex; align-items: center; gap: 8px; padding: 6px 16px 2px; }
+.cal-wd { font-size: 16px; font-weight: 700; color: var(--label); }
+.cal-md { font-size: 13px; color: var(--label-2); }
+.cal-today-tag { font-size: 11px; font-weight: 600; color: #fff; background: var(--accent); border-radius: 7px; padding: 2px 7px; margin-left: 2px; }
+.cal-today .cal-wd { color: var(--accent); }
+.cal-empty { height: 1px; background: var(--sep); opacity: .45; margin: 12px 16px; }
+.cal-strip { padding: 6px 16px 4px; }
+.cal-strip .hc-title { color: var(--label); }
+.cal-strip .hc-year { color: var(--label-2); }
+.cal-loading { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--label-2); }
+
 /* ===== v481：恢复毛玻璃 =====
    v475 那条「全站停用 backdrop-filter」已经撤掉。当时以为 tab 栏发糊是毛玻璃自糊，
    后来查明是 PWA 装了旧包（v479 结论）。现在 tab 栏、搜索框、弹窗、菜单都用回真玻璃。
