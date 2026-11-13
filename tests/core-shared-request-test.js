@@ -10,13 +10,13 @@ const NfoCore = require('../src/core-shared.js').NfoCore;
 
 // —— 桩：拦截 fetch，记录 url/method/body，按路径返回对应 JSON 形态 ——
 let calls = [];
-let reviewRaw = null;   // v503：可切换直连 LLM 的影评返回体，测 JSON 解析各分支
-const REVIEW_RAW_DEFAULT = '```json\n{"review":"## **节奏克制**，余韵悠长。[1]"}\n```';
+let reviewRaw = null;   // v504：可切换直连 LLM 的评论返回体，测 comments 数组解析各分支
+const REVIEW_RAW_DEFAULT = '```json\n{"comments":["## **节奏克制**，余韵悠长。[1]","镜头慢得自有章法","适合安静的夜晚重看"]}\n```';
 function stubFetch(url, init) {
   calls.push({ url: String(url), init: init || {} });
   let payload;
   if (/\/chat\/completions$/.test(url)) {
-    // 按 system prompt 区分功能：影评返回 {"review":...} JSON 字符串，翻译返回 {title,summary} JSON 字符串
+    // 按 system prompt 区分功能：评论返回 {"comments":[...]} JSON 字符串，翻译返回 {title,summary} JSON 字符串
     let sys = '';
     try { sys = JSON.parse(init.body).messages[0].content || ''; } catch (e) {}
     const isReview = /影视评论人/.test(sys);
@@ -24,7 +24,7 @@ function stubFetch(url, init) {
   } else if (/\/translate(\?|$)/.test(url)) {
     payload = { title: 'W', summary: 'Q' };
   } else if (/\/ai\/review(\?|$)/.test(url)) {
-    payload = { ok: true, review: '**节奏克制**，余韵悠长。' };
+    payload = { ok: true, raw: REVIEW_RAW_DEFAULT };   // v504：Worker 只回原文，解析在客户端
   } else {
     payload = { title: 'T', summary: 'S' };
   }
@@ -94,6 +94,7 @@ async function expectReject(name, p, re) {
       eq('translate/Worker: POST', calls[0].init.method === 'POST');
       const body = JSON.parse(calls[0].init.body);
       eq('translate/Worker: 体含 title/plot', body.title === 'Foo' && body.plot === 'bar');
+      eq('translate/Worker: 带客户端提示词', /译为简体中文的翻译专家/.test(body.prompt || ''));
       eq('translate/Worker: 返回清洗后结果', !!r && r.title === 'W' && r.summary === 'Q');
     });
 
@@ -114,61 +115,71 @@ async function expectReject(name, p, re) {
   // 7. 无 ownCfg 且缺 Worker → reject（对齐 6.3 矩阵：中/免费无自填 key 不能走服务端翻译）
   await expectReject('translate/缺配置: 正确 reject', NfoCore.translateRequest('a', 'b', {}), /未配置翻译/);
 
-  /* —— v503 AI 影评 reviewRequest：三项输入 + 严格 JSON 输出 —— */
+  /* —— v504 精彩评论 reviewRequest：三项输入 + comments 数组 + 提示词随请求体 —— */
   const REVIEW_INFO = { title: '花样年华', originaltitle: 'In the Mood for Love', date: '2000-09-29' };
   const OWN = { baseUrl: 'https://llm.example.com/v1', apiKey: 'K', model: 'agnes-2.5-flash' };
-  // 8. 自填 ownCfg 完整 → 直连 LLM，且用的是 review 提示词（不是 translate）
+  // 8. 自填 ownCfg 完整 → 直连 LLM，用的是 review 提示词（不是 translate）
   calls = [];
-  await NfoCore.reviewRequest(REVIEW_INFO, { ownCfg: OWN }).then(function (text) {
+  await NfoCore.reviewRequest(REVIEW_INFO, { ownCfg: OWN }).then(function (list) {
     eq('review/自填cfg: 仅 1 次请求', calls.length === 1);
     eq('review/自填cfg: endpoint 自动补 /chat/completions', calls[0].url === 'https://llm.example.com/v1/chat/completions');
     const body = JSON.parse(calls[0].init.body);
-    eq('review/自填cfg: 用影评提示词', /影视评论人/.test(body.messages[0].content));
+    eq('review/自填cfg: 用精彩评论提示词', /影视评论人/.test(body.messages[0].content));
     eq('review/自填cfg: 不用翻译提示词', !/译为简体中文的翻译专家/.test(body.messages[0].content));
-    eq('review/自填cfg: 提示词要求 JSON 输出', /"review"/.test(body.messages[0].content) && /JSON/.test(body.messages[0].content));
-    eq('review/自填cfg: 提示词要求专业客观', /专业、客观/.test(body.messages[0].content));
+    eq('review/自填cfg: 提示词要求 comments 数组', /"comments"/.test(body.messages[0].content) && /JSON/.test(body.messages[0].content));
+    eq('review/自填cfg: 提示词要求如实反映', /如实反映/.test(body.messages[0].content));
     const um = body.messages[1].content;
     eq('review/自填cfg: 只发三项', /【片名】/.test(um) && /【原始名称】/.test(um) && /【上映日期】/.test(um)
       && !/【简介】/.test(um) && !/【评分】/.test(um) && !/【类型】/.test(um));
     eq('review/自填cfg: 完整日期不截断', um.indexOf('2000-09-29') > -1);
     eq('review/自填cfg: 原始名进 messages', um.indexOf('In the Mood for Love') > -1);
-    eq('review/自填cfg: JSON 解析并清洗', text === '节奏克制，余韵悠长。', text);
+    eq('review/自填cfg: 解析出评论数组并清洗', Array.isArray(list) && list.length === 3
+      && list[0] === '节奏克制，余韵悠长。', JSON.stringify(list));
   });
 
-  // 9. 无 ownCfg + Worker + code → POST /ai/review?code=（高级档由 Worker 放行）
+  // 9. 无 ownCfg + Worker + code → POST /ai/review?code=，提示词随 body 带过去
   calls = [];
   await NfoCore.reviewRequest(REVIEW_INFO, { workerBase: 'https://w.example.com', code: 'FULL123' })
-    .then(function (text) {
+    .then(function (list) {
       eq('review/Worker: 走 /ai/review?code=', calls[0].url === 'https://w.example.com/ai/review?code=FULL123');
       eq('review/Worker: POST', calls[0].init.method === 'POST');
       const body = JSON.parse(calls[0].init.body);
       eq('review/Worker: 只发三项', body.title === '花样年华' && body.originaltitle === 'In the Mood for Love'
         && body.date === '2000-09-29' && !('plot' in body) && !('genres' in body) && !('rating' in body));
-      eq('review/Worker: 返回清洗后纯文本', text === '节奏克制，余韵悠长。', text);
+      eq('review/Worker: 带客户端提示词', /影视评论人/.test(body.prompt || '') && /"comments"/.test(body.prompt || ''));
+      eq('review/Worker: Worker 只回 raw，客户端统一解析', Array.isArray(list) && list.length === 3
+        && list[0] === '节奏克制，余韵悠长。', JSON.stringify(list));
     });
 
   // 10. 缺配置 → reject；缺片名 → reject（不发无谓请求）
-  await expectReject('review/缺配置: 正确 reject', NfoCore.reviewRequest(REVIEW_INFO, {}), /未配置 AI 影评/);
+  await expectReject('review/缺配置: 正确 reject', NfoCore.reviewRequest(REVIEW_INFO, {}), /未配置精彩评论/);
   await expectReject('review/缺片名: 正确 reject', NfoCore.reviewRequest({ plot: 'x' }, { workerBase: 'https://w.example.com' }), /缺少片名/);
 
-  // 11. AI_PROMPTS 表是单点真相：translate / review 两份且内容不同
-  eq('AI_PROMPTS: 两份提示词', !!NfoCore.AI_PROMPTS && typeof NfoCore.AI_PROMPTS.translate === 'string' && typeof NfoCore.AI_PROMPTS.review === 'string');
+  // 11. AI_PROMPTS 表是单点真相：translate / tidy / review 三份
+  eq('AI_PROMPTS: 三份提示词', !!NfoCore.AI_PROMPTS && typeof NfoCore.AI_PROMPTS.translate === 'string'
+    && typeof NfoCore.AI_PROMPTS.tidy === 'string' && typeof NfoCore.AI_PROMPTS.review === 'string');
   eq('AI_PROMPTS: translate 与旧常量一致', NfoCore.AI_PROMPTS.translate === NfoCore.TRANSLATE_SYSTEM_PROMPT);
+  eq('AI_PROMPTS: tidy 已由 Worker 搬入客户端', /115 网盘文件整理助手/.test(NfoCore.AI_PROMPTS.tidy));
 
-  /* —— v503 JSON 解析：正常 / 围栏 / 噪音 / 去角标 / 五类失败 —— */
-  eq('parse/纯 JSON', NfoCore.parseAiReviewText('{"review":"节奏舒缓。"}') === '节奏舒缓。');
-  eq('parse/带噪音前后文字', NfoCore.parseAiReviewText('好的，这是影评：\n{"review":"温和而有分寸。"}\n以上。') === '温和而有分寸。');
-  const linkText = NfoCore.parseAiReviewText('{"review":"参见 [资料](https://x.com/a) 的说法。"}');
-  eq('parse/markdown 链接保留文字', linkText === '参见 资料 的说法。', linkText);
-  const cnText = NfoCore.parseAiReviewText('{"review":"影像克制【1，2】，余韵长。"}');
-  eq('parse/去中文数字角标', cnText === '影像克制，余韵长。', cnText);
+  /* —— v504 comments 数组解析：正常 / 围栏 / 噪音 / 去角标 / 去重 / 七类失败 —— */
+  eq('parse/纯 JSON', NfoCore.parseAiReviewText('{"comments":["节奏舒缓。","镜头慢得有理","适合一个人看"]}').length === 3);
+  eq('parse/带噪音前后文字', NfoCore.parseAiReviewText('好的，这是评论：\n{"comments":["温和而有分寸。","配乐很克制","值得留到周末"]}\n以上。')[0] === '温和而有分寸。');
+  const linkText = NfoCore.parseAiReviewText('{"comments":["参见 [资料](https://x.com/a) 的说法。","第二条还行","第三条也行"]}');
+  eq('parse/markdown 链接保留文字', linkText[0] === '参见 资料 的说法。', linkText[0]);
+  const cnText = NfoCore.parseAiReviewText('{"comments":["影像克制【1，2】，余韵长。","第二条还行","第三条也行"]}');
+  eq('parse/去中文数字角标', cnText[0] === '影像克制，余韵长。', cnText[0]);
+  const many = [];
+  for (let mi = 1; mi <= 18; mi++) many.push('第' + mi + '条评论');
+  many.push('第1条评论');
+  eq('parse/去重并最多 15 条', NfoCore.parseAiReviewText(JSON.stringify({ comments: many })).length === 15);
   let parseFail = 0;
-  ['这是一段纯文本，没有 JSON', '{"foo":"bar"}', '{"review":""}', '{"review":', ''].forEach(function (raw) {
+  ['这是一段纯文本，没有 JSON', '{"foo":"bar"}', '{"comments":[]}', '{"comments":', '',
+    '{"comments":["只有一条"]}', '{"comments":"不是数组"}'].forEach(function (raw) {
     try { NfoCore.parseAiReviewText(raw); } catch (e) { parseFail++; }
   });
-  eq('parse/五类解析失败全部抛错', parseFail === 5, '实际抛错 ' + parseFail + ' 次');
+  eq('parse/七类解析失败全部抛错', parseFail === 7, '实际抛错 ' + parseFail + ' 次');
   reviewRaw = '抱歉，我无法找到该片资料。';
-  await expectReject('review/模型没按 JSON 回: reject（状态机静默不显示）', NfoCore.reviewRequest(REVIEW_INFO, { ownCfg: OWN }), /影评返回非 JSON/);
+  await expectReject('review/模型没按 JSON 回: reject（状态机静默不显示）', NfoCore.reviewRequest(REVIEW_INFO, { ownCfg: OWN }), /评论返回非 JSON/);
   reviewRaw = null;
 
   /* —— 配额计数（本地按天，仅展示；权威以服务端为准）—— */

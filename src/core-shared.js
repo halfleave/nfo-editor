@@ -143,14 +143,71 @@
      各功能只负责「挑 prompt + 拼输入 + 解析结果」；服务端代理路径由各功能自己发。 */
   var AI_PROMPTS = {
     translate: TRANSLATE_SYSTEM_PROMPT,
+    /* v504：文件整理提示词由 Worker 搬入，客户端成为唯一真相（Worker 只透传 prompt） */
+    tidy: [
+      '你是「115 网盘文件整理助手」，帮用户把网盘里的文件名整理规范。',
+      '',
+      '【怎么对话】',
+      '1. 用简体中文，回答简短（一般 3 句以内），不要复述整棵树。',
+      '2. 不确定就问，不要臆测。目录树里没有文件体积、也不区分文件夹和文件，',
+      '   只能靠扩展名和上下文推断；拿不准就说明你的假设。',
+      '3. 平时只讨论「怎么改名字、放哪个文件夹」，给出建议方案（改什么、为什么），',
+      '   并且**不要输出任何 JSON 或代码块**。',
+      '4. 只有收到「出清单」类指令（用户说「出清单 / 确认结果 / 就这样 / 可以了 / 开始 / 执行」，',
+      '   或收到「【出清单】」这样的指令）时，才输出整理清单。',
+      '',
+      '【命名规范 —— 必须遵守】',
+      '- 统一格式：同一作品 / 同一系列的文件，命名风格要一致（分隔符、大小写、集数写法）。',
+      '- 保留关键信息：番号、年份、季号集数、分辨率、版本后缀一个都不能丢；扩展名原样保留（连 . 一起）。',
+      '- 清掉噪声：站点 / 论坛水印（形如 www.xxx.com、[xxx论坛]、@xxx 这类推广标记）、',
+      '  重复的方括号标签、连续分隔符、首尾空格与多余的点。',
+      '- 番号统一大写（例如 abc-123 → ABC-123），数字部分不要动。',
+      '- 精简长度：整理后的名字建议不超过 120 个字符；过长时先砍描述性文字，保住番号与集数。',
+      '- 合法字符：新名里不能出现 \\ / : * ? " < > | 这九个字符。',
+      '- 只允许出现目录树里真实存在的名字，不要编造、不要翻译或改写作品名（除非用户明确要求）。',
+      '- 宁少勿错：拿不准的条目不要列进清单，并在回复里说明哪些没处理。',
+      '',
+      '【目录与移动】',
+      '- 允许移动：可以把文件放进更合适的子文件夹（例如按剧集分季、按作品建夹）。',
+      '- 新文件路径必须落在目录树里**已经存在**的文件夹（相对目标文件夹）；',
+      '  需要新建文件夹时不要擅自写进清单，先在回复里告诉用户要建哪个夹。',
+      '- 只改名（不换目录）时，新文件路径 与 旧文件路径 填成一样即可。',
+      '',
+      '【输出清单时】',
+      '回复里只能有**唯一一个 ```json 代码块**，不要有别的内容：',
+      '```json',
+      '{',
+      '  "root": "<目标文件夹名>",',
+      '  "total": <总共需要整理的条数（数字）>,',
+      '  "items": [',
+      '    { "旧文件路径": "<原文件所在目录，相对目标文件夹；就在目标文件夹根下就留空字符串>",',
+      '      "旧名": "<原文件名，必须与目录树里的名字逐字一致>",',
+      '      "新文件路径": "<整理后文件所在目录，只改名就填和「旧文件路径」一样>",',
+      '      "新名": "<整理后的文件名>" }',
+      '  ]',
+      '}',
+      '```',
+      '',
+      '硬性要求：',
+      '- 一次最多列 200 条（items 上限 200）。需要整理的超过 200 条时，只列前 200 条，',
+      '  total 照实写总数；用户说「继续」时接着列后面的，不要重复已经列过的条目。',
+      '- 不要自行分批：能一次列完就必须全部列出。只有上面那种真的超过 200 条没列完的情况，',
+      '  total 才允许大于你实际列出的条数（列的条数 = total 就表示已经列完，不会再输出第二批）。',
+      '- 旧名 必须逐字复制目录树里的名字（连扩展名一起），一个字都不能改。',
+      '- 旧文件路径 / 新文件路径 用 / 分隔、相对目标文件夹、不以 / 开头、末尾不带 /。',
+      '- 没有需要整理的：不要输出清单，直接用一句话说明。'
+    ].join('\n'),
+    /* v504：精彩评论 —— 8~15 条不同角度的短评，如实反映影片，不预设褒贬 */
     review: [
-      '你是一位影视评论人。请根据给出的【片名】【原始名称】【上映日期】，查阅公开资料后写一段简体中文短评。',
-      '文风：专业、客观，有依据、有分寸；不吹捧也不贬损，不用「神作」「烂片」「必看」这类情绪词。但不要写成数据报告，语气温和、有阅读的愉悦感，接近杂志专栏。',
-      '内容：',
-      '1. 2~4 句、80~120 字；谈类型定位、叙事结构、影像手法、表演或它适合的观众，不剧透、不列剧情大纲、不照抄资料原文。',
-      '2. 不臆造未证实的情节、演员或获奖信息；资料不足时只谈气质与观感。',
-      '3. 正文里不要出现引用编号、来源链接、「据某某报道」等溯源字样，不要 Markdown、标题、项目符号。',
-      '4. 严格输出单个 JSON 对象，不要代码块、不要任何多余文字。格式：{"review":"影评正文"}'
+      '你是一位阅片量很大的影视评论人。请根据给出的【片名】【原始名称】【上映日期】，自行查阅公开资料，判断这是一部什么样的影片、精不精彩、值不值得花时间看。',
+      '请模拟不同身份、不同视角的观众，写出 8~15 条彼此不重复的简体中文短评，像一部片子下方真实存在的观众评论。',
+      '最重要的是如实反映这部影片本身：不预设立场，不为凑平衡硬写好话或坏话，也不刻意褒贬。一条评论可以是喜欢、可以是不适、可以只是冷静说出一个特点和观感；整体合起来让人看清这片子真实的样子。',
+      '角度尽量分散：类型与气质、故事讲法与节奏、影像/配乐/美术、演员表现、印象最深的细节、明显的局限、适合什么人看、适合什么心情看、在同类片里的位置、看完之后剩下什么、一句话直觉等。',
+      '风格也要分散：克制专业的影评人、普通观众的直白感受、谨慎推荐、略带调侃但不刻薄、真心喜欢、只做冷静描述的人。不要每条都是同一种腔调。',
+      '每条 15~40 字，独立成句，读完能让人对这片子多一点判断；不要全是空泛的夸奖，也不要为了显得客观而硬挑毛病。',
+      '不剧透关键情节，不臆造演员、奖项、评分等未证实信息，不照抄资料原文，不用「神作」「烂片」「必看」这类空泛情绪词。',
+      '不要出现引用编号、来源链接、「据某某报道」等溯源字样，不要 Markdown、标题、项目符号、序号。',
+      '严格输出单个 JSON 对象，不要代码块、不要任何多余文字。格式：{"comments":["评论一","评论二",...]}，数组长度 8~15，每个元素都是字符串。'
     ].join('\n')
   };
 
@@ -202,18 +259,28 @@
     t = t.replace(/\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)]+\)/g, '$1');
     t = t.replace(/[\[【]\s*\d+(?:\s*[,，]\s*\d+)*\s*[\]】]/g, '');
     t = t.replace(/[ \t]{2,}/g, ' ');
-    return t.trim().slice(0, 300);
+    return t.trim().slice(0, 80);   // v504：单条短评，防止模型写成长段
   }
 
-  /* v503：AI 影评改为严格 JSON 输出，这里统一取 review 字段。
-     解析失败 / 字段为空一律抛错，由状态机按「没获取到」静默处理（不退回纯文本）。 */
+  /* v504：精彩评论改为严格 JSON 数组，这里统一取 comments 字段并逐条清洗。
+     解析失败 / 条数不足一律抛错，由状态机按「没获取到」静默处理（不退回纯文本）。
+     自填配置直连与 Worker 兜底两条链路都走这里，结果完全一致。 */
   function parseAiReviewText(raw) {
     var obj;
     try { obj = extractJsonObject(raw); }
-    catch (e) { throw new Error('影评返回非 JSON'); }
-    var t = cleanAiReviewText(obj && obj.review);
-    if (!t) throw new Error('影评返回为空');
-    return t;
+    catch (e) { throw new Error('评论返回非 JSON'); }
+    var arr = obj && obj.comments;
+    if (!Array.isArray(arr)) throw new Error('评论返回非数组');
+    var seen = {}, list = [];
+    for (var i = 0; i < arr.length; i++){
+      var t = cleanAiReviewText(typeof arr[i] === 'string' ? arr[i] : '');
+      if (!t || seen[t]) continue;
+      seen[t] = 1;
+      list.push(t);
+      if (list.length >= 15) break;
+    }
+    if (list.length < 3) throw new Error('评论条数不足');
+    return list;
   }
 
   // 是否需要翻译：仅当含日文假名（平/片假名）判定为日文；纯汉字/英文/番号不翻（避免误翻中文）
@@ -340,16 +407,18 @@
     });
   }
 
-  /* AI 影评（v503）：info = { title, originaltitle, date }，只发三项，资料由模型自行查阅。
-     自填配置完整 → 直连 LLM（复用 callLLM + review prompt），返回体是 JSON，取 review 字段；
-     否则 → Worker /ai/review（仅高级档放行，Worker 已解析成纯文本）。返回清洗后的短评。 */
+  /* 精彩评论（v504）：info = { title, originaltitle, date }，只发三项，资料由模型自行查阅。
+     自填配置完整 → 直连 LLM（复用 callLLM + review prompt）；
+     否则 → Worker /ai/review（仅高级档放行，提示词随请求体带过去）。
+     两条链路都拿到模型原文，统一由 parseAiReviewText 取 comments → 评论数组。 */
   function reviewRequest(info, opts) {
     opts = opts || {};
     info = info || {};
     var payload = {
       title: String(info.title || '').slice(0, 200),
       originaltitle: String(info.originaltitle || '').slice(0, 200),
-      date: String(info.date || '').slice(0, 20)
+      date: String(info.date || '').slice(0, 20),
+      prompt: AI_PROMPTS.review
     };
     if (!payload.title.trim()) return Promise.reject(new Error('缺少片名'));
     var own = opts.ownCfg || {};
@@ -363,7 +432,7 @@
       ], own, { temperature: 0.7 }).then(parseAiReviewText);
     }
     var base = (opts.workerBase || '').replace(/\/+$/, '');
-    if (!base) return Promise.reject(new Error('未配置 AI 影评：请填写 AI 配置或升级高级档'));
+    if (!base) return Promise.reject(new Error('未配置精彩评论：请填写 AI 配置或升级高级档'));
     var url = base + '/ai/review' + (opts.code ? ('?code=' + encodeURIComponent(opts.code)) : '');
     return fetch(url, {
       method: 'POST',
@@ -374,11 +443,7 @@
         if (d && d.error) throw new Error(d.error);
         return d;
       });
-    }).then(function (d) {
-      var t = cleanAiReviewText(d && d.review);
-      if (!t) throw new Error('影评返回为空');
-      return t;
-    });
+    }).then(function (d) { return parseAiReviewText(d && d.raw); });
   }
 
   // ===== JAV 解析（纯逻辑，不碰 DOM/state；两端逐字一致的映射表合并为单点真相）=====
@@ -889,7 +954,7 @@ function normalizeJavbusFilm(d, opts){
     return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: title || '', plot: plot || '' })
+      body: JSON.stringify({ title: title || '', plot: plot || '', prompt: AI_PROMPTS.translate })
     }).then(function (r) { return r.json().then(function (d) { if (d && d.error) throw new Error(d.error); return d; }); })
       .then(function (d) {
         var res = { title: (d && d.title) || '', summary: (d && d.summary) || '' };

@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '503';
+window.__SCRIPT_VER = '504';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -159,7 +159,7 @@ function switchPage(page) {
     syncAppUpdateRow();      // v492：刷新「检查更新 / 发现新版本」这一行的状态
     swCheckForUpdate();      // v448：顺手比对一次 sw.js（60 秒内不重复）
   }
-  if (page === 'calendar' && typeof renderUpdateCalendar === 'function') renderUpdateCalendar();  // v501：进入更新日历即按当前周重绘
+  if (page === 'calendar' && typeof renderUpdateCalendar === 'function') renderUpdateCalendar();  // v504：进入更新日历即按近 7 天重绘
 }
 /* —— Tab 切换滑动动画（所有 tab 通用） ——
    tabSlideIn：dir<0 从左滑入 / dir>0 从右滑入；先摘旧动画类再强制回流，保证连续切换可重播。
@@ -405,6 +405,8 @@ function closeAllSheets() {
   cancelDrag();
   overviewSuppressClick = false;
   ctxIgnoreNextOutside = false;
+  var cmBox = document.getElementById('detailAiReview');          // v504：关弹窗后恢复精彩评论滚动
+  if (cmBox && cmBox.classList) cmBox.classList.remove('cm-paused');
   document.getElementById('sheetMask').classList.remove('show');
   document.getElementById('ctxMask').classList.remove('show');
   var aboutMask = document.getElementById('aboutMask');
@@ -8250,7 +8252,7 @@ function saveToDisk(){
     // 先存原文；保存时即显示首页剧照刷新图标，等数据加载完再翻译（手动编辑无后续异步，立即 flush）
     NfoCore.markPendingTranslate(film.id);
     flushPendingTranslate(film.id);
-    maybeFetchAiReview(film.id);       // v502：保存时生成 AI 影评（幂等）
+    maybeFetchAiReview(film.id);       // v502：保存时生成精彩评论（幂等）
   }).catch(function(err){
     showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
   });
@@ -8280,7 +8282,7 @@ function quickSaveAndHome(){
       checkFilmCap(1500);
       // 先存原文；保存时即显示首页剧照刷新图标，等 silentRefresh（图片/简介加载完）后由 flushPendingTranslate 翻译
       NfoCore.markPendingTranslate(saved.id);
-      maybeFetchAiReview(saved.id);    // v502：保存时生成 AI 影评（幂等）
+      maybeFetchAiReview(saved.id);    // v502：保存时生成精彩评论（幂等）
     }).catch(function(err){
       showToast('保存失败：' + ((err && err.message) || '存储不可用'), 'error');
     });
@@ -10637,34 +10639,35 @@ function openFilmDetail(encId){
   });
 }
 
-/* ===== v502：AI 影评（保存时生成，剧照上方展示）=====
-   状态放独立 kv 键 aiReview:<id>，不写进 film.data —— buildFilmFromCurrent() 每次从表单
-   重建 film 对象，silentRefreshCurrentFilm() 会把 data 里的额外字段整体覆盖掉。
+/* ===== v504：精彩评论（保存时生成，剧照上方展示）=====
+   状态放独立 kv 键 aiReview2:<id> = { list:[...], at }，不写进 film.data ——
+   buildFilmFromCurrent() 每次从表单重建 film，会覆盖 data 里的额外字段。
+   v504 换成评论数组 + 新键：旧的单条影评缓存自然作废，老片下次进详情会重生成一次。
    规则：
-   ① 没拿到文本 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
-   ② 保存影片时发起一次；已有影评则永不重复调 AI
-   ③ 下次进入详情页时再尝试一次，但：
-      - 正在请求中（内存 in-flight）→ 不打断、不重入
-      - 距上次发起 < 5 分钟 → 冷却，避免「刚保存就点进去」重复打 AI
+   ① 评论不足 3 条 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
+   ② 保存影片时发起一次；已有评论则永不重复调 AI
+   ③ 下次进入详情页时再尝试一次：在途不打断、距上次发起 < 5 分钟冷却
    ④ at 在「发起时」就落库，杀掉 App 重开仍有效（不只依赖内存标记） */
 var AI_REVIEW_GAP = 5 * 60 * 1000;
 var aiReviewInFlight = {};              // filmId → true（本会话内，防打断）
-function aiReviewKey(id){ return 'aiReview:' + id; }
+var aiReviewShowing = [];               // 当前详情页的评论，供弹窗展示
+function aiReviewKey(id){ return 'aiReview2:' + id; }
 function aiReviewGet(id){
   return idbGet('kv', aiReviewKey(id)).then(function(v){
-    return (v && typeof v === 'object') ? v : { text: '', at: 0 };
-  }).catch(function(){ return { text: '', at: 0 }; });
+    var list = (v && Array.isArray(v.list))
+      ? v.list.filter(function(s){ return typeof s === 'string' && s.trim(); }) : [];
+    return { list: list, at: (v && v.at) || 0 };
+  }).catch(function(){ return { list: [], at: 0 }; });
 }
 function aiReviewSet(id, rec){
   return idbPut('kv', aiReviewKey(id), rec).catch(function(){});
 }
 function aiReviewConfigReady(){
-  /* 1B：自填 AI 配置 → 直连 LLM；否则高级档 → Worker /ai/review 兜底 */
+  /* 自填 AI 配置 → 直连 LLM；否则高级档 → Worker /ai/review 兜底 */
   return translateConfigReady() || (state.tier || '') === 'full';
 }
 function aiReviewInfoOf(film){
-  /* v503：只发片名 / 原始名 / 完整上映日期，资料交由模型自行查阅；
-     不再发简介/类型/评分，避免模型偷懒照抄简介。 */
+  /* 只发片名 / 原始名 / 完整上映日期，资料交由模型自行查阅 */
   var d = (film && film.data) || {};
   return {
     title: String(d.title || (film && film.title) || '').slice(0, 200),
@@ -10672,25 +10675,62 @@ function aiReviewInfoOf(film){
     date: String(d.premiered || d.year || '').slice(0, 20)
   };
 }
-/* 只改影评这一个区块，不重绘整页（避免底图/滚动位置丢失） */
-function paintAiReview(id, text){
+/* 三行循环随机滚动：打乱 → 轮流分到三行 → 每行随机方向/速度/起始位置，
+   序列复制两份做无缝循环（track 移到 -50% 正好回到起点）。 */
+function cmShuffle(a){
+  var r = a.slice();
+  for (var i = r.length - 1; i > 0; i--){
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = r[i]; r[i] = r[j]; r[j] = t;
+  }
+  return r;
+}
+function cmLaneHtml(items){
+  var seq = items.map(function(s){ return '<span class="cm-bubble">' + escapeHtml(s) + '</span>'; }).join('');
+  var dur = 32 + Math.floor(Math.random() * 26);        // 32~57s，缓慢不抢眼
+  var dir = (Math.random() < 0.5) ? 'normal' : 'reverse';
+  var delay = -(Math.random() * dur);                   // 负延迟 = 随机起始位置
+  return '<div class="cm-lane"><div class="cm-track" style="--cm-dur:' + dur + 's;--cm-dir:' + dir + ';--cm-delay:' + delay.toFixed(1) + 's">'
+       + '<div class="cm-seq">' + seq + '</div><div class="cm-seq">' + seq + '</div>'
+       + '</div></div>';
+}
+/* 只改评论这一个区块，不重绘整页（避免底图/滚动位置丢失） */
+function paintAiReview(id, list){
   var box = document.getElementById('detailAiReview');
   if (!box || currentDetailFilmId !== id) return;
-  var t = String(text || '').trim();
-  if (!t){ box.innerHTML = ''; box.style.display = 'none'; return; }
-  box.innerHTML = '<div class="detail-ai-review-title">AI 影评</div>'
-    + '<div class="detail-ai-review-text">' + escapeHtml(t) + '</div>';
+  var arr = (list || []).filter(function(s){ return typeof s === 'string' && s.trim(); });
+  if (arr.length < 3){ box.innerHTML = ''; box.style.display = 'none'; return; }
+  aiReviewShowing = arr.slice();
+  var lanes = [[], [], []];
+  cmShuffle(arr).forEach(function(s, k){ lanes[k % 3].push(s); });
+  if (box.classList && box.classList.remove) box.classList.remove('cm-paused');
+  box.innerHTML = '<div class="cm-head">精彩评论</div>'
+    + '<div class="cm-lanes">' + lanes.map(cmLaneHtml).join('') + '</div>';
+  box.onclick = function(){ openCommentsSheet(); };   // 覆盖式绑定，重绘不累积
   box.style.display = '';
+}
+function openCommentsSheet(){
+  if (!aiReviewShowing.length) return;
+  var box = document.getElementById('detailAiReview');
+  if (box && box.classList && box.classList.add) box.classList.add('cm-paused');
+  var list = document.getElementById('commentsSheetList');
+  if (list) list.innerHTML = aiReviewShowing.map(function(s){ return '<div class="cm-sheet-item">' + escapeHtml(s) + '</div>'; }).join('');
+  if (typeof openSheet === 'function') openSheet('commentsSheet');
+}
+function closeCommentsSheet(){
+  var box = document.getElementById('detailAiReview');
+  if (box && box.classList && box.classList.remove) box.classList.remove('cm-paused');
+  if (typeof closeAllSheets === 'function') closeAllSheets();
 }
 function renderAiReview(film){
   var box = document.getElementById('detailAiReview');
   if (!box) return;
-  box.innerHTML = ''; box.style.display = 'none';    // 切换影片先清空，防串片
+  box.innerHTML = ''; box.style.display = 'none'; box.onclick = null; aiReviewShowing = [];  // 切换影片先清空，防串片
   if (!film || !film.id) return;
   var id = film.id;
   aiReviewGet(id).then(function(rec){
     if (currentDetailFilmId !== id) return;
-    if (rec.text) paintAiReview(id, rec.text);
+    if (rec.list.length) paintAiReview(id, rec.list);
   }).catch(function(){});
 }
 /* 幂等触发：已有 / 在途 / 冷却 / 配置未就绪 / 数据未齐 都会静默跳过 */
@@ -10699,17 +10739,16 @@ function maybeFetchAiReview(filmOrId){
   if (!id || aiReviewInFlight[id] || !aiReviewConfigReady()) return;
   aiReviewGet(id).then(function(rec){
     if (aiReviewInFlight[id]) return;
-    if (rec.text) return;                                    // ② 已有影评：永不再调
+    if (rec.list.length) return;                             // ② 已有评论：永不再调
     var now = Date.now();
     if (rec.at && (now - rec.at) < AI_REVIEW_GAP) return;     // ③ 5 分钟冷却
-    // 先读库确认数据齐：保存瞬间片名可能还没落定，此时不落 at，
-    // 等 silentRefresh 或下次进详情数据齐了再发起，避免拿空片名白打一次 AI
+    // 先读库确认数据齐：保存瞬间片名可能还没落定，此时不落 at，避免拿空片名白打一次 AI
     return loadFilm(id).then(function(film){
       if (!film || aiReviewInFlight[id]) return;
       var info = aiReviewInfoOf(film);
       if (!info.title) return;
       aiReviewInFlight[id] = true;
-      return aiReviewSet(id, { text: '', at: now })           // 发起时先落时间戳（跨会话有效）
+      return aiReviewSet(id, { list: [], at: now })          // 发起时先落时间戳（跨会话有效）
         .then(function(){
           return getActivationCode().then(function(code){
             return NfoCore.reviewRequest(info, {
@@ -10718,11 +10757,10 @@ function maybeFetchAiReview(filmOrId){
               code: code || ''
             });
           });
-        }).then(function(text){
-          text = String(text || '').trim();
-          if (!text) return;
-          return aiReviewSet(id, { text: text, at: now }).then(function(){
-            paintAiReview(id, text);                          // 详情页正开着 → 局部插入
+        }).then(function(list){
+          if (!list || !list.length) return;
+          return aiReviewSet(id, { list: list, at: now }).then(function(){
+            paintAiReview(id, list);                         // 详情页正开着 → 局部插入
           });
         }).catch(function(){
           /* ① 失败静默：只留 at，不显示、不提示 */
@@ -10731,13 +10769,11 @@ function maybeFetchAiReview(filmOrId){
   }).catch(function(){});
 }
 
-/* ===== v501：更新日历（首页右上角日期胶囊进入的二级页） =====
-   数据 = 影片库里每部剧集/动漫的「下一集开播日」(data.tvAir.next.date)，按日期归到对应星期。
-   顶部一周日期标题可上下周切换；下面周一~周日七栏，有更新的日子把对应影片卡放进去。 */
-var calendarWeekStart = null;   // 当前显示周的周一（本地 0 点）
-var CAL_WD = ['周一','周二','周三','周四','周五','周六','周日'];
+/* ===== v504：更新日历（首页右上角日期胶囊进入的二级页） =====
+   数据 = 影片库里每部剧集/动漫的「下一集开播日」(data.tvAir.next.date)。
+   窗口 = 昨天 + 今天 + 未来 5 天（共 7 天）；没有更新的日子整栏不显示。 */
+var CAL_WD = ['周日','周一','周二','周三','周四','周五','周六'];
 function calPad2(n){ return (n < 10 ? '0' : '') + n; }
-function calMondayOf(d){ var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); var wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); return x; }
 function calAddDays(d, n){ return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
 function calIsoToDate(s){ var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
 function calDateToIso(d){ return d.getFullYear() + '-' + calPad2(d.getMonth() + 1) + '-' + calPad2(d.getDate()); }
@@ -10759,26 +10795,17 @@ function calCardHtml(f){
     + (y ? '<div class="hc-year">' + escapeAttr(y) + '</div>' : '')
     + '</div>';
 }
-function openUpdateCalendar(){
-  if (!calendarWeekStart) calendarWeekStart = calMondayOf(new Date());
-  switchPage('calendar');   // switchPage 末尾会调 renderUpdateCalendar 按当前周重绘
-}
+function openUpdateCalendar(){ switchPage('calendar'); }   // switchPage 末尾会调 renderUpdateCalendar
 function closeUpdateCalendar(){ switchPage('home'); }
-function calendarShiftWeek(delta){
-  if (!calendarWeekStart) calendarWeekStart = calMondayOf(new Date());
-  calendarWeekStart = calAddDays(calendarWeekStart, delta * 7);
-  renderUpdateCalendar();
-}
 function renderUpdateCalendar(){
-  if (!calendarWeekStart) calendarWeekStart = calMondayOf(new Date());
-  var sun = calAddDays(calendarWeekStart, 6);
-  var lbl = document.getElementById('calWeekLabel');
-  if (lbl) lbl.textContent = (calendarWeekStart.getMonth() + 1) + '月' + calendarWeekStart.getDate() + '日~'
-                           + (sun.getMonth() + 1) + '月' + sun.getDate() + '日';
   var grid = document.getElementById('calGrid');
   if (!grid) return;
   grid.innerHTML = '<div class="cal-loading">加载中…</div>';
-  var weekStart = calendarWeekStart, weekEnd = sun, todayIso = calDateToIso(new Date());
+  var today = new Date();
+  var today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  var start = calAddDays(today0, -1);        // 昨天
+  var end = calAddDays(today0, 5);           // 未来第 5 天
+  var todayIso = calDateToIso(today0);
   listFilms().then(function(all){
     var byDate = {};
     (all || []).forEach(function(f){
@@ -10787,23 +10814,22 @@ function renderUpdateCalendar(){
       if (!date) return;
       var dt = calIsoToDate(date);
       if (!dt) return;
-      if (dt < weekStart || dt > weekEnd) return;   // 只收本周（周一~周日）
+      if (dt < start || dt > end) return;   // 只收昨天 ~ 未来 5 天
       (byDate[date] = byDate[date] || []).push(f);
     });
     var html = '';
     for (var i = 0; i < 7; i++){
-      var day = calAddDays(weekStart, i);
+      var day = calAddDays(start, i);
       var iso = calDateToIso(day);
       var films = byDate[iso] || [];
+      if (!films.length) continue;          // 没有更新 → 标题、日期、分隔线整栏都不出现
       var isToday = (iso === todayIso);
       html += '<div class="cal-day' + (isToday ? ' cal-today' : '') + '">'
-            + '<div class="cal-day-head"><span class="cal-wd">' + CAL_WD[i] + '</span>'
+            + '<div class="cal-day-head"><span class="cal-wd">' + CAL_WD[day.getDay()] + '</span>'
             + '<span class="cal-md">' + (day.getMonth() + 1) + '/' + day.getDate() + '</span>'
             + (isToday ? '<span class="cal-today-tag">今天</span>' : '')
             + '</div>'
-            + (films.length
-                ? '<div class="home-strip cal-strip">' + films.map(calCardHtml).join('') + '</div>'
-                : '<div class="cal-empty"></div>')
+            + '<div class="home-strip cal-strip">' + films.map(calCardHtml).join('') + '</div>'
             + '</div>';
     }
     grid.innerHTML = html;
@@ -13168,9 +13194,14 @@ function tidyAiRequest(){
   var hist = tidyChatMsgs().filter(function (m){ return m && (m.role === 'me' || m.role === 'ai'); })
     .map(function (m){ return { role: m.role === 'me' ? 'user' : 'assistant', content: m.text }; });
   if (!hist.length || hist[hist.length - 1].role !== 'user') return Promise.reject(new Error('没有可发送的内容'));
+  /* v504：提示词由客户端单点提供（含目标文件夹与目录树），Worker 只做校验与转发 */
+  var tidyFolder = tidyState.folder ? (tidyState.folder.path || tidyState.folder.name) : '';
+  var tidyTree = tidyCurrentTree();
+  var tidySys = NfoCore.AI_PROMPTS.tidy
+    + '\n\n【目标文件夹】' + (tidyFolder || '（未命名）')
+    + '\n【目录树】\n' + (tidyTree || '（用户还没获取目录树，请先提醒他点右上角「获取目录树」）');
   var payload = {
-    folder: tidyState.folder ? (tidyState.folder.path || tidyState.folder.name) : '',
-    tree: tidyCurrentTree(),
+    prompt: tidySys.slice(0, 32000),
     messages: hist
   };
   return getActivationCode().then(function (code){

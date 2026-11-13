@@ -406,11 +406,21 @@ img { display: block; }
 .detail-cast-spacer { flex: 0 0 auto; width: 4px; height: 1px; }
 .detail-cast-row::-webkit-scrollbar { display: none; }
 .detail-person { flex: 0 0 auto; width: 72px; text-align: center; }
-/* v502「AI 影评」—— 剧照上方，仅在拿到文本时由 JS 显示（无占位、无加载态） */
-.detail-ai-review { margin-top: 22px; padding: 15px 16px 16px; border-radius: 14px; background: rgba(255,255,255,0.07); }
+/* v504「精彩评论」—— 剧照上方，仅在拿到足量评论时由 JS 显示（无占位、无加载态） */
+/* ===== v504：精彩评论（三行随机循环滚动，点击弹窗看全部） ===== */
+.detail-ai-review { margin-top: 22px; padding: 14px 0 15px; border-radius: 14px; background: rgba(255,255,255,0.055); overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-ai-review:empty { display: none; }
-.detail-ai-review-title { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 9px; }
-.detail-ai-review-text { font-size: 13.5px; line-height: 1.65; color: rgba(255,255,255,0.78); white-space: pre-line; }
+.detail-ai-review:active { opacity: .88; }
+.cm-head { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 16px 10px; }
+.cm-lanes { display: flex; flex-direction: column; gap: 9px; }
+.cm-lane { overflow: hidden; }
+.cm-track { display: flex; width: max-content; animation: cm-scroll var(--cm-dur, 42s) linear infinite; animation-direction: var(--cm-dir, normal); animation-delay: var(--cm-delay, 0s); will-change: transform; }
+.cm-seq { display: flex; gap: 9px; padding-right: 9px; }
+.cm-paused .cm-track { animation-play-state: paused; }
+@keyframes cm-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.cm-bubble { flex: none; padding: 8px 13px; border-radius: 14px; background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.9); font-size: 12.5px; line-height: 1.45; white-space: nowrap; }
+.cm-sheet-list { padding: 4px 2px calc(var(--sab, 0px) + 20px); }
+.cm-sheet-item { padding: 11px 14px; margin-bottom: 10px; border-radius: 13px; background: rgba(0,0,0,0.045); color: var(--label); font-size: 13.5px; line-height: 1.55; }
 /* 详情页「剧照」—— 演职人员/女优下方，双列 JS 瀑布流（按列高动态选择落点） */
 .detail-shots { margin-top: 22px; padding-top: 16px; }
 .detail-shots:empty { display: none; }
@@ -2740,13 +2750,9 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .all-count { font-size: 12.5px; color: var(--label-2); }
 .all-loading { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--label-2); }
 
-/* ===== v501：更新日历 ===== */
+/* ===== v504：更新日历（昨天 + 今天 + 未来 5 天，只显示有更新的日子） ===== */
 .hp-date { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .hero-pill:active .hp-date { opacity: .55; }
-.cal-weekbar { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 6px 16px 12px; }
-.cal-nav { width: 34px; height: 34px; border: none; border-radius: 50%; background: var(--gray-fill); color: var(--label); font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.cal-nav:active { opacity: .6; }
-.cal-week-label { font-size: 15px; font-weight: 600; color: var(--label); min-width: 150px; text-align: center; }
 .cal-grid { padding: 6px 0 calc(var(--sab, 0px) + 50px); }
 .cal-day { padding: 8px 0; }
 .cal-day-head { display: flex; align-items: center; gap: 8px; padding: 6px 16px 2px; }
@@ -2754,7 +2760,6 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .cal-md { font-size: 13px; color: var(--label-2); }
 .cal-today-tag { font-size: 11px; font-weight: 600; color: #fff; background: var(--accent); border-radius: 7px; padding: 2px 7px; margin-left: 2px; }
 .cal-today .cal-wd { color: var(--accent); }
-.cal-empty { height: 1px; background: var(--sep); opacity: .45; margin: 12px 16px; }
 .cal-strip { padding: 6px 16px 4px; }
 .cal-strip .hc-title { color: var(--label); }
 .cal-strip .hc-year { color: var(--label-2); }
