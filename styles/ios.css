@@ -113,6 +113,10 @@
    输入框聚焦时冒底栏的问题改由 bootApp 的全局 focusin 监听缓解（window.scrollTo(0,0)）。 */
 /* touch-action: manipulation —— 关掉「双击缩放」，双击不再把底部浏览器栏带回来（v388 自愈的另一半） */
 html, body { margin: 0; padding: 0; touch-action: manipulation; }
+/* v507：全局关闭 iOS Safari 的文字自动放大（text autosizing）。它会按每个块自身的宽度
+   分别算放大系数，横向超宽轨道里长短不一的评论就会被放大成不同字号。100% = 不自动放大，
+   仍尊重用户手动缩放；项目字号全为显式 px，关掉后各处显示更一致。 */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -406,21 +410,26 @@ img { display: block; }
 .detail-cast-spacer { flex: 0 0 auto; width: 4px; height: 1px; }
 .detail-cast-row::-webkit-scrollbar { display: none; }
 .detail-person { flex: 0 0 auto; width: 72px; text-align: center; }
-/* v506「精彩评论」—— 剧照上方，仅在拿到足量评论时由 JS 显示（无占位、无加载态） */
-/* ===== v506：精彩评论（三行随机循环滚动，点击弹窗看全部；字号统一、轨道通栏到屏幕边缘） =====
+/* v507「精彩评论」—— 剧照上方，仅在拿到足量评论时由 JS 显示（无占位、无加载态） */
+/* ===== v507：精彩评论（三行循环滚动，点击弹窗看全部；字号统一、宽度按内容、轨道通栏） =====
    .detail-content 左右各 20px 内边距：整块用 -20px 负边距通栏，标题用 20px padding 拉回原对齐，
-   三行轨道再 -20px 抵消，裁切边界正好落在屏幕左右边缘（与 .detail-cast-row 同一手法）。 */
-.detail-ai-review { margin: 22px -20px 0; padding: 4px 20px 6px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+   三行轨道再 -20px 抵消，裁切边界正好落在屏幕左右边缘（与 .detail-cast-row 同一手法）。
+   v507 修「文字有大有小」：iOS Safari 的 text autosizing 会按每个气泡宽度各自算放大倍数，
+   超宽横向轨道里同字号文字被放大得不一样；已在 html + 整块 + 气泡三级关闭自动放大，
+   并把气泡宽度改成严格由内容决定（短句窄、长句宽）。 */
+.detail-ai-review { margin: 22px -20px 0; padding: 4px 20px 6px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .detail-ai-review:empty { display: none; }
 .detail-ai-review:active { opacity: .88; }
 .cm-head { font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 10px; }
 .cm-lanes { display: flex; flex-direction: column; gap: 9px; margin: 0 -20px; }
 .cm-lane { overflow: hidden; }
 .cm-track { display: flex; width: max-content; animation: cm-scroll var(--cm-dur, 42s) linear infinite; animation-direction: var(--cm-dir, normal); animation-delay: var(--cm-delay, 0s); will-change: transform; }
-.cm-seq { display: flex; gap: 9px; padding-right: 9px; }
+.cm-seq { display: flex; flex: 0 0 auto; width: max-content; gap: 9px; padding-right: 9px; }
 .cm-paused .cm-track { animation-play-state: paused; }
 @keyframes cm-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.cm-bubble { flex: none; padding: 8px 13px; border-radius: 14px; background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.9); font-size: 13.5px; line-height: 1.45; white-space: nowrap; }
+/* 宽度严格按文字字数算：0 0 auto 不许伸缩/压缩，max-content 定宽，nowrap 不折行；
+   再显式关一次自动放大，避免超宽 flex 轨道里短句被放大得比长句更大。 */
+.cm-bubble { flex: 0 0 auto; width: max-content; padding: 8px 13px; border-radius: 14px; background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.9); font-size: 13.5px; line-height: 1.45; white-space: nowrap; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .cm-sheet-list { padding: 4px 2px calc(var(--sab, 0px) + 20px); }
 .cm-sheet-item { padding: 11px 14px; margin-bottom: 10px; border-radius: 13px; background: rgba(0,0,0,0.045); color: var(--label); font-size: 13.5px; line-height: 1.55; }
 /* 详情页「剧照」—— 演职人员/女优下方，双列 JS 瀑布流（按列高动态选择落点） */
