@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '508';
+window.__SCRIPT_VER = '510';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -466,7 +466,9 @@ var CTX_ICONS = {
   meta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
   /* clock：重置清除计时（长按菜单「重置清除」专用，与「刷新」的循环箭头区分开） */
-  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  /* save：剧照列表页长按菜单「存储到照片」 */
+  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>'
 };
 function showContextSheet(title, items, anchor){
   document.getElementById('contextSheetTitle').textContent = title || '操作';
@@ -8010,6 +8012,86 @@ function closeImagePreview(){
   var track = document.getElementById('imagePreviewTrack');
   if (track) track.innerHTML = '';
 }
+/* ===== v509：剧照列表页长按 → 「存储到照片」 =====
+   复用首页卡片那套 520ms 长按手势 + showContextSheet 浮动菜单，菜单只有一项。
+   touchstart 就预取图片 blob：iOS 的 navigator.share(files) 必须在用户手势里同步调用，
+   等点击菜单项再 fetch 会丢手势，分享面板就弹不出来（只能退回下载到文件）。 */
+var ssLongPressBlob = null;
+function ssShotFilename(idx, url){
+  var ext = (String(url || '').split('?')[0] || '').match(/\.(jpe?g|png|gif|webp|bmp)$/i);
+  return 'nfo-image-' + (idx + 1) + '.' + (ext ? ext[1].toLowerCase() : 'jpg');
+}
+function ssPrefetchShot(idx){
+  ssLongPressBlob = null;
+  var url = (previewList || [])[idx];
+  if (!url) return;
+  var src = (String(url).indexOf('data:') === 0) ? url : NfoCore.stillDisplayUrl(url);
+  var filename = ssShotFilename(idx, src);
+  fetch(src).then(function(r){ return r.blob(); }).then(function(blob){
+    if (blob && blob.size) ssLongPressBlob = { idx: idx, blob: blob, filename: filename };
+  }).catch(function(){});
+}
+function ssSaveShotToPhotos(idx){
+  previewIndex = idx;                        // 回退到通用下载函数时按下标取图
+  var rec = ssLongPressBlob;
+  if (rec && rec.idx === idx){
+    ssLongPressBlob = null;
+    try {
+      var f = new File([rec.blob], rec.filename, { type: rec.blob.type || 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [f] })){
+        navigator.share({ files: [f] }).catch(function(){});   // 用户取消分享：静默
+        return;
+      }
+    } catch (_) {}
+  }
+  downloadCurrentPreview();                  // 不支持文件分享 / 预取未完成 → 走原有兜底
+}
+function bindStillsStreamLongPress(){
+  var track = document.getElementById('stillsStreamTrack');
+  if (!track || track.getAttribute('data-lp-bound')) return;
+  track.setAttribute('data-lp-bound', '1');    // track.innerHTML 每次重建，事件委托只绑一次
+  var timer = null, sx = 0, sy = 0, fired = false;
+  function point(e){
+    var t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+    return { x: t.clientX || 0, y: t.clientY || 0 };
+  }
+  function shotIdx(e){
+    var t = e.target;
+    if (!t || t.tagName !== 'IMG' || !/(^|\s)ss-img(\s|$)/.test(t.className || '')) return -1;
+    var i = parseInt(t.getAttribute('data-idx'), 10);
+    return isNaN(i) ? -1 : i;
+  }
+  track.addEventListener('touchstart', function(e){
+    var idx = shotIdx(e);
+    if (idx < 0) return;
+    var ctx = document.getElementById('contextSheet');
+    if (ctx && ctx.classList.contains('show')) return;   // 菜单已开，交给外部点击关闭
+    var p = point(e); sx = p.x; sy = p.y; fired = false;
+    ssPrefetchShot(idx);
+    clearTimeout(timer);
+    (function(curIdx, ax, ay){
+      timer = setTimeout(function(){
+        fired = true;
+        if (navigator.vibrate) navigator.vibrate(15);
+        showContextSheet('', [
+          { label: '存储到照片', icon: 'save', onClick: function(){ ssSaveShotToPhotos(curIdx); } }
+        ], { x: ax, y: ay });
+      }, 520);
+    })(idx, p.x, p.y);
+  }, { passive: true });
+  track.addEventListener('touchmove', function(e){
+    if (timer == null) return;
+    var p = point(e);
+    if (Math.abs(p.x - sx) > 10 || Math.abs(p.y - sy) > 10){ clearTimeout(timer); timer = null; }
+  }, { passive: true });
+  function end(e){
+    clearTimeout(timer); timer = null;
+    if (fired && e.cancelable) e.preventDefault();   // 抑制合成 click
+  }
+  track.addEventListener('touchend', end, { passive: false });
+  track.addEventListener('touchcancel', end, { passive: true });
+  track.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+}
 function openStillsStream(idx){
   if (!currentDetailShots || !currentDetailShots.length) return;
   previewType = '';   // 不关联编辑态字段，仅预览
@@ -8026,6 +8108,7 @@ function openStillsStream(idx){
     html += '<div class="' + blockCls + '"></div>';
   }
   track.innerHTML = html;
+  bindStillsStreamLongPress();
   document.getElementById('stillsStreamMask').classList.add('show');
   document.getElementById('stillsStreamModal').classList.add('show');
   document.documentElement.classList.add('stills-open');
@@ -8034,6 +8117,9 @@ function openStillsStream(idx){
   if (target) track.scrollTop = Math.max(0, target.offsetTop - 8);
 }
 function closeStillsStream(){
+  ssLongPressBlob = null;
+  var ctx = document.getElementById('contextSheet');
+  if (ctx && ctx.classList.contains('show')) closeAllSheets();   // 菜单还开着就一起收掉
   document.getElementById('stillsStreamMask').classList.remove('show');
   document.getElementById('stillsStreamModal').classList.remove('show');
   document.documentElement.classList.remove('stills-open');
@@ -14720,10 +14806,20 @@ function syncAvCoverMaskSwitch(){
   var sw = document.getElementById('avCoverMaskSwitch');
   if (sw) sw.checked = !!state.avCoverMask;
 }
-/* 占位块的内部 HTML：番号居中显示（无番号时退回标题，仍不露封面） */
+/* 占位块的内部 HTML：v510 起番号拆成上下两行（上行字母前缀 / 下行数字段），字号由 CSS 放大。
+   A 方案：按第一个连字符拆「前缀 / 后面整段」；纯数字编号、中文标题、格式太怪的一律保持整行，不硬拆。
+   无番号时退回标题（或「无番号」），仍不露封面。 */
 function avCoverMaskHtml(code){
-  var txt = String(code == null ? '' : code).trim();
-  return '<span>' + escapeHtml(txt || '无番号') + '</span>';
+  var txt = String(code == null ? '' : code).trim() || '无番号';
+  var parts = /^[A-Za-z0-9-]+$/.test(txt) ? txt.split('-') : [];
+  var num = parts.length > 1 ? parts.slice(1).join('-') : '';
+  if (parts.length > 1 && parts[0].length <= 8 && /[A-Za-z]/.test(parts[0]) && /[0-9]/.test(num)) {
+    return '<span class="av-mask-txt">'
+      + '<span class="av-mask-l">' + escapeHtml(parts[0]) + '</span>'
+      + '<span class="av-mask-n' + (num.length > 8 ? ' av-mask-long' : '') + '">' + escapeHtml(num) + '</span>'
+      + '</span>';
+  }
+  return '<span class="av-mask-txt">' + escapeHtml(txt) + '</span>';
 }
 /* 统一入口：首页 AV 行标题右侧的眼镜按钮也走这里（点击直接开关，和设置页开关联动） */
 function setAvCoverMask(v){

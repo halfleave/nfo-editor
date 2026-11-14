@@ -934,11 +934,15 @@ textarea.ios-input { resize: none; line-height: 1.45; }
 .stills-stream-close svg { width: 24px; height: 24px; }
 .stills-stream-track { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; background: #000; scrollbar-width: none; }
 .stills-stream-track::-webkit-scrollbar { display: none; }
-.stills-stream-track img.ss-img { display: block; width: 100%; height: auto; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* v509：仍禁掉 iOS 原生长按菜单（改为 App 自己的菜单），并禁掉图片拖拽，避免长按被系统抢走 */
+.stills-stream-track img.ss-img { display: block; width: 100%; height: auto; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-user-drag: none; }
 .stills-stream-block { width: 100%; height: 32px; background: #000; }
 .stills-stream-block.ss-block-edge { height: 48px; }
 .stills-stream-block.ss-block-top { height: calc(48px + env(safe-area-inset-top)); }
 html.stills-open, html.stills-open body { background: #000; }
+/* v509：剧照全屏页 z-index 721，长按菜单默认只有 501/500 会被黑底整屏挡住 —— 打开期间临时抬高 */
+html.stills-open .ctx-mask { z-index: 760; }
+html.stills-open .sheet.sheet-context { z-index: 761; }
 
 /* ===== 启动页（避免进入时白屏） ===== */
 .splash {
@@ -1661,25 +1665,34 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tmdb-result img { width: 80px; height: 120px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: var(--card-fill); }
 .tmdb-result .tr-ph { width: 80px; height: 120px; border-radius: 8px; background: var(--card-fill); flex-shrink: 0; }
 /* ===== v446：里模式「不显示 AV 封面」占位（浅色底 / 深色底 + 番号） =====
-   搜索列表 .tr-cover 与首页 .mc-poster 共用；详情页海报、磁力弹窗等其它位置不受影响 */
+   搜索列表 .tr-cover 与首页 .mc-poster 共用；详情页海报、磁力弹窗等其它位置不受影响
+   v510：番号改上下两行（字母 / 数字），字号整体放大；外层 .av-mask-txt 用 > 选择器，
+   避免内层两行被下面 .mc-poster 的绝对定位规则命中而重叠 */
 .av-cover-mask {
   display: flex; align-items: center; justify-content: center;
   box-sizing: border-box; overflow: hidden;
   background: #eceef3; color: #7c8290;
 }
 [data-theme="dark"] .av-cover-mask { background: #24262b; color: #8b919c; }
-.av-cover-mask span {
-  padding: 0 6px; text-align: center; line-height: 1.35;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
-  word-break: break-word; overflow-wrap: anywhere;
+.av-mask-txt {
+  display: block; box-sizing: border-box; max-width: 100%; padding: 0 6px;
+  text-align: center; line-height: 1.15;
+  font-weight: 700; letter-spacing: 0.4px; word-break: break-word; overflow-wrap: anywhere;
 }
+.av-mask-txt .av-mask-l,
+.av-mask-txt .av-mask-n { display: block; white-space: nowrap; }
+.av-mask-txt .av-mask-n { font-size: 1.12em; font-weight: 800; letter-spacing: 0.6px; }
+/* 三段番号（FC2-PPV-1234567）下行较长，自动缩一点避免被裁 */
+.av-mask-txt .av-mask-long { font-size: 0.72em; letter-spacing: 0; }
+.av-cover-mask > .av-mask-txt { font-size: 16px; }
 /* 首页网格卡片：.mc-poster 用 height:0 + padding-top 撑 2:3，内容区高度为 0，
    文字必须绝对定位铺满整块，否则会被 overflow:hidden 裁掉 */
 .movie-card .mc-poster.av-cover-mask { background-color: #eceef3; }
 [data-theme="dark"] .movie-card .mc-poster.av-cover-mask { background-color: #24262b; }
-.movie-card .mc-poster.av-cover-mask span {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  padding: 0 6px; font-size: 12px; letter-spacing: 0.6px;
+.movie-card .mc-poster.av-cover-mask > .av-mask-txt {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 0 6px; font-size: 18px; letter-spacing: 0.6px;
 }
 /* 搜索结果左侧缩略图：与 .tmdb-result img 同尺寸 */
 .tmdb-result .tr-cover.av-cover-mask { width: 80px; height: 120px; border-radius: 8px; flex-shrink: 0; }
@@ -2616,12 +2629,13 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 }
 /* 空态不压暗（那一屏本来就是整片延伸色） */
 .bg-slide.no-shade::after { display: none; }
-/* 里模式「隐私封面」：不拉海报，只给番号 */
+/* 里模式「隐私封面」：不拉海报，只给番号（v510：两行、字号放大） */
 .hero-mask {
   position: absolute; inset: 0; display: grid; place-items: center;
   background: #202027; color: rgba(255,255,255,.72);
-  font-size: 15px; font-weight: 600; letter-spacing: 1px;
+  font-size: 22px; font-weight: 600; letter-spacing: 1px;
 }
+.hero-mask .av-mask-txt { max-width: 100%; }
 
 /* ---------- 三、内容层：焦点区占位 + 文字 ---------- */
 /* 只当“海报那么高的一块地方”，本身不动（跟着页面滚），手势也绑在它身上 */
@@ -2745,7 +2759,7 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 }
 /* 首页隐私封面：这块永远铺在深色底上，用半透明白底 + 亮一点的番号（全局 .av-cover-mask 的浅底样式对不上） */
 .hc-poster.av-cover-mask { background: rgba(255,255,255,.10); color: rgba(255,255,255,.78); }
-.hc-poster.av-cover-mask span { font-size: 11.5px; }
+.hc-poster.av-cover-mask > .av-mask-txt { font-size: 16px; }
 .hc-title {
   margin-top: 7px; font-size: 12.5px; line-height: 1.35; color: var(--home-fg);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
