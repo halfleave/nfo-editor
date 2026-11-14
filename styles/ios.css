@@ -406,19 +406,19 @@ img { display: block; }
 .detail-cast-spacer { flex: 0 0 auto; width: 4px; height: 1px; }
 .detail-cast-row::-webkit-scrollbar { display: none; }
 .detail-person { flex: 0 0 auto; width: 72px; text-align: center; }
-/* v504「精彩评论」—— 剧照上方，仅在拿到足量评论时由 JS 显示（无占位、无加载态） */
-/* ===== v504：精彩评论（三行随机循环滚动，点击弹窗看全部） ===== */
-.detail-ai-review { margin-top: 22px; padding: 14px 0 15px; border-radius: 14px; background: rgba(255,255,255,0.055); overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* v505「精彩评论」—— 剧照上方，仅在拿到足量评论时由 JS 显示（无占位、无加载态） */
+/* ===== v505：精彩评论（三行随机循环滚动，点击弹窗看全部；去掉外层灰底卡片，评论文字统一字号） ===== */
+.detail-ai-review { margin-top: 22px; padding: 4px 0 6px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-ai-review:empty { display: none; }
 .detail-ai-review:active { opacity: .88; }
-.cm-head { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 16px 10px; }
+.cm-head { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 10px; }
 .cm-lanes { display: flex; flex-direction: column; gap: 9px; }
 .cm-lane { overflow: hidden; }
 .cm-track { display: flex; width: max-content; animation: cm-scroll var(--cm-dur, 42s) linear infinite; animation-direction: var(--cm-dir, normal); animation-delay: var(--cm-delay, 0s); will-change: transform; }
 .cm-seq { display: flex; gap: 9px; padding-right: 9px; }
 .cm-paused .cm-track { animation-play-state: paused; }
 @keyframes cm-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.cm-bubble { flex: none; padding: 8px 13px; border-radius: 14px; background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.9); font-size: 12.5px; line-height: 1.45; white-space: nowrap; }
+.cm-bubble { flex: none; padding: 8px 13px; border-radius: 14px; background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.9); font-size: 13.5px; line-height: 1.45; white-space: nowrap; }
 .cm-sheet-list { padding: 4px 2px calc(var(--sab, 0px) + 20px); }
 .cm-sheet-item { padding: 11px 14px; margin-bottom: 10px; border-radius: 13px; background: rgba(0,0,0,0.045); color: var(--label); font-size: 13.5px; line-height: 1.55; }
 /* 详情页「剧照」—— 演职人员/女优下方，双列 JS 瀑布流（按列高动态选择落点） */
