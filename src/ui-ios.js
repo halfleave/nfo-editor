@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '510';
+window.__SCRIPT_VER = '511';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -10727,20 +10727,23 @@ function openFilmDetail(encId){
   });
 }
 
-/* ===== v508：精彩评论（保存时生成，剧照上方展示）=====
+/* ===== v511：精彩评论（保存时生成，剧照上方展示）=====
    状态放独立 kv 键，不写进 film.data —— buildFilmFromCurrent() 每次从表单重建 film，
-   会覆盖 data 里的额外字段。普通影片键 aiReview2:<id>，AV 键 aiReviewAv:<id>（互不混用），
+   会覆盖 data 里的额外字段。普通影片键 aiReview2:<id>，AV 键 aiReviewAv2:<id>（互不混用；
+   v511 由 aiReviewAv: 换键，令旧版绕厂商/番号字母的评论自然作废、按新提示词重生成一次），
    值 = { list:[...], at }。
    规则：
    ① 评论不足 3 条 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
    ② 保存影片时发起一次；已有评论则永不重复调 AI
    ③ 下次进入详情页时再尝试一次：在途不打断、距上次发起 < 5 分钟冷却
    ④ at 在「发起时」就落库，杀掉 App 重开仍有效（不只依赖内存标记）
-   ⑤ AV 用独立提示词 + 只发番号；无码片 / 拿不准的一律跳过（见 aiReviewAllowed） */
+   ⑤ AV 用独立提示词 + 只发番号和片名（模型自行联网查作品内容）；无码片 / 拿不准的一律跳过（见 aiReviewAllowed） */
 var AI_REVIEW_GAP = 5 * 60 * 1000;
 var aiReviewInFlight = {};              // filmId → true（本会话内，防打断）
 var aiReviewShowing = [];               // 当前详情页的评论，供弹窗展示
-function aiReviewKey(id, av){ return (av ? 'aiReviewAv:' : 'aiReview2:') + id; }
+/* v511：AV 换键 aiReviewAv2 —— 上一版提示词只会绕着厂商/番号字母写，旧评论不重生成就不会变；
+   换键后老片按新规则自然重生成一次（每片一次），普通影片 aiReview2 不受影响。 */
+function aiReviewKey(id, av){ return (av ? 'aiReviewAv2:' : 'aiReview2:') + id; }
 function aiReviewGet(id, av){
   return idbGet('kv', aiReviewKey(id, av)).then(function(v){
     var list = (v && Array.isArray(v.list))
@@ -10777,9 +10780,14 @@ function aiReviewConfigReady(){
 }
 function aiReviewInfoOf(film){
   var d = (film && film.data) || {};
-  /* v508：AV 只发番号，片名/日期一律不带（避免模型拿日文标题去查普通影评资料） */
+  /* v511：AV 只发番号 + 片名（片名仅作检索锚点）；简介、分类标签、日期一律不发，
+     由模型自行联网查作品内容，避免照着简介复述、也避免绕着厂商/番号字母空写。 */
   if (NfoCore.isAvFilm(film)) {
-    return { av: true, dvdId: String(d.dvdId || '').trim().slice(0, 60) };
+    return {
+      av: true,
+      dvdId: String(d.dvdId || '').trim().slice(0, 60),
+      title: String(d.title || (film && film.title) || '').trim().slice(0, 200)
+    };
   }
   /* 普通影片：只发片名 / 原始名 / 完整上映日期，资料交由模型自行查阅 */
   return {

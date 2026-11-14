@@ -272,20 +272,20 @@ function reset(opts) {
   ok('有码判定: 无分隔符拿不准→跳过', !sandbox.aiReviewMaskedByCode('ABC123'));
   ok('有码判定: 普通影片不受限制', sandbox.aiReviewAllowed(films.f1) === true);
 
-  /* ⑨ v508：AV 只发番号、独立缓存键、三行 UI 复用 */
+  /* ⑨ v511：AV 只发番号 + 片名、独立缓存键、三行 UI 复用 */
   reset();
   const avFilm = { id: 'av1', title: 'IPX-456', data: { dvdId: 'IPX-456', javCensor: 'masked', title: '某片' } };
   films['av1'] = avFilm;
   sandbox.maybeFetchAiReview('av1');
   await tick(14);
   ok('AV: 发起 1 次 AI 请求', calls.review.length === 1, JSON.stringify(calls.review));
-  ok('AV: 只发番号（不带片名/日期）', (function () {
+  ok('AV: 只发番号 + 片名（不发简介/标签/日期）', (function () {
     const i = calls.review[0] && calls.review[0].info;
-    return !!i && i.av === true && i.dvdId === 'IPX-456'
-      && !('title' in i) && !('originaltitle' in i) && !('date' in i);
+    return !!i && i.av === true && i.dvdId === 'IPX-456' && i.title === '某片'
+      && !('plot' in i) && !('genres' in i) && !('originaltitle' in i) && !('date' in i);
   })(), JSON.stringify(calls.review[0]));
-  ok('AV: 用独立缓存键 aiReviewAv', !!kv['aiReviewAv:av1'] && kv['aiReviewAv:av1'].list.length === 3
-    && !kv['aiReview2:av1'], JSON.stringify(kv));
+  ok('AV: 用独立缓存键 aiReviewAv2', !!kv['aiReviewAv2:av1'] && kv['aiReviewAv2:av1'].list.length === 3
+    && !kv['aiReview2:av1'] && !kv['aiReviewAv:av1'], JSON.stringify(kv));
   setCurrent('av1');
   sandbox.renderAiReview(avFilm);
   await tick(8);
@@ -311,7 +311,8 @@ function reset(opts) {
     sandbox.maybeFetchAiReview(c.id);
     await tick(12);
     ok('无码/拿不准 ' + c.id + '：0 次 AI 请求', calls.review.length === 0, JSON.stringify(calls.review));
-    ok('无码/拿不准 ' + c.id + '：不写缓存', !kv['aiReviewAv:' + c.id] && !kv['aiReview2:' + c.id]);
+    ok('无码/拿不准 ' + c.id + '：不写缓存', !kv['aiReviewAv2:' + c.id] && !kv['aiReviewAv:' + c.id]
+      && !kv['aiReview2:' + c.id]);
     ok('无码/拿不准 ' + c.id + '：评论区保持隐藏', boxes.detailAiReview.style.display === 'none'
       && boxes.detailAiReview.innerHTML === '');
   }

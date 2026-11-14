@@ -164,20 +164,26 @@ async function expectReject(name, p, re) {
   eq('AI_PROMPTS: AV 提示词与普通影评完全分开', NfoCore.AI_PROMPTS.avReview !== NfoCore.AI_PROMPTS.review
     && !/影视评论人/.test(NfoCore.AI_PROMPTS.avReview));
 
-  /* —— v508 AV 评论：只发番号 + 独立提示词，输出结构仍复用 comments 数组 —— */
-  const AV_INFO = { av: true, dvdId: 'IPX-456' };
+  /* —— v511 AV 评论：只发番号 + 片名 + 独立提示词，输出结构仍复用 comments 数组 —— */
+  const AV_INFO = { av: true, dvdId: 'IPX-456', title: '夫の目の前で…' };
   calls = [];
   await NfoCore.reviewRequest(AV_INFO, { ownCfg: OWN }).then(function (list) {
     eq('AV/自填cfg: 仅 1 次请求', calls.length === 1);
     const body = JSON.parse(calls[0].init.body);
-    eq('AV/自填cfg: 用 AV 专用提示词', /商业成人影片/.test(body.messages[0].content));
-    eq('AV/自填cfg: 不用普通影评提示词', !/影视评论人/.test(body.messages[0].content));
-    eq('AV/自填cfg: 提示词要求胆大轻松成人向', /胆大/.test(body.messages[0].content)
-      && /轻松/.test(body.messages[0].content) && /圈内用语/.test(body.messages[0].content));
-    eq('AV/自填cfg: 提示词要求 comments 数组', /"comments"/.test(body.messages[0].content));
+    const sys = body.messages[0].content;
+    eq('AV/自填cfg: 用 AV 专用提示词', /商业成人影片/.test(sys));
+    eq('AV/自填cfg: 不用普通影评提示词', !/影视评论人/.test(sys));
+    eq('AV/自填cfg: 提示词要求联网查作品内容', /联网检索/.test(sys) && /剧情桥段/.test(sys));
+    eq('AV/自填cfg: 提示词禁止解读番号与聊厂商', /严禁/.test(sys) && /解读番号字母/.test(sys) && /厂商/.test(sys));
+    eq('AV/自填cfg: 提示词要求评论落在具体内容', /作品内容/.test(sys) && /人物关系/.test(sys));
+    eq('AV/自填cfg: 提示词尺度放宽但不写精确过程', /行为类型/.test(sys) && /身体与气质/.test(sys)
+      && /不描写具体动作过程/.test(sys) && /不写精确部位细节/.test(sys));
+    eq('AV/自填cfg: 提示词排除未成年人与非自愿', /未成年人/.test(sys) && /非自愿/.test(sys));
+    eq('AV/自填cfg: 提示词要求 comments 数组', /"comments"/.test(sys));
     const um = body.messages[1].content;
-    eq('AV/自填cfg: 只发番号一项', /【番号】IPX-456/.test(um) && !/【片名】/.test(um)
-      && !/【原始名称】/.test(um) && !/【上映日期】/.test(um), um);
+    eq('AV/自填cfg: 只发番号 + 片名两项', /【番号】IPX-456/.test(um) && /【片名】夫の目の前で…/.test(um)
+      && !/【简介】/.test(um) && !/【分类】/.test(um) && !/【原始名称】/.test(um)
+      && !/【上映日期】/.test(um), um);
     eq('AV/自填cfg: 解析出评论数组', Array.isArray(list) && list.length === 3, JSON.stringify(list));
   });
   calls = [];
@@ -185,12 +191,13 @@ async function expectReject(name, p, re) {
     .then(function (list) {
       eq('AV/Worker: 走 /ai/review', /\/ai\/review/.test(calls[0].url));
       const body = JSON.parse(calls[0].init.body);
-      eq('AV/Worker: 只带 dvdId + prompt', body.dvdId === 'IPX-456'
-        && !('title' in body) && !('originaltitle' in body) && !('date' in body), JSON.stringify(body));
+      eq('AV/Worker: 只带 dvdId + title + prompt', body.dvdId === 'IPX-456' && body.title === '夫の目の前で…'
+        && !('originaltitle' in body) && !('date' in body) && !('plot' in body)
+        && !('genres' in body), JSON.stringify(body));
       eq('AV/Worker: 带 AV 提示词', /商业成人影片/.test(body.prompt || ''));
       eq('AV/Worker: 返回评论数组', Array.isArray(list) && list.length === 3, JSON.stringify(list));
     });
-  await expectReject('AV/缺番号: 正确 reject', NfoCore.reviewRequest({ av: true }, { ownCfg: OWN }), /缺少番号/);
+  await expectReject('AV/缺番号: 正确 reject', NfoCore.reviewRequest({ av: true, title: 'x' }, { ownCfg: OWN }), /缺少番号/);
 
   /* —— v504 comments 数组解析：正常 / 围栏 / 噪音 / 去角标 / 去重 / 七类失败 —— */
   eq('parse/纯 JSON', NfoCore.parseAiReviewText('{"comments":["节奏舒缓。","镜头慢得有理","适合一个人看"]}').length === 3);
