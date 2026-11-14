@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '507';
+window.__SCRIPT_VER = '508';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -9299,6 +9299,7 @@ function fetchJavbusSearch(q, box, opts){
   var fc2n = fc2Num(q);
   if (fc2n){
     _javCensorKnown = true; _javLastFc2 = true;
+    state.javCensor = 'uncensored';   // v508：FC2 无有码/无码之分，一律按无码 → 不生成 AV 评论
     syncRightSideControls();
     fetchFc2Search(fc2n, box, jbCode);
     return;
@@ -10299,6 +10300,7 @@ function applyFilmData(film){
   state.adult = !!(film.data && film.data.dvdId);
   var d = film.data || {};
   state.source = film.source || '';   // 还原来源，编辑后保存保持原来源
+  state.javCensor = d.javCensor || ''; // v508：老片无此字段 → 空，AV 评论按番号格式兜底判定
   state.javbusId = d.javbusId || null;
   state.javbusMagnets = (d.javbusMagnets || []).slice();   // 还原 JavBus 磁力列表
   state.tmdbMediaType = d.tmdbMediaType || 'movie';   // 还原 TMDB 媒体类型（电影/剧集），旧数据无此字段默认电影
@@ -10639,36 +10641,61 @@ function openFilmDetail(encId){
   });
 }
 
-/* ===== v504：精彩评论（保存时生成，剧照上方展示）=====
-   状态放独立 kv 键 aiReview2:<id> = { list:[...], at }，不写进 film.data ——
-   buildFilmFromCurrent() 每次从表单重建 film，会覆盖 data 里的额外字段。
-   v504 换成评论数组 + 新键：旧的单条影评缓存自然作废，老片下次进详情会重生成一次。
+/* ===== v508：精彩评论（保存时生成，剧照上方展示）=====
+   状态放独立 kv 键，不写进 film.data —— buildFilmFromCurrent() 每次从表单重建 film，
+   会覆盖 data 里的额外字段。普通影片键 aiReview2:<id>，AV 键 aiReviewAv:<id>（互不混用），
+   值 = { list:[...], at }。
    规则：
    ① 评论不足 3 条 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
    ② 保存影片时发起一次；已有评论则永不重复调 AI
    ③ 下次进入详情页时再尝试一次：在途不打断、距上次发起 < 5 分钟冷却
-   ④ at 在「发起时」就落库，杀掉 App 重开仍有效（不只依赖内存标记） */
+   ④ at 在「发起时」就落库，杀掉 App 重开仍有效（不只依赖内存标记）
+   ⑤ AV 用独立提示词 + 只发番号；无码片 / 拿不准的一律跳过（见 aiReviewAllowed） */
 var AI_REVIEW_GAP = 5 * 60 * 1000;
 var aiReviewInFlight = {};              // filmId → true（本会话内，防打断）
 var aiReviewShowing = [];               // 当前详情页的评论，供弹窗展示
-function aiReviewKey(id){ return 'aiReview2:' + id; }
-function aiReviewGet(id){
-  return idbGet('kv', aiReviewKey(id)).then(function(v){
+function aiReviewKey(id, av){ return (av ? 'aiReviewAv:' : 'aiReview2:') + id; }
+function aiReviewGet(id, av){
+  return idbGet('kv', aiReviewKey(id, av)).then(function(v){
     var list = (v && Array.isArray(v.list))
       ? v.list.filter(function(s){ return typeof s === 'string' && s.trim(); }) : [];
     return { list: list, at: (v && v.at) || 0 };
   }).catch(function(){ return { list: [], at: 0 }; });
 }
-function aiReviewSet(id, rec){
-  return idbPut('kv', aiReviewKey(id), rec).catch(function(){});
+function aiReviewSet(id, rec, av){
+  return idbPut('kv', aiReviewKey(id, av), rec).catch(function(){});
+}
+/* v508：AV 评论只给「明确有码的番号片」生成。
+   有码/无码从 v508 起由 buildFilmFromCurrent 落到 data.javCensor（JavBus 搜索区）；
+   老片没这个字段就按番号格式粗判 —— 拿不准的一律当无码，跳过不调 AI。 */
+function aiReviewMaskedByCode(code){
+  var s = String(code || '').trim();
+  if (!s) return false;
+  // 典型无码厂牌 / FC2 / 东京热 / 明确标注无码，一律不算有码
+  if (/(fc2|ppv|heyzo|carib|pondo|paco|d2pass|tokyo.?hot|xxx.?av|uncen|无码|^n\d{3,})/i.test(s)) return false;
+  if (/^\d{4,}[-_]\d{2,5}$/.test(s)) return false;   // 加勒比/一本道「日期-编号」纯数字形式
+  // 只认最典型的有码番号：字母前缀 + 分隔符 + 2~5 位数字，可带中文字幕后缀 C/ch；
+  // 带 U/UC/UP（无码后缀）、无分隔符、格式奇怪的一律视为拿不准 → 不生成
+  return /^[A-Za-z]{2,6}[-_]\d{2,5}(?:[-_]?(?:c|ch))?$/i.test(s);
+}
+function aiReviewAllowed(film){
+  if (!NfoCore.isAvFilm(film)) return true;            // 普通影片不受此限制
+  var d = (film && film.data) || {};
+  var censor = String(d.javCensor || '').trim();
+  if (censor && censor !== 'masked') return false;     // 明确无码或未知值 → 跳过
+  return aiReviewMaskedByCode(d.dvdId);                // 老片无 javCensor：格式拿不准 → 当无码
 }
 function aiReviewConfigReady(){
   /* 自填 AI 配置 → 直连 LLM；否则高级档 → Worker /ai/review 兜底 */
   return translateConfigReady() || (state.tier || '') === 'full';
 }
 function aiReviewInfoOf(film){
-  /* 只发片名 / 原始名 / 完整上映日期，资料交由模型自行查阅 */
   var d = (film && film.data) || {};
+  /* v508：AV 只发番号，片名/日期一律不带（避免模型拿日文标题去查普通影评资料） */
+  if (NfoCore.isAvFilm(film)) {
+    return { av: true, dvdId: String(d.dvdId || '').trim().slice(0, 60) };
+  }
+  /* 普通影片：只发片名 / 原始名 / 完整上映日期，资料交由模型自行查阅 */
   return {
     title: String(d.title || (film && film.title) || '').slice(0, 200),
     originaltitle: String(d.originaltitle || '').slice(0, 200),
@@ -10728,28 +10755,31 @@ function renderAiReview(film){
   if (!box) return;
   box.innerHTML = ''; box.style.display = 'none'; box.onclick = null; aiReviewShowing = [];  // 切换影片先清空，防串片
   if (!film || !film.id) return;
+  if (!aiReviewAllowed(film)) return;   // v508：无码片连旧缓存也不显示
   var id = film.id;
-  aiReviewGet(id).then(function(rec){
+  aiReviewGet(id, NfoCore.isAvFilm(film)).then(function(rec){
     if (currentDetailFilmId !== id) return;
     if (rec.list.length) paintAiReview(id, rec.list);
   }).catch(function(){});
 }
-/* 幂等触发：已有 / 在途 / 冷却 / 配置未就绪 / 数据未齐 都会静默跳过 */
+/* 幂等触发：已有 / 在途 / 冷却 / 配置未就绪 / 数据未齐 / 无码片 都会静默跳过 */
 function maybeFetchAiReview(filmOrId){
   var id = (filmOrId && typeof filmOrId === 'object') ? filmOrId.id : filmOrId;
   if (!id || aiReviewInFlight[id] || !aiReviewConfigReady()) return;
-  aiReviewGet(id).then(function(rec){
-    if (aiReviewInFlight[id]) return;
-    if (rec.list.length) return;                             // ② 已有评论：永不再调
-    var now = Date.now();
-    if (rec.at && (now - rec.at) < AI_REVIEW_GAP) return;     // ③ 5 分钟冷却
-    // 先读库确认数据齐：保存瞬间片名可能还没落定，此时不落 at，避免拿空片名白打一次 AI
-    return loadFilm(id).then(function(film){
-      if (!film || aiReviewInFlight[id]) return;
-      var info = aiReviewInfoOf(film);
-      if (!info.title) return;
+  // v508：先读库拿到最新资料，才能判断是不是 AV、是不是无码，再选对应缓存键
+  return loadFilm(id).then(function(film){
+    if (!film || aiReviewInFlight[id]) return;
+    if (!aiReviewAllowed(film)) return;                   // 无码 / 拿不准 → 静默跳过
+    var av = NfoCore.isAvFilm(film);
+    var info = aiReviewInfoOf(film);
+    if (av ? !info.dvdId : !info.title) return;           // 数据未齐不落 at，避免白打一次 AI
+    return aiReviewGet(id, av).then(function(rec){
+      if (aiReviewInFlight[id]) return;                   // 并发重入（连点两次）挡在这里
+      if (rec.list.length) return;                        // ② 已有评论：永不再调
+      var now = Date.now();
+      if (rec.at && (now - rec.at) < AI_REVIEW_GAP) return;  // ③ 5 分钟冷却
       aiReviewInFlight[id] = true;
-      return aiReviewSet(id, { list: [], at: now })          // 发起时先落时间戳（跨会话有效）
+      return aiReviewSet(id, { list: [], at: now }, av)   // 发起时先落时间戳（跨会话有效）
         .then(function(){
           return getActivationCode().then(function(code){
             return NfoCore.reviewRequest(info, {
@@ -10760,8 +10790,8 @@ function maybeFetchAiReview(filmOrId){
           });
         }).then(function(list){
           if (!list || !list.length) return;
-          return aiReviewSet(id, { list: list, at: now }).then(function(){
-            paintAiReview(id, list);                         // 详情页正开着 → 局部插入
+          return aiReviewSet(id, { list: list, at: now }, av).then(function(){
+            paintAiReview(id, list);                       // 详情页正开着 → 局部插入
           });
         }).catch(function(){
           /* ① 失败静默：只留 at，不显示、不提示 */

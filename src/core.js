@@ -705,6 +705,7 @@ function applyFilmData(film){
   state.adult = !!(film.adult);
   var d = film.data || {};
   state.source = film.source || '';   // 还原来源，编辑后保存保持原来源
+  state.javCensor = d.javCensor || ''; // v508：与移动端一致，重存不丢有码/无码标记
   state.javbusId = d.javbusId || null;
   state.javbusMagnets = (d.javbusMagnets || []).slice();   // 还原 JavBus 磁力列表
   state.tmdbMediaType = d.tmdbMediaType || 'movie';   // 还原 TMDB 媒体类型（电影/剧集），旧数据无此字段默认电影

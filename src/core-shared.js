@@ -208,6 +208,19 @@
       '不剧透关键情节，不臆造演员、奖项、评分等未证实信息，不照抄资料原文，不用「神作」「烂片」「必看」这类空泛情绪词。',
       '不要出现引用编号、来源链接、「据某某报道」等溯源字样，不要 Markdown、标题、项目符号、序号。',
       '严格输出单个 JSON 对象，不要代码块、不要任何多余文字。格式：{"comments":["评论一","评论二",...]}，数组长度 8~15，每个元素都是字符串。'
+    ].join('\n'),
+    /* v508：AV（有码番号片）专用评论 —— 输入只有一个番号，风格胆大、轻松、成人向。
+       普通影片与 AV 的 prompt 完全分开，互不影响；输出结构仍是 comments 数组，UI 全复用。 */
+    avReview: [
+      '你是一位熟悉日本商业成人影片的老观众，正在为成人影片资料库写观众短评。用户只给你一个番号（品番），请自行查阅公开资料，判断这是什么路数的片子。',
+      '写出 8~15 条彼此不重复的简体中文短评，语气像论坛 / 社群里真实存在的老司机留言。',
+      '风格要胆大、轻松、直白：别端着写正经影评，也别写成温吞的官方简介；可以用圈内用语、行话和带点颜色的调侃，敢说题材类别、企划套路、尺度大小、氛围、节奏拖不拖、看点在哪、值不值得留着、适合什么心情看。',
+      '如实反映：不预设褒贬，不为凑平衡硬夸硬踩；查不到资料就老实说「这个番号资料少」，不臆造演员、剧情、评分。',
+      '角度尽量分散：第一眼的封面印象、题材与企划、主演表现、节奏与剪辑、氛围与质感、亮点、明显短板、在同类里的位置、适合谁看、一句话直觉等。',
+      '每条 15~40 字，独立成句，读完能让人对这片子多一点判断。',
+      '边界：只讨论成年演员出演的合法商业成人影片，用观感与圈内用语点到为止；不描写具体性行为过程、不写身体细节、不出现任何未成年人相关内容、不涉及非自愿或违法行为。',
+      '不要引用编号、来源链接、「据某某报道」等溯源字样，不要 Markdown、标题、项目符号、序号。',
+      '严格输出单个 JSON 对象，不要代码块、不要任何多余文字。格式：{"comments":["评论一","评论二",...]}，数组长度 8~15，每个元素都是字符串。'
     ].join('\n')
   };
 
@@ -407,27 +420,36 @@
     });
   }
 
-  /* 精彩评论（v504）：info = { title, originaltitle, date }，只发三项，资料由模型自行查阅。
-     自填配置完整 → 直连 LLM（复用 callLLM + review prompt）；
-     否则 → Worker /ai/review（仅高级档放行，提示词随请求体带过去）。
+  /* 精彩评论（v504 起）：
+     普通影片 info = { title, originaltitle, date } → AI_PROMPTS.review；
+     AV 影片 info = { av:true, dvdId } → AI_PROMPTS.avReview，只发番号（v508）。
+     自填配置完整 → 直连 LLM；否则 → Worker /ai/review（提示词随请求体带过去）。
      两条链路都拿到模型原文，统一由 parseAiReviewText 取 comments → 评论数组。 */
   function reviewRequest(info, opts) {
     opts = opts || {};
     info = info || {};
-    var payload = {
-      title: String(info.title || '').slice(0, 200),
-      originaltitle: String(info.originaltitle || '').slice(0, 200),
-      date: String(info.date || '').slice(0, 20),
-      prompt: AI_PROMPTS.review
-    };
-    if (!payload.title.trim()) return Promise.reject(new Error('缺少片名'));
-    var own = opts.ownCfg || {};
-    if (own.baseUrl && own.apiKey && own.model) {
-      var userMsg = '【片名】' + payload.title
+    var av = !!info.av;
+    var sysPrompt = av ? AI_PROMPTS.avReview : AI_PROMPTS.review;
+    var payload = av
+      ? { dvdId: String(info.dvdId || '').slice(0, 60), prompt: sysPrompt }
+      : {
+          title: String(info.title || '').slice(0, 200),
+          originaltitle: String(info.originaltitle || '').slice(0, 200),
+          date: String(info.date || '').slice(0, 20),
+          prompt: sysPrompt
+        };
+    if (av ? !payload.dvdId.trim() : !payload.title.trim()) {
+      return Promise.reject(new Error(av ? '缺少番号' : '缺少片名'));
+    }
+    var userMsg = av
+      ? '【番号】' + payload.dvdId
+      : '【片名】' + payload.title
         + '\n【原始名称】' + (payload.originaltitle || '未知')
         + '\n【上映日期】' + (payload.date || '未知');
+    var own = opts.ownCfg || {};
+    if (own.baseUrl && own.apiKey && own.model) {
       return callLLM([
-        { role: 'system', content: AI_PROMPTS.review },
+        { role: 'system', content: sysPrompt },
         { role: 'user', content: userMsg }
       ], own, { temperature: 0.7 }).then(parseAiReviewText);
     }
@@ -798,6 +820,7 @@ function normalizeJavbusFilm(d, opts){
         countries: state.countries.slice(), genres: state.genres.slice(),
         directors: state.directors, actors: state.actors,
         studio: normalizeTextField(state.studio), label: normalizeTextField(state.label), series: normalizeTextField(state.series), dvdId: state.dvdId || null,
+        javCensor: state.javCensor || '',   /* v508：记录 JavBus 有码/无码区，供 AV 评论判断是否跳过无码；老片无此字段 */
         poster: state.poster || null, originalPoster: state.originalPoster || null, fanart: state.fanart || null, logo: state.logo || null, detailPoster: state.detailPoster || null,
         posterCandidates: state.posterCandidates || null, fanartCandidates: state.fanartCandidates || null,
         gallery: state.gallery || [], galleryLinks: state.galleryLinks || [], hasSubtitle: !!state.hasSubtitle, trailer: state.trailer || null, tmdbId: state.tmdbId || null,

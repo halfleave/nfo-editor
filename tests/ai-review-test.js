@@ -43,8 +43,8 @@ function extractFn(code, name) {
   throw new Error('括号不配对：' + name);
 }
 const FN = ['aiReviewKey', 'aiReviewGet', 'aiReviewSet', 'aiReviewConfigReady',
-  'aiReviewInfoOf', 'cmShuffle', 'cmLaneHtml', 'paintAiReview', 'renderAiReview',
-  'maybeFetchAiReview'];
+  'aiReviewMaskedByCode', 'aiReviewAllowed', 'aiReviewInfoOf', 'cmShuffle', 'cmLaneHtml',
+  'paintAiReview', 'renderAiReview', 'maybeFetchAiReview'];
 
 /* —— 运行时桩 —— */
 let NOW = 1700000000000;
@@ -87,6 +87,7 @@ const sandbox = {
   },
   showToast: function () { /* 失败应静默，一旦被调用即为异常 */ },
   NfoCore: {
+    isAvFilm: function (f) { return !!(f && f.data && f.data.dvdId); },
     reviewRequest: function (info, opts) {
       calls.review.push({ info: info, opts: opts });
       if (reviewMode === 'fail') return Promise.reject(new Error('评论服务不可用'));
@@ -260,6 +261,60 @@ function reset(opts) {
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
   ok('AI 只回 1 条：整块不出现', boxes.detailAiReview.style.display === 'none' && boxes.detailAiReview.innerHTML === '');
+
+  /* ⑧ v508：有码 / 无码判定 —— 拿不准的一律当无码 */
+  ok('有码判定: 标准番号放行', sandbox.aiReviewMaskedByCode('IPX-456') === true);
+  ok('有码判定: 中文字幕后缀放行', sandbox.aiReviewMaskedByCode('MIAB-500C') === true);
+  ok('有码判定: 无码后缀 U 跳过', sandbox.aiReviewMaskedByCode('ABC-123U') === false);
+  ok('有码判定: FC2 / HEYZO 跳过', !sandbox.aiReviewMaskedByCode('FC2-PPV-123456')
+    && !sandbox.aiReviewMaskedByCode('HEYZO-0523'));
+  ok('有码判定: 纯数字日期式跳过', !sandbox.aiReviewMaskedByCode('070116-197'));
+  ok('有码判定: 无分隔符拿不准→跳过', !sandbox.aiReviewMaskedByCode('ABC123'));
+  ok('有码判定: 普通影片不受限制', sandbox.aiReviewAllowed(films.f1) === true);
+
+  /* ⑨ v508：AV 只发番号、独立缓存键、三行 UI 复用 */
+  reset();
+  const avFilm = { id: 'av1', title: 'IPX-456', data: { dvdId: 'IPX-456', javCensor: 'masked', title: '某片' } };
+  films['av1'] = avFilm;
+  sandbox.maybeFetchAiReview('av1');
+  await tick(14);
+  ok('AV: 发起 1 次 AI 请求', calls.review.length === 1, JSON.stringify(calls.review));
+  ok('AV: 只发番号（不带片名/日期）', (function () {
+    const i = calls.review[0] && calls.review[0].info;
+    return !!i && i.av === true && i.dvdId === 'IPX-456'
+      && !('title' in i) && !('originaltitle' in i) && !('date' in i);
+  })(), JSON.stringify(calls.review[0]));
+  ok('AV: 用独立缓存键 aiReviewAv', !!kv['aiReviewAv:av1'] && kv['aiReviewAv:av1'].list.length === 3
+    && !kv['aiReview2:av1'], JSON.stringify(kv));
+  setCurrent('av1');
+  sandbox.renderAiReview(avFilm);
+  await tick(8);
+  ok('AV: 详情页复用「精彩评论」三行滚动', /class="cm-head">精彩评论</.test(boxes.detailAiReview.innerHTML)
+    && (boxes.detailAiReview.innerHTML.match(/class="cm-lane"/g) || []).length === 3);
+  sandbox.maybeFetchAiReview('av1');
+  await tick(10);
+  ok('AV: 已有评论不重复调 AI', calls.review.length === 1, JSON.stringify(calls.review));
+
+  /* ⑩ v508：无码 / 拿不准 → 不请求、不落库、不显示 */
+  const skipped = [
+    { id: 'u1', data: { dvdId: 'FC2-PPV-123456', javCensor: 'uncensored' } },  // 明确无码
+    { id: 'u2', data: { dvdId: '070116-197' } },                              // 老片、纯数字格式
+    { id: 'u3', data: { dvdId: 'HEYZO-0523' } },                              // 老片、无码厂牌
+    { id: 'u4', data: { dvdId: 'ABC123' } },                                  // 老片、格式拿不准
+    { id: 'u5', data: { dvdId: 'IPX-456', javCensor: 'uncensored' } }          // 新片明确无码
+  ];
+  for (const c of skipped) {
+    const f = { id: c.id, title: c.id, data: c.data };
+    films[c.id] = f;
+    reset();
+    setCurrent(c.id);
+    sandbox.maybeFetchAiReview(c.id);
+    await tick(12);
+    ok('无码/拿不准 ' + c.id + '：0 次 AI 请求', calls.review.length === 0, JSON.stringify(calls.review));
+    ok('无码/拿不准 ' + c.id + '：不写缓存', !kv['aiReviewAv:' + c.id] && !kv['aiReview2:' + c.id]);
+    ok('无码/拿不准 ' + c.id + '：评论区保持隐藏', boxes.detailAiReview.style.display === 'none'
+      && boxes.detailAiReview.innerHTML === '');
+  }
 
   console.log('ai-review ' + (fail ? ('有 ' + fail + ' 项失败') : '全通过'));
   if (fail) process.exitCode = 1;

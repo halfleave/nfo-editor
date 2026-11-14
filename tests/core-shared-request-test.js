@@ -19,7 +19,7 @@ function stubFetch(url, init) {
     // 按 system prompt 区分功能：评论返回 {"comments":[...]} JSON 字符串，翻译返回 {title,summary} JSON 字符串
     let sys = '';
     try { sys = JSON.parse(init.body).messages[0].content || ''; } catch (e) {}
-    const isReview = /影视评论人/.test(sys);
+    const isReview = /影视评论人|商业成人影片/.test(sys);   // v508：AV 提示词同样返回 comments 数组
     payload = { choices: [{ message: { content: isReview ? (reviewRaw === null ? REVIEW_RAW_DEFAULT : reviewRaw) : JSON.stringify({ title: 'T', summary: 'S' }) } }] };
   } else if (/\/translate(\?|$)/.test(url)) {
     payload = { title: 'W', summary: 'Q' };
@@ -155,11 +155,42 @@ async function expectReject(name, p, re) {
   await expectReject('review/缺配置: 正确 reject', NfoCore.reviewRequest(REVIEW_INFO, {}), /未配置精彩评论/);
   await expectReject('review/缺片名: 正确 reject', NfoCore.reviewRequest({ plot: 'x' }, { workerBase: 'https://w.example.com' }), /缺少片名/);
 
-  // 11. AI_PROMPTS 表是单点真相：translate / tidy / review 三份
-  eq('AI_PROMPTS: 三份提示词', !!NfoCore.AI_PROMPTS && typeof NfoCore.AI_PROMPTS.translate === 'string'
-    && typeof NfoCore.AI_PROMPTS.tidy === 'string' && typeof NfoCore.AI_PROMPTS.review === 'string');
+  // 11. AI_PROMPTS 表是单点真相：translate / tidy / review / avReview 四份
+  eq('AI_PROMPTS: 四份提示词', !!NfoCore.AI_PROMPTS && typeof NfoCore.AI_PROMPTS.translate === 'string'
+    && typeof NfoCore.AI_PROMPTS.tidy === 'string' && typeof NfoCore.AI_PROMPTS.review === 'string'
+    && typeof NfoCore.AI_PROMPTS.avReview === 'string');
   eq('AI_PROMPTS: translate 与旧常量一致', NfoCore.AI_PROMPTS.translate === NfoCore.TRANSLATE_SYSTEM_PROMPT);
   eq('AI_PROMPTS: tidy 已由 Worker 搬入客户端', /115 网盘文件整理助手/.test(NfoCore.AI_PROMPTS.tidy));
+  eq('AI_PROMPTS: AV 提示词与普通影评完全分开', NfoCore.AI_PROMPTS.avReview !== NfoCore.AI_PROMPTS.review
+    && !/影视评论人/.test(NfoCore.AI_PROMPTS.avReview));
+
+  /* —— v508 AV 评论：只发番号 + 独立提示词，输出结构仍复用 comments 数组 —— */
+  const AV_INFO = { av: true, dvdId: 'IPX-456' };
+  calls = [];
+  await NfoCore.reviewRequest(AV_INFO, { ownCfg: OWN }).then(function (list) {
+    eq('AV/自填cfg: 仅 1 次请求', calls.length === 1);
+    const body = JSON.parse(calls[0].init.body);
+    eq('AV/自填cfg: 用 AV 专用提示词', /商业成人影片/.test(body.messages[0].content));
+    eq('AV/自填cfg: 不用普通影评提示词', !/影视评论人/.test(body.messages[0].content));
+    eq('AV/自填cfg: 提示词要求胆大轻松成人向', /胆大/.test(body.messages[0].content)
+      && /轻松/.test(body.messages[0].content) && /圈内用语/.test(body.messages[0].content));
+    eq('AV/自填cfg: 提示词要求 comments 数组', /"comments"/.test(body.messages[0].content));
+    const um = body.messages[1].content;
+    eq('AV/自填cfg: 只发番号一项', /【番号】IPX-456/.test(um) && !/【片名】/.test(um)
+      && !/【原始名称】/.test(um) && !/【上映日期】/.test(um), um);
+    eq('AV/自填cfg: 解析出评论数组', Array.isArray(list) && list.length === 3, JSON.stringify(list));
+  });
+  calls = [];
+  await NfoCore.reviewRequest(AV_INFO, { workerBase: 'https://w.example.com', code: 'FULL123' })
+    .then(function (list) {
+      eq('AV/Worker: 走 /ai/review', /\/ai\/review/.test(calls[0].url));
+      const body = JSON.parse(calls[0].init.body);
+      eq('AV/Worker: 只带 dvdId + prompt', body.dvdId === 'IPX-456'
+        && !('title' in body) && !('originaltitle' in body) && !('date' in body), JSON.stringify(body));
+      eq('AV/Worker: 带 AV 提示词', /商业成人影片/.test(body.prompt || ''));
+      eq('AV/Worker: 返回评论数组', Array.isArray(list) && list.length === 3, JSON.stringify(list));
+    });
+  await expectReject('AV/缺番号: 正确 reject', NfoCore.reviewRequest({ av: true }, { ownCfg: OWN }), /缺少番号/);
 
   /* —— v504 comments 数组解析：正常 / 围栏 / 噪音 / 去角标 / 去重 / 七类失败 —— */
   eq('parse/纯 JSON', NfoCore.parseAiReviewText('{"comments":["节奏舒缓。","镜头慢得有理","适合一个人看"]}').length === 3);
