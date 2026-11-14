@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '505';
+window.__SCRIPT_VER = '506';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -10675,8 +10675,9 @@ function aiReviewInfoOf(film){
     date: String(d.premiered || d.year || '').slice(0, 20)
   };
 }
-/* 三行循环随机滚动：打乱 → 轮流分到三行 → 每行随机方向/速度/起始位置，
-   序列复制两份做无缝循环（track 移到 -50% 正好回到起点）。 */
+/* 三行循环滚动：打乱 → 轮流分到三行 → 速度/起始位置随机、方向按行固定，
+   序列复制两份做无缝循环（track 移到 -50% 正好回到起点）。
+   v506：第一行/第三行从右向左（normal，内容左移），第二行从左向右（reverse）。 */
 function cmShuffle(a){
   var r = a.slice();
   for (var i = r.length - 1; i > 0; i--){
@@ -10685,10 +10686,10 @@ function cmShuffle(a){
   }
   return r;
 }
-function cmLaneHtml(items){
+function cmLaneHtml(items, row){
   var seq = items.map(function(s){ return '<span class="cm-bubble">' + escapeHtml(s) + '</span>'; }).join('');
   var dur = 32 + Math.floor(Math.random() * 26);        // 32~57s，缓慢不抢眼
-  var dir = (Math.random() < 0.5) ? 'normal' : 'reverse';
+  var dir = (row === 1) ? 'reverse' : 'normal';         // 第 1/3 行右→左，第 2 行左→右
   var delay = -(Math.random() * dur);                   // 负延迟 = 随机起始位置
   return '<div class="cm-lane"><div class="cm-track" style="--cm-dur:' + dur + 's;--cm-dir:' + dir + ';--cm-delay:' + delay.toFixed(1) + 's">'
        + '<div class="cm-seq">' + seq + '</div><div class="cm-seq">' + seq + '</div>'
@@ -10705,7 +10706,7 @@ function paintAiReview(id, list){
   cmShuffle(arr).forEach(function(s, k){ lanes[k % 3].push(s); });
   if (box.classList && box.classList.remove) box.classList.remove('cm-paused');
   box.innerHTML = '<div class="cm-head">精彩评论</div>'
-    + '<div class="cm-lanes">' + lanes.map(cmLaneHtml).join('') + '</div>';
+    + '<div class="cm-lanes">' + lanes.map(function(items, i){ return cmLaneHtml(items, i); }).join('') + '</div>';
   box.onclick = function(){ openCommentsSheet(); };   // 覆盖式绑定，重绘不累积
   box.style.display = '';
 }

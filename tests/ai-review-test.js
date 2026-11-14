@@ -151,7 +151,9 @@ function reset(opts) {
   ok('renderAiReview：标题为「精彩评论」', /class="cm-head">精彩评论</.test(boxes.detailAiReview.innerHTML));
   ok('renderAiReview：三行滚动轨道', (boxes.detailAiReview.innerHTML.match(/class="cm-lane"/g) || []).length === 3);
   ok('renderAiReview：每行两份序列做无缝循环', (boxes.detailAiReview.innerHTML.match(/class="cm-seq"/g) || []).length === 6);
-  ok('renderAiReview：随机方向/速度/起始位置', /--cm-dur:\d+s;--cm-dir:(normal|reverse);--cm-delay:-/.test(boxes.detailAiReview.innerHTML));
+  var cmDirs = (boxes.detailAiReview.innerHTML.match(/--cm-dir:(normal|reverse)/g) || []).map(function(s){ return s.split(':')[1]; });
+  ok('renderAiReview：1/3 行右→左、2 行左→右', cmDirs.length === 3 && cmDirs[0] === 'normal' && cmDirs[1] === 'reverse' && cmDirs[2] === 'normal', JSON.stringify(cmDirs));
+  ok('renderAiReview：速度/起始位置仍随机', /--cm-dur:\d+s;--cm-dir:(normal|reverse);--cm-delay:-/.test(boxes.detailAiReview.innerHTML));
   ok('renderAiReview：点击区域绑定弹窗', typeof boxes.detailAiReview.onclick === 'function');
 
   /* HTML 转义防注入 */

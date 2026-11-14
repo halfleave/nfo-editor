@@ -406,13 +406,15 @@ img { display: block; }
 .detail-cast-spacer { flex: 0 0 auto; width: 4px; height: 1px; }
 .detail-cast-row::-webkit-scrollbar { display: none; }
 .detail-person { flex: 0 0 auto; width: 72px; text-align: center; }
-/* v505「精彩评论」—— 剧照上方，仅在拿到足量评论时由 JS 显示（无占位、无加载态） */
-/* ===== v505：精彩评论（三行随机循环滚动，点击弹窗看全部；去掉外层灰底卡片，评论文字统一字号） ===== */
-.detail-ai-review { margin-top: 22px; padding: 4px 0 6px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+/* v506「精彩评论」—— 剧照上方，仅在拿到足量评论时由 JS 显示（无占位、无加载态） */
+/* ===== v506：精彩评论（三行随机循环滚动，点击弹窗看全部；字号统一、轨道通栏到屏幕边缘） =====
+   .detail-content 左右各 20px 内边距：整块用 -20px 负边距通栏，标题用 20px padding 拉回原对齐，
+   三行轨道再 -20px 抵消，裁切边界正好落在屏幕左右边缘（与 .detail-cast-row 同一手法）。 */
+.detail-ai-review { margin: 22px -20px 0; padding: 4px 20px 6px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .detail-ai-review:empty { display: none; }
 .detail-ai-review:active { opacity: .88; }
-.cm-head { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 10px; }
-.cm-lanes { display: flex; flex-direction: column; gap: 9px; }
+.cm-head { font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0 0 10px; }
+.cm-lanes { display: flex; flex-direction: column; gap: 9px; margin: 0 -20px; }
 .cm-lane { overflow: hidden; }
 .cm-track { display: flex; width: max-content; animation: cm-scroll var(--cm-dur, 42s) linear infinite; animation-direction: var(--cm-dir, normal); animation-delay: var(--cm-delay, 0s); will-change: transform; }
 .cm-seq { display: flex; gap: 9px; padding-right: 9px; }
