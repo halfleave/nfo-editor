@@ -1667,16 +1667,18 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 /* ===== v446：里模式「不显示 AV 封面」占位（浅色底 / 深色底 + 番号） =====
    搜索列表 .tr-cover 与首页 .mc-poster 共用；详情页海报、磁力弹窗等其它位置不受影响
    v510：番号改上下两行（字母 / 数字），字号整体放大；外层 .av-mask-txt 用 > 选择器，
-   避免内层两行被下面 .mc-poster 的绝对定位规则命中而重叠 */
+   避免内层两行被下面 .mc-poster 的绝对定位规则命中而重叠
+   v513：容器开 container-type，字号由 avCoverMaskHtml() 按封面宽度 / 番号长短算成 cqw 内联，
+   让最长一行约占封面 80% 宽；不认 cqw 的旧系统忽略内联声明，自动退回下面各处的固定 px。 */
 .av-cover-mask {
   display: flex; align-items: center; justify-content: center;
-  box-sizing: border-box; overflow: hidden;
+  box-sizing: border-box; overflow: hidden; container-type: inline-size;
   background: #eceef3; color: #7c8290;
 }
 [data-theme="dark"] .av-cover-mask { background: #24262b; color: #8b919c; }
 .av-mask-txt {
   display: block; box-sizing: border-box; max-width: 100%; padding: 0 6px;
-  text-align: center; line-height: 1.15;
+  text-align: center; line-height: 1.15; opacity: .85;
   font-weight: 700; letter-spacing: 0.4px; word-break: break-word; overflow-wrap: anywhere;
 }
 .av-mask-txt .av-mask-l,
@@ -2629,9 +2631,10 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 }
 /* 空态不压暗（那一屏本来就是整片延伸色） */
 .bg-slide.no-shade::after { display: none; }
-/* 里模式「隐私封面」：不拉海报，只给番号（v510：两行、字号放大） */
+/* 里模式「隐私封面」：不拉海报，只给番号（v510：两行、字号放大；v513：按封面宽度自适应） */
 .hero-mask {
   position: absolute; inset: 0; display: grid; place-items: center;
+  container-type: inline-size;
   background: #202027; color: rgba(255,255,255,.72);
   font-size: 22px; font-weight: 600; letter-spacing: 1px;
 }

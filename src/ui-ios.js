@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '512';
+window.__SCRIPT_VER = '513';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -10727,11 +10727,11 @@ function openFilmDetail(encId){
   });
 }
 
-/* ===== v512：精彩评论（保存时生成，剧照上方展示；AV 在磁力列表上方）=====
+/* ===== v513：精彩评论（保存时生成，剧照上方展示；AV 在磁力列表上方）=====
    状态放独立 kv 键，不写进 film.data —— buildFilmFromCurrent() 每次从表单重建 film，
-   会覆盖 data 里的额外字段。普通影片键 aiReview2:<id>，AV 键 aiReviewAv3:<id>（互不混用；
+   会覆盖 data 里的额外字段。普通影片键 aiReview3:<id>，AV 键 aiReviewAv3:<id>（互不混用；
    v511 由 aiReviewAv: → aiReviewAv2:，v512 再由 aiReviewAv2: → aiReviewAv3:，
-   每次改 AV 提示词都换键，令旧语气的评论自然作废、按新提示词重生成一次），
+   v513 普通片由 aiReview2: → aiReview3:；每次改对应提示词就换键，令旧语气评论自然作废、按新提示词重生成一次），
    值 = { list:[...], at }。
    规则：
    ① 评论不足 3 条 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
@@ -10742,9 +10742,9 @@ function openFilmDetail(encId){
 var AI_REVIEW_GAP = 5 * 60 * 1000;
 var aiReviewInFlight = {};              // filmId → true（本会话内，防打断）
 var aiReviewShowing = [];               // 当前详情页的评论，供弹窗展示
-/* v512：AV 再换键 aiReviewAv3 —— 上一版语气偏资料库短评、尺度只到「概括提行为类型」，
-   旧评论不重生成就不会变；换键后老片按新语气自然重生成一次（每片一次），普通影片 aiReview2 不受影响。 */
-function aiReviewKey(id, av){ return (av ? 'aiReviewAv3:' : 'aiReview2:') + id; }
+/* v513：普通片换键 aiReview3 —— 提示词改成聊天吐槽语气，旧评论不重生成就不会变；
+   AV 的 aiReviewAv3 保持不变（v512 已换过），两边互不影响。 */
+function aiReviewKey(id, av){ return (av ? 'aiReviewAv3:' : 'aiReview3:') + id; }
 function aiReviewGet(id, av){
   return idbGet('kv', aiReviewKey(id, av)).then(function(v){
     var list = (v && Array.isArray(v.list))
@@ -14822,13 +14822,23 @@ function avCoverMaskHtml(code){
   var txt = String(code == null ? '' : code).trim() || '无番号';
   var parts = /^[A-Za-z0-9-]+$/.test(txt) ? txt.split('-') : [];
   var num = parts.length > 1 ? parts.slice(1).join('-') : '';
+  /* v513：字号按「最长一行约占封面 80% 宽」反推，用 cqw 跟着封面宽度走。
+     数字行还要再放大 1.12em，所以等效字数取 max(字母长, 数字长×1.12)；
+     粗体拉丁字符平均约 0.68em 宽（含字距），汉字按 1em 算，都偏保守以免被裁。
+     上限 120cqw 防超宽屏失控；老系统不认 cqw 会忽略内联声明，退回 CSS 里的固定 px。 */
+  function maskFsStyle(l, n, wide){
+    var eff = Math.max(l, n ? n * 1.12 : l, 1);
+    var fs = Math.min(120, 80 / ((wide ? 1 : 0.68) * eff));
+    return ' style="font-size:' + fs.toFixed(1) + 'cqw"';
+  }
+  var wide = /[^\x00-\x7F]/.test(txt);
   if (parts.length > 1 && parts[0].length <= 8 && /[A-Za-z]/.test(parts[0]) && /[0-9]/.test(num)) {
-    return '<span class="av-mask-txt">'
+    return '<span class="av-mask-txt"' + maskFsStyle(parts[0].length, num.length, false) + '>'
       + '<span class="av-mask-l">' + escapeHtml(parts[0]) + '</span>'
       + '<span class="av-mask-n' + (num.length > 8 ? ' av-mask-long' : '') + '">' + escapeHtml(num) + '</span>'
       + '</span>';
   }
-  return '<span class="av-mask-txt">' + escapeHtml(txt) + '</span>';
+  return '<span class="av-mask-txt"' + maskFsStyle(txt.length, 0, wide) + '>' + escapeHtml(txt) + '</span>';
 }
 /* 统一入口：首页 AV 行标题右侧的眼镜按钮也走这里（点击直接开关，和设置页开关联动） */
 function setAvCoverMask(v){

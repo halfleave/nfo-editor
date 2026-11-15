@@ -19,7 +19,7 @@ function stubFetch(url, init) {
     // 按 system prompt 区分功能：评论返回 {"comments":[...]} JSON 字符串，翻译返回 {title,summary} JSON 字符串
     let sys = '';
     try { sys = JSON.parse(init.body).messages[0].content || ''; } catch (e) {}
-    const isReview = /影视评论人|商业成人影片/.test(sys);   // v508：AV 提示词同样返回 comments 数组
+    const isReview = /阅片量很大|商业成人影片/.test(sys);   // v508：AV 提示词同样返回 comments 数组
     payload = { choices: [{ message: { content: isReview ? (reviewRaw === null ? REVIEW_RAW_DEFAULT : reviewRaw) : JSON.stringify({ title: 'T', summary: 'S' }) } }] };
   } else if (/\/translate(\?|$)/.test(url)) {
     payload = { title: 'W', summary: 'Q' };
@@ -124,10 +124,14 @@ async function expectReject(name, p, re) {
     eq('review/自填cfg: 仅 1 次请求', calls.length === 1);
     eq('review/自填cfg: endpoint 自动补 /chat/completions', calls[0].url === 'https://llm.example.com/v1/chat/completions');
     const body = JSON.parse(calls[0].init.body);
-    eq('review/自填cfg: 用精彩评论提示词', /影视评论人/.test(body.messages[0].content));
+    eq('review/自填cfg: 用精彩评论提示词', /阅片量很大/.test(body.messages[0].content));
     eq('review/自填cfg: 不用翻译提示词', !/译为简体中文的翻译专家/.test(body.messages[0].content));
     eq('review/自填cfg: 提示词要求 comments 数组', /"comments"/.test(body.messages[0].content) && /JSON/.test(body.messages[0].content));
     eq('review/自填cfg: 提示词要求如实反映', /如实反映/.test(body.messages[0].content));
+    eq('review/自填cfg: 语气聊天吐槽但内容仍要有价值', /跟朋友聊天/.test(body.messages[0].content)
+      && /吐槽/.test(body.messages[0].content) && /客套书面话术/.test(body.messages[0].content)
+      && /读完能让人对这片子多一点判断/.test(body.messages[0].content)
+      && /角度尽量分散/.test(body.messages[0].content));
     const um = body.messages[1].content;
     eq('review/自填cfg: 只发三项', /【片名】/.test(um) && /【原始名称】/.test(um) && /【上映日期】/.test(um)
       && !/【简介】/.test(um) && !/【评分】/.test(um) && !/【类型】/.test(um));
@@ -146,7 +150,7 @@ async function expectReject(name, p, re) {
       const body = JSON.parse(calls[0].init.body);
       eq('review/Worker: 只发三项', body.title === '花样年华' && body.originaltitle === 'In the Mood for Love'
         && body.date === '2000-09-29' && !('plot' in body) && !('genres' in body) && !('rating' in body));
-      eq('review/Worker: 带客户端提示词', /影视评论人/.test(body.prompt || '') && /"comments"/.test(body.prompt || ''));
+      eq('review/Worker: 带客户端提示词', /阅片量很大/.test(body.prompt || '') && /"comments"/.test(body.prompt || ''));
       eq('review/Worker: Worker 只回 raw，客户端统一解析', Array.isArray(list) && list.length === 3
         && list[0] === '节奏克制，余韵悠长。', JSON.stringify(list));
     });
@@ -162,7 +166,7 @@ async function expectReject(name, p, re) {
   eq('AI_PROMPTS: translate 与旧常量一致', NfoCore.AI_PROMPTS.translate === NfoCore.TRANSLATE_SYSTEM_PROMPT);
   eq('AI_PROMPTS: tidy 已由 Worker 搬入客户端', /115 网盘文件整理助手/.test(NfoCore.AI_PROMPTS.tidy));
   eq('AI_PROMPTS: AV 提示词与普通影评完全分开', NfoCore.AI_PROMPTS.avReview !== NfoCore.AI_PROMPTS.review
-    && !/影视评论人/.test(NfoCore.AI_PROMPTS.avReview));
+    && !/阅片量很大/.test(NfoCore.AI_PROMPTS.avReview));
 
   /* —— v511 AV 评论：只发番号 + 片名 + 独立提示词，输出结构仍复用 comments 数组 —— */
   const AV_INFO = { av: true, dvdId: 'IPX-456', title: '夫の目の前で…' };
@@ -172,7 +176,7 @@ async function expectReject(name, p, re) {
     const body = JSON.parse(calls[0].init.body);
     const sys = body.messages[0].content;
     eq('AV/自填cfg: 用 AV 专用提示词', /商业成人影片/.test(sys));
-    eq('AV/自填cfg: 不用普通影评提示词', !/影视评论人/.test(sys));
+    eq('AV/自填cfg: 不用普通影评提示词', !/阅片量很大/.test(sys));
     eq('AV/自填cfg: 提示词要求联网查作品内容', /联网检索/.test(sys) && /剧情桥段/.test(sys));
     eq('AV/自填cfg: 提示词禁止解读番号与聊厂商', /严禁/.test(sys) && /解读番号字母/.test(sys) && /厂商/.test(sys));
     eq('AV/自填cfg: 提示词要求评论落在具体内容', /作品内容/.test(sys) && /人物关系/.test(sys));

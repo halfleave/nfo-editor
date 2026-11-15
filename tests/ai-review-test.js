@@ -132,9 +132,9 @@ function reset(opts) {
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
   ok('首次：发起 1 次 AI 请求', calls.review.length === 1, JSON.stringify(calls.review));
-  ok('首次：at 在发起时已落库（跨会话有效）', kv['aiReview2:f1'] && typeof kv['aiReview2:f1'].at === 'number');
-  ok('首次：成功后写入评论数组', kv['aiReview2:f1'] && Array.isArray(kv['aiReview2:f1'].list)
-    && kv['aiReview2:f1'].list.length === 3 && kv['aiReview2:f1'].list[0] === COMMENTS[0]);
+  ok('首次：at 在发起时已落库（跨会话有效）', kv['aiReview3:f1'] && typeof kv['aiReview3:f1'].at === 'number');
+  ok('首次：成功后写入评论数组', kv['aiReview3:f1'] && Array.isArray(kv['aiReview3:f1'].list)
+    && kv['aiReview3:f1'].list.length === 3 && kv['aiReview3:f1'].list[0] === COMMENTS[0]);
   ok('首次：只发片名/原始名/完整日期三项', (function () {
     const i = calls.review[0] && calls.review[0].info;
     return !!i && i.title === '花样年华' && i.originaltitle === 'In the Mood for Love' && i.date === '2000-09-29'
@@ -160,7 +160,7 @@ function reset(opts) {
   /* HTML 转义防注入 */
   reset();
   setCurrent('f1');
-  kv['aiReview2:f1'] = { list: ['<img src=x onerror=alert(1)>', '正常评论一', '正常评论二'], at: NOW };
+  kv['aiReview3:f1'] = { list: ['<img src=x onerror=alert(1)>', '正常评论一', '正常评论二'], at: NOW };
   sandbox.renderAiReview(films.f1);
   await tick(8);
   ok('renderAiReview：HTML 转义防注入', /&lt;img/.test(boxes.detailAiReview.innerHTML)
@@ -168,11 +168,11 @@ function reset(opts) {
 
   /* ② 已有评论 → 永不重复调 AI */
   reset();
-  kv['aiReview2:f1'] = { list: ['早就写好的评论一', '早就写好的评论二', '早就写好的评论三'], at: NOW - 1000 };
+  kv['aiReview3:f1'] = { list: ['早就写好的评论一', '早就写好的评论二', '早就写好的评论三'], at: NOW - 1000 };
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
   ok('已有评论：0 次请求', calls.review.length === 0, JSON.stringify(calls.review));
-  ok('已有评论：原评论不被覆盖', kv['aiReview2:f1'].list[0] === '早就写好的评论一');
+  ok('已有评论：原评论不被覆盖', kv['aiReview3:f1'].list[0] === '早就写好的评论一');
 
   /* ③ 在途不打断：连点两次只发一次 */
   reset();
@@ -204,7 +204,7 @@ function reset(opts) {
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
   ok('失败：不显示（区块仍隐藏）', boxes.detailAiReview.style.display === 'none' && boxes.detailAiReview.innerHTML === '');
-  ok('失败：只留 at，不留空评论', kv['aiReview2:f1'] && kv['aiReview2:f1'].list.length === 0 && kv['aiReview2:f1'].at === NOW);
+  ok('失败：只留 at，不留空评论', kv['aiReview3:f1'] && kv['aiReview3:f1'].list.length === 0 && kv['aiReview3:f1'].at === NOW);
   ok('失败：in-flight 已释放', !aiReviewInFlight['f1']);
   // 立刻再进详情（模拟刚保存就点进去）→ 冷却挡住
   sandbox.maybeFetchAiReview('f1');
@@ -221,7 +221,7 @@ function reset(opts) {
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
   ok('满 5 分钟后重开：重试 1 次', calls.review.length === 2, JSON.stringify(calls.review));
-  ok('重试成功：写入评论数组', kv['aiReview2:f1'] && kv['aiReview2:f1'].list.length === 3);
+  ok('重试成功：写入评论数组', kv['aiReview3:f1'] && kv['aiReview3:f1'].list.length === 3);
   // 成功后再进 → 永不再调
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
@@ -232,7 +232,7 @@ function reset(opts) {
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
   ok('无自填 Key 且非高级档：0 次请求', calls.review.length === 0);
-  ok('未就绪：不写库', !kv['aiReview2:f1']);
+  ok('未就绪：不写库', !kv['aiReview3:f1']);
   reset({ configReady: true, tier: 'full' });
   films['f1'] = { id: 'f1', title: '', data: {} };
   sandbox.maybeFetchAiReview('f1');
@@ -242,7 +242,7 @@ function reset(opts) {
   /* ⑥ 切换影片不串片 */
   reset();
   setCurrent('f1');
-  kv['aiReview2:f1'] = { list: ['A 的评论一', 'A 的评论二', 'A 的评论三'], at: NOW };
+  kv['aiReview3:f1'] = { list: ['A 的评论一', 'A 的评论二', 'A 的评论三'], at: NOW };
   sandbox.renderAiReview(films.f1);
   await tick(8);
   ok('切走前：显示 A 的评论', /A 的评论一/.test(boxes.detailAiReview.innerHTML));
@@ -255,7 +255,7 @@ function reset(opts) {
   reset({ reviewMode: 'empty' });
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
-  ok('AI 返回空数组：不显示', boxes.detailAiReview.style.display === 'none' && kv['aiReview2:f1'].list.length === 0);
+  ok('AI 返回空数组：不显示', boxes.detailAiReview.style.display === 'none' && kv['aiReview3:f1'].list.length === 0);
   reset({ reviewMode: 'few' });
   setCurrent('f1');
   sandbox.maybeFetchAiReview('f1');
@@ -285,7 +285,7 @@ function reset(opts) {
       && !('plot' in i) && !('genres' in i) && !('originaltitle' in i) && !('date' in i);
   })(), JSON.stringify(calls.review[0]));
   ok('AV: 用独立缓存键 aiReviewAv3', !!kv['aiReviewAv3:av1'] && kv['aiReviewAv3:av1'].list.length === 3
-    && !kv['aiReview2:av1'] && !kv['aiReviewAv:av1'] && !kv['aiReviewAv2:av1'], JSON.stringify(kv));
+    && !kv['aiReview3:av1'] && !kv['aiReviewAv:av1'] && !kv['aiReviewAv2:av1'], JSON.stringify(kv));
   setCurrent('av1');
   sandbox.renderAiReview(avFilm);
   await tick(8);
@@ -312,7 +312,7 @@ function reset(opts) {
     await tick(12);
     ok('无码/拿不准 ' + c.id + '：0 次 AI 请求', calls.review.length === 0, JSON.stringify(calls.review));
     ok('无码/拿不准 ' + c.id + '：不写缓存', !kv['aiReviewAv3:' + c.id] && !kv['aiReviewAv2:' + c.id]
-      && !kv['aiReviewAv:' + c.id] && !kv['aiReview2:' + c.id]);
+      && !kv['aiReviewAv:' + c.id] && !kv['aiReview3:' + c.id]);
     ok('无码/拿不准 ' + c.id + '：评论区保持隐藏', boxes.detailAiReview.style.display === 'none'
       && boxes.detailAiReview.innerHTML === '');
   }
