@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '511';
+window.__SCRIPT_VER = '512';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -10727,10 +10727,11 @@ function openFilmDetail(encId){
   });
 }
 
-/* ===== v511：精彩评论（保存时生成，剧照上方展示）=====
+/* ===== v512：精彩评论（保存时生成，剧照上方展示；AV 在磁力列表上方）=====
    状态放独立 kv 键，不写进 film.data —— buildFilmFromCurrent() 每次从表单重建 film，
-   会覆盖 data 里的额外字段。普通影片键 aiReview2:<id>，AV 键 aiReviewAv2:<id>（互不混用；
-   v511 由 aiReviewAv: 换键，令旧版绕厂商/番号字母的评论自然作废、按新提示词重生成一次），
+   会覆盖 data 里的额外字段。普通影片键 aiReview2:<id>，AV 键 aiReviewAv3:<id>（互不混用；
+   v511 由 aiReviewAv: → aiReviewAv2:，v512 再由 aiReviewAv2: → aiReviewAv3:，
+   每次改 AV 提示词都换键，令旧语气的评论自然作废、按新提示词重生成一次），
    值 = { list:[...], at }。
    规则：
    ① 评论不足 3 条 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
@@ -10741,9 +10742,9 @@ function openFilmDetail(encId){
 var AI_REVIEW_GAP = 5 * 60 * 1000;
 var aiReviewInFlight = {};              // filmId → true（本会话内，防打断）
 var aiReviewShowing = [];               // 当前详情页的评论，供弹窗展示
-/* v511：AV 换键 aiReviewAv2 —— 上一版提示词只会绕着厂商/番号字母写，旧评论不重生成就不会变；
-   换键后老片按新规则自然重生成一次（每片一次），普通影片 aiReview2 不受影响。 */
-function aiReviewKey(id, av){ return (av ? 'aiReviewAv2:' : 'aiReview2:') + id; }
+/* v512：AV 再换键 aiReviewAv3 —— 上一版语气偏资料库短评、尺度只到「概括提行为类型」，
+   旧评论不重生成就不会变；换键后老片按新语气自然重生成一次（每片一次），普通影片 aiReview2 不受影响。 */
+function aiReviewKey(id, av){ return (av ? 'aiReviewAv3:' : 'aiReview2:') + id; }
 function aiReviewGet(id, av){
   return idbGet('kv', aiReviewKey(id, av)).then(function(v){
     var list = (v && Array.isArray(v.list))

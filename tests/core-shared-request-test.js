@@ -176,8 +176,11 @@ async function expectReject(name, p, re) {
     eq('AV/自填cfg: 提示词要求联网查作品内容', /联网检索/.test(sys) && /剧情桥段/.test(sys));
     eq('AV/自填cfg: 提示词禁止解读番号与聊厂商', /严禁/.test(sys) && /解读番号字母/.test(sys) && /厂商/.test(sys));
     eq('AV/自填cfg: 提示词要求评论落在具体内容', /作品内容/.test(sys) && /人物关系/.test(sys));
-    eq('AV/自填cfg: 提示词尺度放宽但不写精确过程', /行为类型/.test(sys) && /身体与气质/.test(sys)
-      && /不描写具体动作过程/.test(sys) && /不写精确部位细节/.test(sys));
+    eq('AV/自填cfg: 提示词尺度再放开一层但不写精确过程', /尺度再放开一层/.test(sys)
+      && /点名具体的玩法/.test(sys) && /圈内用语/.test(sys) && /带挑逗感/.test(sys)
+      && /点到为止/.test(sys) && /不描写具体动作过程/.test(sys) && /不写精确部位细节/.test(sys));
+    eq('AV/自填cfg: 语气改聊天吐槽、禁客套、不放范例', /跟朋友聊天/.test(sys) && /吐槽/.test(sys)
+      && /客套书面话术/.test(sys) && !/深喉/.test(sys) && !/例如/.test(sys));
     eq('AV/自填cfg: 提示词排除未成年人与非自愿', /未成年人/.test(sys) && /非自愿/.test(sys));
     eq('AV/自填cfg: 提示词要求 comments 数组', /"comments"/.test(sys));
     const um = body.messages[1].content;
