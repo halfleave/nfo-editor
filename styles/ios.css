@@ -990,7 +990,7 @@ html.cw-open, html.cw-open body { background: var(--cw-bg); }
   scrollbar-width: none;
 }
 .cw-scroll::-webkit-scrollbar { display: none; }
-.cw-row { display: flex; justify-content: center; margin-bottom: 20px; }
+.cw-row { display: flex; justify-content: center; margin-bottom: 20px; will-change: transform; }
 .cw-b {
   display: inline-block; max-width: 92%; position: relative; text-align: center;
   background: var(--cw-bub); border-radius: 18px; font-weight: 500;

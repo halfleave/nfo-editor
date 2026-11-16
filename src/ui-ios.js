@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '515';
+window.__SCRIPT_VER = '516';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -10836,7 +10836,7 @@ function paintAiReview(id, list){
    详情页那块三行滚动气泡一个字不改，只把点击目标从底部浮层换成这里。
    规则：① 气泡最多两行（CSS line-clamp 兜底 + 按字数选字号档，正常 15~40 字自然两行内）
         ② 三档字号 cw-lg/cw-md/cw-sm；大字不透明，中/小字随机 cw-o75 或 cw-o45（只作用于文字，白底与尖角保持实心）
-        ③ 七彩 cw-c1..cw-c7 循环；每行一条、围绕中轴小幅左右偏移；对话框圆角 + 底部小尖（左右交替）
+        ③ 七彩 cw-c1..cw-c7 随机取色（相邻避让不同色）；每行一条、围绕中轴小幅左右偏移；对话框圆角 + 底部小尖（左右交替）
         ④ 浅/深两套色板跟随 App 现有主题，不另加开关；静态错落，不做飘动 */
 function cwSizeOf(s){
   var n = String(s || '').length;
@@ -10846,15 +10846,63 @@ function cwSizeOf(s){
 }
 function cwHtml(list){
   var arr = (list || []).filter(function(s){ return typeof s === 'string' && s.trim(); });
-  return arr.map(function(s, i){
+  var prevColor = 0, out = [];
+  for (var i = 0; i < arr.length; i++){
+    var s = arr[i];
     var size = cwSizeOf(s);
     var op = (size === 'cw-lg') ? '' : (Math.random() < 0.5 ? ' cw-o75' : ' cw-o45');
-    var color = ' cw-c' + ((i % 7) + 1);
+    /* v516：颜色改随机取七彩之一（不再按序号循环），相邻两条避让不同色 */
+    var color = 1 + Math.floor(Math.random() * 7);
+    if (color === prevColor) color = (color % 7) + 1;
+    prevColor = color;
     var dx = Math.round((Math.random() * 2 - 1) * 36);
-    return '<div class="cw-row" style="transform:translateX(' + dx + 'px)">'
-      + '<div class="cw-b ' + size + '"><span class="cw-t' + color + op + '">' + escapeHtml(s) + '</span></div>'
-      + '</div>';
-  }).join('');
+    out.push('<div class="cw-row" data-cw-x="' + dx + '" style="transform:translateX(' + dx + 'px)">'
+      + '<div class="cw-b ' + size + '"><span class="cw-t cw-c' + color + op + '">' + escapeHtml(s) + '</span></div>'
+      + '</div>');
+  }
+  return out.join('');
+}
+/* v516：气泡左右缓慢漂移，碰到屏幕（容器）边就反向。三档慢速各气泡随机取一档；
+   每次进入弹幕墙方向/速度/初始位置都重新随机；离开页面即停，不空转耗电。
+   漂移范围按「气泡本体贴到容器边」计算——气泡几乎占满整行（范围 <4px）就保持静止。
+   上下位置不参与，纵向滚动不受影响。 */
+var CW_SPEEDS = [0.12, 0.25, 0.45];   // px/帧（约 60fps，即 7 / 15 / 27 px 每秒）
+var cwDriftRaf = 0;
+var cwDriftItems = [];
+function cwStopDrift(){
+  if (cwDriftRaf){ cancelAnimationFrame(cwDriftRaf); cwDriftRaf = 0; }
+  cwDriftItems = [];
+}
+function cwStartDrift(){
+  cwStopDrift();
+  var rows = document.querySelectorAll('#commentsWallList .cw-row');
+  for (var i = 0; i < rows.length; i++){
+    var b = rows[i].firstElementChild;
+    if (!b) continue;
+    var half = (rows[i].clientWidth - b.offsetWidth) / 2;
+    if (half < 4) continue;
+    var it = {
+      row: rows[i],
+      x: Math.max(-half, Math.min(half, Number(rows[i].getAttribute('data-cw-x')) || 0)),
+      dir: Math.random() < 0.5 ? -1 : 1,
+      speed: CW_SPEEDS[Math.floor(Math.random() * CW_SPEEDS.length)],
+      min: -half, max: half
+    };
+    rows[i].style.transform = 'translateX(' + it.x + 'px)';
+    cwDriftItems.push(it);
+  }
+  if (!cwDriftItems.length) return;
+  var step = function(){
+    for (var j = 0; j < cwDriftItems.length; j++){
+      var t = cwDriftItems[j];
+      t.x += t.dir * t.speed;
+      if (t.x >= t.max){ t.x = t.max; t.dir = -1; }
+      else if (t.x <= t.min){ t.x = t.min; t.dir = 1; }
+      t.row.style.transform = 'translateX(' + t.x.toFixed(1) + 'px)';
+    }
+    cwDriftRaf = requestAnimationFrame(step);
+  };
+  cwDriftRaf = requestAnimationFrame(step);
 }
 function openCommentsWall(){
   if (!aiReviewShowing.length) return;
@@ -10867,8 +10915,10 @@ function openCommentsWall(){
   body.scrollTop = 0;
   wall.classList.add('show');
   document.documentElement.classList.add('cw-open');
+  cwStartDrift();          // v516：墙已显示、气泡有宽度后才量范围并起漂移
 }
 function closeCommentsWall(){
+  cwStopDrift();           // v516：离开弹幕墙立刻停 rAF
   var wall = document.getElementById('commentsWall');
   if (wall) wall.classList.remove('show');
   document.documentElement.classList.remove('cw-open');

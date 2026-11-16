@@ -181,7 +181,12 @@ function reset(opts) {
   const cwOut = sandbox.cwHtml(cwSrc);
   ok('弹幕墙：每条一行一个气泡', (cwOut.match(/class="cw-row"/g) || []).length === 7);
   ok('弹幕墙：三档字号都出现', /cw-lg/.test(cwOut) && /cw-md/.test(cwOut) && /cw-sm/.test(cwOut));
-  ok('弹幕墙：七彩 c1..c7 循环', /cw-c1/.test(cwOut) && /cw-c4/.test(cwOut) && /cw-c7/.test(cwOut));
+  ok('弹幕墙：每条都有七彩颜色类', (cwOut.match(/cw-c\d/g) || []).length === 7);
+  const firstC = (cwOut.match(/cw-c(\d)/) || [])[1] || '';
+  sandbox.Math = { random: function () { return 0.1; }, round: Math.round, floor: Math.floor };
+  const firstC2 = ((sandbox.cwHtml(cwSrc).match(/cw-c(\d)/)) || [])[1] || '';
+  sandbox.Math = { random: function () { return 0.9; }, round: Math.round, floor: Math.floor };
+  ok('弹幕墙：颜色随机不按序号固定', !!firstC && !!firstC2 && firstC !== firstC2, firstC + '→' + firstC2);
   const cwBigCls = (cwOut.match(/<div class="cw-b cw-lg"><span class="([^"]+)"/) || [])[1] || '';
   const cwSmCls = (cwOut.match(/<div class="cw-b cw-sm"><span class="([^"]+)"/) || [])[1] || '';
   ok('弹幕墙：大字不加透明度', !!cwBigCls && !/cw-o/.test(cwBigCls), cwBigCls);
