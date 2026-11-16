@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '513';
+window.__SCRIPT_VER = '515';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -10736,10 +10736,10 @@ function openFilmDetail(encId){
    规则：
    ① 评论不足 3 条 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
    ② 保存影片时发起一次；已有评论则永不重复调 AI
-   ③ 下次进入详情页时再尝试一次：在途不打断、距上次发起 < 5 分钟冷却
+   ③ 下次进入详情页时再尝试一次：在途不打断、距上次发起 < 120 秒冷却
    ④ at 在「发起时」就落库，杀掉 App 重开仍有效（不只依赖内存标记）
    ⑤ AV 用独立提示词 + 只发番号和片名（模型自行联网查作品内容）；无码片 / 拿不准的一律跳过（见 aiReviewAllowed） */
-var AI_REVIEW_GAP = 5 * 60 * 1000;
+var AI_REVIEW_GAP = 120 * 1000;
 var aiReviewInFlight = {};              // filmId → true（本会话内，防打断）
 var aiReviewShowing = [];               // 当前详情页的评论，供弹窗展示
 /* v513：普通片换键 aiReview3 —— 提示词改成聊天吐槽语气，旧评论不重生成就不会变；
@@ -10829,21 +10829,53 @@ function paintAiReview(id, list){
   if (box.classList && box.classList.remove) box.classList.remove('cm-paused');
   box.innerHTML = '<div class="cm-head">精彩评论</div>'
     + '<div class="cm-lanes">' + lanes.map(function(items, i){ return cmLaneHtml(items, i); }).join('') + '</div>';
-  box.onclick = function(){ openCommentsSheet(); };   // 覆盖式绑定，重绘不累积
+  box.onclick = function(){ openCommentsWall(); };   // v514：改成进整屏弹幕墙
   box.style.display = '';
 }
-function openCommentsSheet(){
+/* ===== v514：弹幕墙（点详情页评论区块进入的整屏独立页）=====
+   详情页那块三行滚动气泡一个字不改，只把点击目标从底部浮层换成这里。
+   规则：① 气泡最多两行（CSS line-clamp 兜底 + 按字数选字号档，正常 15~40 字自然两行内）
+        ② 三档字号 cw-lg/cw-md/cw-sm；大字不透明，中/小字随机 cw-o75 或 cw-o45（只作用于文字，白底与尖角保持实心）
+        ③ 七彩 cw-c1..cw-c7 循环；每行一条、围绕中轴小幅左右偏移；对话框圆角 + 底部小尖（左右交替）
+        ④ 浅/深两套色板跟随 App 现有主题，不另加开关；静态错落，不做飘动 */
+function cwSizeOf(s){
+  var n = String(s || '').length;
+  var t = n <= 22 ? 3 : (n <= 32 ? 2 : 1);
+  if (t > 1 && Math.random() < 0.3) t -= 1;   // 三成降一档打散规律；只会更小，仍保证两行内
+  return t === 3 ? 'cw-lg' : (t === 2 ? 'cw-md' : 'cw-sm');
+}
+function cwHtml(list){
+  var arr = (list || []).filter(function(s){ return typeof s === 'string' && s.trim(); });
+  return arr.map(function(s, i){
+    var size = cwSizeOf(s);
+    var op = (size === 'cw-lg') ? '' : (Math.random() < 0.5 ? ' cw-o75' : ' cw-o45');
+    var color = ' cw-c' + ((i % 7) + 1);
+    var dx = Math.round((Math.random() * 2 - 1) * 36);
+    return '<div class="cw-row" style="transform:translateX(' + dx + 'px)">'
+      + '<div class="cw-b ' + size + '"><span class="cw-t' + color + op + '">' + escapeHtml(s) + '</span></div>'
+      + '</div>';
+  }).join('');
+}
+function openCommentsWall(){
   if (!aiReviewShowing.length) return;
   var box = document.getElementById('detailAiReview');
   if (box && box.classList && box.classList.add) box.classList.add('cm-paused');
-  var list = document.getElementById('commentsSheetList');
-  if (list) list.innerHTML = aiReviewShowing.map(function(s){ return '<div class="cm-sheet-item">' + escapeHtml(s) + '</div>'; }).join('');
-  if (typeof openSheet === 'function') openSheet('commentsSheet');
+  var wall = document.getElementById('commentsWall');
+  var body = document.getElementById('commentsWallList');
+  if (!wall || !body) return;
+  body.innerHTML = cwHtml(aiReviewShowing);
+  body.scrollTop = 0;
+  wall.classList.add('show');
+  document.documentElement.classList.add('cw-open');
 }
-function closeCommentsSheet(){
+function closeCommentsWall(){
+  var wall = document.getElementById('commentsWall');
+  if (wall) wall.classList.remove('show');
+  document.documentElement.classList.remove('cw-open');
   var box = document.getElementById('detailAiReview');
   if (box && box.classList && box.classList.remove) box.classList.remove('cm-paused');
-  if (typeof closeAllSheets === 'function') closeAllSheets();
+  var body = document.getElementById('commentsWallList');
+  if (body) body.innerHTML = '';
 }
 function renderAiReview(film){
   var box = document.getElementById('detailAiReview');
@@ -10872,7 +10904,7 @@ function maybeFetchAiReview(filmOrId){
       if (aiReviewInFlight[id]) return;                   // 并发重入（连点两次）挡在这里
       if (rec.list.length) return;                        // ② 已有评论：永不再调
       var now = Date.now();
-      if (rec.at && (now - rec.at) < AI_REVIEW_GAP) return;  // ③ 5 分钟冷却
+      if (rec.at && (now - rec.at) < AI_REVIEW_GAP) return;  // ③ 120 秒冷却
       aiReviewInFlight[id] = true;
       return aiReviewSet(id, { list: [], at: now }, av)   // 发起时先落时间戳（跨会话有效）
         .then(function(){

@@ -8,7 +8,7 @@
  * 覆盖用户定的核心规则：
  *   ① 评论不足 3 条 → 区块不出现（失败静默、无「生成中」占位）
  *   ② 已有评论 → 永不重复调 AI
- *   ③ 在途不打断、5 分钟冷却（at 在发起时即落库，跨会话有效）
+ *   ③ 在途不打断、120 秒冷却（at 在发起时即落库，跨会话有效）
  * 以及：配置未就绪静默跳过、成功后局部插入、切片不串、缺片名不请求、
  *       三行随机循环滚动渲染、标题「精彩评论」、HTML 转义。
  * 全程用桩，不触真实网络（符合隔离测试约束）。
@@ -44,7 +44,7 @@ function extractFn(code, name) {
 }
 const FN = ['aiReviewKey', 'aiReviewGet', 'aiReviewSet', 'aiReviewConfigReady',
   'aiReviewMaskedByCode', 'aiReviewAllowed', 'aiReviewInfoOf', 'cmShuffle', 'cmLaneHtml',
-  'paintAiReview', 'renderAiReview', 'maybeFetchAiReview'];
+  'paintAiReview', 'renderAiReview', 'maybeFetchAiReview', 'cwSizeOf', 'cwHtml'];
 
 /* —— 运行时桩 —— */
 let NOW = 1700000000000;
@@ -68,7 +68,7 @@ const sandbox = {
   Date: { now: function () { return NOW; } },
   Promise: Promise,
   String: String, Array: Array, Object: Object, Error: Error, JSON: JSON, Math: Math,
-  AI_REVIEW_GAP: 5 * 60 * 1000,
+  AI_REVIEW_GAP: 120 * 1000,
   aiReviewInFlight: aiReviewInFlight,
   aiReviewShowing: [],
   currentDetailFilmId: null,
@@ -166,6 +166,31 @@ function reset(opts) {
   ok('renderAiReview：HTML 转义防注入', /&lt;img/.test(boxes.detailAiReview.innerHTML)
     && !/<img/.test(boxes.detailAiReview.innerHTML));
 
+  /* v514：弹幕墙渲染（把随机固定成「不降档」，断言才稳定） */
+  const origMath = sandbox.Math;
+  sandbox.Math = { random: function () { return 0.9; }, round: Math.round, floor: Math.floor };
+  const cwSrc = [
+    '短评一条',
+    '这是一句中等等长度的评论内容差不多二十来个字对吧',
+    '这一条评论写得比较长一些把前因后果和看完之后的感受都顺带说清楚了免得只留下一个空泛的印象',
+    '配乐一响就知道要出事屡试不爽',
+    '中段确实有点拖熬过去后面就顺了',
+    '结尾那段留白比所有台词都狠散场了还在想',
+    '摄影是真的能打随便截一帧都能当壁纸调色也舒服'
+  ];
+  const cwOut = sandbox.cwHtml(cwSrc);
+  ok('弹幕墙：每条一行一个气泡', (cwOut.match(/class="cw-row"/g) || []).length === 7);
+  ok('弹幕墙：三档字号都出现', /cw-lg/.test(cwOut) && /cw-md/.test(cwOut) && /cw-sm/.test(cwOut));
+  ok('弹幕墙：七彩 c1..c7 循环', /cw-c1/.test(cwOut) && /cw-c4/.test(cwOut) && /cw-c7/.test(cwOut));
+  const cwBigCls = (cwOut.match(/<div class="cw-b cw-lg"><span class="([^"]+)"/) || [])[1] || '';
+  const cwSmCls = (cwOut.match(/<div class="cw-b cw-sm"><span class="([^"]+)"/) || [])[1] || '';
+  ok('弹幕墙：大字不加透明度', !!cwBigCls && !/cw-o/.test(cwBigCls), cwBigCls);
+  ok('弹幕墙：小字带 75/45 透明度', /cw-o75|cw-o45/.test(cwSmCls), cwSmCls);
+  ok('弹幕墙：文字 HTML 转义', /&lt;script&gt;/.test(sandbox.cwHtml(['<script>x</script>'])));
+  ok('弹幕墙：左右偏移只在中轴附近', !/translateX\((?:-[4-9]\d|[4-9]\d)px\)/.test(cwOut));
+  ok('cwSizeOf：超长评论自动小字', sandbox.cwSizeOf('很长'.repeat(30)) === 'cw-sm');
+  sandbox.Math = origMath;
+
   /* ② 已有评论 → 永不重复调 AI */
   reset();
   kv['aiReview3:f1'] = { list: ['早就写好的评论一', '早就写好的评论二', '早就写好的评论三'], at: NOW - 1000 };
@@ -199,7 +224,7 @@ function reset(opts) {
     return Promise.resolve(COMMENTS.slice());
   };
 
-  /* ④ 失败静默 + 5 分钟冷却 */
+  /* ④ 失败静默 + 120 秒冷却 */
   reset({ reviewMode: 'fail' });
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
@@ -209,18 +234,18 @@ function reset(opts) {
   // 立刻再进详情（模拟刚保存就点进去）→ 冷却挡住
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
-  ok('失败后立刻重开：5 分钟内不重试', calls.review.length === 1, JSON.stringify(calls.review));
-  // 差 1 秒到 5 分钟 → 仍不重试
-  NOW += 5 * 60 * 1000 - 1000;
+  ok('失败后立刻重开：120 秒内不重试', calls.review.length === 1, JSON.stringify(calls.review));
+  // 差 1 秒到 120 秒 → 仍不重试
+  NOW += 120 * 1000 - 1000;
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
-  ok('差 1 秒满 5 分钟：仍不重试', calls.review.length === 1);
-  // 满 5 分钟后重开 → 重试一次
+  ok('差 1 秒满 120 秒：仍不重试', calls.review.length === 1);
+  // 满 120 秒后重开 → 重试一次
   reviewMode = 'ok';
   NOW += 2000;
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
-  ok('满 5 分钟后重开：重试 1 次', calls.review.length === 2, JSON.stringify(calls.review));
+  ok('满 120 秒后重开：重试 1 次', calls.review.length === 2, JSON.stringify(calls.review));
   ok('重试成功：写入评论数组', kv['aiReview3:f1'] && kv['aiReview3:f1'].list.length === 3);
   // 成功后再进 → 永不再调
   sandbox.maybeFetchAiReview('f1');

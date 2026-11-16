@@ -430,8 +430,6 @@ img { display: block; }
 /* 宽度严格按文字字数算：0 0 auto 不许伸缩/压缩，max-content 定宽，nowrap 不折行；
    再显式关一次自动放大，避免超宽 flex 轨道里短句被放大得比长句更大。 */
 .cm-bubble { flex: 0 0 auto; width: max-content; padding: 8px 13px; border-radius: 14px; background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.9); font-size: 13.5px; line-height: 1.45; white-space: nowrap; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-.cm-sheet-list { padding: 4px 2px calc(var(--sab, 0px) + 20px); }
-.cm-sheet-item { padding: 11px 14px; margin-bottom: 10px; border-radius: 13px; background: rgba(0,0,0,0.045); color: var(--label); font-size: 13.5px; line-height: 1.55; }
 /* 详情页「剧照」—— 演职人员/女优下方，双列 JS 瀑布流（按列高动态选择落点） */
 .detail-shots { margin-top: 22px; padding-top: 16px; }
 .detail-shots:empty { display: none; }
@@ -943,6 +941,84 @@ html.stills-open, html.stills-open body { background: #000; }
 /* v509：剧照全屏页 z-index 721，长按菜单默认只有 501/500 会被黑底整屏挡住 —— 打开期间临时抬高 */
 html.stills-open .ctx-mask { z-index: 760; }
 html.stills-open .sheet.sheet-context { z-index: 761; }
+
+/* ===== v514：精彩评论弹幕墙（整屏独立页） =====
+   浅/深两套色板跟随 App 现有主题，不另加开关；气泡与底部小尖同色，透明度只作用于文字。 */
+:root {
+  --cw-bg: #f4f4f2;
+  --cw-bub: #ffffff;
+  --cw-ink: #4b4b4d;
+  --cw-sub: #8b8b90;
+  --cw-line: rgba(0,0,0,0.06);
+  --cw-back: #4E7FC0;
+  --cw-c1: #C85A5A; --cw-c2: #C07A3A; --cw-c3: #A8862E; --cw-c4: #4A8A62;
+  --cw-c5: #2C8A8A; --cw-c6: #4A72AE; --cw-c7: #7E62A4;
+}
+[data-theme="dark"] {
+  --cw-bg: #1B1B1E;
+  --cw-bub: #2C2C30;
+  --cw-ink: #E6E6E9;
+  --cw-sub: #8E8E93;
+  --cw-line: rgba(255,255,255,0.09);
+  --cw-back: #82AEF0;
+  --cw-c1: #F58A85; --cw-c2: #EFA961; --cw-c3: #E0C766; --cw-c4: #7FCB92;
+  --cw-c5: #6CC4C4; --cw-c6: #82AEF0; --cw-c7: #B79AE0;
+}
+html.cw-open, html.cw-open body { background: var(--cw-bg); }
+.cw-page {
+  position: fixed; inset: 0; z-index: 730; display: none; flex-direction: column;
+  background: var(--cw-bg); box-sizing: border-box; font-family: var(--font);
+}
+.cw-page.show { display: flex; }
+.cw-nav {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--sat) + var(--top-gap)) 14px 10px;
+  border-bottom: 0.5px solid var(--cw-line);
+}
+.cw-back {
+  width: 34px; height: 34px; padding: 0; border: 0; background: transparent;
+  color: var(--cw-back); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  display: flex; align-items: center; justify-content: center;
+}
+.cw-back svg { width: 24px; height: 24px; }
+.cw-back:active { opacity: 0.55; }
+.cw-title { font-size: 15px; font-weight: 600; color: var(--cw-ink); }
+.cw-nav-sp { width: 34px; }
+.cw-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  padding: 22px 14px calc(var(--sab) + 30px); box-sizing: border-box;
+  scrollbar-width: none;
+}
+.cw-scroll::-webkit-scrollbar { display: none; }
+.cw-row { display: flex; justify-content: center; margin-bottom: 20px; }
+.cw-b {
+  display: inline-block; max-width: 92%; position: relative; text-align: center;
+  background: var(--cw-bub); border-radius: 18px; font-weight: 500;
+  line-height: 1.45; letter-spacing: 0.2px; word-break: break-word;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+.cw-b::after {
+  content: ''; position: absolute; bottom: -7px; left: 24px; width: 0; height: 0;
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-top: 9px solid var(--cw-bub);
+}
+.cw-row:nth-child(2n) .cw-b::after { left: auto; right: 24px; }
+.cw-lg { font-size: 18px; padding: 9px 18px; }
+.cw-md { font-size: 14px; padding: 7px 15px; }
+.cw-sm { font-size: 11px; padding: 5px 12px; }
+.cw-t {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; text-align: center; white-space: normal;
+}
+.cw-o75 { opacity: 0.75; }
+.cw-o45 { opacity: 0.45; }
+.cw-c1 { color: var(--cw-c1); }
+.cw-c2 { color: var(--cw-c2); }
+.cw-c3 { color: var(--cw-c3); }
+.cw-c4 { color: var(--cw-c4); }
+.cw-c5 { color: var(--cw-c5); }
+.cw-c6 { color: var(--cw-c6); }
+.cw-c7 { color: var(--cw-c7); }
 
 /* ===== 启动页（避免进入时白屏） ===== */
 .splash {
