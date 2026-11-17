@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '518';
+window.__SCRIPT_VER = '519';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -12307,7 +12307,7 @@ function openTrailer(){
     return;
   }
   if (!currentDetailTrailer) return;
-  // YouTube 视频 ID：隐私增强模式（nocookie）内嵌播放，不跳新页面
+  // YouTube 视频 ID：内嵌播放，不跳新页面
   showTrailerModal();
 }
 function isDirectVideoUrl(s){
@@ -12338,9 +12338,9 @@ function showTrailerModal(){
     v.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;background:#000;';
     container.appendChild(v);
   } else {
-    // YouTube 视频 ID：隐私增强模式（nocookie）内嵌
+    // YouTube 视频 ID：普通 youtube.com 内嵌（带登录状态，避免「确认你不是机器人」弹窗）
     frame.style.display = '';
-    frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(url) + '?autoplay=1&rel=0';
+    frame.src = 'https://www.youtube.com/embed/' + encodeURIComponent(url) + '?autoplay=1&rel=0';
   }
   document.getElementById('trailerMask').classList.add('show');
   document.getElementById('trailerModal').classList.add('show');
