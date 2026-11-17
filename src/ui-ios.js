@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '516';
+window.__SCRIPT_VER = '518';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -11850,7 +11850,7 @@ function renderDetailRatings(d){
   // 老影片常常没存 tmdbId：只要还有片名，就照样去补一次（Worker 会用片名反查 TMDB）
   if (!tmdbId && !rawTitle) return;
   // 缓存键带上影片 id + 识别目标，换识别目标后不会拿旧片的分
-  var key = 'detailRatings:' + (currentDetailFilmId || '-') + ':' + (tmdbId || (rawTitle + '|' + year));
+  var key = 'detailRatings:v2:' + (currentDetailFilmId || '-') + ':' + (tmdbId || (rawTitle + '|' + year));
   var seq = ++_detailRatingsSeq;
   function paint(data){
     if (seq !== _detailRatingsSeq) return;   // 期间换片/关页 → 丢弃过期结果
