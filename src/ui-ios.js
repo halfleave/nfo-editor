@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '519';
+window.__SCRIPT_VER = '520';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -151,7 +151,8 @@ function switchPage(page) {
     }
     syncSearchSourceUI();
     updateSearchPlaceholder();
-    renderSearchHistory(); // 进搜索页时按当前源+输入状态渲染历史
+    renderSearchHistory(); // 进搜索页时按当前源+输入状态渲染历史（内含 renderTrending）
+    loadTrending();        // v520：无当天缓存时才请求一次
   }
   if (page === 'settings'){
     syncThemeHiddenSwitch(); // 进入设置页同步里模式开关状态
@@ -8878,7 +8879,7 @@ function renderTmdbType(list, type, py){
 }
 /* 点「搜索」/ 回车：自动判定类型的一次点击 */
 var _lastSearchSig = '', _lastSearchTs = 0;
-function searchTMDB(){
+function searchTMDB(fallbackOrig){
   var q = (document.getElementById('tmdbQuery').value || '').trim();
   if (!q){ showToast('请输入影片名', 'error'); return; }
   var py = NfoCore.parseTitleYear(q);
@@ -8903,10 +8904,28 @@ function searchTMDB(){
     var py = NfoCore.parseTitleYear(q);                 // v398：「标题.年份」拆开搜、命中置顶
     var params = { language: 'zh-CN', include_adult: adult, query: py.title };
     // 单类失败不影响另一类；ok=false 的结果不进缓存（下次切换会真的重试，不会误报「没有结果」）
-    function req(type){
-      return NfoCore.tmdbRequest(tmdbPath(type), params, base)
+    function req(type, query){
+      var p = { language: 'zh-CN', include_adult: adult, query: (query || py.title) };
+      return NfoCore.tmdbRequest(tmdbPath(type), p, base)
         .then(function(d){ return { ok: true, list: (d && d.results) || [] }; })
         .catch(function(){ return { ok: false, list: [] }; });
+    }
+    // v520：趋势词中文名没命中时，用原名再搜一次电影+剧集（同一 base/qid，不多扣次数）
+    function fallbackByOriginal(orig){
+      if (!orig || orig.toLowerCase() === py.title.toLowerCase()) return null;
+      return Promise.all([req('movie', orig), req('tv', orig)]).then(function(f){
+        if (seq !== _tmdbSearchSeq) return;
+        var fm = f[0] && f[0].list, ft = f[1] && f[1].list;
+        var fc = NfoCore.classifyTmdbResults(fm, ft, orig);
+        if (fc.primary === 'movie' || fc.primary === 'tv'){
+          var fpy = NfoCore.parseTitleYear(orig);
+          if (f[0] && f[0].ok) _tmdbCache.movie = fm;
+          if (f[1] && f[1].ok) _tmdbCache.tv = ft;
+          renderTmdbType(fc.primary === 'movie' ? fm : ft, fc.primary, fpy);
+          return true;
+        }
+        return false;
+      });
     }
     return Promise.all([req('movie'), req('tv')]).then(function(r){
       if (seq !== _tmdbSearchSeq) return;               // 期间又切了 / 又搜了 → 本批结果作废
@@ -8923,7 +8942,11 @@ function searchTMDB(){
         if (seq !== _tmdbSearchSeq) return;
         if (pr.ok) _tmdbCache.person = pr.list;
         if (pr.list.length){ renderTmdbType(pr.list, 'person', py); return; }
-        box.innerHTML = '<div class="tmdb-msg">未找到匹配结果</div>';
+        // v520：人物也没有 → 最后用原名兜底重搜一次（趋势词中文名搜不到时用）
+        return Promise.resolve(fallbackByOriginal(fallbackOrig)).then(function(hit){
+          if (seq !== _tmdbSearchSeq || hit) return;
+          box.innerHTML = '<div class="tmdb-msg">未找到匹配结果</div>';
+        });
       });
     });
   }).catch(function(err){
@@ -9652,6 +9675,62 @@ function populateFromJavbus(d, hintTags){
   return Promise.all(imgPromises);
 }
 
+/* ===== v520：今日趋势（搜索页历史上方，TMDB /trending/all/day）=====
+   电影+剧集按 TMDB 原热度顺序混排（已在 NfoCore.trendingItems 里过滤人物），中文片名胶囊，点击即搜。
+   当天缓存一次（localStorage）；拿不到整块不显示；只在 TMDB 源、输入框空时显示。
+   趋势是读取类请求（路径不含 /search），不扣搜索次数；中文搜不到时用原名兜底重搜，复用同一 qid 也不多扣。 */
+var TRENDING_CACHE_KEY = 'nfo_trending_v1';
+var _trendLoading = false;
+function trendingDay(){ var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+function loadTrendingCache(){
+  try {
+    var o = JSON.parse(localStorage.getItem(TRENDING_CACHE_KEY) || 'null');
+    if (o && o.day === trendingDay() && Array.isArray(o.list) && o.list.length) return o.list;
+  } catch (e){}
+  return null;
+}
+function saveTrendingCache(list){
+  try { localStorage.setItem(TRENDING_CACHE_KEY, JSON.stringify({ day: trendingDay(), list: list })); } catch (e){}
+}
+function renderTrending(){
+  var box = document.getElementById('trendingBox');
+  var list = document.getElementById('trendingList');
+  if (!box || !list) return;
+  var el = document.getElementById('tmdbQuery');
+  if (state.metaSource === 'jav' || (el && el.value.trim())){ box.style.display = 'none'; return; }
+  var arr = loadTrendingCache();
+  if (!arr){ box.style.display = 'none'; list.innerHTML = ''; return; }
+  box.style.display = '';
+  list.innerHTML = arr.map(function(it){
+    return '<button type="button" class="trend-chip" data-cn="' + escapeAttr(it.zh) + '" data-orig="' + escapeAttr(it.orig || '') + '" onclick="applyTrendChip(this)">'
+      + '<span class="trend-chip-text">' + escapeHtml(it.zh) + '</span></button>';
+  }).join('');
+}
+function applyTrendChip(btn){
+  var cn = btn.getAttribute('data-cn') || '';
+  var orig = btn.getAttribute('data-orig') || '';
+  var el = document.getElementById('tmdbQuery');
+  if (el) el.value = cn;
+  toggleSearchClear();                  // 有内容→历史/趋势都隐藏；内部会调 renderTrending
+  if (state.metaSource === 'jav') searchMeta();
+  else searchTMDB(orig);                // 中文名直搜；没命中再用原名兜底（同一 qid，不多扣次数）
+}
+function loadTrending(){
+  if (state.metaSource === 'jav') return;
+  if (loadTrendingCache()){ renderTrending(); return; }
+  if (_trendLoading) return;
+  _trendLoading = true;
+  Promise.all([getTMDBKey(), getActivationCode()]).then(function(res){
+    var key = res[0] || '', code = res[1] || '';
+    var base = tmdbReqBase(key, code, tmdbNewQid());   // 趋势路径不含 /search，qid 不计数
+    return NfoCore.tmdbRequest('/trending/all/day', { language: 'zh-CN' }, base);
+  }).then(function(d){
+    var arr = NfoCore.trendingItems(d, 12);
+    if (arr.length) saveTrendingCache(arr);
+  }).catch(function(){ /* 静默：拿不到就整块不显示 */ })
+    .finally(function(){ _trendLoading = false; renderTrending(); });
+}
+
 /* ===== 搜索历史（TMDB / JAV 各自独立，互不串） ===== */
 var SEARCH_HISTORY_KEY = 'nfo_search_history';
 var SEARCH_HISTORY_MAX = 18;
@@ -9690,6 +9769,7 @@ function renderSearchHistory(){
   var wrap = document.getElementById('searchHistory');
   var list = document.getElementById('searchHistoryList');
   if (!wrap || !list) return;
+  renderTrending(); // v520：趋势与历史共用同一批显示时机（源切换/输入清空/删除等）同步显隐
   var el = document.getElementById('tmdbQuery');
   // 输入框有内容 → 隐藏历史、显示结果
   if (el && el.value.trim().length){

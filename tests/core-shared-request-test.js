@@ -252,6 +252,21 @@ async function expectReject(name, p, re) {
   quotaEvents = 0; NfoCore.quotaInc('javSave');
   eq('quota/inc: 派发事件', quotaEvents === 1);
 
+  /* —— v520：今日趋势 trendingItems（去人物、中英片名、按热度顺序、条数上限）—— */
+  const trendRaw = { results: [
+    { media_type: 'movie', title: '沙丘2', original_title: 'Dune: Part Two' },
+    { media_type: 'person', name: '演员甲', original_name: 'Actor A' },
+    { media_type: 'tv', name: '怪奇物语', original_name: 'Stranger Things' },
+    { media_type: 'movie', title: '', original_title: 'NoTitle' },
+    { media_type: 'tv', name: '幕府将军', original_name: 'Shogun' }
+  ] };
+  const trendList = NfoCore.trendingItems(trendRaw, 12);
+  eq('trending: 过滤人物与空中文名', trendList.length === 3);
+  eq('trending: 保持 TMDB 原顺序（电影/剧集穿插）', trendList[0].zh === '沙丘2' && trendList[1].zh === '怪奇物语' && trendList[2].zh === '幕府将军');
+  eq('trending: 中英片名都带（原名兜底用）', trendList[0].zh === '沙丘2' && trendList[0].orig === 'Dune: Part Two' && trendList[1].orig === 'Stranger Things');
+  eq('trending: 条数上限生效', NfoCore.trendingItems(trendRaw, 2).length === 2);
+  eq('trending: 空数据返回空数组', NfoCore.trendingItems(null, 12).length === 0 && NfoCore.trendingItems({ results: [] }, 12).length === 0);
+
   console.log('core-shared-request ' + (failed ? ('有 ' + failed + ' 项失败') : '全通过'));
   if (failed) process.exitCode = 1;
 })();

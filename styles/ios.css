@@ -1997,6 +1997,11 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .search-box input[type="text"]:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-fg); }
 .search-box .btn-pill { flex: 0 0 auto; background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 7px 20px; font-size: 15px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
 /* 搜索历史：输入框为空时显示，有搜索词时隐藏（由 JS 切换 display） */
+/* v520：今日趋势（搜索页历史上方，中文片名胶囊，点击即搜） */
+.trending-box { padding: 14px 2px 4px; }
+.trend-chip { display: inline-flex; align-items: center; max-width: 100%; padding: 7px 13px; background: var(--card-fill); border: 0.5px solid var(--sep); border-radius: 999px; font-size: 14px; color: var(--label); -webkit-tap-highlight-color: transparent; }
+.trend-chip:active { background: var(--gray-fill); }
+.trend-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62vw; }
 .search-history { padding: 14px 2px 8px; }
 .search-history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .search-history-title { font-size: 14px; font-weight: 600; color: var(--label-2); }

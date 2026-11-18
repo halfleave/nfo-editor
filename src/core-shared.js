@@ -1082,6 +1082,20 @@ function normalizeJavbusFilm(d, opts){
     return { primary: primary, movieStrong: mStrong, tvStrong: tStrong, movieCount: movies.length, tvCount: tvs.length };
   }
 
+  // v520：TMDB /trending/all/day → 趋势胶囊列表。过滤人物，只留电影/剧集，保持 TMDB 原热度顺序。
+  // 中文名取 title/name（zh-CN），原名取 original_title/original_name（供中文搜不到时兜底重搜）。
+  function trendingItems(data, max){
+    var arr = (data && data.results) || [], out = [], limit = max > 0 ? max : 12, i;
+    for (i = 0; i < arr.length && out.length < limit; i++){
+      var it = arr[i];
+      if (!it || it.media_type === 'person') continue;
+      var zh = (it.title || it.name || '').trim();
+      if (!zh) continue;
+      out.push({ zh: zh, orig: (it.original_title || it.original_name || '').trim() });
+    }
+    return out;
+  }
+
   // ===== v418 磁力搜索垃圾过滤（纯逻辑，三层方案）=====
   // 内置屏蔽词：垃圾广告/诈骗特征词（普通片名搜索时生效；番号搜索自动放宽跳过词库层）
   var MAGNET_SPAM_WORDS = [
@@ -1278,6 +1292,7 @@ function normalizeJavbusFilm(d, opts){
     tmdbIsChinese: tmdbIsChinese,
     tmdbEnTitle: tmdbEnTitle,
     tmdbRequest: tmdbRequest,
+    trendingItems: trendingItems,       // v520：今日趋势列表过滤（去人物、中英片名）
     beginTmdbAction: beginTmdbAction,   // v490：一次点击 = 一次额度，动作入口调一下
     translateRequest: translateRequest,
     quotaInc: quotaInc,
