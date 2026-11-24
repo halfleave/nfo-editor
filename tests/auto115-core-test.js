@@ -4,7 +4,7 @@ const api = require('/Users/leavehalf/Downloads/work/NFO/nfo-editor/src/auto115-
 const assert = (cond, msg) => { console.log((cond ? 'PASS  ' : 'FAIL  ') + msg); if (!cond) process.exitCode = 1; };
 
 /* ---------- 步骤表 ---------- */
-assert(api.STEP_DEFS.length === 6 && api.STEP_DEFS[3].key === 'cleanup', '单影片 6 步表');
+assert(api.STEP_DEFS.length === 7 && api.STEP_DEFS[3].key === 'cleanup' && api.STEP_DEFS[6].key === 'place', '单影片 7 步表（v522 末步拆 place）');
 assert(api.STEPS_TV.length === 8 && api.STEPS_TV[5].key === 'mkdir2' && api.STEPS_TV[7].key === 'move2', '剧集 8 步表（mkdir2→rename→move2）');
 assert(api.newSteps('upload', false).length === 2, '上传任务 2 步');
 assert(api.newSteps(undefined, true)[3].key === 'cleanup', '无 type 且 isTv → 剧集表');
@@ -435,7 +435,7 @@ assert(api.pad2(0) === '00' && api.pad2(1) === '01' && api.pad2(12) === '12', 'p
 
 /* 任务卡动态步骤（期三第 1 刀） */
 var vsT = { steps: api.newSteps('tv', true) };
-assert(api.visibleSteps(vsT).length === 6, 'visibleSteps：未开跑显示整表（计划预览，单磁力剧集 6 步）');
+assert(api.visibleSteps(vsT).length === 7, 'visibleSteps：未开跑显示整表（计划预览，单磁力剧集 7 步）');
 api.getStep(vsT, 'submit').state = 'ok';
 api.getStep(vsT, 'wait').state = 'running';
 assert(api.visibleSteps(vsT).length === 3, 'visibleSteps：进行中只显示进度+下一个待跑');
@@ -452,19 +452,20 @@ assert(api.visibleSteps(vsUp).length === 2 && api.visibleSteps(vsUp)[0].key === 
 
 /* ---------- v355~v359 统一整理 · 补充用例 ---------- */
 
-/* v359：STEPS_TV_SINGLE 6 步新表（mkdir2/move2 并入 rename 合并节点） */
-assert(api.STEPS_TV_SINGLE.length === 6, '单磁力剧集 6 步新表');
-assert(api.STEPS_TV_SINGLE.map(function (s) { return s.key; }).join(',') === 'submit,wait,mkdir,cleanup,move,rename', '6 步新表键序：无 mkdir2/move2');
-assert(api.STEPS_TV_SINGLE[5].label === '整理改名与归位', '合并节点标签=整理改名与归位');
+/* v522：STEPS_TV_SINGLE 7 步新表（末步拆「修改视频名称」+「移动文件」） */
+assert(api.STEPS_TV_SINGLE.length === 7, '单磁力剧集 7 步新表');
+assert(api.STEPS_TV_SINGLE.map(function (s) { return s.key; }).join(',') === 'submit,wait,mkdir,cleanup,move,rename,place', '7 步新表键序：末步 place');
+assert(api.STEPS_TV_SINGLE[5].label === '修改视频名称' && api.STEPS_TV_SINGLE[6].label === '移动文件', '改名步标签=修改视频名称，末步=移动文件');
+assert(api.stepLabel('place') === '移动文件', 'stepLabel(place)=移动文件');
 assert(api.STEPS_TV.length === 8 && api.STEPS_TV.some(function (s) { return s.key === 'mkdir2'; }) && api.STEPS_TV.some(function (s) { return s.key === 'move2'; }), '8 步旧表保留（剧集多磁力仍用）');
 
 /* v359：newSteps 按任务类型路由步骤表 */
-assert(api.newSteps('tv').length === 6 && api.newSteps('tv').every(function (s) { return s.key !== 'mkdir2' && s.key !== 'move2'; }), "type='tv' 单磁力剧集 → 6 步新表");
+assert(api.newSteps('tv').length === 7 && api.newSteps('tv').every(function (s) { return s.key !== 'mkdir2' && s.key !== 'move2'; }), "type='tv' 单磁力剧集 → 7 步新表");
 var nsMultiTv = api.newSteps('multi', true);
 assert(nsMultiTv.length === 8 && nsMultiTv[5].key === 'mkdir2' && nsMultiTv[7].key === 'move2', "type='multi'+剧集 → 8 步旧表（建季夹/移入是真节点）");
-assert(api.newSteps('multi', false).length === 6, "type='multi'+电影 → multi 6 步");
-assert(api.newSteps(undefined, true).length === 6, '存量无 type + isTv → 6 步新表');
-assert(api.newSteps('offline', false)[3].key === 'cleanup' && api.newSteps('offline', false).length === 6, 'offline 电影表不受影响（6 步键序不变）');
+assert(api.newSteps('multi', false).length === 7, "type='multi'+电影 → multi 7 步");
+assert(api.newSteps(undefined, true).length === 7, '存量无 type + isTv → 7 步新表');
+assert(api.newSteps('offline', false)[3].key === 'cleanup' && api.newSteps('offline', false).length === 7, 'offline 电影表 7 步（末步 place）');
 
 /* v359：status 大状态在 6 步表上的表现 */
 var s6fail = { steps: api.newSteps('tv', true) };
@@ -480,7 +481,7 @@ assert(api.status(s6run, true).text === '整理中 · 修改视频名称' || api
 var s6done = { steps: api.newSteps('tv', true) };
 ['submit', 'wait', 'mkdir', 'cleanup', 'move', 'rename'].forEach(function (k) { api.getStep(s6done, k).state = 'ok'; });
 assert(api.status(s6done, true).text === '已完成', '6 步表全 ok → 已完成');
-assert(api.visibleSteps(s6run).length === 6 && api.visibleSteps(s6run)[5].key === 'rename', 'visibleSteps：进行中显示到 running 步（前缀切片含中间 idle 的 move，共 6 项）');
+assert(api.visibleSteps(s6run).length === 7 && api.visibleSteps(s6run)[6].key === 'place', 'visibleSteps：进行中显示到 running 步 + 下一个待跑 place（共 7 项）');
 
 /* v359：旧 8 步任务（存量/多磁力）状态不受影响 */
 var s8old = { steps: api.newSteps('multi', true) };

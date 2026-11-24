@@ -2299,6 +2299,10 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .tidy-task-body { border-top: 0.5px solid var(--sep); padding: 9px 14px 0; }
 .tidy-task-path { font-size: 12px; line-height: 1.5; color: var(--label-3); word-break: break-all; }
 .tidy-steps { padding: 10px 0 6px; }
+/* v522：自动化页步骤条改横排后，文件整理页（tidy-steps）保持原竖排 */
+.tidy-steps .auto-step { display: flex; flex-direction: row; align-items: flex-start; gap: 10px; padding: 8px 0; width: auto; min-width: 0; }
+.tidy-steps .auto-step:not(:last-child)::before { left: 8px; right: auto; top: 24px; bottom: -4px; width: 1.5px; height: auto; }
+.tidy-steps .as-label { font-size: 13px; line-height: 1.3; }
 /* 步骤圆点在白卡里要跟卡片同色（自动化页那套默认取 --bg） */
 .tidy-steps .as-dot { background: var(--card); }
 .tidy-task-ops { display: flex; gap: 8px; padding: 4px 14px 14px; }
@@ -2571,7 +2575,10 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .sheet-btn:active { opacity: .8; }
 .auto-task { background: var(--card-fill); border-radius: 14px; overflow: hidden; }
 .auto-task-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; -webkit-tap-highlight-color: transparent; }
-.auto-task-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--label); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* v525：标题 = 名字（可截断）+ 季/集短标（固定不挤） */
+.auto-task-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--label); line-height: 1.35; overflow: hidden; }
+.auto-task-title .att-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auto-task-title .att-tag { flex: 0 0 auto; font-size: 10.5px; font-weight: 600; color: var(--accent, #0a84ff); background: rgba(10,132,255,0.10); border-radius: 5px; padding: 2px 6px; white-space: nowrap; }
 .auto-task-badge { flex: 0 0 auto; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .auto-task-arrow { flex: 0 0 auto; width: 14px; height: 14px; color: var(--label-3); transition: transform .2s; }
 .auto-task-start { flex: 0 0 auto; border: none; border-radius: 999px; font-size: 11.5px; font-weight: 600; padding: 4px 12px; background: var(--accent, #0a84ff); color: var(--accent-text, #fff); -webkit-tap-highlight-color: transparent; }
@@ -2584,22 +2591,31 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 .ab-ok { background: rgba(52,199,89,0.18); color: #34c759; }
 .ab-fail { background: rgba(255,59,48,0.16); color: #ff3b30; }
 .ab-pause { background: rgba(255,59,48,0.12); color: #ff3b30; }
-.auto-steps { display: none; padding: 6px 16px 12px; border-top: 0.5px solid var(--sep); }
-.auto-task.expanded .auto-steps { display: block; }
-.auto-step { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; position: relative; }
-.auto-step:not(:last-child)::before { content: ''; position: absolute; left: 8px; top: 24px; bottom: -4px; width: 1.5px; background: var(--sep); }
-.as-dot { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%; margin-top: 1px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 1.5px solid var(--label-3); color: var(--label-3); background: var(--bg); }
+/* v523：横向步骤条——只显示已发生的圆点，步骤名跟着说明语走 */
+.auto-steps { display: none; padding: 10px 16px 8px; border-top: 0.5px solid var(--sep); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.auto-task.expanded .auto-steps { display: flex; align-items: center; }
+.auto-step { flex: 0 0 auto; width: 26px; display: flex; align-items: center; justify-content: center; position: relative; }
+.auto-step:not(:last-child)::before { content: ''; position: absolute; left: 17px; right: -9px; top: 50%; height: 1.5px; background: var(--sep); }
+.auto-step.pickable { cursor: pointer; }
+.auto-step.viewed .as-dot { box-shadow: 0 0 0 3px rgba(10,132,255,0.28); }
+.as-dot { position: relative; z-index: 1; flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 1.5px solid var(--label-3); color: var(--label-3); background: var(--bg); }
 .as-dot.ok { background: #34c759; border-color: #34c759; color: #fff; }
 .as-dot.fail { background: #ff3b30; border-color: #ff3b30; color: #fff; }
 .as-dot.run { border-color: #007aff; color: #007aff; }
 .as-dot.skip { background: rgba(142,142,147,0.5); border-color: transparent; color: #fff; }
-.as-body { flex: 1; min-width: 0; }
-.as-label { font-size: 13px; font-weight: 600; color: var(--label); line-height: 1.3; }
+.as-label { font-size: 10.5px; font-weight: 600; color: var(--label); line-height: 1.25; word-break: break-all; }
 .as-label.dim { color: var(--label-3); font-weight: 500; }
+/* 文件整理页步骤条仍用竖排 as-body/as-msg/as-time（tidy-core 渲染），保留 */
+.as-body { flex: 1; min-width: 0; }
 .as-msg { font-size: 11.5px; color: var(--label-2); margin-top: 2px; word-break: break-all; line-height: 1.4; }
 .as-msg.err { color: #ff3b30; }
-/* 时间不再单独占一行，跟在步骤名后（如「提交离线 08:31:21」），压缩卡片高度 */
 .as-time { display: inline; font-size: 10.5px; color: var(--label-3); font-weight: 500; margin-left: 6px; }
+/* 步骤条下只留一条说明语 + 该节点操作按钮 */
+.auto-task.expanded .auto-task-line { white-space: normal; overflow: visible; text-overflow: clip; padding-top: 2px; }
+.as-note-label { font-weight: 600; color: var(--label); margin-right: 8px; }
+.as-note-txt { color: var(--label-2); }
+.as-note-ops { display: inline-flex; gap: 8px; margin-left: 10px; vertical-align: middle; }
+.as-note-ops button { border: none; border-radius: 980px; font-size: 11.5px; font-weight: 600; padding: 3px 12px; -webkit-tap-highlight-color: transparent; }
 .as-ops { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .as-ops button { border: none; border-radius: 980px; font-size: 12px; font-weight: 600; padding: 6px 14px; -webkit-tap-highlight-color: transparent; }
 .as-op-retry { background: var(--accent); color: var(--accent-text); }

@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '521';
+window.__SCRIPT_VER = '525';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -2640,6 +2640,97 @@ function auto115TaskTitle(t){
   if (name && /^[0-9A-Za-z]{32,40}$/.test(name)) name = '磁力任务 · ' + name.slice(0, 6).toUpperCase();
   return name || '磁力任务';
 }
+/* v525：任务卡标题清洗（只用于展示，不改已存数据）——去广告前缀/域名/magnet 前缀/trackers。
+   域名特征与 core.TAIL_DOMAIN_RE 保持一致，避免两套规则一边剥一边留。 */
+var AUTO115_AD_DOMAIN = '(?:www\\.)?[a-z0-9-]+(?:\\.(?:com|net|cc|xyz|tv|me|org|moe|vip|club|cn|info|top))+';
+var AUTO115_AD_DOMAIN_RE = new RegExp(AUTO115_AD_DOMAIN, 'i');
+/* 纯中文资源站名（无域名）——只认明确广告词，避免把 [1080p] 这类有效标记删掉 */
+var AUTO115_AD_WORD_RE = /影视|电影|下载|资源|最新|发布|论坛|天堂|联盟|字幕组|出品|分享|首发|制作组|BT之家/i;
+function auto115TitleClean(s){
+  s = String(s || '').trim();
+  if (!s) return '';
+  /* magnet 链真名在 dn= 里，btih 只是哈希 */
+  if (/^magnet:/i.test(s)){
+    var dn = /[?&]dn=([^&]+)/i.exec(s);
+    if (dn){ try { s = decodeURIComponent(dn[1].replace(/\+/g, ' ')); } catch (_) { s = dn[1]; } }
+  }
+  s = s.replace(/^magnet:\?xt=urn:btih:[^&\s?]+/i, '').replace(/[?&](?:xt|tr|xl|kt|xs|as)=[^&]*/ig, '');
+  /* 括号广告（域名 / 中文站名）：首尾各剥最多 3 层 */
+  var adBracket = new RegExp('^\\s*[\\[【(（][^\\]】)）]{0,80}(?:' + AUTO115_AD_DOMAIN + '|' + AUTO115_AD_WORD_RE.source + ')[^\\]】)）]{0,80}[\\]】)）]\\s*', 'i');
+  var adBracketEnd = new RegExp('\\s*[\\[【(（][^\\]】)）]{0,80}(?:' + AUTO115_AD_DOMAIN + '|' + AUTO115_AD_WORD_RE.source + ')[^\\]】)）]{0,80}[\\]】)）]\\s*$', 'i');
+  for (var i = 0; i < 3; i++){
+    var before = s;
+    s = s.replace(adBracket, '').replace(adBracketEnd, '');
+    if (s === before) break;
+  }
+  /* 裸域名前缀 / 尾巴 */
+  s = s.replace(new RegExp('^\\s*(?:https?:\\/\\/)?' + AUTO115_AD_DOMAIN + '\\s*[-—_:：|·.]?\\s*', 'i'), '');
+  s = s.replace(new RegExp('\\s*(?:https?:\\/\\/)?' + AUTO115_AD_DOMAIN + '\\s*$', 'i'), '');
+  return s.replace(/^[\s\-—_.·|]+/, '').trim();
+}
+/* v525：季/集短标——只认 episodeOf 的强规则，裸数字弱规则不打标（防年份误标成集号） */
+function auto115TitleTags(s){
+  var name = auto115TitleClean(s);
+  if (!name) return null;
+  var hasS = /(?:\bs\s*\d{1,2}\s*[.\-_ ]?\s*e\d{1,3}\b|\bseason\s*\d{1,2}\b|第\s*[零一二两三四五六七八九十百\d]+\s*季)/i.test(name);
+  var hasE = /(?:\bs\s*\d{1,2}\s*[.\-_ ]?\s*e\s*\d{1,3}\b|\b(?:ep|e)\s*\d{1,3}\b|第\s*[零一二两三四五六七八九十百\d]+\s*(?:[-–~～至]\s*[零一二两三四五六七八九十百\d]+\s*)?[集话話])/i.test(name);
+  if (!hasS && !hasE) return null;
+  var ep = Auto115Core.episodeOf(name);
+  if (!ep) return null;
+  var out = {};
+  if (hasS && ep.season) out.s = ep.season;
+  if (hasE && ep.episode) out.e = ep.episode;
+  var range = /e\s*(\d{1,3})\s*[-–~～至]\s*(?:e\s*)?(\d{1,3})\b/i.exec(name)
+           || /第\s*(\d{1,3})\s*[-–~～至]\s*(\d{1,3})\s*[集话話]/.exec(name);
+  if (range){
+    var a = +range[1], b = +range[2];
+    if (a > 0 && b >= a && b <= 999){ out.eMin = a; out.eMax = b; delete out.e; }
+  }
+  return (out.s || out.e || out.eMin) ? out : null;
+}
+/* v525：多磁力集范围——磁链 dn= / 任务跑起来后 115 回传的真实文件名，取不到就不标 */
+function auto115MultiTags(t){
+  var eps = [], seasons = [];
+  function take(x){
+    var tg = auto115TitleTags(x);
+    if (!tg) return;
+    if (tg.s) seasons.push(tg.s);
+    if (tg.eMin){ eps.push(tg.eMin, tg.eMax); }
+    else if (tg.e) eps.push(tg.e);
+  }
+  (t.magnets || []).forEach(function(m){ take(m && (m.offlineName || m.title || m.magnet)); });
+  [t.offlineDirName, t.videoName, t.finalDirName].forEach(take);
+  var out = {};
+  if (seasons.length) out.s = seasons[0];
+  if (eps.length){ out.eMin = Math.min.apply(null, eps); out.eMax = Math.max.apply(null, eps); }
+  return (out.s || out.eMin) ? out : null;
+}
+/* v525：任务卡标题（名字 + 季/集短标），只用于 iOS 自动化页卡片；tbm 列表仍用纯文本 auto115TaskTitle */
+function auto115TaskTitleHtml(t){
+  var multi = Auto115Core.isMultiMagnet(t);
+  /* 整理 / 上传 / tbm 已填整理名：沿用原有文案，不动 */
+  if (!multi && (!t || t.tidy || auto115TaskType(t) === 'upload' || (t.tbm && t.tbmType && t.targetName)))
+    return '<span class="att-name">' + escapeHtml(auto115TaskTitle(t)) + '</span>';
+  var name, tags = null;
+  if (multi){
+    var film = auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId);
+    name = '多·' + (film || '磁力');
+    tags = auto115MultiTags(t);
+  } else {
+    var raw = (t && (t.magnetTitle || auto115TitleClean(t.magnet))) || '';
+    name = auto115TitleClean(raw);
+    if (!name) name = auto115OfflineTitle(t && t.magnet) || '';
+    if (/^[0-9A-Za-z]{32,40}$/.test(name)) name = '磁力任务 · ' + name.slice(0, 6).toUpperCase();
+    else tags = auto115TitleTags(raw);
+  }
+  var html = '<span class="att-name">' + escapeHtml(name || '磁力任务') + '</span>';
+  if (tags){
+    if (tags.s) html += '<span class="att-tag">S' + tags.s + '</span>';
+    if (tags.eMin) html += '<span class="att-tag">E' + tags.eMin + '–E' + tags.eMax + '</span>';
+    else if (tags.e) html += '<span class="att-tag">E' + tags.e + '</span>';
+  }
+  return html;
+}
 var auto115Doc = null;          // { filmId, filmTitle, dvdId, tasks: [] }
 var auto115LibraryDoc = null;   /* tbm 磁力库文档（方案 A，v332）：filmId='tbm-library'，存工具箱磁力管理任务。
                                    与影片文档相互独立，离线下载与整理都在它名下跑，不污染任何影片文档 */
@@ -2892,9 +2983,20 @@ function auto115Set(t, key, state, msg){
   s.state = state; s.msg = msg || '';
   if (state !== 'idle' && state !== 'running') s.at = auto115Now();
   else if (!s.at) s.at = auto115Now();
+  if (t && t.id) delete auto115ViewStep[t.id];   /* v522：进度推进 → 说明语回到当前节点 */
   renderAuto115(); auto115Save(auto115DocOf(t) || auto115Doc);   /* 进度写回任务归属的文档（防串到别的影片） */
   auto115TbmRefreshIfOpen(t);
   return s;
+}
+/* v522 拆步说明语：改名步「已改名为：完整名」/ 多个视频「已改名为：完整名等名称」；
+   移动步在改名链内一起标完成（物理上改名+移动同一个 ExecPlan，展示上拆成两步）。peekStep 只读——
+   存量任务步骤表没有 place，跳过不补建幽灵节点。 */
+function auto115RenameMsg(name, videoCount){
+  return '已改名为：' + (name || '') + ((videoCount || 1) > 1 ? '等名称' : '');
+}
+function auto115PlaceDone(t, msg){
+  var s = Auto115Core.peekStep(t, 'place');
+  if (s && s.state === 'idle') auto115Set(t, 'place', 'ok', msg || '文件已就位');
 }
 /* ===== v417 绑定文件夹：自动化页右上角链环 → 逐层选 115 目录 → 绑定存影片数据（bindCid/bindName），
    整理流水线全部成功后（auto115Finish 收口）自动把成果投递到绑定夹；解绑即回到云下载老逻辑 ===== */
@@ -3153,6 +3255,13 @@ function updateAutoBadge(){
   el.className = cls ? ('auto-badge ' + cls) : 'auto-badge';
   el.style.display = cls ? '' : 'none';
 }
+/* v522：横向步骤条——「临时查看」的步骤（点已执行节点切换；进度推进/刷新自动回到当前）。
+   idle 灰节点不可点；auto115Set 每次进度写回即清掉临时查看，天然实现「推进回到当前」。 */
+var auto115ViewStep = {};
+function auto115PickStep(tid, key){
+  auto115ViewStep[tid] = key;
+  renderAuto115();
+}
 /* 当前节点：最后一个「已发生」的步骤（正在跑的排在后面，天然被选中）；未开跑返回第一步 */
 function auto115CurStep(t){
   var steps = Auto115Core.visibleSteps(t);
@@ -3161,34 +3270,46 @@ function auto115CurStep(t){
   for (var i = 0; i < steps.length; i++){ if (steps[i].state && steps[i].state !== 'idle') cur = steps[i]; }
   return cur;
 }
-function auto115StepHtml(t, s){
-  var label = auto115StepLabel(s.key);
-  if (s.state === 'running') label += '…';
-  var dot = (s.state === 'ok') ? '✓' : (s.state === 'fail') ? '!' : (s.state === 'skip') ? '–' : '';
+function auto115StepOps(t, s){
   var ops = '';
   if (s.state === 'fail') ops = '<button class="as-op-retry" onclick="auto115RetryStep(\'' + t.id + '\',\'' + s.key + '\')">重试</button>';
-  /* v334：卡住的步骤（running 但本会话无定时器驱动，如离线中途退出后重开）也允许手动重试，避免「一直进行中」无法挽回；wait 的 running 已有「中止」可退出 */
+  /* v334：卡住的步骤（running 但本会话无定时器驱动，如离线中途退出后重开）也允许手动重试 */
   if (s.state === 'running' && s.key !== 'wait') ops = '<button class="as-op-retry" onclick="auto115RetryStep(\'' + t.id + '\',\'' + s.key + '\',true)">重试</button>';
   if (s.key === 'wait' && s.state === 'waiting'){
     ops = '<button class="as-op-retry" onclick="auto115ContinueProbe(\'' + t.id + '\')">继续探测</button>'
         + '<button class="as-op-ghost" onclick="auto115RetryStep(\'' + t.id + '\',\'submit\')">重新提交</button>';
   }
   if (s.key === 'wait' && s.state === 'running') ops = '<button class="as-op-ghost" onclick="auto115Abort(\'' + t.id + '\')">中止</button>';
-  return '<div class="auto-step">'
+  return ops;
+}
+function auto115StepHtml(t, s){
+  if (s.state === 'idle') return '';                        /* v523：未开始的步骤连圆点都不显示 */
+  var dot = (s.state === 'ok') ? '✓' : (s.state === 'fail') ? '!' : (s.state === 'skip') ? '–' : '';
+  var note = auto115NoteStep(t);
+  var viewed = note && note.key === s.key;                  /* 当前圆点 / 点到的圆点 */
+  return '<div class="auto-step pickable' + (viewed ? ' viewed' : '') + '"'
+    + ' onclick="auto115PickStep(\'' + t.id + '\',\'' + s.key + '\')">'
     + '<div class="as-dot ' + s.state + '">' + dot + '</div>'
-    + '<div class="as-body">'
-    + '<div class="as-label' + (s.state === 'idle' ? ' dim' : '') + '">' + escapeHtml(label)
-    + (s.at ? '<span class="as-time">' + auto115Time(s.at) + '</span>' : '') + '</div>'
-    + (s.msg ? '<div class="as-msg' + (s.state === 'fail' ? ' err' : '') + '">' + escapeHtml(s.msg) + '</div>' : '')
-    + (ops ? '<div class="as-ops">' + ops + '</div>' : '')
-    + '</div></div>';
+    + '</div>';
+}
+/* v522：说明语只显示一条——默认当前节点，点了已执行节点则临时显示那一步。
+   步骤推进靠 auto115Set 清 view；刷新页面内存清空自然回到当前。 */
+function auto115NoteStep(t){
+  var cur = auto115CurStep(t);
+  var v = auto115ViewStep[t.id];
+  if (v){
+    var hit = null, all = t.steps || [];
+    for (var i = 0; i < all.length; i++) if (all[i].key === v){ hit = all[i]; break; }
+    if (hit && hit.state && hit.state !== 'idle') return hit;   /* 只回看已发生步骤 */
+  }
+  return cur;
 }
 function auto115TaskHtml(t){
   var st = auto115Status(t);
   var expanded = !!auto115Expanded[t.id];
   var html = '<div class="auto-task' + (expanded ? ' expanded' : '') + '">'
     + '<div class="auto-task-head" onclick="auto115Toggle(\'' + t.id + '\')">'
-    + '<div class="auto-task-title">' + escapeHtml(auto115TaskTitle(t)) + '</div>'
+    + '<div class="auto-task-title">' + auto115TaskTitleHtml(t) + '</div>'
     + '<span class="auto-task-badge ' + st.cls + '">' + escapeHtml(st.text) + '</span>'
     /* 还没跑起来时，标题栏直接给「开始」按钮（不展开也能点），卡住时可手动点火 */
     + (st.cls === 'ab-idle'
@@ -3196,19 +3317,30 @@ function auto115TaskHtml(t){
         : '')
     + '<svg class="auto-task-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
     + '</div>';
-  /* 折叠态补一行「当前节点说明」：不用展开就能看到进度细节，文案随节点推进自动变 */
+  var noteStep = auto115NoteStep(t);
+  var noteMsg = noteStep ? String(noteStep.msg || '').replace(/\s+/g, ' ').trim() : '';
+  var noteLabel = noteStep ? auto115StepLabel(noteStep.key) : '';   /* v523：步骤名跟着说明语走 */
+  /* v524：收起态只留标题 + 最后走到的步骤名，说明语只在展开态显示 */
   if (!expanded){
     var curStep = auto115CurStep(t);
-    var curMsg = curStep ? String(curStep.msg || '').replace(/\s+/g, ' ').trim() : '';
-    if (curMsg) html += '<div class="auto-task-line">' + escapeHtml(curMsg) + '</div>';
+    var curLabel = curStep ? auto115StepLabel(curStep.key) : '';
+    if (curLabel) html += '<div class="auto-task-line">' + escapeHtml(curLabel) + '</div>';
   }
   if (expanded){
     /* 动态步骤（期三第 1 刀）：按实际进度裁剪 + tidy/upload 过滤，全部收口到 core.visibleSteps */
     var renderSteps = Auto115Core.visibleSteps(t);
     var startOp = (st.cls === 'ab-idle')
       ? '<button type="button" class="op-start" onclick="auto115ForceStart(\'' + t.id + '\')">开始</button>' : '';
-    html += '<div class="auto-steps">' + renderSteps.map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>'
-      + '<div class="auto-task-ops">'
+    html += '<div class="auto-steps">' + renderSteps.map(function(s){ return auto115StepHtml(t, s); }).join('') + '</div>';
+    /* 横向步骤条下只留一条说明语 + 该节点的操作按钮 */
+    if (noteMsg || (noteStep && auto115StepOps(t, noteStep))){
+      html += '<div class="auto-task-line">'
+        + (noteLabel ? '<span class="as-note-label">' + escapeHtml(noteLabel) + '</span>' : '')
+        + (noteMsg ? '<span class="as-note-txt">' + escapeHtml(noteMsg) + '</span>' : '')
+        + (noteStep ? '<span class="as-note-ops">' + auto115StepOps(t, noteStep) + '</span>' : '')
+        + '</div>';
+    }
+    html += '<div class="auto-task-ops">'
       + startOp
       + '<button type="button" onclick="auto115RetryTask(\'' + t.id + '\')">' + (st.cls === 'ab-ok' ? '重跑' : '重试') + '</button>'
       + '<button type="button" onclick="auto115RemoveTask(\'' + t.id + '\')">删除</button>'
@@ -3540,6 +3672,7 @@ function auto115DispatchStep(t, key){
     if (key === 'mkdir2') return auto115StepTvMkdir2Multi(t);
     if (key === 'rename') return auto115StepRenameMulti(t);
     if (key === 'move2') return auto115StepMove2Multi(t);
+    if (key === 'place') return isTv ? auto115StepMove2Multi(t) : Promise.resolve(null);
     return Promise.resolve(null);
   }
   if (key === 'dir') return auto115StepUploadDir(t);
@@ -3549,6 +3682,7 @@ function auto115DispatchStep(t, key){
   if (key === 'mkdir') return t.tidy ? auto115StepTidyMkdir(t) : auto115StepMkdir(t);
   if (key === 'move') return isTv ? auto115StepTvCleanupFiles(t) : auto115StepMove(t);
   if (key === 'rename') return isTv ? auto115StepTvRenameVideos(t) : auto115StepRename(t);
+  if (key === 'place') return isTv ? auto115TvMovePhase(t, 'place') : Promise.resolve(null);
   if (key === 'cleanup') return auto115StepCleanup(t);
   /* TV 专属步骤 */
   if (key === 'mkdir2') return auto115StepTvMkdirSeasons(t);
@@ -4108,11 +4242,15 @@ function auto115StepTvRenameVideos(t){
   else t.tvFlat = false;
   var execRenames = function(){
     var needRename = plan.renames.filter(function(r){ return r.orig !== r.name; }).length;
+    var vids = plan.renames.filter(function(r){ return Auto115Core.isVideoName(r.name); });
     auto115Set(t, 'rename', 'running', plan.av ? '正在按番号重命名视频…' : (t.tvFlat ? need.reason + '，' : '') + '正在按 SxxExx 规则重命名视频/字幕…');
-    /* v354 期二：改名统一走 ExecPlan（tvPlan 条目补 op:'rename'） */
+    /* v354 期二：改名统一走 ExecPlan（tvPlan 条目补 op:'rename'）
+       v522：改名完成即把 rename 步收口为「已改名为：X/等名称」，归位/移动落到独立的 place 步 */
     return auto115ExecPlan(t, plan.renames.map(function(r){ r.op = 'rename'; return r; }), { mode: 'rename' }).then(function(){
-      if (!needRename) auto115Set(t, 'rename', 'running', '文件名已符合规则，正在归位…');
-      return auto115TvMovePhase(t, 'rename');
+      auto115Set(t, 'rename', 'ok', needRename
+        ? auto115RenameMsg((vids[0] || plan.renames[0]).name, vids.length)
+        : '文件名已符合规则，无需改名');
+      return auto115TvMovePhase(t, 'place');
     });
   };
   if (t.tvFlat) return execRenames();
@@ -4843,7 +4981,8 @@ function auto115StepRename(t){
         var dupSize = stems[baseName.toLowerCase()];
         if (dupSize != null && Math.abs((t.videoSize || 0) - dupSize) < 1){
           t.videoName = baseName + ext;
-          auto115Set(t, 'rename', 'ok', '视频已在「' + prev.name + '」中，跳过重复文件');
+          auto115Set(t, 'rename', 'ok', auto115RenameMsg(t.videoName, 1));
+          auto115PlaceDone(t, '文件已在「' + prev.name + '」中，跳过重复移动');
           /* 次清晰度版本仍要改名并入；夹里还有合集保留下来的其他视频 → 临时夹整体保留不动 */
           var dupSvJob = auto115SecondVersionJob(t);
           var dupSv = dupSvJob ? auto115ExecPlan(t, auto115PlanMoves([dupSvJob]), { targetCid: prev.cid }) : Promise.resolve(null);
@@ -4889,8 +5028,9 @@ function auto115StepRename(t){
       return auto115ExecPlan(t, auto115PlanMoves(jobs), { targetCid: prev.cid }).then(function(){
         t.videoName = jobs[0].name;
         var afterMain = function(movedN){
-          auto115Set(t, 'rename', 'ok', '已移入「' + prev.name + '」并改名为：' + jobs[0].name
-            + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + jobs.length + ' 个文件') : ''))
+          auto115Set(t, 'rename', 'ok', auto115RenameMsg(jobs[0].name, keep.length));
+          auto115PlaceDone(t, '已移入「' + prev.name + '」'
+            + (multi || subCount ? (' ' + jobs.length + ' 个文件') : '')
             + (conflictPlan.skipped ? ('（' + conflictPlan.skipped + ' 个已存在相同文件，跳过）') : '')
             + (movedN ? ('；合集其他 ' + movedN + ' 部已归入合集文件夹') : '')
             + (auto115HasKeptOthers(t) ? ('；' + t.keptOtherVideos + ' 部未识别为合集，保留原夹') : ''));
@@ -4933,9 +5073,10 @@ function auto115StepRename(t){
   auto115Set(t, 'rename', 'running', needRename ? ('正在改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + (jobs.length) + ' 个文件') : ''))) : '正在核对文件名…');
   var afterRenameNoPrev = function(movedN){
     t.videoName = jobs[0].name;
-    var movedMsg = movedN ? ('；合集其他 ' + movedN + ' 部已按片名归档') : '';
-    if (!needRename) auto115Set(t, 'rename', 'ok', '文件名已符合规则，无需改名' + movedMsg);
-    else auto115Set(t, 'rename', 'ok', '已改名为：' + jobs[0].name + (multi ? (' 等 ' + jobs.length + ' 个文件') : (subCount ? (' 等 ' + jobs.length + ' 个文件') : '')) + movedMsg);
+    auto115Set(t, 'rename', 'ok', auto115RenameMsg(jobs[0].name, keep.length));
+    auto115PlaceDone(t, '文件已整理到「' + (t.offlineDirName || '影片文件夹') + '」'
+      + (multi || subCount ? (' ' + jobs.length + ' 个文件') : '')
+      + (movedN ? ('；合集其他 ' + movedN + ' 部已按片名归档') : ''));
     return auto115RemoveTmpDir(t).then(function(){ auto115Finish(t); return null; });
   };
   /* 主视频改名后，v347 合集其他视频搬出（失败不阻塞主流程，维持保护） */
@@ -4985,7 +5126,8 @@ function auto115StepRenameFlat(t){
       if (dupSize != null && Math.abs(t.videoSize - dupSize) < 1){
         t.videoName = baseName + ext;
         if (!collDirCid){ t.flatVideoFid = keep[0]; t.flatVideoName = t.videoName; }
-        auto115Set(t, 'rename', 'ok', '云下载已有同名同大小的「' + t.videoName + '」，跳过重复文件');
+        auto115Set(t, 'rename', 'ok', auto115RenameMsg(t.videoName, 1));
+        auto115PlaceDone(t, '云下载已有同名同大小文件，跳过重复移动');
         /* 次清晰度版本仍要改名搬到根目录；夹里还有合集保留下来的其他视频 → 临时夹整体保留不动 */
         var dupSvJob = auto115SecondVersionJob(t);
         var dupSv = dupSvJob ? auto115ExecPlan(t, auto115PlanMoves([dupSvJob]), { targetCid: collDirCid || (t.noFolder ? null : C115_DEFAULT_DIR_CID) }) : Promise.resolve(null);
@@ -5051,12 +5193,13 @@ function auto115StepRenameFlat(t){
       t.videoName = jobs[0].name;
       if (!collDirCid){ t.flatVideoFid = keep[0]; t.flatVideoName = jobs[0].name; }
       var afterMainFlat = function(movedN){
-        var msg = collDirCid ? ('已移入合集文件夹「' + collDirName + '」，改名为：' + jobs[0].name)
-          : (t.noFolder ? ('已改名为：' + jobs[0].name) : ('已移到云下载并改名为：' + jobs[0].name));
-        if (multi || subCount) msg += ' 等 ' + jobs.length + ' 个文件';
+        auto115Set(t, 'rename', 'ok', auto115RenameMsg(jobs[0].name, keep.length));
+        var msg = collDirCid ? ('已移入合集文件夹「' + collDirName + '」')
+          : (t.noFolder ? '文件已在云下载根目录' : '已移到云下载');
+        if (multi || subCount) msg += ' ' + jobs.length + ' 个文件';
         if (movedN) msg += '；合集其他 ' + movedN + ' 部已归入合集文件夹';
         if (!t.noFolder && auto115HasKeptOthers(t)) msg += '；' + t.keptOtherVideos + ' 部未识别为合集，保留原夹';
-        auto115Set(t, 'rename', 'ok', msg);
+        auto115PlaceDone(t, msg);
         /* 反查没命中的其他视频维持保护 → 临时夹也不删 */
         if (!t.noFolder && auto115HasKeptOthers(t)){ auto115RefreshDerived(); auto115Finish(t); return null; }
         return auto115RemoveTmpDir(t).then(function(){ auto115RefreshDerived(); auto115Finish(t); return null; });
@@ -5290,11 +5433,11 @@ function auto115StepRenameMulti(t){
     if (!plan.jobs.length){ auto115Set(t, 'rename', 'ok', '无需改名'); auto115Finish(t); return null; }
     if (isTv){
       var renameJobs = plan.jobs.filter(function(j){ return j.orig !== j.name; });
-      if (!renameJobs.length){ auto115Set(t, 'rename', 'ok', '文件名已符合，无需改名'); return auto115StepMove2Multi(t); }
+      if (!renameJobs.length){ auto115Set(t, 'rename', 'ok', auto115RenameMsg(plan.jobs[0].name, plan.jobs.length)); return auto115StepMove2Multi(t); }
       auto115Set(t, 'rename', 'running', '正在按 SxxExx 改名…');
       /* v354 期二：改名/移入统一走 ExecPlan（op 条目，mode 透传） */
       return auto115ExecPlan(t, renameJobs, { mode: 'rename' }).then(function(){
-        auto115Set(t, 'rename', 'ok', '已改名 ' + renameJobs.length + ' 个文件');
+        auto115Set(t, 'rename', 'ok', auto115RenameMsg(renameJobs[0].name, renameJobs.length));
         return auto115StepMove2Multi(t);
       }).catch(function(e){
         auto115Set(t, 'rename', 'fail', (e && e.message) ? e.message : '改名失败'); auto115Finish(t); return null;
@@ -5305,7 +5448,9 @@ function auto115StepRenameMulti(t){
       /* 视频/字幕已移走，清理搬空的源文件夹（里面还剩文件则不删，避免误删） */
       var srcDirs = plan.ms2.filter(function(m){ return m._srcDirCid; }).map(function(m){ return m._srcDirCid; });
       return auto115MultiCleanEmptyDirs(srcDirs).then(function(){
-        auto115Set(t, 'rename', 'ok', '已整理 ' + plan.jobs.length + ' 条磁力');
+        var vcnt = plan.jobs.filter(function(j){ return Auto115Core.isVideoName(j.name); }).length || 1;
+        auto115Set(t, 'rename', 'ok', auto115RenameMsg(plan.jobs[0].name, vcnt));
+        auto115PlaceDone(t, '已把 ' + vcnt + ' 部影片移到云下载');
         auto115Finish(t); return null;
       });
     }).catch(function(e){

@@ -292,7 +292,7 @@ const lz4LiteralForTest = (bytes) => {
   doc.tasks.unshift(tflat);
   calls.length = 0;
   await ctx.auto115StepRenameFlat(tflat);
-  assert(ctx.auto115GetStep(tflat, 'rename').state === 'ok' && ctx.auto115GetStep(tflat, 'rename').msg.indexOf('跳过重复') >= 0, '平铺判重：根目录同名同大小 → 跳过（' + ctx.auto115GetStep(tflat, 'rename').msg + '）');
+  assert(ctx.auto115GetStep(tflat, 'rename').state === 'ok' && ctx.auto115GetStep(tflat, 'place').msg.indexOf('跳过重复') >= 0, '平铺判重：根目录同名同大小 → 跳过（place：' + ctx.auto115GetStep(tflat, 'place').msg + '）');
   assert(!calls.some(c => c.url.indexOf('files/edit') >= 0), '平铺判重：未发起改名请求（无 files/edit）');
   doc.dvdId = 'IPX-486'; doc.filmTitle = '测试影片'; doc.originalTitle = ''; doc.year = ''; doc.nfoUploaded = false;
 
@@ -347,7 +347,7 @@ const lz4LiteralForTest = (bytes) => {
   doc.tasks.unshift(tmg2);
   calls.length = 0;
   await ctx.auto115StepRename(tmg2);
-  assert(ctx.auto115GetStep(tmg2, 'rename').state === 'ok' && ctx.auto115GetStep(tmg2, 'rename').msg.indexOf('跳过重复') >= 0, '并入判重：主视频已在目标夹 → 跳过（' + ctx.auto115GetStep(tmg2, 'rename').msg + '）');
+  assert(ctx.auto115GetStep(tmg2, 'rename').state === 'ok' && ctx.auto115GetStep(tmg2, 'place').msg.indexOf('跳过重复') >= 0, '并入判重：主视频已在目标夹 → 跳过（place：' + ctx.auto115GetStep(tmg2, 'place').msg + '）');
   assert(!calls.some(c => c.url.indexOf('files/move') >= 0 && decodeURIComponent(c.body || '').indexOf('fid=G3') >= 0), '并入判重：赌神2(G3) 留在原文件夹不动');
   const delMg2 = calls.filter(c => c.url.indexOf('rb/delete') >= 0).map(c => c.body || '');
   assert(!delMg2.some(b => b.indexOf('fid=DIRTMP2') >= 0) && !delMg2.some(b => b.indexOf('G3') >= 0), '并入判重：夹里还有保留视频 → 临时夹不删，赌神2 不被删');
@@ -819,7 +819,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115GetStep(ttv, 'move').state === 'ok', 'TV 清除无关文件 move = ok');
   assert(!ctx.Auto115Core.hasStep(ttv, 'mkdir2') && !ctx.Auto115Core.hasStep(ttv, 'move2'), '期三：单磁力剧集不再有 mkdir2/move2 幽灵节点');
   assert(ctx.auto115GetStep(ttv, 'rename').state === 'ok', 'TV 整理改名与归位 rename = ok（命名仍带 SxxExx）');
-  assert(ctx.auto115GetStep(ttv, 'rename').msg.indexOf('无需移动') >= 0, 'TV 不分季且文件已在剧集根 → 无需移动（' + ctx.auto115GetStep(ttv, 'rename').msg + '）');
+  assert(ctx.auto115GetStep(ttv, 'place').msg.indexOf('无需移动') >= 0, 'TV 不分季且文件已在剧集根 → 无需移动（place：' + ctx.auto115GetStep(ttv, 'place').msg + '）');
   const editBodies = calls.filter(c => c.url.indexOf('files/edit') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E01.mkv') >= 0), '改名含 权力的游戏.S01E01.mkv');
   assert(editBodies.some(b => b.indexOf('权力的游戏.S01E02.mkv') >= 0), '改名含 权力的游戏.S01E02.mkv');
@@ -863,7 +863,7 @@ const lz4LiteralForTest = (bytes) => {
   ['submit', 'wait', 'mkdir'].forEach(k => { ctx.auto115GetStep(ttot, k).state = 'ok'; });
   calls.length = 0;
   await ctx.auto115StepCleanup(ttot);
-  assert(ctx.auto115GetStep(ttot, 'rename').state === 'ok' && ctx.auto115GetStep(ttot, 'rename').msg.indexOf('已把 3 个文件') >= 0, '古战场传奇：2 季不足阈值不分季，嵌在老季夹里的 3 个文件搬到剧集根（' + ctx.auto115GetStep(ttot, 'rename').msg + '）');
+  assert(ctx.auto115GetStep(ttot, 'place').state === 'ok' && ctx.auto115GetStep(ttot, 'place').msg.indexOf('已把 3 个文件') >= 0, '古战场传奇：2 季不足阈值不分季，嵌在老季夹里的 3 个文件搬到剧集根（place：' + ctx.auto115GetStep(ttot, 'place').msg + '）');
   const otMoves = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
   /* v383：move 批量化后 fid 是逗号列表，用边界匹配核对每个文件都在清单里 */
   assert(otMoves.every(b => b.indexOf('pid=DIROT') >= 0) && ['O1', 'O2', 'O3'].every(f => otMoves.some(b => new RegExp('fid=[^&]*\\b' + f + '\\b').test(b))), '古战场传奇：O1/O2/O3 全部移入「古战场传奇」根');
@@ -1030,7 +1030,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115GetStep(tSp2, 'rename').state === 'running' || ctx.auto115GetStep(tSp2, 'rename').state === 'ok', '多季且达到阈值 → 合并节点执行（建季夹+移入）');
   const addSp2 = calls.filter(c => c.url.indexOf('files/add') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(addSp2.length === 2 && addSp2.some(b => b.indexOf('cname=S01') >= 0) && addSp2.some(b => b.indexOf('cname=S02') >= 0), '新建 S01 与 S02 两个季文件夹');
-  assert(ctx.auto115GetStep(tSp2, 'rename').state === 'ok' && ctx.auto115GetStep(tSp2, 'rename').msg.indexOf('已移入') >= 0, '达到阈值时移入对应季文件夹（' + ctx.auto115GetStep(tSp2, 'rename').msg + '）');
+  assert(ctx.auto115GetStep(tSp2, 'place').state === 'ok' && ctx.auto115GetStep(tSp2, 'place').msg.indexOf('已移入') >= 0, '达到阈值时移入对应季文件夹（place：' + ctx.auto115GetStep(tSp2, 'place').msg + '）');
   const mvSp2 = calls.filter(c => c.url.indexOf('files/move') >= 0).map(c => decodeURIComponent(c.body || ''));
   assert(mvSp2.some(b => b.indexOf('pid=S01NEW') >= 0) && mvSp2.some(b => b.indexOf('pid=S02NEW') >= 0), '视频分别移入 S01 / S02');
   ctx.Auto115Core.SPLIT_MIN_EPISODES = 100;
@@ -1163,7 +1163,7 @@ const lz4LiteralForTest = (bytes) => {
   docT.tasks.length = 0; docT.tasks.unshift(ttNfo);
   await ctx.auto115Run(ttNfo);
   assert(ctx.auto115GetStep(ttNfo, 'cleanup').state === 'ok' && ctx.auto115GetStep(ttNfo, 'cleanup').msg.indexOf('整理测试片') >= 0, '已传 NFO → 整理时并入已有文件夹：' + ctx.auto115GetStep(ttNfo, 'cleanup').msg);
-  assert(ctx.auto115GetStep(ttNfo, 'rename').state === 'ok' && ctx.auto115GetStep(ttNfo, 'rename').msg.indexOf('已移入「整理测试片」') >= 0, '散装视频移入 NFO 文件夹：' + ctx.auto115GetStep(ttNfo, 'rename').msg);
+  assert(ctx.auto115GetStep(ttNfo, 'place').state === 'ok' && ctx.auto115GetStep(ttNfo, 'place').msg.indexOf('已移入「整理测试片」') >= 0, '散装视频移入 NFO 文件夹（place）：' + ctx.auto115GetStep(ttNfo, 'place').msg);
   docT.nfoUploaded = 0;
 
   ctx.currentDetailFilm = { id: 'film1', data: { title: '测试影片', dvdId: 'IPX-486' } };
@@ -1223,7 +1223,7 @@ const lz4LiteralForTest = (bytes) => {
   ['mkdir','cleanup','move','rename'].forEach(function(k){ if (!ctx.Auto115Core.hasStep(tbm, k)) ctx.Auto115Core.getStep(tbm, k); });
   assert(ctx.auto115TaskIsTv(tbm) === false, 'tbm 整理为影片 → 仍非剧集');
   assert(ctx.auto115TaskTitle(tbm) === '影片：我的电影', 'tbm 整理为影片 → 标题「影片：我的电影」');
-  assert(ctx.auto115StepDefs(tbm).length === 6, 'tbm 影片 → 步骤表 6 步（定位/清理/移动/改名 + 提交/等待）');
+  assert(ctx.auto115StepDefs(tbm).length === 7, 'tbm 影片 → 步骤表 7 步（定位/清理/移动/改名/移动文件 + 提交/等待）');
   assert(ctx.auto115Status(tbm).text === '待提交', 'tbm 影片（已组织、步骤全空）→ 大状态「待提交」（将自动接整理跑）');
   /* 模拟整理进行中：mkdir running */
   ctx.Auto115Core.getStep(tbm, 'mkdir').state = 'running';
@@ -1235,7 +1235,7 @@ const lz4LiteralForTest = (bytes) => {
   tbm2.tbmType = 'tv'; tbm2.type = 'tv'; tbm2.targetName = '我的剧集';
   ['mkdir','cleanup','move','rename'].forEach(function(k){ if (!ctx.Auto115Core.hasStep(tbm2, k)) ctx.Auto115Core.getStep(tbm2, k); });
   assert(ctx.auto115TaskIsTv(tbm2) === true, 'tbm 整理为剧集 → 判为剧集');
-  assert(ctx.auto115StepDefs(tbm2).length === 6, 'tbm 剧集 → 步骤表 6 步（期三：建季/移入并入改名节点）');
+  assert(ctx.auto115StepDefs(tbm2).length === 7, 'tbm 剧集 → 步骤表 7 步（末步拆移动文件）');
   assert(ctx.auto115TaskTitle(tbm2) === '剧集：我的剧集', 'tbm 整理为剧集 → 标题「剧集：我的剧集」');
   /* 合成虚拟文档：tbm 任务的 auto115TaskDoc 应带 targetName 与正确 type（供清理/改名读身份） */
   const tbmDoc = ctx.auto115TaskDoc(tbm2);
@@ -1324,7 +1324,7 @@ const lz4LiteralForTest = (bytes) => {
   /* v338：磁力库多磁力仅下载 → 2 步表（提交离线/等待离线完成），不再用 6 步 multi 表 */
   const tbmSteps = ctx.Auto115Core.newSteps('tbm');
   assert(tbmSteps.length === 2 && tbmSteps[0].key === 'submit' && tbmSteps[1].key === 'wait', '磁力库多磁力：步骤表 = 2 步（仅下载）');
-  assert(ctx.Auto115Core.newSteps('multi', false).length === 6, '电影多磁力：步骤表 = 6 步');
+  assert(ctx.Auto115Core.newSteps('multi', false).length === 7, '电影多磁力：步骤表 = 7 步（末步拆移动文件）');
 
   // 11a. 电影多磁力（后缀模式）：每条磁力是 115 离线文件夹，穿透提取视频平铺进「影片名」夹（不再整夹套娃）
   ctx.auto115Doc = mkMultiDoc('movie', '测试影片');
@@ -1479,7 +1479,7 @@ const lz4LiteralForTest = (bytes) => {
   ctx.auto115Doc = { filmId: 'film1', filmTitle: '剧名', type: 'tv', tasks: [tMvFail] };
   calls.length = 0;
   await ctx.auto115StepTvRenameVideos(tMvFail);
-  assert(ctx.auto115GetStep(tMvFail, 'rename').state === 'fail', 'v395：批量移动被拒（state:false）→ rename 节点 fail，不静默标 ok（' + ctx.auto115GetStep(tMvFail, 'rename').msg + '）');
+  assert(ctx.auto115GetStep(tMvFail, 'place').state === 'fail', 'v395+v522：批量移动被拒（state:false）→ 移动步 place fail（改名已 ok，不静默标 ok）（' + ctx.auto115GetStep(tMvFail, 'place').msg + '）');
   assert(calls.some(c => c.url.indexOf('files/move') >= 0), 'v395：确实发起过移动请求（数组式→逗号式→逐条都试过）');
   /* v396：已完成任务也支持重跑（场景：任务被误标成功——v394 移动静默失败就是「显示完成、文件没搬」） */
   script = { 'files?cid=RDIR': { state: true, data: [] }, 'files/move': { state: true }, 'files/batch_rename': { state: true }, 'files/add': { state: true, data: { cid: 'RSUB' } } };
@@ -1514,9 +1514,9 @@ const lz4LiteralForTest = (bytes) => {
   const chDoc = await ctx.auto115EnsureDoc();
   /* v385：一键离线 = 单任务链（离线表 + 上传两步 dir/upload），不再另建上传任务 */
   const chainSteps = ctx.auto115NewStepsChained();
-  assert(chainSteps.length === 8 && chainSteps[6].key === 'dir' && chainSteps[7].key === 'upload', '一键离线链：步骤表 = 离线 6 步 + 上传 2 步（实际 ' + chainSteps.map(s => s.key).join(',') + '）');
+  assert(chainSteps.length === 9 && chainSteps[7].key === 'dir' && chainSteps[8].key === 'upload', '一键离线链：步骤表 = 离线 7 步 + 上传 2 步（实际 ' + chainSteps.map(s => s.key).join(',') + '）');
   const stTask = { id: 'tst', type: 'offline', autoUpload: true, steps: ctx.auto115NewStepsChained(), fv: ctx.AUTO115_FLOW_VERSION };
-  ['submit', 'wait', 'mkdir', 'cleanup', 'move', 'rename'].forEach(k => { ctx.auto115GetStep(stTask, k).state = 'ok'; });
+  ['submit', 'wait', 'mkdir', 'cleanup', 'move', 'rename', 'place'].forEach(k => { ctx.auto115GetStep(stTask, k).state = 'ok'; });
   assert(ctx.auto115Status(stTask).cls === 'ab-ok', '一键离线链：离线段跑完 = ab-ok（上传段仍 idle 时不误入上传分支）');
   ctx.auto115GetStep(stTask, 'dir').state = 'running';
   assert(ctx.auto115Status(stTask).text === '准备中…' && ctx.auto115Status(stTask).cls === 'ab-run', '一键离线链：准备文件夹阶段 → 准备中…');
@@ -1527,7 +1527,7 @@ const lz4LiteralForTest = (bytes) => {
   assert(ctx.auto115Status(stTask).cls === 'ab-ok', '一键离线链：上传完成 = ab-ok');
 
   const chTask = { id: 'tchain', magnet: 'magnet:?xt=urn:btih:eeee', magnetTitle: '一键离线磁力', steps: ctx.auto115NewStepsChained(), createdAt: Date.now(), fv: ctx.AUTO115_FLOW_VERSION, filmId: chDoc.filmId, autoUpload: true };
-  ['submit', 'wait', 'mkdir', 'cleanup', 'move', 'rename'].forEach(k => { ctx.auto115GetStep(chTask, k).state = 'ok'; });   // 离线段整条成功
+  ['submit', 'wait', 'mkdir', 'cleanup', 'move', 'rename', 'place'].forEach(k => { ctx.auto115GetStep(chTask, k).state = 'ok'; });   // 离线段整条成功
   chDoc.tasks.unshift(chTask);
   ctx.auto115Finish(chTask);
   await new Promise(r => setTimeout(r, 20));
@@ -1763,6 +1763,69 @@ const lz4LiteralForTest = (bytes) => {
       ctx.auto115MoveFids = realMoveFids;
       ctx.bindDelRootDel = realDel;
     }
+  }
+
+  /* ===== v522：末步拆「修改视频名称」+「移动文件」 + 说明语单条展示 ===== */
+  {
+    assert(ctx.auto115RenameMsg('凡人修仙传.S01E01.mkv', 1) === '已改名为：凡人修仙传.S01E01.mkv',
+      'v522 改名说明语：单个视频 = 已改名为：完整名（' + ctx.auto115RenameMsg('凡人修仙传.S01E01.mkv', 1) + '）');
+    assert(ctx.auto115RenameMsg('凡人修仙传.S01E01.mkv', 12) === '已改名为：凡人修仙传.S01E01.mkv等名称',
+      'v522 改名说明语：多个视频 = 完整名+等名称（' + ctx.auto115RenameMsg('凡人修仙传.S01E01.mkv', 12) + '）');
+
+    const tPlace = { id: 'v522-place', steps: ctx.auto115NewSteps('offline') };
+    ctx.auto115PlaceDone(tPlace, '已移到云下载');
+    assert(ctx.auto115GetStep(tPlace, 'place').state === 'ok' && ctx.auto115GetStep(tPlace, 'place').msg === '已移到云下载',
+      'v522 place 步：移动完成写入 ok（' + ctx.auto115GetStep(tPlace, 'place').msg + '）');
+    const tLegacy = { id: 'v522-legacy', steps: [
+      { key: 'submit', state: 'ok', msg: '' }, { key: 'rename', state: 'ok', msg: '已改名为：X' }
+    ] };
+    ctx.auto115PlaceDone(tLegacy, '已移动');
+    assert(!ctx.Auto115Core.hasStep(tLegacy, 'place'), 'v522 存量任务没有 place 步 → 不补建幽灵节点');
+
+    /* 说明语单条：默认当前步；点已执行步临时回看；推进后回到当前 */
+    const tNote = { id: 'v522-note', steps: ctx.auto115NewSteps('offline') };
+    ctx.auto115GetStep(tNote, 'submit').state = 'ok';
+    ctx.auto115GetStep(tNote, 'rename').state = 'ok';
+    ctx.auto115GetStep(tNote, 'rename').msg = '已改名为：A.mkv';
+    ctx.auto115GetStep(tNote, 'place').state = 'running';
+    ctx.auto115GetStep(tNote, 'place').msg = '正在移动';
+    vm.runInContext('auto115ViewStep = {};', ctx);
+    assert(ctx.auto115NoteStep(tNote).key === 'place', 'v522 说明语默认显示当前步（place）');
+    ctx.auto115PickStep(tNote.id, 'rename');
+    assert(ctx.auto115NoteStep(tNote).key === 'rename', 'v522 点已执行步 → 临时回看 rename');
+    ctx.auto115Set(tNote, 'place', 'ok', '已移动完成');
+    assert(ctx.auto115NoteStep(tNote).key === 'place', 'v522 进度推进 → 说明语回到当前步（place）');
+    ctx.auto115PickStep(tNote.id, 'place');
+    ctx.auto115PickStep(tNote.id, 'submit');
+    assert(ctx.auto115NoteStep(tNote).key === 'submit', 'v522 可回看更早已执行步（submit）');
+    ctx.auto115PickStep(tNote.id, 'wait');
+    assert(ctx.auto115NoteStep(tNote).key === 'place', 'v522 idle 灰步点不动 → 回落当前步');
+  }
+
+  /* v525：任务卡标题清洗 + 季/集短标 */
+  {
+    var clean = ctx.auto115TitleClean('【电影天堂www.dyg7.com】凡人修仙传.S02E05.1080p.mp4');
+    assert(clean.indexOf('dyg7') < 0 && clean.indexOf('天堂') < 0 && clean.indexOf('S02E05') >= 0,
+      'v525 广告括号前缀/域名剥掉，片名与集号保留（' + clean + '）');
+
+    var c2 = ctx.auto115TitleClean('magnet:?xt=urn:btih:ABCDEF123456&dn=%E5%87%A1%E4%BA%BA%E4%BF%AE%E4%BB%99%E4%BC%A0.E05&tr=udp%3A%2F%2Ftracker');
+    assert(c2.indexOf('凡人修仙传') >= 0 && c2.indexOf('btih') < 0 && c2.indexOf('tracker') < 0,
+      'v525 magnet 取 dn= 真名、去 btih/tr（' + c2 + '）');
+
+    var c3 = ctx.auto115TitleClean('www.dyg7.com 赌神.1989.1080p.mp4');
+    assert(c3 === '赌神.1989.1080p.mp4', 'v525 裸域名前缀剥掉（' + c3 + '）');
+
+    var tg = ctx.auto115TitleTags('[BT之家]凡人修仙传.S02E05.1080p.mp4');
+    assert(tg && tg.s === 2 && tg.e === 5, 'v525 SxxExx → S2 + E5 短标');
+
+    var tg2 = ctx.auto115TitleTags('凡人修仙传 第3-12集');
+    assert(tg2 && tg2.eMin === 3 && tg2.eMax === 12, 'v525 中文集范围 → E3–E12');
+
+    var tg3 = ctx.auto115TitleTags('赌神.1989.1080p.mp4');
+    assert(!tg3, 'v525 无强规则（年份/清晰度）不打标，避免误标成集号');
+
+    var tg4 = ctx.auto115TitleTags('凡人修仙传.E01-E12.1080p');
+    assert(tg4 && tg4.eMin === 1 && tg4.eMax === 12, 'v525 E01-E12 → E1–E12');
   }
 
   console.log('\nTOASTS:', toasts.join(' | '));

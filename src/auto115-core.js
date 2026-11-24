@@ -35,15 +35,16 @@
   };
 
   /* ---------- 步骤表（方案 B：先定容器再整理内容） ---------- */
-  api.STEP_DEFS = [   // offline：单影片 6 步
+  api.STEP_DEFS = [   // offline：单影片 7 步（v522：末步拆「修改视频名称」+「移动文件」）
     { key: 'submit',  label: '提交离线' },
     { key: 'wait',    label: '等待离线完成' },
     { key: 'mkdir',   label: '定位文件夹或影片' },   // 离线落地可能是文件夹，也可能是散装视频（v268 起两者都找）
     { key: 'cleanup', label: '修改文件夹名称' },   // 先定容器（独立任务改名为影片标题）
     { key: 'move',    label: '清理文件' },         // 删 sample/非主视频
-    { key: 'rename',  label: '修改视频名称' }
+    { key: 'rename',  label: '修改视频名称' },
+    { key: 'place',   label: '移动文件' }          // v522：改名后把文件移到最终位置（展示节点，与 rename 同链）
   ];
-  api.STEPS_TV = [    // 剧集离线 8 步
+  api.STEPS_TV = [    // 剧集离线 8 步（多磁力剧集）
     { key: 'submit',  label: '提交离线' },
     { key: 'wait',    label: '等待离线完成' },
     { key: 'mkdir',   label: '定位文件夹' },      // 定位离线落地的文件夹
@@ -51,7 +52,7 @@
     { key: 'move',    label: '清除无关文件' },    // 删 sample / 非中文字幕
     { key: 'mkdir2',  label: '新建季文件夹' },    // 在容器内建 S01/S02
     { key: 'rename',  label: '修改视频名称' },    // 视频/字幕按 SxxExx 改名
-    { key: 'move2',   label: '移入对应视频' }     // 把改好名的文件移进 Sxx
+    { key: 'move2',   label: '移动文件' }         // v522：文案统一为「移动文件」（原「移入对应视频」）
   ];
   api.STEPS_UPLOAD = [ // upload：上传 NFO 两步
     { key: 'dir',    label: '准备文件夹' },
@@ -72,10 +73,11 @@
     { key: 'mkdir',   label: '定位文件夹' },
     { key: 'cleanup', label: '清理' },
     { key: 'move',    label: '移动' },
-    { key: 'rename',  label: '重命名' }
+    { key: 'rename',  label: '修改视频名称' },
+    { key: 'place',   label: '移动文件' }   // v522：末步拆分（展示节点，与 rename 同链）
   ];
-  /* 单磁力剧集 6 步（期三第 2 刀）：mkdir2（建季夹）/move2（移入季夹）退役并入 rename
-     （判分季→建季夹→改名→冲突感知移入→未识别归拢→收尾一次完成）。
+  /* 单磁力剧集 7 步（v522：末步拆「修改视频名称」+「移动文件」）：mkdir2（建季夹）退役并入 rename，
+     move2（移入季夹）独立为 place（判分季→建季夹在 rename，改名在 rename，移入/归拢在 place）。
      旧表 STEPS_TV 仍服务剧集多磁力（8 步）与存量任务的兼容分发。 */
   api.STEPS_TV_SINGLE = [
     { key: 'submit',  label: '提交离线' },
@@ -83,7 +85,8 @@
     { key: 'mkdir',   label: '定位文件夹' },
     { key: 'cleanup', label: '修改标题文件夹' },
     { key: 'move',    label: '清除无关文件' },
-    { key: 'rename',  label: '整理改名与归位' }
+    { key: 'rename',  label: '修改视频名称' },
+    { key: 'place',   label: '移动文件' }
   ];
 
   /* ---------- 任务模型纯函数 ---------- */
