@@ -1667,6 +1667,104 @@ const lz4LiteralForTest = (bytes) => {
     ctx.auto115Doc = null; ctx.auto115ExecDoc = null; ctx.auto115RunningId = '';
   }
 
+  /* v521 绑定投递回归：① 文件夹已符合/改名成功都要写回成果 cid；② 同名夹只搬内容不套娃；③ 已在目标夹不搬自己 */
+  {
+    const realWriteEnter = ctx.auto115WriteEnter;
+    const realSet = ctx.auto115Set;
+    const realCleanupFiles = ctx.auto115StepTvCleanupFiles;
+    const realStepMove = ctx.auto115StepMove;
+    const realIsTv = ctx.auto115TaskIsTv;
+    const realTaskDoc = ctx.auto115TaskDoc;
+    const realTvDirName = ctx.auto115TvDirName;
+    const realLayout = ctx.auto115MovieLayout;
+    const realFindMerge = ctx.auto115FindMergeTarget;
+    const realPost = ctx.auto115Post;
+    try {
+      ctx.auto115WriteEnter = () => true;
+      ctx.auto115Set = () => ({});
+      ctx.auto115StepTvCleanupFiles = () => Promise.resolve(null);
+      ctx.auto115StepMove = () => Promise.resolve(null);
+      ctx.auto115TaskDoc = () => ({ filmTitle: '凡人修仙传' });
+      ctx.auto115TvDirName = (s) => s;
+      ctx.auto115TaskIsTv = () => true;
+
+      const tvAlready = { id: 'v521-tv-a', offlineDirCid: 'ROOT_FAN', offlineDirName: '凡人修仙传', steps: ctx.auto115NewSteps('offline') };
+      await ctx.auto115StepCleanup(tvAlready);
+      assert(tvAlready.finalDirCid === 'ROOT_FAN' && tvAlready.tvRootCid === 'ROOT_FAN' && tvAlready.finalDirName === '凡人修仙传',
+        'v521 成果夹：剧集夹原名已符合时写回 cid（实际 ' + tvAlready.finalDirCid + '）');
+
+      ctx.auto115Post = () => Promise.resolve({ ok: true, d: { state: true } });
+      const tvRenamed = { id: 'v521-tv-b', offlineDirCid: 'ROOT_FAN2', offlineDirName: '旧夹', steps: ctx.auto115NewSteps('offline') };
+      await ctx.auto115StepCleanup(tvRenamed);
+      assert(tvRenamed.finalDirCid === 'ROOT_FAN2' && tvRenamed.tvRootCid === 'ROOT_FAN2' && tvRenamed.finalDirName === '凡人修仙传',
+        'v521 成果夹：剧集夹改名成功时写回 cid（实际 ' + tvRenamed.finalDirCid + '）');
+
+      ctx.auto115TaskIsTv = () => false;
+      ctx.auto115TaskDoc = () => ({ filmTitle: '测试影片' });
+      ctx.auto115MovieLayout = () => ({ folder: true, name: '测试影片' });
+      ctx.auto115FindMergeTarget = () => null;
+      const mvAlready = { id: 'v521-mv-a', offlineDirCid: 'ROOT_MOVIE', offlineDirName: '测试影片', steps: ctx.auto115NewSteps('offline') };
+      await ctx.auto115StepCleanup(mvAlready);
+      assert(mvAlready.finalDirCid === 'ROOT_MOVIE' && mvAlready.finalDirName === '测试影片',
+        'v521 成果夹：影片夹原名已符合时写回 cid（实际 ' + mvAlready.finalDirCid + '）');
+    } finally {
+      ctx.auto115WriteEnter = realWriteEnter;
+      ctx.auto115Set = realSet;
+      ctx.auto115StepTvCleanupFiles = realCleanupFiles;
+      ctx.auto115StepMove = realStepMove;
+      ctx.auto115TaskIsTv = realIsTv;
+      ctx.auto115TaskDoc = realTaskDoc;
+      ctx.auto115TvDirName = realTvDirName;
+      ctx.auto115MovieLayout = realLayout;
+      ctx.auto115FindMergeTarget = realFindMerge;
+      ctx.auto115Post = realPost;
+    }
+  }
+
+  {
+    const realDocOf = ctx.auto115DocOf;
+    const realLoadFilm = ctx.loadFilm;
+    const realIsTv = ctx.auto115TaskIsTv;
+    const realListDir = ctx.auto115ListDir;
+    const realMoveFids = ctx.auto115MoveFids;
+    const realDel = ctx.bindDelRootDel;
+    try {
+      ctx.auto115DocOf = () => ({ filmId: 'film1' });
+      ctx.loadFilm = () => Promise.resolve({ data: { bindCid: 'ANIME', bindName: '动画' } });
+      ctx.auto115TaskIsTv = () => true;
+      ctx.auto115ListDir = (cid) => Promise.resolve(
+        String(cid) === 'ANIME' ? [{ cid: 'ANIME_FAN', n: '凡人修仙传' }]
+          : String(cid) === 'ROOT_FAN' ? [{ fid: 'F1', n: 'S01E01.mp4' }, { cid: 'S1', n: 'S01' }]
+            : []
+      );
+      const moves = [], dels = [];
+      ctx.auto115MoveFids = (pid, fids) => { moves.push({ pid: String(pid), fids: fids.map(String) }); return Promise.resolve({ ok: fids.length, fail: 0 }); };
+      ctx.bindDelRootDel = (cid, pid) => { dels.push({ cid: String(cid), pid: String(pid) }); return Promise.resolve(); };
+      const toastStart = toasts.length;
+
+      const tDeliver = { id: 'v521-deliver', finalDirCid: 'ROOT_FAN', finalDirName: '凡人修仙传', offlineDirCid: 'ROOT_FAN', steps: ctx.auto115NewSteps('offline') };
+      await ctx.auto115BindDeliver(tDeliver);
+      assert(moves.length === 1 && moves[0].pid === 'ANIME_FAN' && moves[0].fids.join(',') === 'F1,S1',
+        'v521 同名夹合并：只把源夹内容搬进【动画/凡人】（实际 ' + JSON.stringify(moves) + '）');
+      assert(dels.length === 1 && dels[0].cid === 'ROOT_FAN' && dels[0].pid === String(ctx.C115_DEFAULT_DIR_CID),
+        'v521 同名夹合并：删空源夹用云下载根目录作 pid（实际 ' + JSON.stringify(dels) + '）');
+      assert(tDeliver.finalDirCid === 'ANIME_FAN', 'v521 同名夹合并：finalDirCid 更新到绑定夹内（实际 ' + tDeliver.finalDirCid + '）');
+      assert(toasts.slice(toastStart).some(m => m.indexOf('剧集已并入绑定文件夹') >= 0), 'v521 同名夹合并：给用户成功提示');
+
+      moves.length = 0; dels.length = 0;
+      const tSelf = { id: 'v521-self', finalDirCid: 'ANIME_FAN', finalDirName: '凡人修仙传', offlineDirCid: 'ANIME_FAN', steps: ctx.auto115NewSteps('offline') };
+      await ctx.auto115BindDeliver(tSelf);
+      assert(moves.length === 0 && dels.length === 0, 'v521 防套娃：同名夹就是成果夹本身时不搬自己、不删自己');
+    } finally {
+      ctx.auto115DocOf = realDocOf;
+      ctx.loadFilm = realLoadFilm;
+      ctx.auto115TaskIsTv = realIsTv;
+      ctx.auto115ListDir = realListDir;
+      ctx.auto115MoveFids = realMoveFids;
+      ctx.bindDelRootDel = realDel;
+    }
+  }
+
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');
   process.exit(process.exitCode || 0);

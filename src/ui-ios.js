@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '520';
+window.__SCRIPT_VER = '521';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -3004,19 +3004,27 @@ function auto115BindDeliver(t){
   return loadFilm(doc.filmId).then(function(film){
     var d = (film && film.data) || {};
     var bindCid = d.bindCid;
-    if (!bindCid || !auto115TaskDoc) return;
-    var rootCid = t.finalDirCid ? String(t.finalDirCid) : '';
+    if (!bindCid) return;
+    /* v521：成果夹兜底顺序 finalDirCid → tvRootCid → 非默认目录的 offlineDirCid。
+       旧版只在部分分支写 finalDirCid，文件夹名已符合/改名成功时漏写，导致投递静默跳过。 */
+    var rootCid = t.finalDirCid ? String(t.finalDirCid)
+      : (t.tvRootCid ? String(t.tvRootCid)
+      : ((t.offlineDirCid && String(t.offlineDirCid) !== String(C115_DEFAULT_DIR_CID)) ? String(t.offlineDirCid) : ''));
     /* 平铺（视频在云下载根，没有夹）→ 文件直接移入绑定夹 */
     if (!rootCid || rootCid === String(C115_DEFAULT_DIR_CID)){
       var fids = (t.keepFids && t.keepFids.length) ? t.keepFids.slice() : (t.videoFid ? [String(t.videoFid)] : []);
-      if (!fids.length) return;
+      if (!fids.length){
+        console.warn('[115绑定投递] 已绑定但未定位到成果文件夹或散装视频，跳过投递', t && t.id);
+        showToast('已绑定，但没找到可投递的成果，结果留在云下载', 'info');
+        return;
+      }
       return auto115MoveFids(bindCid, fids).then(function(r){
         if (r.ok) showToast('已移入绑定文件夹「' + (d.bindName || '') + '」', 'success');
       });
     }
     if (String(rootCid) === String(bindCid)) return;   /* 已在绑定夹（如重跑），不重复搬 */
     if (auto115TaskIsTv(t)){
-      var rootName = t.finalDirName || '';
+      var rootName = t.finalDirName || t.offlineDirName || '';
       return auto115ListDir(bindCid).then(function(list){
         var sameCid = '';
         for (var i = 0; i < (list || []).length; i++){
@@ -3024,14 +3032,20 @@ function auto115BindDeliver(t){
           if (it && !it.fid && (it.n || it.name) === rootName){ sameCid = String(it.cid || ''); break; }
         }
         if (sameCid){
+          /* v521：同名夹其实就是成果夹本身（重跑/已在绑定夹内）→ 不搬自己、不删自己 */
+          if (String(sameCid) === String(rootCid)){
+            t.finalDirCid = rootCid; t.finalDirName = rootName;
+            showToast('剧集已在绑定文件夹「' + rootName + '」内', 'success');
+            return;
+          }
           /* 同名夹已存在 → 只搬根夹里的内容，不搬根夹本身（避免 剧名/剧名 套娃） */
           return auto115ListDir(rootCid).then(function(items){
             var fids = (items || []).filter(function(x){ return x && (x.fid || x.cid); })
               .map(function(x){ return String(x.fid || x.cid); });
-            if (!fids.length) return bindDelRootDel(rootCid, bindCid);
+            if (!fids.length) return bindDelRootDel(rootCid, C115_DEFAULT_DIR_CID);
             return auto115MoveFids(sameCid, fids).then(function(r){
               if (!r.ok) throw new Error(r.err || '移动失败');
-              return bindDelRootDel(rootCid, bindCid);
+              return bindDelRootDel(rootCid, C115_DEFAULT_DIR_CID);
             });
           }).then(function(){
             t.finalDirCid = sameCid;
@@ -5511,6 +5525,11 @@ function auto115StepCleanup(t){
       auto115Set(t, 'cleanup', 'fail', '文件夹没定位到'); auto115Finish(t); return Promise.resolve(null);
     }
     if (t.offlineDirName === showTitle){
+      /* v521：文件夹名已符合 → 这个夹本身就是最终剧集夹，必须记下成果 cid，
+         否则绑定投递只看 finalDirCid 会误判成散装视频而静默跳过 */
+      t.tvRootCid = String(t.offlineDirCid);
+      t.finalDirCid = String(t.offlineDirCid);
+      t.finalDirName = showTitle;
       auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改');
       return auto115StepTvCleanupFiles(t);
     }
@@ -5520,6 +5539,10 @@ function auto115StepCleanup(t){
       var d = res.d || {};
       if (res.ok && (d.state === true || d.errno === 0)){
         t.offlineDirName = showTitle;
+        /* v521：改名成功后的夹就是成果夹，写回 cid 供绑定投递使用 */
+        t.tvRootCid = String(t.offlineDirCid);
+        t.finalDirCid = String(t.offlineDirCid);
+        t.finalDirName = showTitle;
         auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + showTitle);
         return auto115StepTvCleanupFiles(t);
       }
@@ -5584,7 +5607,13 @@ function auto115StepCleanup(t){
   if (!t.offlineDirCid || t.offlineDirCid === C115_DEFAULT_DIR_CID){ auto115Set(t, 'cleanup', 'fail', '文件夹没定位到，点「重试」再试一次'); auto115Finish(t); return Promise.resolve(null); }
   var newName;
   if (t.external){
-    if (!t.targetName){ auto115Set(t, 'cleanup', 'skip', '未填目标名称，保留 115 文件夹名'); return auto115StepMove(t); }
+    if (!t.targetName){
+      /* v521：外部磁力保留原夹名时，这个夹就是成果夹 */
+      if (t.offlineDirCid && t.offlineDirCid !== C115_DEFAULT_DIR_CID){
+        t.finalDirCid = String(t.offlineDirCid); t.finalDirName = t.offlineDirName;
+      }
+      auto115Set(t, 'cleanup', 'skip', '未填目标名称，保留 115 文件夹名'); return auto115StepMove(t);
+    }
     newName = auto115ExternalBaseName(t);
   } else {
     /* 文件夹命名：始终只取影片标题；统一走 sanitizeName（非法字符 → _，/ 不净化），
@@ -5593,13 +5622,19 @@ function auto115StepCleanup(t){
     newName = rawName ? sanitizeName(rawName) : '';
   }
   if (!newName){ auto115Set(t, 'cleanup', 'fail', '缺少名称信息，没法改名'); auto115Finish(t); return Promise.resolve(null); }
-  if (newName === t.offlineDirName){ auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改'); return auto115StepMove(t); }
+  if (newName === t.offlineDirName){
+    /* v521：同上，原名已符合时补记成果 cid，绑定投递才能找到夹 */
+    t.finalDirCid = String(t.offlineDirCid); t.finalDirName = newName;
+    auto115Set(t, 'cleanup', 'skip', '文件夹名已符合，无需修改'); return auto115StepMove(t);
+  }
   auto115Set(t, 'cleanup', 'running', '正在把文件夹改名为「' + newName + '」…');
   var body2 = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&file_name=' + encodeURIComponent(newName);
   return auto115Post('https://webapi.115.com/files/edit', body2).then(function(res){
     var d = res.d || {};
     if (res.ok && (d.state === true || d.errno === 0)){
       t.offlineDirName = newName;
+      /* v521：影片夹改名成功后即成果夹 */
+      t.finalDirCid = String(t.offlineDirCid); t.finalDirName = newName;
       auto115Set(t, 'cleanup', 'ok', '文件夹已改名为：' + newName);
       return auto115StepMove(t);
     }
