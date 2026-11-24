@@ -1826,6 +1826,22 @@ const lz4LiteralForTest = (bytes) => {
 
     var tg4 = ctx.auto115TitleTags('凡人修仙传.E01-E12.1080p');
     assert(tg4 && tg4.eMin === 1 && tg4.eMax === 12, 'v525 E01-E12 → E1–E12');
+
+    /* v526：拿到真实文件名立刻切换显示 */
+    var tReal = { id: 'treal', magnetTitle: '【广告站www.dyg7.com】磁力原始名.mkv', magnet: 'magnet:?xt=urn:btih:ABCDEF1234567890', videoName: '凡人修仙传.S02E05.1080p.mp4' };
+    var hReal = ctx.auto115TaskTitleHtml(tReal);
+    assert(hReal.indexOf('凡人修仙传') >= 0 && hReal.indexOf('>S2<') >= 0 && hReal.indexOf('>E5<') >= 0 && hReal.indexOf('磁力原始名') < 0,
+      'v526 videoName 真实名立刻切换，旧入库标题不再显示（' + hReal + '）');
+
+    var tOffReal = { id: 'toff', magnetTitle: '哈希标题', magnet: 'magnet:?xt=urn:btih:ABCDEF1234567890', offlineName: '[BT之家]凡人修仙传.E07.mp4' };
+    var hOff = ctx.auto115TaskTitleHtml(tOffReal);
+    assert(hOff.indexOf('凡人修仙传') >= 0 && hOff.indexOf('>E7<') >= 0 && hOff.indexOf('哈希标题') < 0,
+      'v526 无 videoName 时用 offlineName 真实名（' + hOff + '）');
+
+    var tOld = { id: 'told', magnetTitle: '[电影天堂]赌神.1989.mp4', magnet: 'magnet:?xt=urn:btih:ABCDEF1234567890' };
+    var hOld = ctx.auto115TaskTitleHtml(tOld);
+    assert(hOld.indexOf('赌神') >= 0 && hOld.indexOf('天堂') < 0,
+      'v526 没真实名时仍回落到清洗后的入库标题（' + hOld + '）');
   }
 
   console.log('\nTOASTS:', toasts.join(' | '));

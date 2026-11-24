@@ -2594,11 +2594,13 @@ body:has(.magnet-selbar) .magnet-list { padding-bottom: 68px; }
 /* v523：横向步骤条——只显示已发生的圆点，步骤名跟着说明语走 */
 .auto-steps { display: none; padding: 10px 16px 8px; border-top: 0.5px solid var(--sep); overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .auto-task.expanded .auto-steps { display: flex; align-items: center; }
-.auto-step { flex: 0 0 auto; width: 26px; display: flex; align-items: center; justify-content: center; position: relative; }
-.auto-step:not(:last-child)::before { content: ''; position: absolute; left: 17px; right: -9px; top: 50%; height: 1.5px; background: var(--sep); }
+/* v527：圆点加大到 26px、点击区 44px（iOS 最小可点尺寸），只作用于自动化页步骤条 */
+.auto-step { flex: 0 0 auto; width: 44px; padding: 11px 0; display: flex; align-items: center; justify-content: center; position: relative; }
+.auto-step:not(:last-child)::before { content: ''; position: absolute; left: 35px; right: -9px; top: 50%; height: 1.5px; background: var(--sep); }
 .auto-step.pickable { cursor: pointer; }
 .auto-step.viewed .as-dot { box-shadow: 0 0 0 3px rgba(10,132,255,0.28); }
 .as-dot { position: relative; z-index: 1; flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border: 1.5px solid var(--label-3); color: var(--label-3); background: var(--bg); }
+.auto-steps .as-dot { width: 26px; height: 26px; font-size: 12px; }
 .as-dot.ok { background: #34c759; border-color: #34c759; color: #fff; }
 .as-dot.fail { background: #ff3b30; border-color: #ff3b30; color: #fff; }
 .as-dot.run { border-color: #007aff; color: #007aff; }

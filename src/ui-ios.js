@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '525';
+window.__SCRIPT_VER = '527';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -2717,7 +2717,10 @@ function auto115TaskTitleHtml(t){
     name = '多·' + (film || '磁力');
     tags = auto115MultiTags(t);
   } else {
-    var raw = (t && (t.magnetTitle || auto115TitleClean(t.magnet))) || '';
+    /* v526：115 回传真实文件名后立刻切换——整理后规范名 videoName > 离线原始名 offlineName > 入库标题；
+       都拿不到才回落 magnet 清洗/哈希。真实名同样过广告清洗，标签也从真实名解析。 */
+    var raw = (t && (t.videoName || t.offlineName || t.magnetTitle)) || '';
+    if (!raw) raw = auto115TitleClean(t && t.magnet);
     name = auto115TitleClean(raw);
     if (!name) name = auto115OfflineTitle(t && t.magnet) || '';
     if (/^[0-9A-Za-z]{32,40}$/.test(name)) name = '磁力任务 · ' + name.slice(0, 6).toUpperCase();
