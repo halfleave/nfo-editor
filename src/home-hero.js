@@ -255,7 +255,9 @@
   }
 
   function pickHero(pool){
-    /* 签名只看「有哪些片子」：数据更新（翻译补全、评分回写）不该把焦点区重新洗一遍 */
+    /* 签名只看「有哪些片子」：数据更新（翻译补全、评分回写）不该把焦点区重新洗一遍。
+       v529：前 2 部不再固定，全部参与随机；每次「打开 App」由 reshuffle() 清掉 heroSig，
+       让这里重洗一批。从详情页返回不触发 reshuffle，所以不会乱跳。 */
     var sig = pool.map(function(f){ return f.id; }).sort().join('|');
     if (sig === heroSig && heroFilms.length){
       var alive = {};
@@ -268,16 +270,13 @@
        看着就像「选中了但海报没刷出来」。全库都没图时才退回原列表（至少还有片名可读）。 */
     var withPic = pool.filter(function(f){ return !!posterOf(f); });
     var src = withPic.length ? withPic : pool;
-    /* v482：最新添加的 2 部固定留在焦点区最前面 —— 刚加完片回首页，先看到的必须是它；
-       其余名额仍然随机（保留「每次打开都有新鲜感」的老行为）。 */
-    var byNew = src.slice().sort(function(a, b){ return addedAt(b) - addedAt(a); });
-    var head = Math.min(2, byNew.length);
-    var rest = byNew.slice(head);
-    for (var i = rest.length - 1; i > 0; i--){                  // 其余随机
+    /* v529：全部真随机（用户拍板：前两部也不固定，每次打开 App 换一批） */
+    var arr = src.slice();
+    for (var i = arr.length - 1; i > 0; i--){
       var j = Math.floor(Math.random() * (i + 1));
-      var t = rest[i]; rest[i] = rest[j]; rest[j] = t;
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
     }
-    heroFilms = byNew.slice(0, head).concat(rest).slice(0, Math.min(HERO_MAX, byNew.length));
+    heroFilms = arr.slice(0, Math.min(HERO_MAX, arr.length));
     heroIdx = 0;
     return heroFilms;
   }
@@ -443,22 +442,28 @@
     var host = d('homeRows');
     if (!host) return;
     var masked = !!state.avCoverMask;
+    var recentHtml = recentRowHtml(films);   // v528：最近添加不再排最前，挪到「动漫」下方
     var html = ROW_DEFS.map(function(def){
       if (def.av && !state.themeHidden) return '';     // 普通模式不显示 AV 行（里外隔离照旧）
       var list = films.filter(function(f){ return kindOf(f) === def.key; });
-      if (!list.length) return '';
-      var showAll = list.length > ALL_THRESHOLD;
-      return '<section class="home-row">'
-        + '<div class="home-row-head"><h2>' + def.title
-        + (def.av ? eyeBtnHtml(masked) : '')
-        + '<em>' + list.length + '</em></h2>'
-        + (showAll ? '<button class="home-more" onclick="HomeHero.openAll(\'' + def.key + '\',\'' + def.title + '\')">全部'
-            + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>' : '')
-        + '</div>'
-        + '<div class="home-strip">' + list.map(cardHtml).join('') + '</div>'
-        + '</section>';
+      var rowHtml = '';
+      if (list.length){
+        var showAll = list.length > ALL_THRESHOLD;
+        rowHtml = '<section class="home-row">'
+          + '<div class="home-row-head"><h2>' + def.title
+          + (def.av ? eyeBtnHtml(masked) : '')
+          + '<em>' + list.length + '</em></h2>'
+          + (showAll ? '<button class="home-more" onclick="HomeHero.openAll(\'' + def.key + '\',\'' + def.title + '\')">全部'
+              + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>' : '')
+          + '</div>'
+          + '<div class="home-strip">' + list.map(cardHtml).join('') + '</div>'
+          + '</section>';
+      }
+      /* v528：最近添加插在「动漫」之后、「AVideo」之前；动漫本身没数据时也占住这个位置 */
+      if (def.key === 'anime') rowHtml += recentHtml;
+      return rowHtml;
     }).join('');
-    host.innerHTML = recentRowHtml(films) + html;   // v496：最近添加排在「电影」上面
+    host.innerHTML = html;
     bindOverviewLongPress(0, host);      // 复用首页卡片的长按菜单（编辑/刷新/锁定/删除）
   }
 
@@ -515,6 +520,15 @@
     } catch (e) {
       return Promise.resolve();
     }
+  }
+
+  /* v529：每次「打开 App」（冷启动 / 从后台切回前台）重洗焦点区。
+     清掉两个签名强制重选一批；此刻若正停在首页就直接重绘，否则等下次回首页的 render 自然生效。
+     App 内部导航（详情页→首页）不调这里，所以不会每返回一次就乱跳。 */
+  function reshuffle(){
+    heroSig = '';
+    lastSig = '';
+    if (window.currentPage === 'home' && d('homeRows')) render(true);
   }
 
   /* 首页 AV 行标题右侧的眼镜：和设置页「隐私封面」同一个开关 */
@@ -677,6 +691,7 @@
 
   window.HomeHero = {
     render: render,
+    reshuffle: reshuffle,
     syncHead: syncHead,
     syncScroll: syncScrollState,
     toggleMask: toggleMask,

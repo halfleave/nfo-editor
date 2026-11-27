@@ -1844,6 +1844,76 @@ const lz4LiteralForTest = (bytes) => {
       'v526 没真实名时仍回落到清洗后的入库标题（' + hOld + '）');
   }
 
+  /* v531：多磁力逐条提交 + 空临时夹收尾 */
+  {
+    var h1 = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    var h2 = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    var h3 = 'CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC';
+    script = {
+      'task_lists': { state: true, data: { tasks: [] } },
+      'add_task_url': { state: true }
+    };
+    calls.length = 0;
+    var tSub531 = {
+      id: 'v531sub', type: 'multi', fv: 2,
+      magnets: [h1, h2, h3].map(function(h){ return { magnet: 'magnet:?xt=urn:btih:' + h, title: '磁力' + h.slice(0, 2) }; }),
+      steps: ctx.auto115NewSteps('multi', false), createdAt: Date.now()
+    };
+    await ctx.auto115StepSubmitMulti(tSub531);
+    var oneByOne = calls.filter(c => c.url.indexOf('ac=add_task_url') >= 0 && c.url.indexOf('ac=add_task_urls') < 0);
+    assert(oneByOne.length === 3, 'v531 多磁力逐条提交：3 条磁力 → 3 次 add_task_url，实际 ' + oneByOne.length);
+    assert(!calls.some(c => c.url.indexOf('ac=add_task_urls') >= 0), 'v531 不再走批量接口 add_task_urls（假成功源头）');
+    assert(ctx.auto115GetStep(tSub531, 'submit').state === 'ok', 'v531 逐条提交全部成功 → submit = ok');
+
+    /* 部分失败：如实报条数，不假装全成功 */
+    script = {
+      'task_lists': { state: true, data: { tasks: [] } },
+      'add_task_url': (n) => (n <= 2 ? { state: true } : { state: false, error: '失败' })
+    };
+    calls.length = 0;
+    var tPartial = {
+      id: 'v531partial', type: 'multi', fv: 2,
+      magnets: [h1, h2, h3].map(function(h){ return { magnet: 'magnet:?xt=urn:btih:' + h, title: '磁力' }; }),
+      steps: ctx.auto115NewSteps('multi', false), createdAt: Date.now()
+    };
+    await ctx.auto115StepSubmitMulti(tPartial);
+    var ps = ctx.auto115GetStep(tPartial, 'submit');
+    assert(ps.state === 'fail' && ps.msg.indexOf('已提交 2 条') >= 0 && ps.msg.indexOf('1 条失败') >= 0,
+      'v531 部分失败如实提示条数（' + ps.msg + '）');
+
+    /* 删除返回 errno:0 但没真删 → 回查列表为准 */
+    script = {
+      'rb/delete': { state: false, errno: 0 },
+      'files?cid=TMPFAKE': { state: true, data: [] }
+    };
+    calls.length = 0;
+    var tDelFake = { id: 'v531del', fv: 2, offlineDirCid: 'TMPFAKE', finalDirCid: 'DONE', offlineDirName: '临时夹', steps: ctx.auto115NewSteps() };
+    await ctx.auto115RemoveTmpDir(tDelFake);
+    assert(calls.some(c => c.url.indexOf('files?cid=TMPFAKE') >= 0), 'v531 删除非明确成功 → 回查列表确认');
+    assert(!toasts.some(x => x.indexOf('临时目录未删') >= 0), 'v531 回查确认为空 → 不误报未删');
+
+    script = {
+      'rb/delete': { state: false, errno: 0 },
+      'files?cid=TMPSTILL': { state: true, data: [{ fid: 'X1', n: '遗留.mkv', s: 100 }] }
+    };
+    calls.length = 0;
+    var tDelStill = { id: 'v531still', fv: 2, offlineDirCid: 'TMPSTILL', finalDirCid: 'DONE', offlineDirName: '临时夹', steps: ctx.auto115NewSteps() };
+    await ctx.auto115RemoveTmpDir(tDelStill);
+    assert(toasts.some(x => x.indexOf('临时目录未删') >= 0), 'v531 回查发现夹里还有文件 → 提示手动清理');
+
+    /* 剧集遗留检查偶发失败（列目录被拒）→ 自动再查一次，别留下空夹 */
+    var listed = 0;
+    script = {
+      'files?cid=TMPTV': function(){ listed++; return listed === 1 ? { state: false, error: '被拒' } : { state: true, data: [] }; },
+      'rb/delete': { state: true }
+    };
+    calls.length = 0;
+    var tTvTmp = { id: 'v531tv', fv: 2, offlineDirCid: 'TMPTV', finalDirCid: 'TVSHOW', offlineDirName: '剧集临时夹', steps: ctx.auto115NewSteps() };
+    await ctx.auto115TvCleanTmpIfEmpty(tTvTmp, { renames: [], deleteFids: [] });
+    assert(listed >= 2, 'v531 列目录失败 → 自动再查一次，实际 ' + listed);
+    assert(calls.some(c => c.url.indexOf('rb/delete') >= 0 && c.body.indexOf('fid=TMPTV') >= 0), 'v531 重试确认空 → 删掉空临时夹');
+  }
+
   console.log('\nTOASTS:', toasts.join(' | '));
   console.log(process.exitCode ? '\n❌ 有用例失败' : '\n✅ 全部通过');
   process.exit(process.exitCode || 0);

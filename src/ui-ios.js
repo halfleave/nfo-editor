@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '527';
+window.__SCRIPT_VER = '531';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -2274,7 +2274,7 @@ function magnetPickFansub(btn){
 }
 /* ===== v430 磁力结果多选 → 批量离线 =====
    每行左侧常显复选框；勾中任意一个就进多选模式（底部浮出操作条），取消或全部取消即退出。
-   提交时一次把多条磁力交给 115（后端 add_task_urls 批量接口，失败再逐条回落）。 */
+   提交时逐条交给 115（v531 起放弃批量接口，避免假成功）。 */
 function magnetBoxOf(el){
   var n = el;
   for (var i = 0; i < 10 && n; i++){
@@ -2711,10 +2711,11 @@ function auto115TaskTitleHtml(t){
   /* 整理 / 上传 / tbm 已填整理名：沿用原有文案，不动 */
   if (!multi && (!t || t.tidy || auto115TaskType(t) === 'upload' || (t.tbm && t.tbmType && t.targetName)))
     return '<span class="att-name">' + escapeHtml(auto115TaskTitle(t)) + '</span>';
-  var name, tags = null;
+  var name, tags = null, multiTag = false;
   if (multi){
     var film = auto115Doc && (auto115Doc.filmTitle || auto115Doc.dvdId);
-    name = '多·' + (film || '磁力');
+    name = film || '磁力';
+    multiTag = true;   /* v530：「多」从名字文本里拆出来，单独做成标签 */
     tags = auto115MultiTags(t);
   } else {
     /* v526：115 回传真实文件名后立刻切换——整理后规范名 videoName > 离线原始名 offlineName > 入库标题；
@@ -2726,7 +2727,8 @@ function auto115TaskTitleHtml(t){
     if (/^[0-9A-Za-z]{32,40}$/.test(name)) name = '磁力任务 · ' + name.slice(0, 6).toUpperCase();
     else tags = auto115TitleTags(raw);
   }
-  var html = '<span class="att-name">' + escapeHtml(name || '磁力任务') + '</span>';
+  var html = (multiTag ? '<span class="att-tag">多</span>' : '')
+    + '<span class="att-name">' + escapeHtml(name || '磁力任务') + '</span>';
   if (tags){
     if (tags.s) html += '<span class="att-tag">S' + tags.s + '</span>';
     if (tags.eMin) html += '<span class="att-tag">E' + tags.eMin + '–E' + tags.eMax + '</span>';
@@ -3774,64 +3776,19 @@ function auto115StepSubmit(t){
 }
 /* 真正发提交请求。提交前先查一次 115 任务列表：同一个 hash 已经在离线列表里就直接复用，
    避免「上次提交成功但响应丢了/超时被判失败」后再提交一次造成重复离线。 */
-/* 批量提交：115 网页版「新建任务」支持一次传多条（add_task_urls，urls 用换行分隔），
-   所以多磁力任务只发一次请求。两种兜底：①全部已在 115 列表里（按 btih 预查）→ 直接算提交成功；
-   ②批量接口不认 / 整批失败 → 逐条回落 add_task_url 老路径，最坏等于旧行为。 */
-function auto115SubmitBatch(t, ms){
-  var todo = [];
-  // 预查只拉一次任务列表（原先是每条磁力各查一次，N 条就 N 次读请求）
-  return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=task_lists', 'page=1&page_row=100').then(function(res){
-    var d = (res && res.d) || {};
-    var tasks = d.tasks || (d.data && d.data.tasks) || [];
-    var have = {};
-    for (var i = 0; i < tasks.length; i++){
-      var x = tasks[i];
-      var h = ((x.info_hash || x.infohash || x.hash || '') + '').toUpperCase();
-      if (h) have[h] = x;
-    }
-    for (var j = 0; j < ms.length; j++){
-      var m = ms[j], hash = (auto115Btih(m.magnet) || '').toUpperCase();
-      var hit = hash ? have[hash] : null;
-      if (hit){
-        m.infoHash = hash;
-        m.offlineName = hit.name || m.offlineName || m.title || '';
-        m.state = 'submitted';
-      } else {
-        todo.push(m);
-      }
-    }
-  }).catch(function(){
-    todo = ms.slice();   // 列表都查不到就当全要提交，交给后面批量/逐条判断
-  }).then(function(){
-    if (!todo.length) return true;
-    var urls = todo.map(function(x){ return String(x.magnet || '').trim(); }).filter(Boolean);
-    if (!urls.length) return true;
-    var body = 'urls=' + encodeURIComponent(urls.join('\n')) + '&wp_path_id=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
-    return auto115Post('https://115.com/web/lixian/?ct=lixian&ac=add_task_urls', body).then(function(res){
-      var d = res.d || {};
-      var ok = res.ok && (d.state === true || d.errcode === 10008 || d.errno === 0);
-      if (!ok) return false;
-      // 有逐条失败项（state:false）时不猜对应关系，整批走逐条回落——已成功的再提交只会返回「已存在」
-      if (Object.prototype.toString.call(d.data) === '[object Array]'
-          && d.data.some(function(x){ return x && x.state === false; })) return false;
-      // 批量接口不回每条的 info_hash（顺序也不保证），用本地算的 btih 回填；名字留给等待阶段从任务列表补
-      todo.forEach(function(x){
-        x.infoHash = (auto115Btih(x.magnet) || '').toUpperCase();
-        x.state = 'submitted';
-        if (!x.offlineName) x.offlineName = x.title || '';
-      });
-      return true;
-    }).catch(function(){ return false; });
-  }).then(function(ok){
-    if (ok) return true;
-    // 批量失败 → 逐条回落（写操作仍受 c115Call 串行节流）
-    return Promise.all(todo.map(function(m){
-      return auto115SubmitOneMagnet(t, m).then(function(){ return 1; }).catch(function(){ return 0; });
-    })).then(function(rs){
-      var okN = rs.filter(Boolean).length;
-      if (!okN) throw new Error('提交失败');
-      return true;
+/* v531：多磁力一律逐条提交，放弃 add_task_urls 批量接口。
+   批量接口会在 HTTP 200 + errno:0 时实际没建任务，被误判成「已提交」，等待阶段又拿本地算的
+   hash 查不到，卡在「任务暂未出现」。逐条走 add_task_url（与单磁力同一条已验证可靠的路径），
+   写操作本身受 c115Call 串行节流，慢几秒但不会假成功。 */
+function auto115SubmitMultiSequential(t, ms){
+  var okN = 0, failN = 0;
+  return ms.reduce(function(chain, m){
+    return chain.then(function(){
+      return auto115SubmitOneMagnet(t, m).then(function(){ okN++; }, function(){ failN++; });
     });
+  }, Promise.resolve()).then(function(){
+    if (failN) throw new Error('已提交 ' + okN + ' 条，' + failN + ' 条失败');
+    return true;
   });
 }
 function auto115SubmitPost(t){
@@ -4375,6 +4332,17 @@ function auto115TvLeftoverJobs(t, plan){
     });
   });
 }
+/* v531：剧集并入收尾——只删「确认空」的临时夹。列目录偶发失败（风控/网络）时再查一次，
+   两次都失败就保守保留，绝不基于一次失败的列表删东西。 */
+function auto115TvCleanTmpIfEmpty(t, plan){
+  var clean = function(){
+    return auto115TvLeftoverJobs(t, plan).then(function(leftJobs){
+      if (leftJobs.length) return null;
+      return auto115RemoveTmpDir(t).then(function(){ return null; });
+    });
+  };
+  return clean().catch(function(){ return clean().catch(function(){ return null; }); });
+}
 /* 剧集平铺收尾：把「搬空了的子文件夹」删掉（如原有的 Outlander.S01–S05 老季夹——
    里面的视频已全部搬到剧集根）。只删**空夹**：里面还留着文件（遗留/认不出的）一律不动。 */
 function auto115RemoveEmptySubDirs(t, dirCid){
@@ -4456,15 +4424,8 @@ function auto115TvMovePhase(t, stepKey){
       auto115Finish(t);
       /* 收尾：把搬空了的老季文件夹（Outlander.S01 等）删掉；里面还有遗留文件的不动 */
       var tidy = auto115RemoveEmptySubDirs(t, t.offlineDirCid);
-      /* 并入同名剧集夹：夹里有遗留文件（认不出集号被保留的）→ 临时夹整体保留不动 */
-      if (t.tvMergeCid){
-        return tidy.then(function(){
-          return auto115TvLeftoverJobs(t, plan).then(function(leftJobs){
-            if (leftJobs.length) return null;
-            return auto115RemoveTmpDir(t).then(function(){ return null; });
-          });
-        });
-      }
+      /* 并入同名剧集夹：v531 用带重试的空夹清理，列目录偶发失败不再静默留下空夹 */
+      if (t.tvMergeCid) return tidy.then(function(){ return auto115TvCleanTmpIfEmpty(t, plan); });
       if (t.noFolder) return auto115RemoveTmpDir(t).then(function(){ return null; });
       return Promise.resolve(null);
     }).catch(function(e){ auto115Set(t, stepKey, 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
@@ -4490,14 +4451,8 @@ function auto115TvMovePhase(t, stepKey){
   return p.then(function(){
     auto115Set(t, stepKey, 'ok', '已移入 ' + moved + ' 个文件到对应季文件夹' + (skipped ? ('（跳过 ' + skipped + ' 个已存在的相同文件）') : ''));
     auto115Finish(t);
-    /* 并入同名剧集夹场景：夹里文件已全部处理才删临时夹；
-       有遗留文件（认不出集号被保留的）→ 临时夹整体保留不动 */
-    if (t.tvMergeCid){
-      return auto115TvLeftoverJobs(t, plan).then(function(leftJobs){
-        if (leftJobs.length) return null;
-        return auto115RemoveTmpDir(t).then(function(){ return null; });
-      });
-    }
+    /* 并入同名剧集夹：v531 用带重试的空夹清理，列目录偶发失败不再静默留下空夹 */
+    if (t.tvMergeCid) return auto115TvCleanTmpIfEmpty(t, plan);
     return Promise.resolve(null);
   }).catch(function(e){ auto115Set(t, stepKey, 'fail', (e && e.message) ? e.message : '网络错误'); auto115Finish(t); return null; });
   });
@@ -5271,7 +5226,7 @@ function auto115StepSubmitMulti(t){
   var ms = Auto115Core.magnets(t).filter(function(m){ return m.state !== 'submitted'; });
   if (!ms.length){ delete auto115Submitting[t.id]; return auto115BeginWait(t); }
   auto115Set(t, 'submit', 'running', '正在提交 ' + ms.length + ' 条磁力到 115…');
-  return auto115SubmitBatch(t, ms).then(function(){
+  return auto115SubmitMultiSequential(t, ms).then(function(){
     delete auto115Submitting[t.id];
     auto115Set(t, 'submit', 'ok', '已提交 ' + Auto115Core.magnets(t).length + ' 条磁力');
     return auto115BeginWait(t);
@@ -5815,12 +5770,13 @@ function auto115RemoveTmpDir(t){
   if (!boxPermanent && t.finalDirCid && !t.noFolder && t.offlineDirCid && t.offlineDirCid !== C115_DEFAULT_DIR_CID && t.offlineDirCid !== t.finalDirCid){
     var delBody = 'fid=' + encodeURIComponent(t.offlineDirCid) + '&pid=' + encodeURIComponent(C115_DEFAULT_DIR_CID);
     main = auto115Post('https://webapi.115.com/rb/delete', delBody).then(function(res){
-      if (res.ok && ((res.d || {}).state === true || (res.d || {}).errno === 0)){
-        /* 静默成功 */ return;
-      }
-      /* 失败：toast 提示一次，不抛错 */
-      showToast('临时目录未删，可手动清理：' + (t.offlineDirName || ''), 'info');
-      return;
+      var d = res.d || {};
+      if (res.ok && d.state === true) return;   // v531：只认明确成功，errno:0 不再直接算删掉
+      /* v531：115 有时回成功但夹子还在 → 回查列表为准，真删掉才静默 */
+      return auto115ListDir(t.offlineDirCid).then(function(after){
+        if (!after || !after.length) return;
+        showToast('临时目录未删，可手动清理：' + (t.offlineDirName || ''), 'info');
+      }).catch(function(){ /* 回查失败不影响主流程 */ });
     }).catch(function(){ /* 网络错误静默，不影响主流程 */ });
   }
   return main.then(function(){ return rel.length ? auto115MultiCleanEmptyDirs(rel) : null; })
@@ -15865,7 +15821,11 @@ if (document.readyState === 'loading'){
 } else {
   requestAnimationFrame(bootApp);
 }
-document.addEventListener('visibilitychange', function(){ if (document.hidden) cancelDrag(); });
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden) cancelDrag();
+  /* v529：从后台切回前台 = 一次「打开 App」→ 焦点区换一批（在首页就立刻重绘，否则等回首页生效） */
+  else if (window.HomeHero && window.HomeHero.reshuffle) window.HomeHero.reshuffle();
+});
 
 /* —— PWA：Service Worker 离线缓存（仅 HTTPS / localhost 生效；file:// 直接跳过） ——
    v448：改为「缓存优先 + 后台静默更新」。新版本装好后停在 waiting，不自动打断用户；
