@@ -7,8 +7,8 @@
  *   paintAiReview / renderAiReview
  * 覆盖用户定的核心规则：
  *   ① 评论不足 3 条 → 区块不出现（失败静默、无「生成中」占位）
- *   ② 已有评论 → 永不重复调 AI
- *   ③ 在途不打断、120 秒冷却（at 在发起时即落库，跨会话有效）
+ *   ② v532：每部片每天最多发起一次；跨天首次打开刷新一批，当天再开不重复
+ *   ③ 在途不打断；at 在发起时即落库（跨会话有效），失败/空结果保留旧评论
  * 以及：配置未就绪静默跳过、成功后局部插入、切片不串、缺片名不请求、
  *       三行随机循环滚动渲染、标题「精彩评论」、HTML 转义。
  * 全程用桩，不触真实网络（符合隔离测试约束）。
@@ -44,7 +44,7 @@ function extractFn(code, name) {
 }
 const FN = ['aiReviewKey', 'aiReviewGet', 'aiReviewSet', 'aiReviewConfigReady',
   'aiReviewMaskedByCode', 'aiReviewAllowed', 'aiReviewInfoOf', 'cmShuffle', 'cmLaneHtml',
-  'paintAiReview', 'renderAiReview', 'maybeFetchAiReview', 'cwSizeOf', 'cwHtml'];
+  'aiReviewSameDay', 'paintAiReview', 'renderAiReview', 'maybeFetchAiReview', 'cwSizeOf', 'cwHtml'];
 
 /* —— 运行时桩 —— */
 let NOW = 1700000000000;
@@ -65,10 +65,18 @@ function makeBox(id) {
 }
 const sandbox = {
   console: console,
-  Date: { now: function () { return NOW; } },
+  /* v532：aiReviewSameDay 需要 new Date(ts)，桩要既能构造又能被 Date.now() 拨表 */
+  Date: (function () {
+    const Real = Date;
+    function MockDate(v) { return arguments.length ? new Real(v) : new Real(NOW); }
+    MockDate.now = function () { return NOW; };
+    MockDate.parse = Real.parse;
+    MockDate.UTC = Real.UTC;
+    MockDate.prototype = Real.prototype;
+    return MockDate;
+  })(),
   Promise: Promise,
   String: String, Array: Array, Object: Object, Error: Error, JSON: JSON, Math: Math,
-  AI_REVIEW_GAP: 120 * 1000,
   aiReviewInFlight: aiReviewInFlight,
   aiReviewShowing: [],
   currentDetailFilmId: null,
@@ -196,13 +204,45 @@ function reset(opts) {
   ok('cwSizeOf：超长评论自动小字', sandbox.cwSizeOf('很长'.repeat(30)) === 'cw-sm');
   sandbox.Math = origMath;
 
-  /* ② 已有评论 → 永不重复调 AI */
+  /* ② 当天已有评论 → 当天不重复 */
   reset();
   kv['aiReview3:f1'] = { list: ['早就写好的评论一', '早就写好的评论二', '早就写好的评论三'], at: NOW - 1000 };
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
-  ok('已有评论：0 次请求', calls.review.length === 0, JSON.stringify(calls.review));
-  ok('已有评论：原评论不被覆盖', kv['aiReview3:f1'].list[0] === '早就写好的评论一');
+  ok('当天已有评论：0 次请求', calls.review.length === 0, JSON.stringify(calls.review));
+  ok('当天已有评论：原评论不被覆盖', kv['aiReview3:f1'].list[0] === '早就写好的评论一');
+
+  /* ②b v532：隔天第一次打开 → 重新生成并就地替换；同日再开不重复 */
+  reset();
+  setCurrent('f1');
+  kv['aiReview3:f1'] = { list: ['昨天的评论一', '昨天的评论二', '昨天的评论三'], at: NOW - 26 * 3600 * 1000 };
+  sandbox.renderAiReview(films.f1);
+  await tick(8);
+  ok('跨天前：详情页显示旧评论', /昨天的评论一/.test(boxes.detailAiReview.innerHTML));
+  sandbox.maybeFetchAiReview('f1');
+  await tick(14);
+  ok('跨天首次打开：发起 1 次刷新', calls.review.length === 1, JSON.stringify(calls.review));
+  ok('跨天刷新：写入新评论', kv['aiReview3:f1'].list[0] === COMMENTS[0]);
+  ok('跨天刷新：详情页就地换成新评论', /余韵悠长/.test(boxes.detailAiReview.innerHTML)
+    && !/昨天的评论一/.test(boxes.detailAiReview.innerHTML));
+  sandbox.maybeFetchAiReview('f1');
+  await tick(10);
+  ok('刷新后同一天再开：仍 1 次请求', calls.review.length === 1, JSON.stringify(calls.review));
+
+  /* ②c v532：跨天刷新失败 → 保留昨天的旧评论，当天不再重试 */
+  reset({ reviewMode: 'fail' });
+  setCurrent('f1');
+  kv['aiReview3:f1'] = { list: ['昨天的评论一', '昨天的评论二', '昨天的评论三'], at: NOW - 26 * 3600 * 1000 };
+  sandbox.renderAiReview(films.f1);
+  await tick(8);
+  sandbox.maybeFetchAiReview('f1');
+  await tick(14);
+  ok('跨天刷新失败：旧评论仍在缓存且 at 已更新', kv['aiReview3:f1'].list[0] === '昨天的评论一'
+    && kv['aiReview3:f1'].at === NOW, JSON.stringify(kv['aiReview3:f1']));
+  ok('跨天刷新失败：页面保留旧评论不空白', /昨天的评论一/.test(boxes.detailAiReview.innerHTML));
+  sandbox.maybeFetchAiReview('f1');
+  await tick(10);
+  ok('跨天刷新失败后当天再开：不重试', calls.review.length === 1, JSON.stringify(calls.review));
 
   /* ③ 在途不打断：连点两次只发一次 */
   reset();
@@ -229,33 +269,32 @@ function reset(opts) {
     return Promise.resolve(COMMENTS.slice());
   };
 
-  /* ④ 失败静默 + 120 秒冷却 */
+  /* ④ v532：失败静默 + 当天不再重试；跨天自动重试 */
   reset({ reviewMode: 'fail' });
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
   ok('失败：不显示（区块仍隐藏）', boxes.detailAiReview.style.display === 'none' && boxes.detailAiReview.innerHTML === '');
   ok('失败：只留 at，不留空评论', kv['aiReview3:f1'] && kv['aiReview3:f1'].list.length === 0 && kv['aiReview3:f1'].at === NOW);
   ok('失败：in-flight 已释放', !aiReviewInFlight['f1']);
-  // 立刻再进详情（模拟刚保存就点进去）→ 冷却挡住
+  // 当天再进详情 → 不重试
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
-  ok('失败后立刻重开：120 秒内不重试', calls.review.length === 1, JSON.stringify(calls.review));
-  // 差 1 秒到 120 秒 → 仍不重试
-  NOW += 120 * 1000 - 1000;
+  ok('失败后当天再开：不重试', calls.review.length === 1, JSON.stringify(calls.review));
+  NOW += 1000;
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
-  ok('差 1 秒满 120 秒：仍不重试', calls.review.length === 1);
-  // 满 120 秒后重开 → 重试一次
+  ok('失败后当天稍晚再开：仍不重试', calls.review.length === 1);
+  // 跨天重开 → 重试一次
   reviewMode = 'ok';
-  NOW += 2000;
+  NOW += 24 * 3600 * 1000;
   sandbox.maybeFetchAiReview('f1');
   await tick(14);
-  ok('满 120 秒后重开：重试 1 次', calls.review.length === 2, JSON.stringify(calls.review));
+  ok('跨天后再开：重试 1 次', calls.review.length === 2, JSON.stringify(calls.review));
   ok('重试成功：写入评论数组', kv['aiReview3:f1'] && kv['aiReview3:f1'].list.length === 3);
-  // 成功后再进 → 永不再调
+  // 当天再进 → 不重复
   sandbox.maybeFetchAiReview('f1');
   await tick(10);
-  ok('重试成功后再进：仍为 2 次', calls.review.length === 2);
+  ok('重试成功当天再进：仍为 2 次', calls.review.length === 2);
 
   /* ⑤ 配置未就绪 / 缺数据 → 静默跳过 */
   reset({ configReady: false, tier: 'free' });

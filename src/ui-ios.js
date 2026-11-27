@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '531';
+window.__SCRIPT_VER = '532';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -10952,15 +10952,19 @@ function openFilmDetail(encId){
    v511 由 aiReviewAv: → aiReviewAv2:，v512 再由 aiReviewAv2: → aiReviewAv3:，
    v513 普通片由 aiReview2: → aiReview3:；每次改对应提示词就换键，令旧语气评论自然作废、按新提示词重生成一次），
    值 = { list:[...], at }。
-   规则：
+   规则（v532 起按天刷新）：
    ① 评论不足 3 条 → 区块不出现（全程静默：无「生成中」占位、失败不提示）
-   ② 保存影片时发起一次；已有评论则永不重复调 AI
-   ③ 下次进入详情页时再尝试一次：在途不打断、距上次发起 < 120 秒冷却
-   ④ at 在「发起时」就落库，杀掉 App 重开仍有效（不只依赖内存标记）
+   ② 每部影片当天第一次打开详情时刷新一批（有旧评论也重新生成），当天再开不重复
+   ③ at 在「发起时」就落库，跨天即视为新的一天；同日连点由 at + 在途标记挡住，不受旧 120 秒冷却影响
+   ④ 新评论成功才替换旧评论；失败 / 返回空则保留旧评论、页面不动、不提示
    ⑤ AV 用独立提示词 + 只发番号和片名（模型自行联网查作品内容）；无码片 / 拿不准的一律跳过（见 aiReviewAllowed） */
-var AI_REVIEW_GAP = 120 * 1000;
 var aiReviewInFlight = {};              // filmId → true（本会话内，防打断）
 var aiReviewShowing = [];               // 当前详情页的评论，供弹窗展示
+/* v532：按本机日历日比较「是不是同一天」，跟 App 其它日期逻辑一致 */
+function aiReviewSameDay(ts, now){
+  var a = new Date(ts), b = new Date(now == null ? Date.now() : now);
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
 /* v513：普通片换键 aiReview3 —— 提示词改成聊天吐槽语气，旧评论不重生成就不会变；
    AV 的 aiReviewAv3 保持不变（v512 已换过），两边互不影响。 */
 function aiReviewKey(id, av){ return (av ? 'aiReviewAv3:' : 'aiReview3:') + id; }
@@ -11158,7 +11162,7 @@ function renderAiReview(film){
     if (rec.list.length) paintAiReview(id, rec.list);
   }).catch(function(){});
 }
-/* 幂等触发：已有 / 在途 / 冷却 / 配置未就绪 / 数据未齐 / 无码片 都会静默跳过 */
+/* 幂等触发：当日已发起 / 在途 / 配置未就绪 / 数据未齐 / 无码片 都会静默跳过 */
 function maybeFetchAiReview(filmOrId){
   var id = (filmOrId && typeof filmOrId === 'object') ? filmOrId.id : filmOrId;
   if (!id || aiReviewInFlight[id] || !aiReviewConfigReady()) return;
@@ -11171,11 +11175,12 @@ function maybeFetchAiReview(filmOrId){
     if (av ? !info.dvdId : !info.title) return;           // 数据未齐不落 at，避免白打一次 AI
     return aiReviewGet(id, av).then(function(rec){
       if (aiReviewInFlight[id]) return;                   // 并发重入（连点两次）挡在这里
-      if (rec.list.length) return;                        // ② 已有评论：永不再调
       var now = Date.now();
-      if (rec.at && (now - rec.at) < AI_REVIEW_GAP) return;  // ③ 120 秒冷却
+      /* v532：按天刷新 —— at 是今天（无论成功/失败）当天不再重复；跨天或从未发起才刷新一批 */
+      if (rec.at && aiReviewSameDay(rec.at, now)) return;
       aiReviewInFlight[id] = true;
-      return aiReviewSet(id, { list: [], at: now }, av)   // 发起时先落时间戳（跨会话有效）
+      /* v532：先落 at 并保留旧评论（失败也不清空，下次打开仍显示旧的） */
+      return aiReviewSet(id, { list: rec.list, at: now }, av)
         .then(function(){
           return getActivationCode().then(function(code){
             return NfoCore.reviewRequest(info, {
@@ -11190,7 +11195,7 @@ function maybeFetchAiReview(filmOrId){
             paintAiReview(id, list);                       // 详情页正开着 → 局部插入
           });
         }).catch(function(){
-          /* ① 失败静默：只留 at，不显示、不提示 */
+          /* ① 失败静默：旧评论原样保留（发起时没清），不显示、不提示 */
         }).then(function(){ delete aiReviewInFlight[id]; });
     });
   }).catch(function(){});
