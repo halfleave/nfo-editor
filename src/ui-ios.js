@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '534';
+window.__SCRIPT_VER = '535';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -9002,6 +9002,24 @@ function fetchD1Meta(codes){
       return hit;
     });
 }
+/* v535：D1 关键词搜索（JavBus 无结果时的兜底）。番号/片名/演员模糊匹配，失败静默返回空数组。
+   命中结果同时塞进 d1Cache，卡片进详情补字段时可零请求复用。 */
+function fetchD1Search(q){
+  q = String(q || '').trim();
+  if (!q) return Promise.resolve([]);
+  var base = javbusApiBase();
+  return javFetchRetry(base + '/api/d1/search?q=' + encodeURIComponent(q) + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(j){
+      var items = (j && j.items) || [];
+      items.forEach(function(it){
+        var k = it.queryCode || d1NormCode(it.code);
+        if (k && !d1Cache[k]) d1Cache[k] = it;
+      });
+      return items;
+    })
+    .catch(function(){ return []; });
+}
 
 /* —— TMDB 常量 —— */
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
@@ -9584,6 +9602,9 @@ function fetchJavbusSearch(q, box, opts){
     fetchFc2Search(fc2n, box, jbCode);
     return;
   }
+  /* v535：D1 关键词搜索与 JavBus 并行发起。JavBus 有结果时命中项进 d1Cache 供补数据零请求复用；
+     JavBus 全空时用这批结果兜底出卡片。失败静默返回空，不影响主流程。 */
+  var d1P = fetchD1Search(q);
   /* v443：opts.censor 是用户手动指定的区（点药丸换区，只搜它、不回落）；
      否则按 javZoneOrder 自动依次试两个区——一个区 0 结果就换另一个区，都空才兜底 / 未找到 */
   var zones = opts.censor ? [opts.censor] : NfoCore.javZoneOrder(q);
@@ -9617,7 +9638,18 @@ function fetchJavbusSearch(q, box, opts){
       box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((err && err.message) ? err.message : '未知错误') + '</div>';
       return;
     }
-    return javMetaFallback(q, base, jbCode, box);
+    /* v535：JavBus 两区都空 → 等并行的 D1 搜索；有结果就出 D1 卡片（中文标题优先、可进详情），
+       没有再回落原 FC2/HEYZO 番号直查与「未找到」。 */
+    return d1P.then(function(d1Items){
+      if (d1Items && d1Items.length){
+        state.javCensor = 'uncensored';   // D1 全为 AV，药丸显示无码区
+        _javLastFc2 = false;
+        syncRightSideControls();
+        renderD1Results(d1Items, box);
+        return true;
+      }
+      return javMetaFallback(q, base, jbCode, box);
+    });
   }).catch(function(e){
     box.innerHTML = '<div class="tmdb-msg">JavBus 出错：' + escapeHtml((e && e.message) ? e.message : '未知错误') + '</div>';
   }).finally(function(){ stopLoadingRotator(); });
@@ -9715,6 +9747,67 @@ function applyJavbusResult(i){
     .catch(function(e){
       showToast('加载详情失败：' + ((e && e.message) || '未知'), 'error');
     });
+}
+/* ===== v535：D1 兜底搜索结果（JavBus 两区都空时显示）=====
+   列表标题中文优先：有 D1 中文译名就用中文作主标题、日文原名降为小字；
+   没有译名才用原始标题。卡片点选进详情走 applyD1Result。 */
+var lastD1Results = [];
+function renderD1Results(items, box){
+  lastD1Results = items;
+  var html = items.slice(0, 20).map(function(it, i){
+    var zh = String(it.title_zh || '').trim();
+    var orig = String(it.title || it.code || '').trim();
+    var mainTitle = zh || orig || '未命名';
+    var id = it.code || '';
+    var date = it.date || '';
+    var cover = javbusImgUrl(it.cover);
+    var coverHtml = state.avCoverMask
+      ? '<div class="tr-cover av-cover-mask">' + avCoverMaskHtml(id || mainTitle) + '</div>'
+      : (cover ? '<img class="tr-cover" src="' + escapeAttr(cover) + '" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="tr-ph"></div>');
+    var metaParts = [];
+    if (date) metaParts.push(date);
+    if (id) metaParts.push(id.toUpperCase());
+    var meta = metaParts.join(' · ');
+    // 有中文译名时：主标题中文，日文原名降小字（复用 v534 回填后的同款 DOM，零新增 CSS）
+    var titleHtml = zh
+      ? '<span class="tr-title-zh">' + escapeHtml(mainTitle) + '</span>'
+        + '<span class="tr-title-text tr-title-orig">' + escapeHtml(orig) + '</span>'
+      : '<span class="tr-title-text">' + escapeHtml(mainTitle) + '</span>';
+    return '<div class="tmdb-result" data-d1code="' + escapeAttr(d1NormCode(id)) + '" onclick="applyD1Result(' + i + ')">'
+      + coverHtml
+      + '<div class="tr-info"><div class="tr-title">' + titleHtml + '</div>'
+      + (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '')
+      + '</div></div>';
+  }).join('');
+  box.innerHTML = html;
+}
+/* D1 item → JavBus 详情结构 → 复用 populateFromJavbus 填充表单并进详情。
+   D1 没有的字段（剧情/评分/磁力/预告/剧照）留空；中文小字由 renderFilmDetail 末尾的
+   patchDetailFromD1 从 d1Cache 自动补（fetchD1Search 已把结果塞进缓存，零请求）。 */
+function applyD1Result(i){
+  var it = lastD1Results[i];
+  if (!it) return;
+  var arr = function(x){ return Array.isArray(x) ? x : []; };
+  var d = {
+    id: it.code || '',
+    title: String(it.title || it.code || '').trim(),   // 日文原名；中文小字交给 patchDetailFromD1
+    date: it.date || '',
+    img: it.cover || '',
+    videoLength: it.duration || '',
+    plot: '',
+    rating: '',
+    genres: arr(it.genres).map(function(g){ return { name: String(g || '') }; }),
+    stars: arr(it.actors).map(function(a){ return { name: String((a && a.name) || '') }; }),
+    director: arr(it.directors).length ? { name: String(it.directors[0] || '') } : null,
+    producer: arr(it.makers).length ? { name: String(it.makers[0] || '') } : null,
+    publisher: arr(it.labels).length ? { name: String(it.labels[0] || '') } : null,
+    series: arr(it.series).length ? { name: String(it.series[0] || '') } : null,
+    magnets: []
+  };
+  showToast('加载详情中…');
+  var imgP = populateFromJavbus(d, []);
+  prefetchJavbusPoster(it.cover).then(function(){ return quickSaveAndHome(); })
+    .then(function(){ return imgP; }).then(silentRefreshCurrentFilm).catch(function(){});
 }
 /* 保存时直接复用搜索列表已加载的封面（URL 相同 → 浏览器缓存秒回）：转 dataURL 并按海报方向裁切，
    作为初始海报让首页立刻有图；高清封面在后台加载完后由 silentRefresh 覆盖升级 */
