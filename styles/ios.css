@@ -282,16 +282,33 @@ img { display: block; }
 }
 .edit-type-seg { display: flex; margin: 0 0 6px; }
 .meta-type-tag { display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: var(--label-2); background: var(--card); border-radius: 10px; }
-/* 胶囊主按钮：占屏宽约 80%，水平居中 */
+/* 预告片胶囊 + 官网圆钮：整行共占屏宽约 80%，水平居中。
+   官网圆钮隐藏时，预告片胶囊 flex 撑满整行（仍为 80% 宽）。 */
+.detail-trailer-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 80%; max-width: 440px; margin: 0 auto 14px;
+}
 .detail-trailer-btn {
+  flex: 1 1 auto; min-width: 0;
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  width: 80%; max-width: 440px; height: 50px; margin: 0 auto 14px; border: none;
+  height: 50px; border: none;
   border-radius: 25px; background: rgba(255,255,255,0.22);
   backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px);
   color: #fff; font-size: 16px; font-weight: 600;
   -webkit-tap-highlight-color: transparent;
   transition: background .15s, transform .08s;
 }
+/* v533：官方网站圆钮，宽高 1:1，与预告片胶囊同高 */
+.detail-official-btn {
+  flex: 0 0 50px; width: 50px; height: 50px; border: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.22);
+  backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px);
+  color: #fff; -webkit-tap-highlight-color: transparent;
+  transition: background .15s, transform .08s;
+}
+.detail-official-btn svg { width: 24px; height: 24px; }
+.detail-official-btn:active { background: rgba(255,255,255,0.34); transform: scale(0.94); }
 .detail-trailer-btn svg { width: 20px; height: 20px; }
 .detail-trailer-btn:active { background: rgba(255,255,255,0.34); transform: scale(0.98); }
 /* 无预告片：禁用态，文字「暂无预告片」，隐藏播放图标，不可点击 */
@@ -1777,6 +1794,13 @@ html, body { scrollbar-width: none; -ms-overflow-style: none; }
 .tmdb-result .tr-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .tmdb-result .tr-title { font-size: 16px; font-weight: 600; color: var(--label); }
 .tmdb-result .tr-title-text { transition: opacity .2s ease; }
+/* v534：D1 补中文译名——中文主标题独占一行，原日文标题降为小字灰字放下面 */
+.tmdb-result .tr-title-zh { display: block; color: var(--label); font-size: 16px; font-weight: 600; line-height: 1.35; }
+.tmdb-result .tr-title-zh[hidden] { display: none; }
+/* v534：详情页番号标题下方的 D1 中文译名小字 */
+.detail-title-zh-d1 { color: var(--label-2); font-size: 14px; font-weight: 500; line-height: 1.35; margin-top: 2px; }
+.detail-title-zh-d1[hidden] { display: none; }
+.tmdb-result .tr-title-text.tr-title-orig { display: block; color: var(--label-2); font-size: 12px; font-weight: 400; line-height: 1.35; margin-top: 2px; }
 .tmdb-result .tr-meta { font-size: 13px; color: var(--label-2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tmdb-result .tr-overview { font-size: 13px; color: var(--label-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .adult-tag {

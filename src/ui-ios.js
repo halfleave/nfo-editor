@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '532';
+window.__SCRIPT_VER = '534';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -8971,6 +8971,38 @@ function setMagnetConfig(cfg){ return idbPut('kv', 'magnetConfig', cfg || {}); }
    请求会打到 GitHub Pages 自己域名（Pages 404），而 TMDB/磁力/字幕都有兜底唯独 javbus 挂 */
 function javbusApiBase(){ return (state.magnetWorker || DEFAULT_WORKER || '').replace(/\/+$/, '') + '/javbus'; }
 
+/* ===== v534：D1 元数据补缺（只读，失败静默）=====
+   日常以 JavBus 为主，D1 只补 JavBus 没有的字段。番号归一化（去横杠小写）由后台变体匹配，
+   结果按 queryCode 回填。任何失败都返回空对象，绝不影响搜索/详情主流程。 */
+function d1NormCode(code){ return String(code || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+var d1Cache = {};   // 归一化番号 → item；本次会话内查过的不再重复请求
+function fetchD1Meta(codes){
+  var need = [], seen = {};
+  (codes || []).forEach(function(c){
+    var k = d1NormCode(c);
+    if (k && !seen[k] && !(k in d1Cache)){ seen[k] = 1; need.push(k); }
+  });
+  if (!need.length){
+    var hit = {};
+    (codes || []).forEach(function(c){ var k = d1NormCode(c); if (k in d1Cache) hit[k] = d1Cache[k]; });
+    return Promise.resolve(hit);
+  }
+  var base = javbusApiBase();
+  return javFetchRetry(base + '/api/d1?codes=' + encodeURIComponent(need.join(',')) + '&_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(j){
+      var hit = {};
+      (j && j.items || []).forEach(function(it){ if (it.queryCode){ d1Cache[it.queryCode] = it; hit[it.queryCode] = it; } });
+      (codes || []).forEach(function(c){ var k = d1NormCode(c); if (k in d1Cache && !hit[k]) hit[k] = d1Cache[k]; });
+      return hit;
+    })
+    .catch(function(){
+      var hit = {};
+      (codes || []).forEach(function(c){ var k = d1NormCode(c); if (k in d1Cache) hit[k] = d1Cache[k]; });
+      return hit;
+    });
+}
+
 /* —— TMDB 常量 —— */
 var TMDB_API_BASE = 'https://api.themoviedb.org/3';
 /* TMDB_IMG_BASE 已迁入共享核心 src/core-shared.js（经 NfoCore.tmdbImgUrl 引用）；此处不再定义本地常量 */
@@ -9617,14 +9649,43 @@ function renderJavbusResults(items, box){
     if (date) metaParts.push(date);
     if (id) metaParts.push(id);
     var meta = metaParts.join(' · ');
-    return '<div class="tmdb-result" onclick="applyJavbusResult(' + i + ')">'
+    var norm = d1NormCode(id);
+    return '<div class="tmdb-result" data-d1code="' + escapeAttr(norm) + '" onclick="applyJavbusResult(' + i + ')">'
       + coverHtml
-      + '<div class="tr-info"><div class="tr-title">' + escapeHtml(title) + '</div>'
+      + '<div class="tr-info"><div class="tr-title">'
+      + '<span class="tr-title-text" data-role="jav-title">' + escapeHtml(title) + '</span>'
+      + '<span class="tr-title-zh" data-role="d1-zh" hidden></span>'
+      + '</div>'
       + (tagBadges ? '<div class="tr-tags">' + tagBadges + '</div>' : '')
       + (meta ? '<div class="tr-meta">' + escapeHtml(meta) + '</div>' : '')
       + '</div></div>';
   }).join('');
   box.innerHTML = html;
+  patchSearchFromD1(box, items);
+}
+/* v534：搜索列表补 D1 中文译名——中文为主显示，原日文标题降为小字。
+   只填 JavBus 没给的译名；查不到/失败完全不动原卡片。异步回填，不重绘整块。 */
+function patchSearchFromD1(box, items){
+  var codes = items.map(function(it){ return it.id || ''; }).filter(Boolean);
+  if (!codes.length) return;
+  fetchD1Meta(codes).then(function(hit){
+    if (!box || !box.isConnected) return;
+    var cards = box.querySelectorAll('.tmdb-result[data-d1code]');
+    Array.prototype.forEach.call(cards, function(card){
+      var k = card.getAttribute('data-d1code');
+      var d = hit[k];
+      if (!d || !d.title_zh) return;
+      var javEl = card.querySelector('[data-role="jav-title"]');
+      var zhEl = card.querySelector('[data-role="d1-zh"]');
+      if (!javEl || !zhEl) return;
+      if (javEl.dataset.d1Applied) return;
+      // 原日文标题降为小字，中文译名作主标题
+      javEl.classList.add('tr-title-orig');
+      zhEl.textContent = d.title_zh;
+      zhEl.hidden = false;
+      javEl.dataset.d1Applied = '1';
+    });
+  });
 }
 function applyJavbusResult(i){
   var it = lastJavbusResults[i];
@@ -12214,6 +12275,9 @@ function renderFilmDetail(film){
     }
     tb.style.display = 'flex';
   }
+  // v533：官方网站圆钮 —— 能拼出地址才显示（AV 靠封面 cid / 普通片靠 TMDB id），拿不到就隐藏，胶囊仍占满 80%
+  var ob = document.getElementById('detailOfficialBtn');
+  if (ob) ob.style.display = officialPageUrlOf(film) ? 'flex' : 'none';
   // 磁力按钮：需有激活码且 Worker 可用
   var mb = document.getElementById('dtActMagnet');
   if (mb) mb.style.display = (state.activationCode && (state.magnetWorker || DEFAULT_WORKER)) ? '' : 'none';
@@ -12330,6 +12394,102 @@ function renderFilmDetail(film){
     var sc = document.getElementById('detailScroll');
     if (sc) sc.scrollTop = 0;
   });
+  patchDetailFromD1(film, d);   // v534：D1 补缺（只填空不覆盖，异步局部更新，失败静默）
+}
+/* v534：详情页 D1 补缺——以 JavBus 为主，只用 D1 填 JavBus 没给的字段。
+   查不到 / 失败 / 非 AV 片一律静默跳过。只读当前影片番号，命中后逐项填空：
+   中文译名（番号下方小字）、发行日期、演员、标签、片商、时长。不主动存盘，用户保存时自然带入。
+   磁力链（D1 为 ed2k 老链接、覆盖率极低）不并入磁力区，避免污染 JavBus 主链。 */
+function patchDetailFromD1(film, d){
+  if (!film || !d) return;
+  var code = (d.dvdId || d.content_id || film.id || '').toString().trim();
+  if (!code) return;   // 普通片（TMDB）无番号，不走 D1
+  var seq = detailRenderSeq;   // 渲染代号：查询回来时若已切到别的片，丢弃结果
+  fetchD1Meta([code]).then(function(hit){
+    var it = hit[d1NormCode(code)];
+    if (!it || !it.title_zh) return;   // D1 无译名视为未命中，整块跳过
+    if (seq !== detailRenderSeq || currentDetailFilm !== film) return;
+    if (currentDetailFilm && currentDetailFilm.data === d) applyD1FieldsToDetail(d, it);
+  });
+}
+function applyD1FieldsToDetail(d, it){
+  var normText = function(x){ return (x == null ? '' : String(x)).trim(); };
+  var zh = normText(it.title_zh);
+  // ① 中文译名：番号标题下方加一行小字（只加一次）
+  var titleEl = document.getElementById('detailTitle');
+  if (titleEl && zh){
+    var sub = titleEl.parentNode.querySelector('.detail-title-zh-d1');
+    if (!sub){
+      sub = document.createElement('div');
+      sub.className = 'detail-title-zh-d1';
+      titleEl.parentNode.insertBefore(sub, titleEl.nextSibling);
+    }
+    sub.textContent = zh;
+    sub.hidden = false;
+    d.title_zh = zh;
+  }
+  // ② 时长：info1 缺时长才补（D1 形如「120分」「150分 （HD版：150分）」）
+  if (!parseInt(d.runtime, 10) && it.duration){
+    var mm = String(it.duration).match(/(\d+)\s*分/);
+    if (mm){ d.runtime = mm[1]; patchDetailInfoLines(d); }
+  }
+  // ③ 发行日期：缺 premiered 才补（D1 形如 2023/08/18 → 2023-08-18）
+  if (!normText(d.premiered) && it.date){
+    var iso = String(it.date).replace(/\//g, '-');
+    d.premiered = iso; patchDetailInfoLines(d);
+  }
+  // ④ 演员：缺演员才补
+  if (!(d.actors && d.actors.length) && it.actors && it.actors.length){
+    d.actors = it.actors.map(function(a){ return { name: normText(a.name), role: normText(a.role) || 'actress' }; });
+    patchDetailCast(d);
+  }
+  // ⑤ 标签：缺标签才补
+  if (!(d.genres && d.genres.length) && it.genres && it.genres.length){
+    d.genres = it.genres.slice(); patchDetailInfoLines(d);
+  }
+  // ⑥ 片商：缺片商才补（D1 makers 为数组）
+  if (!normText(d.studio) && it.makers && it.makers.length){
+    d.studio = normText(it.makers[0]); patchDetailInfoLines(d);
+  }
+}
+function patchDetailInfoLines(d){
+  var info1 = [], rtMin = parseInt(d.runtime, 10);
+  if (d.rating) info1.push('<span class="dt-star">⭐️</span> ' + escapeHtml(d.rating));
+  if (rtMin > 0) info1.push(rtMin + ' 分钟');
+  if (d.premiered) info1.push(escapeHtml(d.premiered));
+  if (d.countries && d.countries.length) info1.push(escapeHtml(d.countries.join(' / ')));
+  if (d.mpaa) info1.push(escapeHtml(d.mpaa));
+  var el1 = document.getElementById('detailInfo1');
+  if (el1){ el1.innerHTML = info1.join(' ｜ '); el1.style.display = info1.length ? '' : 'none'; }
+  var avParts = [d.studio, d.label, d.series].map(normalizeTextField).filter(function(x){ return x; });
+  var elAv = document.getElementById('detailInfoAv');
+  if (elAv){ elAv.innerHTML = avParts.map(escapeHtml).join(' ｜ '); elAv.style.display = avParts.length ? '' : 'none'; }
+  var tags = (d.genres && d.genres.length) ? d.genres.slice(0, 6) : [];
+  var el2 = document.getElementById('detailInfo2');
+  if (el2){ el2.textContent = tags.length ? tags.join(', ') : ''; el2.style.display = tags.length ? '' : 'none'; }
+}
+function patchDetailCast(d){
+  var castEl = document.getElementById('detailCast');
+  if (!castEl) return;
+  var people = [];
+  (d.actors || []).forEach(function(p){ people.push({ name: p.name || '', role: p.role || '', photo: p.photo }); });
+  (d.directors || []).forEach(function(p){ people.push({ name: p.name || '', role: '导演', photo: p.photo }); });
+  if (!people.length){ castEl.innerHTML = ''; return; }
+  var ch = '<div class="detail-cast-title">演职人员</div><div class="detail-cast-row"><div class="detail-cast-spacer"></div>';
+  people.forEach(function(p){
+    var nm = p.name || '?';
+    var ini = escapeHtml(nm.charAt(0) || '?');
+    var ph = !p.photo;
+    var avaCls = 'dp-ava' + (ph ? ' ph' : '');
+    var avaAttr = p.photo ? ' style="background-image:url(' + escapeAttr(javbusImgUrl(p.photo)) + ');background-size:cover;background-position:center;"' : '';
+    var roleLabel = (p.role === '导演') ? '导演名' : '演员名';
+    var copyAttr = ' data-name="' + escapeAttr(nm) + '" onclick="copyText(this.dataset.name, \'' + roleLabel + '\');event.stopPropagation();"';
+    ch += '<div class="detail-person"><div class="' + avaCls + '"' + avaAttr + copyAttr + '>' + (ph ? ini : '') + '</div>'
+        + '<div class="dp-name"' + copyAttr + '>' + escapeHtml(nm) + '</div>'
+        + (p.role ? '<div class="dp-role">' + escapeHtml(p.role) + '</div>' : '') + '</div>';
+  });
+  ch += '<div class="detail-cast-spacer"></div></div>';
+  castEl.innerHTML = ch;
 }
 /* v408：无海报兜底——有的影片没有海报（首页灰框），读第一张剧照设为海报并写回影片数据。
    顺序：gallery 已缓存 dataURL（≥25KB 非缩略图）→ galleryLinks 首张远程（AV 图走 /img 代理）下载转本地 → fanart。
@@ -12541,6 +12701,33 @@ function openTrailerExternal(){
   if (!currentDetailTrailer) return;
   // 直接视频链接（如 R18 sample）直接打开；YouTube ID 则拼 YouTube 链接
   window.open(isDirectVideoUrl(currentDetailTrailer) ? currentDetailTrailer : ('https://www.youtube.com/watch?v=' + currentDetailTrailer), '_blank');
+}
+/* v533：官方网站地址。
+   AV：从封面代理链接解出 DMM cid，拼 DMM 商品详情页（约九成 DMM 片能拼出；MGStage 等拼不出→返回空，按钮隐藏）。
+   普通片：TMDB 电影/剧集页，用 tmdbId + tmdbMediaType。
+   拿不到地址返回空 → 圆钮隐藏 → 预告片胶囊自动撑满整行仍占 80% 宽。 */
+function officialPageUrlOf(film){
+  var d = (film && film.data) || {};
+  var dvdId = (d.dvdId || '').toString().trim();
+  if (dvdId){
+    var links = (d.galleryLinks || []).concat(d.posterCandidates || []);
+    if (d.originalPoster) links.unshift(d.originalPoster);
+    for (var i = 0; i < links.length; i++){
+      var u = String(links[i] || '');
+      var q = /[?&]url=([^&]+)/.exec(u);                 // 代理链接 worker/img?url=<encoded>
+      var raw = q ? decodeURIComponent(q[1]) : u;
+      var m = /pics\.dmm\.co\.jp\/digital\/(?:video|videoc)\/([^\/?]+)\//i.exec(raw);
+      if (m) return 'https://www.dmm.co.jp/digital/videoa/-/detail/=/cid=' + m[1] + '/';
+    }
+    return '';
+  }
+  var tid = (d.tmdbId || '').toString().trim();
+  if (!/^\d+$/.test(tid)) return '';
+  return 'https://www.themoviedb.org/' + (d.tmdbMediaType === 'tv' ? 'tv' : 'movie') + '/' + tid;
+}
+function openOfficialPage(){
+  var url = officialPageUrlOf(currentDetailFilm);
+  if (url) window.open(url, '_blank');
 }
 function showTrailerModal(){
   var frame = document.getElementById('trailerFrame');
