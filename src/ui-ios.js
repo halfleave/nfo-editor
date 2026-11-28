@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '537';
+window.__SCRIPT_VER = '538';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -2960,7 +2960,19 @@ function auto115DocOf(t){
   if (auto115Doc && (auto115Doc.tasks || []).indexOf(t) >= 0) return auto115Doc;
   return null;
 }
-/* 执行器读影片身份：按任务实时解析归属文档（引用比对 → filmId 比对 → 当前文档）。
+/* v538：任务自带影片身份快照——创建任务时随任务一起持久化，改名/整理不再依赖全局「当前影片」。
+   多部影片各加一条并发下载时，先完成的任务按 filmId 找不到归属文档会兜底抓当前影片（串名根因）；
+   快照跟着任务走，互不干扰。老任务没有此字段，行为与原来完全一致。 */
+function auto115FilmSnapOf(doc){
+  doc = doc || auto115Doc || {};
+  return {
+    filmId: doc.filmId || '', filmTitle: doc.filmTitle || '', dvdId: doc.dvdId || '',
+    originalTitle: doc.originalTitle || '', year: doc.year || '',
+    type: doc.type || 'movie', collectionId: doc.collectionId || '',
+    tmdbId: doc.tmdbId || '', nfoUploaded: doc.nfoUploaded || 0
+  };
+}
+/* 执行器读影片身份：按任务实时解析归属文档（引用比对 → filmId 比对 → 任务自带快照）。
    不用全局「执行绑定」判断身份——绑定文档在探测等待期不会解除，会劫持别的影片的身份读取。
    tbm 任务：合成虚拟文档，身份（标题/剧集属性）取自任务自身 targetName，不依赖影片详情页。 */
 function auto115TaskDoc(t){
@@ -2979,6 +2991,17 @@ function auto115TaskDoc(t){
   if (t && t.filmId){
     if (auto115ExecDoc && auto115ExecDoc.filmId === t.filmId) return auto115ExecDoc;
     if (auto115Doc && auto115Doc.filmId === t.filmId) return auto115Doc;
+  }
+  /* v538：归属文档已被切走/反序列化替换 → 用任务自带快照合成身份，绝不兜底当前影片
+     （并发时当前影片是最后打开的那部，兜底会把先完成的任务改成它的片名） */
+  if (t && t.filmSnap){
+    var s = t.filmSnap;
+    return {
+      filmId: s.filmId || t.filmId || '', filmTitle: s.filmTitle || '', dvdId: s.dvdId || '',
+      originalTitle: s.originalTitle || '', year: s.year || '', type: s.type || 'movie',
+      collectionId: s.collectionId || '', tmdbId: s.tmdbId || '', nfoUploaded: s.nfoUploaded || 0,
+      tasks: (auto115Doc && auto115Doc.tasks) || []
+    };
   }
   return auto115Doc;
 }
@@ -6716,7 +6739,8 @@ function auto115AddUploadTask(){
     var t = {
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
       type: 'upload', steps: auto115NewSteps('upload'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
-      filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
+      filmId: auto115Doc && auto115Doc.filmId,   /* v327 归属快照：执行期防串档 */
+      filmSnap: auto115FilmSnapOf(doc)   /* v538：影片身份随任务存，并发不串档 */
     };
     ts.unshift(t); doc.tasks = ts;
     auto115Expanded[t.id] = true;
@@ -6783,7 +6807,8 @@ function auto115AddFromOp(){
       id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
       magnet: magnet, magnetTitle: title || auto115OfflineTitle(magnet),
       steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
-      filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
+      filmId: auto115Doc && auto115Doc.filmId,   /* v327 归属快照：执行期防串档 */
+      filmSnap: auto115FilmSnapOf(doc)   /* v538：影片身份随任务存，并发改名不串档 */
     };
     doc.tasks.unshift(t);
     auto115Expanded[t.id] = true;
@@ -6817,6 +6842,7 @@ function oneClickOffline(){
         magnet: magnet, magnetTitle: mags[0].title || auto115OfflineTitle(magnet),
         steps: auto115NewStepsChained(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
         filmId: doc && doc.filmId,
+        filmSnap: auto115FilmSnapOf(doc),   /* v538：影片身份随任务存，并发改名不串档 */
         autoUpload: true   /* 离线段跑完 → 同一条任务接着上传元数据 */
       };
       doc.tasks.unshift(t);
@@ -7062,7 +7088,8 @@ function auto115AddMagnets(mags){
         id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
         magnet: kept[0], magnetTitle: auto115OfflineTitle(kept[0]),
         steps: auto115NewSteps(), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
-        filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
+        filmId: auto115Doc && auto115Doc.filmId,   /* v327 归属快照：执行期防串档 */
+        filmSnap: auto115FilmSnapOf(doc)   /* v538：影片身份随任务存，并发改名不串档 */
       };
     } else {
       var ms = kept.map(function(m){ return { magnet: m, title: auto115OfflineTitle(m), state: 'idle' }; });
@@ -7071,7 +7098,8 @@ function auto115AddMagnets(mags){
         type: 'offline', multi: true,
         magnets: ms,
         steps: Auto115Core.newSteps('multi', auto115IsTvTask()), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
-        filmId: auto115Doc && auto115Doc.filmId   /* v327 归属快照：执行期防串档 */
+        filmId: auto115Doc && auto115Doc.filmId,   /* v327 归属快照：执行期防串档 */
+        filmSnap: auto115FilmSnapOf(doc)   /* v538：影片身份随任务存，并发改名不串档 */
       };
     }
     doc.tasks.unshift(t);
@@ -7374,7 +7402,8 @@ function auto115TidyTaskOf(doc, dir){
     id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
     type: 'tidy', tidy: true,
     steps: auto115NewSteps('offline'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
-    filmId: (doc && doc.filmId) || (auto115Doc && auto115Doc.filmId)   /* v327 归属快照：执行期防串档 */
+    filmId: (doc && doc.filmId) || (auto115Doc && auto115Doc.filmId),   /* v327 归属快照：执行期防串档 */
+    filmSnap: auto115FilmSnapOf(doc)   /* v538：影片身份随任务存，并发不串档 */
   };
   /* 整理任务复用离线任务那张步骤表，但前两步（提交/等待）不走，标记为跳过 */
   auto115Set(t, 'submit', 'skip', '已有文件，跳过离线下载');
@@ -7422,7 +7451,8 @@ function auto115TidyMultiTaskOf(doc, dirs){
     id: 't' + auto115Now().toString(36) + Math.random().toString(36).slice(2, 6),
     type: 'tidy', tidy: true,
     steps: auto115NewSteps('offline'), createdAt: auto115Now(), fv: AUTO115_FLOW_VERSION,
-    filmId: (doc && doc.filmId) || (auto115Doc && auto115Doc.filmId)   /* v327 归属快照：执行期防串档 */
+    filmId: (doc && doc.filmId) || (auto115Doc && auto115Doc.filmId),   /* v327 归属快照：执行期防串档 */
+    filmSnap: auto115FilmSnapOf(doc)   /* v538：影片身份随任务存，并发不串档 */
   };
   /* 复用离线步骤表，但前两步（提交/等待）不走 */
   auto115Set(t, 'submit', 'skip', '已有文件，跳过离线下载');
