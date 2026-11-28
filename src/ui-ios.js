@@ -4,7 +4,7 @@
 /* v453：脚本版本号。页面（nfo-editor-ios.html）里也有一个同值的 __PAGE_VER，
    两边不一致就说明「新页面配到了缓存里的旧脚本」——那是会把人卡在启动页的死法，
    由页面里的自愈逻辑清掉离线缓存重载一次。 */
-window.__SCRIPT_VER = '535';
+window.__SCRIPT_VER = '537';
 
 var currentPage = '';
 var detailReturnPage = 'home';   // v501：从哪个页进的详情页，返回就回哪个（日历页专用，其余仍回首页）
@@ -15405,23 +15405,32 @@ function syncAvCoverMaskSwitch(){
    A 方案：按第一个连字符拆「前缀 / 后面整段」；纯数字编号、中文标题、格式太怪的一律保持整行，不硬拆。
    无番号时退回标题（或「无番号」），仍不露封面。 */
 function avCoverMaskHtml(code){
-  var txt = String(code == null ? '' : code).trim() || '无番号';
-  var parts = /^[A-Za-z0-9-]+$/.test(txt) ? txt.split('-') : [];
-  var num = parts.length > 1 ? parts.slice(1).join('-') : '';
-  /* v513：字号按「最长一行约占封面 80% 宽」反推，用 cqw 跟着封面宽度走。
-     数字行还要再放大 1.12em，所以等效字数取 max(字母长, 数字长×1.12)；
-     粗体拉丁字符平均约 0.68em 宽（含字距），汉字按 1em 算，都偏保守以免被裁。
-     上限 120cqw 防超宽屏失控；老系统不认 cqw 会忽略内联声明，退回 CSS 里的固定 px。 */
+  var raw = String(code == null ? '' : code).trim() || '无番号';
+  /* v536：多变体番号（字段里塞了换行/逗号分隔的两个写法）只取第一段；字母统一大写；
+     横杠、下划线、空格去掉，显示更干净。 */
+  var txt = raw.split(/[\n\r,]/)[0].trim().toUpperCase().replace(/[-_\s]/g, '');
+  /* v536：所有番号统一拆「上行前缀 + 下行数字」两行——拆点取最后一段连续数字，
+     末尾若还有字母（如 XS-2363AI 的 AI）并入下行。
+     字号按「最长一行约占封面 80% 宽」反推，用 cqw 跟着封面宽度走；数字行再放大 1.12em，
+     所以等效字数取 max(字母长, 数字长×1.12)；粗体拉丁字符平均约 0.68em 宽（含字距），
+     汉字按 1em 算，都偏保守以免被裁。上限 120cqw 防超宽屏失控；
+     老系统不认 cqw 会忽略内联声明，退回 CSS 里的固定 px。 */
   function maskFsStyle(l, n, wide){
     var eff = Math.max(l, n ? n * 1.12 : l, 1);
     var fs = Math.min(120, 80 / ((wide ? 1 : 0.68) * eff));
     return ' style="font-size:' + fs.toFixed(1) + 'cqw"';
   }
   var wide = /[^\x00-\x7F]/.test(txt);
-  if (parts.length > 1 && parts[0].length <= 8 && /[A-Za-z]/.test(parts[0]) && /[0-9]/.test(num)) {
-    return '<span class="av-mask-txt"' + maskFsStyle(parts[0].length, num.length, false) + '>'
-      + '<span class="av-mask-l">' + escapeHtml(parts[0]) + '</span>'
-      + '<span class="av-mask-n' + (num.length > 8 ? ' av-mask-long' : '') + '">' + escapeHtml(num) + '</span>'
+  var m = txt.match(/^(.*?)(\d+)([A-Z]*)$/);
+  if (m && m[1]) {
+    var l = m[1];
+    /* v537：数字部分前面带一串零（如 00001）时缩到后 3 位显示（001）；
+       正常长数字（如 01885、4146）保留原样，字母后缀照常并到下行。 */
+    var digits = /^0{2,}/.test(m[2]) && m[2].length > 3 ? m[2].slice(-3) : m[2];
+    var n = digits + m[3];
+    return '<span class="av-mask-txt"' + maskFsStyle(l.length, n.length, false) + '>'
+      + '<span class="av-mask-l">' + escapeHtml(l) + '</span>'
+      + '<span class="av-mask-n' + (n.length > 8 ? ' av-mask-long' : '') + '">' + escapeHtml(n) + '</span>'
       + '</span>';
   }
   return '<span class="av-mask-txt"' + maskFsStyle(txt.length, 0, wide) + '>' + escapeHtml(txt) + '</span>';
